@@ -1960,10 +1960,10 @@ export const executionLocks = pgTable('execution_locks', {
   recoveredAt:  bigint('recovered_at', { mode: 'number' }), // if stale-recovered
 }, (t) => [
   // Unique active lock per (kind, key) when not released — enforced in service layer
-  index('el_workspace_idx').on(t.workspaceId),
-  index('el_resource_idx').on(t.lockKind, t.resourceKey),
-  index('el_holder_idx').on(t.holderId),
-  index('el_expires_idx').on(t.expiresAt),
+  index('exlock_workspace_idx').on(t.workspaceId),
+  index('exlock_resource_idx').on(t.lockKind, t.resourceKey),
+  index('exlock_holder_idx').on(t.holderId),
+  index('exlock_expires_idx').on(t.expiresAt),
 ])
 
 // ─── Production Readiness Audits + Launch Lock ────────────────────────────────
