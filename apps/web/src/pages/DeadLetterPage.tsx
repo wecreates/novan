@@ -29,19 +29,35 @@ interface DlqStats {
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 
+// Pull token from localStorage on every call so token rotation in Settings
+// takes effect without a page reload.
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const t = typeof localStorage !== 'undefined'
+    ? localStorage.getItem('ops_auth_token')
+    : null
+  return {
+    ...extra,
+    ...(t ? { Authorization: `Bearer ${t}` } : {}),
+  }
+}
+
 const dlqApi = {
   list: (params?: { queue?: string; limit?: number }) => {
     const qs = new URLSearchParams()
     if (params?.queue) qs.set('queue', params.queue)
     qs.set('limit', String(params?.limit ?? 50))
-    return fetch(`/api/v1/dead-letter?${qs.toString()}`).then((r) => r.json()) as Promise<{ success: true; data: DlqJob[] }>
+    return fetch(`/api/v1/dead-letter?${qs.toString()}`, { headers: authHeaders() })
+      .then((r) => r.json()) as Promise<{ success: true; data: DlqJob[] }>
   },
   stats: () =>
-    fetch('/api/v1/dead-letter/stats').then((r) => r.json()) as Promise<{ success: true; data: DlqStats }>,
+    fetch('/api/v1/dead-letter/stats', { headers: authHeaders() })
+      .then((r) => r.json()) as Promise<{ success: true; data: DlqStats }>,
   retry: (id: string) =>
-    fetch(`/api/v1/dead-letter/${id}/retry`, { method: 'POST' }).then((r) => r.json()) as Promise<{ success: true }>,
+    fetch(`/api/v1/dead-letter/${id}/retry`, { method: 'POST', headers: authHeaders() })
+      .then((r) => r.json()) as Promise<{ success: true }>,
   discard: (id: string) =>
-    fetch(`/api/v1/dead-letter/${id}/discard`, { method: 'POST' }).then((r) => r.json()) as Promise<{ success: true }>,
+    fetch(`/api/v1/dead-letter/${id}/discard`, { method: 'POST', headers: authHeaders() })
+      .then((r) => r.json()) as Promise<{ success: true }>,
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
