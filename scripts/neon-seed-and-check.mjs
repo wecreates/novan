@@ -1,4 +1,5 @@
 import postgres from '../node_modules/.pnpm/postgres@3.4.9/node_modules/postgres/src/index.js'
+import crypto from 'node:crypto'
 
 const sql = postgres(process.env.DATABASE_URL, { ssl: 'require' })
 const now = Date.now()
@@ -142,6 +143,54 @@ try {
         VALUES (${permId}, 'owner', ${w.id}, 'owner', ${ALL_PERMS}, 'system', ${now}, ${now})
       `
       console.log(`✓ Owner permission grant created for '${w.id}'`)
+    }
+  }
+
+  // ─── Default kill switches (patch #3) ─────────────────────────────────────
+  const SWITCHES = ['ai_request', 'remote_worker', 'browser_job', 'provider']
+  for (const w of ws) {
+    for (const switchType of SWITCHES) {
+      const sid = `${w.id}-${switchType}`
+      await sql`
+        INSERT INTO kill_switches (
+          id, workspace_id, switch_type, enabled, created_at, updated_at
+        ) VALUES (
+          ${sid}, ${w.id}, ${switchType}, false, ${now}, ${now}
+        ) ON CONFLICT (id) DO NOTHING
+      `.catch((e) => console.log(`  (kill_switches insert skipped: ${e.message.slice(0,80)})`))
+    }
+  }
+  const sw = await sql`SELECT COUNT(*)::int as c FROM kill_switches`
+  console.log(`✓ Kill switches: ${sw[0].c} configured`)
+
+  // ─── Owner API token (patch #4) ───────────────────────────────────────────
+  for (const w of ws) {
+    const existing = await sql`SELECT id, prefix FROM api_tokens WHERE workspace_id = ${w.id} AND name = 'owner-bootstrap'`.catch(() => [])
+    if (existing.length === 0) {
+      const tokenSecret = crypto.randomBytes(32).toString('hex')
+      const tokenPlain  = `ops_${tokenSecret}`
+      const tokenHash   = crypto.createHash('sha256').update(tokenPlain).digest('hex')
+      const tokenId     = crypto.randomUUID()
+      try {
+        await sql`
+          INSERT INTO api_tokens (
+            id, workspace_id, name, token_hash, prefix,
+            scopes, created_at
+          ) VALUES (
+            ${tokenId}, ${w.id}, 'owner-bootstrap',
+            ${tokenHash}, ${tokenPlain.slice(0, 8)},
+            ${['read', 'write', 'admin']},
+            ${now}
+          )
+        `
+        console.log(`\n  ━━━ NEW OWNER TOKEN FOR '${w.id}' (save now, won't be shown again) ━━━`)
+        console.log(`  ${tokenPlain}`)
+        console.log(`  ━━━ USE: curl -H "Authorization: Bearer ${tokenPlain}" ... ━━━\n`)
+      } catch (e) {
+        console.log(`  (api_tokens insert failed: ${e.message.slice(0, 100)})`)
+      }
+    } else {
+      console.log(`  Owner token already exists for '${w.id}' (prefix: ${existing[0].prefix})`)
     }
   }
 

@@ -21,6 +21,7 @@ services:
       API_HOST:         0.0.0.0
       RUNTIME_MODE:     cloud-api-only
       LOG_LEVEL:        info
+      REPO_ROOT:        /app
 
       DATABASE_URL:     postgresql://neondb_owner:npg_n2wGjmuWzrU9@ep-bitter-snow-ak0w2voz-pooler.c-3.us-west-2.aws.neon.tech/neondb?sslmode=require
       REDIS_URL:        rediss://default:gQAAAAAAAewCAAIgcDIzOWIwNjU2NjA3MTY0MzRhODExNmZkOGEwYjJlY2QwNA@lucky-anemone-125954.upstash.io:6379
