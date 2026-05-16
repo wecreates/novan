@@ -189,7 +189,52 @@ function ApiTokensSection() {
           </button>
         </div>
       )}
+
+      {/* Paste existing token — for tokens issued out-of-band (e.g. seed script).
+          Saves to localStorage so all subsequent api.* calls authenticate. */}
+      <PasteExistingToken />
     </SectionPanel>
+  )
+}
+
+function PasteExistingToken() {
+  const [val, setVal]    = useState('')
+  const [done, setDone]  = useState(false)
+  const apply = () => {
+    const trimmed = val.trim()
+    if (!trimmed.startsWith('ops_')) return
+    setAuthToken(trimmed)
+    setDone(true)
+    setVal('')
+    setTimeout(() => setDone(false), 2000)
+  }
+  return (
+    <div className="px-4 py-2.5 border-t border-[var(--border)] space-y-1.5">
+      <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
+        Paste an existing token (e.g. from the seed script output)
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') apply() }}
+          placeholder="ops_..."
+          spellCheck={false}
+          type="password"
+          className="flex-1 text-xs font-mono bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-blue-500/50"
+        />
+        <button
+          onClick={apply}
+          disabled={!val.trim().startsWith('ops_')}
+          className="text-xs px-3 py-1.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/30 transition-colors disabled:opacity-40"
+        >
+          {done ? 'Saved ✓' : 'Set active'}
+        </button>
+      </div>
+      <div className="text-[10px] text-[var(--text-muted)]">
+        Token is stored in browser localStorage and sent as <code>Authorization: Bearer …</code> on every API call.
+      </div>
+    </div>
   )
 }
 
