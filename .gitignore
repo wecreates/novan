@@ -18,3 +18,8 @@ build/
 *.pem
 *.key
 secrets/
+
+# Leaked API tokens — never re-introduce
+rc1-token.txt
+rc*-token.txt
+*-token.txt
