@@ -1,0 +1,20 @@
+node_modules/
+dist/
+.turbo/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+coverage/
+.next/
+out/
+build/
+*.tsbuildinfo
+
+# Production secrets (never commit)
+.env.production
+.env.*.production
+*.pem
+*.key
+secrets/

@@ -1,0 +1,90 @@
+# Novan — Production stack
+# Brings up: api, web (Caddy + static), postgres, redis
+# Usage:
+#   cp .env.production.example .env.production
+#   # fill in real values
+#   docker compose -f docker-compose.production.yml --env-file .env.production up -d
+#   docker compose -f docker-compose.production.yml logs -f api
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB:       ${POSTGRES_DB}
+    volumes:
+      - novan-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:    ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - novan-redis:/data
+    healthcheck:
+      test:    ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+
+  api:
+    build:
+      context:    .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    environment:
+      NODE_ENV:           production
+      API_PORT:           "3001"
+      API_HOST:           0.0.0.0
+      DATABASE_URL:       postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL:          redis://default:${REDIS_PASSWORD}@redis:6379
+      AUTH_SECRET:        ${AUTH_SECRET}
+      VAULT_MASTER_KEY:   ${VAULT_MASTER_KEY}
+      CORS_ORIGINS:       ${CORS_ORIGINS}
+      # Provider keys (optional — only set what you have)
+      OPENAI_API_KEY:     ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY:  ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY:     ${GEMINI_API_KEY:-}
+      STRIPE_SECRET_KEY:  ${STRIPE_SECRET_KEY:-}
+      # Telemetry
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_SERVICE_NAME:           novan-api
+      LOG_LEVEL:                   info
+      REPO_ROOT:                   /app
+    healthcheck:
+      test:    ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/health"]
+      interval: 30s
+      timeout:  5s
+      retries:  3
+      start_period: 30s
+    ports:
+      - "3001:3001"
+
+  web:
+    build:
+      context:    .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-/api}
+    restart: unless-stopped
+    depends_on:
+      api: { condition: service_healthy }
+    environment:
+      API_UPSTREAM: api:3001
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+
+volumes:
+  novan-pgdata:
+  novan-redis:

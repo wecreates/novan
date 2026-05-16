@@ -1,0 +1,137 @@
+/**
+ * learning-cron.ts — Periodic background scans.
+ *
+ * Drives the closed learning loop on a timer:
+ * - Incident detector       (5 min)
+ * - Improvement engine      (15 min)
+ * - Suspicious activity     (5 min)
+ * - Stuck assignment sweep  (2 min)
+ * - Trial expiry            (1 hour)
+ *
+ * Lightweight setInterval — no external scheduler dependency.
+ * All scans are workspace-scoped: they fan out over all workspaces.
+ */
+import { db }                       from '../db/client.js'
+import { workspaces, events }       from '../db/schema.js'
+import { v7 as uuidv7 }             from 'uuid'
+import { scanAndOpenIncidents }     from './incident-service.js'
+import { runImprovementScan }       from './improvement-engine.js'
+import { detectSuspiciousActivity } from './security-monitor.js'
+import { failStuckAssignments, detectStuckAgents } from './orchestrator.js'
+import { recoverStaleLocks }        from './lock-manager.js'
+import { expireTrials }             from './billing.js'
+import { runSecurityScan }          from './security-team.js'
+
+const handles: NodeJS.Timeout[] = []
+
+async function listWorkspaceIds(): Promise<string[]> {
+  const rows = await db.select({ id: workspaces.id }).from(workspaces).limit(500)
+  return rows.map((r) => r.id)
+}
+
+async function emit(type: string, payload: Record<string, unknown>) {
+  await db.insert(events).values({
+    id: uuidv7(), type, workspaceId: 'global', payload,
+    traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
+    source: 'learning-cron', version: 1, createdAt: Date.now(),
+  }).catch(() => null)
+}
+
+async function runIncidentScans() {
+  try {
+    const ids = await listWorkspaceIds()
+    let opened = 0, updated = 0
+    for (const ws of ids) {
+      const r = await scanAndOpenIncidents(ws).catch(() => ({ opened: 0, updated: 0 }))
+      opened += r.opened; updated += r.updated
+    }
+    await emit('cron.incident_scan_completed', { workspaces: ids.length, opened, updated })
+  } catch (e) { await emit('cron.error', { task: 'incident', error: (e as Error).message }) }
+}
+
+async function runImprovementScans() {
+  try {
+    const ids = await listWorkspaceIds()
+    let created = 0, refreshed = 0
+    for (const ws of ids) {
+      const r = await runImprovementScan(ws).catch(() => ({ created: 0, refreshed: 0 }))
+      created += r.created; refreshed += r.refreshed
+    }
+    await emit('cron.improvement_scan_completed', { workspaces: ids.length, created, refreshed })
+  } catch (e) { await emit('cron.error', { task: 'improvement', error: (e as Error).message }) }
+}
+
+async function runSuspiciousScans() {
+  try {
+    const ids = await listWorkspaceIds()
+    for (const ws of ids) await detectSuspiciousActivity(ws).catch(() => null)
+    await emit('cron.suspicious_scan_completed', { workspaces: ids.length })
+  } catch (e) { await emit('cron.error', { task: 'suspicious', error: (e as Error).message }) }
+}
+
+async function runOrchestratorSweep() {
+  try {
+    const ids = await listWorkspaceIds()
+    let stuck = 0, downAgents = 0, locksRecovered = 0
+    for (const ws of ids) {
+      stuck          += await failStuckAssignments(ws).catch(() => 0)
+      downAgents     += await detectStuckAgents(ws).catch(() => 0)
+      locksRecovered += await recoverStaleLocks(ws).catch(() => 0)
+    }
+    if (stuck + downAgents + locksRecovered > 0) {
+      await emit('cron.orchestrator_sweep_completed', { stuck, downAgents, locksRecovered })
+    }
+  } catch (e) { await emit('cron.error', { task: 'orchestrator', error: (e as Error).message }) }
+}
+
+async function runSecurityTeamScans() {
+  try {
+    const ids = await listWorkspaceIds()
+    let findings = 0, blocking = 0
+    for (const ws of ids) {
+      const r = await runSecurityScan(ws).catch(() => ({ findingsCreated: 0, blockingCount: 0 }))
+      findings += r.findingsCreated; blocking += r.blockingCount
+    }
+    await emit('cron.security_team_scan_completed', { workspaces: ids.length, findings, blocking })
+  } catch (e) { await emit('cron.error', { task: 'security_team', error: (e as Error).message }) }
+}
+
+async function runBillingSweep() {
+  try {
+    const expired = await expireTrials().catch(() => 0)
+    if (expired > 0) await emit('cron.trials_expired', { count: expired })
+  } catch (e) { await emit('cron.error', { task: 'billing', error: (e as Error).message }) }
+}
+
+// ─── Public boot/stop ─────────────────────────────────────────────────────────
+
+const INTERVALS = {
+  incident:     5  * 60_000,   // 5 min
+  improvement:  15 * 60_000,   // 15 min
+  suspicious:   5  * 60_000,   // 5 min
+  orchestrator: 2  * 60_000,   // 2 min
+  securityTeam: 10 * 60_000,   // 10 min — full security team sweep
+  billing:      60 * 60_000,   // 1 hour
+}
+
+export function startLearningCron(): void {
+  if (process.env['DISABLE_LEARNING_CRON'] === '1') return
+  if (handles.length > 0) return  // already started
+
+  handles.push(setInterval(() => void runIncidentScans(),    INTERVALS.incident))
+  handles.push(setInterval(() => void runImprovementScans(), INTERVALS.improvement))
+  handles.push(setInterval(() => void runSuspiciousScans(),  INTERVALS.suspicious))
+  handles.push(setInterval(() => void runOrchestratorSweep(),INTERVALS.orchestrator))
+  handles.push(setInterval(() => void runSecurityTeamScans(),INTERVALS.securityTeam))
+  handles.push(setInterval(() => void runBillingSweep(),     INTERVALS.billing))
+
+  // Don't keep the event loop alive just for cron
+  for (const h of handles) h.unref?.()
+
+  void emit('cron.started', { intervals: INTERVALS })
+}
+
+export function stopLearningCron(): void {
+  for (const h of handles) clearInterval(h)
+  handles.length = 0
+}

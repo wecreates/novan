@@ -1,0 +1,143 @@
+##
+## ops-platform — local development infrastructure
+##
+## Services:
+##   postgres     — primary database (with pgvector extension)
+##   redis        — BullMQ queues + caching
+##   redis-insight — Redis GUI (optional)
+##   prometheus   — metrics collection
+##   grafana      — metrics dashboards
+##   otel-collector — OpenTelemetry collector
+##
+## Usage:
+##   pnpm infra:up      — start all services
+##   pnpm infra:down    — stop all services
+##   docker compose -f infra/docker/docker-compose.yml logs -f postgres
+##
+
+version: '3.9'
+
+services:
+
+  # ── PostgreSQL + pgvector ────────────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: ops-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ops
+      POSTGRES_PASSWORD: ops_secret
+      POSTGRES_DB:       ops_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test:     ["CMD-SHELL", "pg_isready -U ops -d ops_platform"]
+      interval: 5s
+      timeout:  5s
+      retries:  10
+    networks:
+      - ops-network
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.4-alpine
+    container_name: ops-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+        --maxmemory 512mb
+        --maxmemory-policy allkeys-lru
+        --save 60 1
+        --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:     ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout:  3s
+      retries:  10
+    networks:
+      - ops-network
+
+  # ── RedisInsight (optional GUI) ───────────────────────────────────────────────
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: ops-redis-insight
+    restart: unless-stopped
+    ports:
+      - "5540:5540"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - ops-network
+    profiles: ["tools"]
+
+  # ── OpenTelemetry Collector ───────────────────────────────────────────────────
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.112.0
+    container_name: ops-otel
+    restart: unless-stopped
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./monitoring/otel-collector.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8889:8889"   # Prometheus scrape endpoint
+    networks:
+      - ops-network
+
+  # ── Prometheus ────────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: ops-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - ops-network
+
+  # ── Grafana ───────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: ops-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER:     admin
+      GF_SECURITY_ADMIN_PASSWORD: admin_dev
+      GF_AUTH_ANONYMOUS_ENABLED:  "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3100:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - ops-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  ops-network:
+    driver: bridge

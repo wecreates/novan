@@ -1,0 +1,70 @@
+# Novan — Render.com deploy spec
+# Reads this file when you click "New" → "Blueprint" with your repo.
+# Free tier: web service + (optionally) free Redis. Database = managed Neon Postgres external.
+
+services:
+
+  # ─── API ────────────────────────────────────────────────────────────────────
+  - type: web
+    name: novan-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_PORT
+        value: "3001"
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: RUNTIME_MODE
+        value: cloud-api-only
+      - key: LOG_LEVEL
+        value: info
+      - key: REPO_ROOT
+        value: /app
+      # ─── Required secrets (set in Render dashboard) ───────────────────────
+      - key: DATABASE_URL
+        sync: false   # Neon connection string with ?sslmode=require
+      - key: REDIS_URL
+        sync: false   # Upstash rediss:// URL
+      - key: AUTH_SECRET
+        sync: false   # openssl rand -base64 48
+      - key: VAULT_MASTER_KEY
+        sync: false   # openssl rand -base64 32 (MUST be 32 bytes)
+      - key: CORS_ORIGINS
+        sync: false   # https://your-vercel-app.vercel.app
+      # ─── AI providers (set what you have) ─────────────────────────────────
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      # ─── Runtime safety flags ─────────────────────────────────────────────
+      - key: PROVIDER_ROUTER_ENABLED
+        value: "true"
+      - key: BUDGET_GUARDS_ENABLED
+        value: "true"
+      - key: KILL_SWITCH_ENABLED
+        value: "true"
+
+  # ─── Worker (optional, can run inside API process for free tier) ───────────
+  # Uncomment to run BullMQ workers as a separate background service.
+  # - type: worker
+  #   name: novan-worker
+  #   runtime: docker
+  #   dockerfilePath: ./apps/api/Dockerfile
+  #   dockerCommand: node apps/api/dist/worker.js
+  #   plan: free
+  #   envVars:
+  #     - fromService:
+  #         name: novan-api
+  #         type: web
+  #         envVarKey: DATABASE_URL
+  #     - fromService:
+  #         name: novan-api
+  #         type: web
+  #         envVarKey: REDIS_URL

@@ -1,0 +1,30 @@
+FROM node:22-alpine AS base
+RUN corepack enable && corepack prepare pnpm@latest --activate
+WORKDIR /app
+
+ARG WORKER
+
+FROM base AS deps
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY workers/${WORKER}/package.json ./workers/${WORKER}/
+COPY apps/api/package.json ./apps/api/
+COPY packages/shared-types/package.json ./packages/shared-types/
+COPY packages/event-contracts/package.json ./packages/event-contracts/
+COPY packages/runtime-kernel/package.json ./packages/runtime-kernel/
+RUN pnpm install --frozen-lockfile --prod
+
+FROM base AS build
+ARG WORKER
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN pnpm --filter=@ops/${WORKER} build
+
+FROM node:22-alpine AS runner
+ARG WORKER
+RUN addgroup -S ops && adduser -S ops -G ops
+WORKDIR /app
+COPY --from=build --chown=ops:ops /app/workers/${WORKER}/dist ./dist
+COPY --from=build --chown=ops:ops /app/node_modules ./node_modules
+COPY --from=build --chown=ops:ops /app/workers/${WORKER}/package.json ./package.json
+USER ops
+CMD ["node", "dist/worker.js"]

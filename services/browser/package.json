@@ -1,0 +1,25 @@
+{
+  "name": "@ops/service-browser",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev":       "tsx watch src/index.ts",
+    "start":     "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "lint":      "eslint src"
+  },
+  "dependencies": {
+    "@ops/event-contracts": "workspace:*",
+    "@ops/runtime-kernel":  "workspace:*",
+    "@ops/shared-types":    "workspace:*",
+    "bullmq":               "^5.7.0",
+    "fastify":              "^5.0.0",
+    "pino":                 "^9.2.0",
+    "playwright":           "^1.44.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx":         "^4.15.0",
+    "typescript":  "^5.4.5"
+  }
+}

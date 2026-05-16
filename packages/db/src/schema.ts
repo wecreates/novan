@@ -1,0 +1,2297 @@
+/**
+ * @ops/db — canonical database schema.
+ *
+ * All tables are workspace-scoped.
+ * Timestamps are stored as bigint (Unix ms).
+ * Embeddings use pgvector (1536-dim for OpenAI, 768 for Ollama).
+ *
+ * New tables added here are re-exported from apps/api/src/db/schema.ts
+ * for backwards compatibility. Services + workers import from @ops/db directly.
+ */
+import {
+  pgTable, text, integer, bigint, boolean, jsonb,
+  real, index, uniqueIndex, pgEnum, vector,
+} from 'drizzle-orm/pg-core'
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+export const workflowStatusEnum = pgEnum('workflow_status', [
+  'pending', 'running', 'paused', 'completed', 'failed', 'cancelled', 'awaiting_approval',
+])
+
+export const stepStatusEnum = pgEnum('step_status', [
+  'pending', 'running', 'completed', 'failed', 'skipped', 'retrying',
+])
+
+export const approvalStatusEnum = pgEnum('approval_status', [
+  'pending', 'approved', 'rejected', 'expired',
+])
+
+export const memoryTypeEnum = pgEnum('memory_type', [
+  'observation', 'decision', 'lesson', 'goal', 'idea', 'fact', 'strategic', 'operational',
+])
+
+export const jobPriorityEnum = pgEnum('job_priority', ['1', '2', '3', '4', '5'])
+
+export const agentStatusEnum = pgEnum('agent_status', [
+  'idle', 'running', 'paused', 'error', 'offline',
+])
+
+export const opportunityStatusEnum = pgEnum('opportunity_status', [
+  'identified', 'evaluating', 'active', 'won', 'lost', 'deferred',
+  'accepted', 'rejected', 'stale', 'completed',
+])
+
+export const riskSeverityEnum = pgEnum('risk_severity', [
+  'low', 'medium', 'high', 'critical',
+])
+
+export const goalStatusEnum = pgEnum('goal_status', [
+  'draft', 'active', 'paused', 'completed', 'abandoned',
+])
+
+// ─── Workspaces ───────────────────────────────────────────────────────────────
+
+export const workspaces = pgTable('workspaces', {
+  id:        text('id').primaryKey().default('gen_random_uuid()'),
+  name:      text('name').notNull(),
+  slug:      text('slug').notNull().unique(),
+  plan:      text('plan').notNull().default('free'),
+  ownerId:   text('owner_id').notNull(),
+  settings:  jsonb('settings').notNull().default({}),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
+// ─── Workflow definitions ─────────────────────────────────────────────────────
+
+export const workflowDefinitions = pgTable('workflow_definitions', {
+  id:          text('id').primaryKey().default('gen_random_uuid()'),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  name:        text('name').notNull(),
+  description: text('description'),
+  version:     integer('version').notNull().default(1),
+  steps:       jsonb('steps').notNull().default([]),
+  triggers:    jsonb('triggers').notNull().default([]),
+  retryPolicy: jsonb('retry_policy').notNull(),
+  timeout:     integer('timeout').notNull().default(300_000),
+  tags:        text('tags').array().notNull().default([]),
+  isActive:    boolean('is_active').notNull().default(true),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('workflow_def_workspace_idx').on(t.workspaceId),
+  index('workflow_def_tags_idx').on(t.tags),
+])
+
+// ─── Workflow runs ────────────────────────────────────────────────────────────
+
+export const workflowRuns = pgTable('workflow_runs', {
+  id:              text('id').primaryKey().default('gen_random_uuid()'),
+  workflowId:      text('workflow_id').notNull().references(() => workflowDefinitions.id),
+  workspaceId:     text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  status:          workflowStatusEnum('status').notNull().default('pending'),
+  triggeredBy:     text('triggered_by').notNull(),
+  triggeredAt:     bigint('triggered_at', { mode: 'number' }).notNull(),
+  startedAt:       bigint('started_at', { mode: 'number' }),
+  completedAt:     bigint('completed_at', { mode: 'number' }),
+  failedAt:        bigint('failed_at', { mode: 'number' }),
+  errorMessage:    text('error_message'),
+  context:         jsonb('context').notNull().default({}),
+  attempt:         integer('attempt').notNull().default(1),
+  parentRunId:     text('parent_run_id'),
+  checkpointAt:    bigint('checkpoint_at', { mode: 'number' }),
+  checkpointState: jsonb('checkpoint_state'),
+  traceId:         text('trace_id').notNull(),
+}, (t) => [
+  index('workflow_run_workspace_idx').on(t.workspaceId),
+  index('workflow_run_status_idx').on(t.status),
+  index('workflow_run_triggered_idx').on(t.triggeredAt),
+])
+
+// ─── Step runs ────────────────────────────────────────────────────────────────
+
+export const stepRuns = pgTable('step_runs', {
+  id:          text('id').primaryKey().default('gen_random_uuid()'),
+  runId:       text('run_id').notNull().references(() => workflowRuns.id, { onDelete: 'cascade' }),
+  stepId:      text('step_id').notNull(),
+  workspaceId: text('workspace_id').notNull(),
+  status:      stepStatusEnum('status').notNull().default('pending'),
+  startedAt:   bigint('started_at', { mode: 'number' }),
+  completedAt: bigint('completed_at', { mode: 'number' }),
+  output:      jsonb('output'),
+  error:       text('error'),
+  attempt:     integer('attempt').notNull().default(1),
+  rollback:    jsonb('rollback'),
+}, (t) => [
+  index('step_run_run_idx').on(t.runId),
+  index('step_run_status_idx').on(t.status),
+])
+
+// ─── Approvals ────────────────────────────────────────────────────────────────
+
+export const approvals = pgTable('approvals', {
+  id:             text('id').primaryKey().default('gen_random_uuid()'),
+  workspaceId:    text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  runId:          text('run_id').notNull().references(() => workflowRuns.id, { onDelete: 'cascade' }),
+  stepId:         text('step_id').notNull(),
+  requestedBy:    text('requested_by').notNull(),
+  requestedAt:    bigint('requested_at', { mode: 'number' }).notNull(),
+  expiresAt:      bigint('expires_at', { mode: 'number' }).notNull(),
+  status:         approvalStatusEnum('status').notNull().default('pending'),
+  resolvedBy:     text('resolved_by'),
+  resolvedAt:     bigint('resolved_at', { mode: 'number' }),
+  operationLabel: text('operation_label').notNull(),
+  context:        jsonb('context').notNull().default({}),
+  risk:           text('risk').notNull(),
+}, (t) => [
+  index('approval_workspace_idx').on(t.workspaceId),
+  index('approval_status_idx').on(t.status),
+  index('approval_expires_idx').on(t.expiresAt),
+])
+
+// ─── Memory ───────────────────────────────────────────────────────────────────
+
+export const memories = pgTable('memories', {
+  id:          text('id').primaryKey().default('gen_random_uuid()'),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  type:        memoryTypeEnum('type').notNull(),
+  content:     text('content').notNull(),
+  summary:     text('summary'),
+  embedding:   vector('embedding', { dimensions: 1536 }),
+  confidence:  real('confidence').notNull().default(1.0),
+  tags:        text('tags').array().notNull().default([]),
+  source:      text('source').notNull(),
+  sourceRef:   text('source_ref'),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
+  expiresAt:   bigint('expires_at', { mode: 'number' }),
+}, (t) => [
+  index('memory_workspace_idx').on(t.workspaceId),
+  index('memory_type_idx').on(t.type),
+  index('memory_tags_idx').on(t.tags),
+  index('memory_created_idx').on(t.createdAt),
+])
+
+// ─── Events ───────────────────────────────────────────────────────────────────
+
+export const events = pgTable('events', {
+  id:            text('id').primaryKey().default('gen_random_uuid()'),
+  type:          text('type').notNull(),
+  workspaceId:   text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  payload:       jsonb('payload').notNull(),
+  traceId:       text('trace_id').notNull(),
+  correlationId: text('correlation_id').notNull(),
+  causationId:   text('causation_id'),
+  source:        text('source').notNull(),
+  version:       integer('version').notNull().default(1),
+  createdAt:     bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('event_workspace_type_idx').on(t.workspaceId, t.type),
+  index('event_trace_idx').on(t.traceId),
+  index('event_created_idx').on(t.createdAt),
+])
+
+// ─── Recovery log ─────────────────────────────────────────────────────────────
+
+export const recoveryLog = pgTable('recovery_log', {
+  id:          text('id').primaryKey().default('gen_random_uuid()'),
+  workspaceId: text('workspace_id').notNull(),
+  runId:       text('run_id').notNull(),
+  strategy:    text('strategy').notNull(),
+  reason:      text('reason').notNull(),
+  steps:       jsonb('steps').notNull(),
+  status:      text('status').notNull(),
+  startedAt:   bigint('started_at', { mode: 'number' }).notNull(),
+  completedAt: bigint('completed_at', { mode: 'number' }),
+  error:       text('error'),
+}, (t) => [
+  index('recovery_run_idx').on(t.runId),
+  index('recovery_workspace_idx').on(t.workspaceId),
+])
+
+// ─── Businesses ───────────────────────────────────────────────────────────────
+
+export const businesses = pgTable('businesses', {
+  id:          text('id').primaryKey().default('gen_random_uuid()'),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  name:        text('name').notNull(),
+  domain:      text('domain'),
+  industry:    text('industry'),
+  stage:       text('stage').notNull().default('early'),
+  health:      text('health').notNull().default('green'),
+  metrics:     jsonb('metrics').notNull().default({}),
+  metadata:    jsonb('metadata').notNull().default({}),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('business_workspace_idx').on(t.workspaceId),
+])
+
+// ─── Agents ───────────────────────────────────────────────────────────────────
+
+export const agents = pgTable('agents', {
+  id:           text('id').primaryKey().default('gen_random_uuid()'),
+  workspaceId:  text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  name:         text('name').notNull(),
+  description:  text('description'),
+  type:         text('type').notNull(),
+  status:       agentStatusEnum('status').notNull().default('idle'),
+  capabilities: text('capabilities').array().notNull().default([]),
+  config:       jsonb('config').notNull().default({}),
+  lastActiveAt: bigint('last_active_at', { mode: 'number' }),
+  heartbeatAt:  bigint('heartbeat_at', { mode: 'number' }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('agent_workspace_idx').on(t.workspaceId),
+  index('agent_status_idx').on(t.status),
+])
+
+// ─── Opportunities ────────────────────────────────────────────────────────────
+
+export const opportunities = pgTable('opportunities', {
+  id:                  text('id').primaryKey().default('gen_random_uuid()'),
+  workspaceId:         text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  businessId:          text('business_id').references(() => businesses.id),
+  title:               text('title').notNull(),
+  description:         text('description'),
+  type:                text('type').notNull().default('operational'), // revenue|content|seo|automation|business|operational|strategic
+  status:              opportunityStatusEnum('status').notNull().default('identified'),
+  priority:            integer('priority').notNull().default(50),
+  valuePotential:      real('value_potential'),
+  confidence:          real('confidence').notNull().default(0.5),
+  category:            text('category').notNull().default('growth'),
+  evidence:            jsonb('evidence').notNull().default([]),
+  tags:                text('tags').array().notNull().default([]),
+  // Scoring inputs
+  estimatedROI:        real('estimated_roi'),          // multiplier, e.g. 3.5 = 3.5x return
+  estimatedEffort:     text('estimated_effort'),        // low|medium|high|very_high
+  riskLevel:           text('risk_level'),              // low|medium|high|critical
+  strategicAlignment:  real('strategic_alignment'),     // 0-1
+  // Computed composite score (0-1) + breakdown
+  score:               real('score'),
+  scoreBreakdown:      jsonb('score_breakdown').$type<Record<string, number>>(),
+  // Linked entities
+  linkedMemoryIds:     text('linked_memory_ids').array().notNull().default([]),
+  linkedWorkflowIds:   text('linked_workflow_ids').array().notNull().default([]),
+  // Conversion
+  convertedRunId:      text('converted_run_id'),
+  convertedWorkflowId: text('converted_workflow_id'),
+  convertedAt:         bigint('converted_at', { mode: 'number' }),
+  // Lifecycle timestamps
+  acceptedAt:          bigint('accepted_at', { mode: 'number' }),
+  rejectedAt:          bigint('rejected_at', { mode: 'number' }),
+  dueDate:             bigint('due_date', { mode: 'number' }),
+  closedAt:            bigint('closed_at', { mode: 'number' }),
+  createdAt:           bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:           bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('opportunity_workspace_idx').on(t.workspaceId),
+  index('opportunity_status_idx').on(t.status),
+  index('opportunity_priority_idx').on(t.priority),
+  index('opportunity_type_idx').on(t.type),
+  index('opportunity_score_idx').on(t.score),
+])
+
+// ─── Risks ────────────────────────────────────────────────────────────────────
+
+export const risks = pgTable('risks', {
+  id:           text('id').primaryKey().default('gen_random_uuid()'),
+  workspaceId:  text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  businessId:   text('business_id').references(() => businesses.id),
+  title:        text('title').notNull(),
+  description:  text('description'),
+  severity:     riskSeverityEnum('severity').notNull().default('medium'),
+  probability:  real('probability').notNull().default(0.5),
+  impact:       real('impact').notNull().default(0.5),
+  riskScore:    real('risk_score').notNull().default(0.25),
+  category:     text('category').notNull().default('operational'),
+  status:       text('status').notNull().default('open'),
+  mitigations:  jsonb('mitigations').notNull().default([]),
+  detectedAt:   bigint('detected_at', { mode: 'number' }).notNull(),
+  resolvedAt:   bigint('resolved_at', { mode: 'number' }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('risk_workspace_idx').on(t.workspaceId),
+  index('risk_severity_idx').on(t.severity),
+  index('risk_score_idx').on(t.riskScore),
+])
+
+// ─── Insights ─────────────────────────────────────────────────────────────────
+
+export const insights = pgTable('insights', {
+  id:           text('id').primaryKey().default('gen_random_uuid()'),
+  workspaceId:  text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  title:        text('title').notNull(),
+  body:         text('body').notNull(),
+  category:     text('category').notNull().default('operational'),
+  confidence:   real('confidence').notNull().default(0.8),
+  source:       text('source').notNull(),
+  sourceRef:    text('source_ref'),
+  tags:         text('tags').array().notNull().default([]),
+  embedding:    vector('embedding', { dimensions: 1536 }),
+  dismissed:    boolean('dismissed').notNull().default(false),
+  actedOn:      boolean('acted_on').notNull().default(false),
+  expiresAt:    bigint('expires_at', { mode: 'number' }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('insight_workspace_idx').on(t.workspaceId),
+  index('insight_category_idx').on(t.category),
+  index('insight_created_idx').on(t.createdAt),
+])
+
+// ─── Strategic goals ──────────────────────────────────────────────────────────
+
+export const strategicGoals = pgTable('strategic_goals', {
+  id:           text('id').primaryKey().default('gen_random_uuid()'),
+  workspaceId:  text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  businessId:   text('business_id').references(() => businesses.id),
+  parentGoalId: text('parent_goal_id'),
+  title:        text('title').notNull(),
+  description:  text('description'),
+  status:       goalStatusEnum('status').notNull().default('draft'),
+  horizon:      text('horizon').notNull().default('quarter'),
+  targetDate:   bigint('target_date', { mode: 'number' }),
+  progress:     real('progress').notNull().default(0),
+  keyResults:   jsonb('key_results').notNull().default([]),
+  owners:       text('owners').array().notNull().default([]),
+  tags:         text('tags').array().notNull().default([]),
+  completedAt:  bigint('completed_at', { mode: 'number' }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('goal_workspace_idx').on(t.workspaceId),
+  index('goal_status_idx').on(t.status),
+  index('goal_horizon_idx').on(t.horizon),
+])
+
+// ─── AI usage ─────────────────────────────────────────────────────────────────
+
+export const aiUsage = pgTable('ai_usage', {
+  id:           text('id').primaryKey().default('gen_random_uuid()'),
+  workspaceId:  text('workspace_id').notNull(),
+  provider:     text('provider').notNull(),
+  model:        text('model').notNull(),
+  promptTokens: integer('prompt_tokens').notNull(),
+  outputTokens: integer('output_tokens').notNull(),
+  costUsd:      real('cost_usd').notNull(),
+  latencyMs:    integer('latency_ms').notNull(),
+  cached:       boolean('cached').notNull().default(false),
+  taskType:     text('task_type').notNull(),
+  timestamp:    bigint('timestamp', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ai_usage_workspace_idx').on(t.workspaceId),
+  index('ai_usage_timestamp_idx').on(t.timestamp),
+])
+
+// ─── Dead-letter jobs ─────────────────────────────────────────────────────────
+
+export const deadLetterJobs = pgTable('dead_letter_jobs', {
+  id:             text('id').primaryKey(),
+  queueName:      text('queue_name').notNull(),
+  jobId:          text('job_id').notNull(),
+  jobName:        text('job_name').notNull(),
+  workspaceId:    text('workspace_id').notNull(),
+  payload:        jsonb('payload').$type<Record<string, unknown>>().notNull(),
+  error:          text('error').notNull(),
+  attempts:       integer('attempts').notNull().default(0),
+  workerId:       text('worker_id').notNull(),
+  traceId:        text('trace_id'),
+  firstFailedAt:  bigint('first_failed_at', { mode: 'number' }).notNull(),
+  deadLetteredAt: bigint('dead_lettered_at', { mode: 'number' }).notNull(),
+  replayedAt:     bigint('replayed_at', { mode: 'number' }),
+  replayedBy:     text('replayed_by'),
+  replayRunId:    text('replay_run_id'),
+}, (t) => [
+  index('dlq_workspace_idx').on(t.workspaceId),
+  index('dlq_queue_idx').on(t.queueName),
+  index('dlq_dead_lettered_at_idx').on(t.deadLetteredAt),
+])
+
+// ─── Observability: Event traces ──────────────────────────────────────────────
+
+export const eventTraces = pgTable('event_traces', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  traceId:     text('trace_id').notNull(),
+  eventId:     text('event_id').notNull(),
+  eventType:   text('event_type').notNull(),
+  source:      text('source').notNull(),
+  payload:     jsonb('payload').$type<Record<string, unknown>>().notNull(),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('et_trace_idx').on(t.traceId),
+  index('et_workspace_idx').on(t.workspaceId),
+  index('et_created_idx').on(t.createdAt),
+])
+
+// ─── Observability: Workflow traces ──────────────────────────────────────────
+
+export const workflowTraces = pgTable('workflow_traces', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  traceId:      text('trace_id').notNull(),
+  runId:        text('run_id').notNull(),
+  workflowId:   text('workflow_id').notNull(),
+  status:       text('status').notNull(),
+  triggeredBy:  text('triggered_by').notNull(),
+  startedAt:    bigint('started_at', { mode: 'number' }),
+  completedAt:  bigint('completed_at', { mode: 'number' }),
+  failedAt:     bigint('failed_at', { mode: 'number' }),
+  durationMs:   integer('duration_ms'),
+  stepCount:    integer('step_count').notNull().default(0),
+  errorMessage: text('error_message'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('wt_trace_idx').on(t.traceId),
+  index('wt_run_idx').on(t.runId),
+  index('wt_workspace_idx').on(t.workspaceId),
+])
+
+// ─── Observability: Task traces ───────────────────────────────────────────────
+
+export const taskTraces = pgTable('task_traces', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  traceId:     text('trace_id').notNull(),
+  runId:       text('run_id').notNull(),
+  stepId:      text('step_id').notNull(),
+  stepType:    text('step_type').notNull(),
+  status:      text('status').notNull(),
+  attempt:     integer('attempt').notNull().default(1),
+  startedAt:   bigint('started_at', { mode: 'number' }),
+  completedAt: bigint('completed_at', { mode: 'number' }),
+  durationMs:  integer('duration_ms'),
+  output:      jsonb('output').$type<Record<string, unknown>>(),
+  error:       text('error'),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('tt_trace_idx').on(t.traceId),
+  index('tt_run_idx').on(t.runId),
+  index('tt_workspace_idx').on(t.workspaceId),
+])
+
+// ─── Observability: Approval traces ──────────────────────────────────────────
+
+export const approvalTraces = pgTable('approval_traces', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  traceId:        text('trace_id').notNull(),
+  approvalId:     text('approval_id').notNull(),
+  runId:          text('run_id').notNull(),
+  stepId:         text('step_id').notNull(),
+  status:         text('status').notNull(),
+  requestedBy:    text('requested_by').notNull(),
+  resolvedBy:     text('resolved_by'),
+  requestedAt:    bigint('requested_at', { mode: 'number' }).notNull(),
+  resolvedAt:     bigint('resolved_at', { mode: 'number' }),
+  expiresAt:      bigint('expires_at', { mode: 'number' }).notNull(),
+  operationLabel: text('operation_label').notNull(),
+  risk:           text('risk').notNull(),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('at_trace_idx').on(t.traceId),
+  index('at_approval_idx').on(t.approvalId),
+  index('at_workspace_idx').on(t.workspaceId),
+])
+
+// ─── Observability: Policy traces ────────────────────────────────────────────
+
+export const policyTraces = pgTable('policy_traces', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  traceId:     text('trace_id').notNull(),
+  policyId:    text('policy_id').notNull(),
+  policyName:  text('policy_name').notNull(),
+  action:      text('action').notNull(),
+  verdict:     text('verdict').notNull(),
+  riskLevel:   text('risk_level').notNull(),
+  agentId:     text('agent_id'),
+  checkedAt:   bigint('checked_at', { mode: 'number' }).notNull(),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('pt_trace_idx').on(t.traceId),
+  index('pt_workspace_idx').on(t.workspaceId),
+  index('pt_verdict_idx').on(t.verdict),
+])
+
+// ─── Observability: Worker traces ────────────────────────────────────────────
+
+export const workerTraces = pgTable('worker_traces', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id'),
+  traceId:       text('trace_id').notNull(),
+  workerId:      text('worker_id').notNull(),
+  workerName:    text('worker_name').notNull(),
+  queueName:     text('queue_name').notNull(),
+  event:         text('event').notNull(),
+  heapUsedMb:    real('heap_used_mb'),
+  rssMemMb:      real('rss_mem_mb'),
+  activeJobs:    integer('active_jobs'),
+  processedJobs: integer('processed_jobs'),
+  createdAt:     bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('wort_trace_idx').on(t.traceId),
+  index('wort_worker_idx').on(t.workerId),
+  index('wort_queue_idx').on(t.queueName),
+])
+
+// ─── Observability: Queue traces ─────────────────────────────────────────────
+
+export const queueTraces = pgTable('queue_traces', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id'),
+  traceId:     text('trace_id').notNull(),
+  queueName:   text('queue_name').notNull(),
+  jobId:       text('job_id').notNull(),
+  jobName:     text('job_name').notNull(),
+  event:       text('event').notNull(),
+  durationMs:  integer('duration_ms'),
+  attempt:     integer('attempt'),
+  error:       text('error'),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('qt_trace_idx').on(t.traceId),
+  index('qt_queue_idx').on(t.queueName),
+  index('qt_job_idx').on(t.jobId),
+])
+
+// ─── Browser sessions ─────────────────────────────────────────────────────────
+
+export const browserSessions = pgTable('browser_sessions', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  jobId:          text('job_id').notNull(),
+  runId:          text('run_id'),
+  stepId:         text('step_id'),
+  traceId:        text('trace_id').notNull(),
+  url:            text('url').notNull(),
+  status:         text('status').notNull().default('active'),
+  pageTitle:      text('page_title'),
+  pageText:       text('page_text'),
+  screenshotPath: text('screenshot_path'),
+  errorMessage:   text('error_message'),
+  durationMs:     integer('duration_ms'),
+  startedAt:      bigint('started_at', { mode: 'number' }).notNull(),
+  completedAt:    bigint('completed_at', { mode: 'number' }),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('bsess_workspace_idx').on(t.workspaceId),
+  index('bsess_job_idx').on(t.jobId),
+  index('bsess_started_idx').on(t.startedAt),
+])
+
+export const browserActions = pgTable('browser_actions', {
+  id:             text('id').primaryKey(),
+  sessionId:      text('session_id').notNull().references(() => browserSessions.id, { onDelete: 'cascade' }),
+  workspaceId:    text('workspace_id').notNull(),
+  actionType:     text('action_type').notNull(),
+  actionInput:    jsonb('action_input').notNull().default({}),
+  success:        boolean('success').notNull().default(false),
+  output:         jsonb('output'),
+  error:          text('error'),
+  screenshotPath: text('screenshot_path'),
+  durationMs:     integer('duration_ms'),
+  executedAt:     bigint('executed_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('bact_session_idx').on(t.sessionId),
+  index('bact_workspace_idx').on(t.workspaceId),
+])
+
+// ─── Observability: Failure lineages ─────────────────────────────────────────
+
+export const failureLineages = pgTable('failure_lineages', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  runId:             text('run_id').notNull(),
+  traceId:           text('trace_id').notNull(),
+  rootCause:         text('root_cause'),
+  failureChain:      jsonb('failure_chain').$type<Array<{ eventId: string; eventType: string; timestamp: number; message?: string }>>().notNull(),
+  affectedSteps:     text('affected_steps').array().notNull().default([]),
+  recoveryAttempts:  integer('recovery_attempts').notNull().default(0),
+  resolved:          boolean('resolved').notNull().default(false),
+  resolvedAt:        bigint('resolved_at', { mode: 'number' }),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:         bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('fl_run_idx').on(t.runId),
+  index('fl_trace_idx').on(t.traceId),
+  index('fl_workspace_idx').on(t.workspaceId),
+])
+
+// ─── Snapshots ────────────────────────────────────────────────────────────────
+
+export const snapshots = pgTable('snapshots', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  runId:       text('run_id').notNull(),
+  stepId:      text('step_id'),
+  traceId:     text('trace_id').notNull(),
+  status:      text('status').notNull().default('active'),
+  description: text('description'),
+  itemCount:   integer('item_count').notNull().default(0),
+  sizeBytes:   integer('size_bytes').notNull().default(0),
+  expiresAt:   bigint('expires_at', { mode: 'number' }),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('snap_run_idx').on(t.runId),
+  index('snap_workspace_idx').on(t.workspaceId),
+  index('snap_trace_idx').on(t.traceId),
+])
+
+// ─── Snapshot items ───────────────────────────────────────────────────────────
+
+export const snapshotItems = pgTable('snapshot_items', {
+  id:          text('id').primaryKey(),
+  snapshotId:  text('snapshot_id').notNull().references(() => snapshots.id, { onDelete: 'cascade' }),
+  workspaceId: text('workspace_id').notNull(),
+  itemType:    text('item_type').notNull(),
+  entityType:  text('entity_type').notNull(),
+  entityId:    text('entity_id').notNull(),
+  beforeState: jsonb('before_state').$type<Record<string, unknown>>().notNull(),
+  metadata:    jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('si_snapshot_idx').on(t.snapshotId),
+  index('si_entity_idx').on(t.entityType, t.entityId),
+])
+
+// ─── Rollback requests ────────────────────────────────────────────────────────
+
+export const rollbackRequests = pgTable('rollback_requests', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  runId:       text('run_id').notNull(),
+  snapshotId:  text('snapshot_id'),
+  traceId:     text('trace_id').notNull(),
+  status:      text('status').notNull().default('pending'),
+  reason:      text('reason').notNull(),
+  requestedBy: text('requested_by').notNull(),
+  startedAt:   bigint('started_at', { mode: 'number' }),
+  completedAt: bigint('completed_at', { mode: 'number' }),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rr_run_idx').on(t.runId),
+  index('rr_workspace_idx').on(t.workspaceId),
+  index('rr_status_idx').on(t.status),
+])
+
+// ─── Rollback results ─────────────────────────────────────────────────────────
+
+export const rollbackResults = pgTable('rollback_results', {
+  id:          text('id').primaryKey(),
+  requestId:   text('request_id').notNull().references(() => rollbackRequests.id, { onDelete: 'cascade' }),
+  workspaceId: text('workspace_id').notNull(),
+  itemId:      text('item_id').notNull().references(() => snapshotItems.id),
+  status:      text('status').notNull(),
+  error:       text('error'),
+  restoredAt:  bigint('restored_at', { mode: 'number' }),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rb_request_idx').on(t.requestId),
+  index('rb_workspace_idx').on(t.workspaceId),
+])
+
+// ─── Recovery checkpoints ─────────────────────────────────────────────────────
+
+export const recoveryCheckpoints = pgTable('recovery_checkpoints', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  runId:          text('run_id').notNull(),
+  stepId:         text('step_id').notNull(),
+  traceId:        text('trace_id').notNull(),
+  completedSteps: text('completed_steps').array().notNull().default([]),
+  state:          jsonb('state').$type<Record<string, unknown>>().notNull(),
+  snapshotId:     text('snapshot_id'),
+  restoredAt:     bigint('restored_at', { mode: 'number' }),
+  restoredBy:     text('restored_by'),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rcp_run_idx').on(t.runId),
+  index('rcp_workspace_idx').on(t.workspaceId),
+])
+
+// ─── Executive briefings ──────────────────────────────────────────────────────
+
+export const briefings = pgTable('briefings', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  status:       text('status').notNull().default('generating'),   // generating | ready | failed
+  requestedBy:  text('requested_by').notNull().default('system'),
+  traceId:      text('trace_id').notNull(),
+  windowMs:     bigint('window_ms', { mode: 'number' }).notNull().default(86_400_000), // lookback window
+  // Aggregated section summaries (quick read without loading all items)
+  summary:      text('summary'),
+  errorMessage: text('error_message'),
+  generatedAt:  bigint('generated_at', { mode: 'number' }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('briefing_workspace_idx').on(t.workspaceId),
+  index('briefing_status_idx').on(t.status),
+  index('briefing_created_idx').on(t.createdAt),
+])
+
+export const briefingItems = pgTable('briefing_items', {
+  id:           text('id').primaryKey(),
+  briefingId:   text('briefing_id').notNull().references(() => briefings.id, { onDelete: 'cascade' }),
+  workspaceId:  text('workspace_id').notNull(),
+  section:      text('section').notNull(),    // top_priorities | blocked_workflows | risks | opportunities | recovery | next_actions
+  title:        text('title').notNull(),
+  body:         text('body').notNull(),
+  confidence:   real('confidence').notNull().default(0.8),
+  isLowConfidence: boolean('is_low_confidence').notNull().default(false),
+  source:       text('source').notNull(),     // workflow_runs | memories | risks | opportunities | events | insights
+  sourceRef:    text('source_ref'),           // entity ID that sourced this item
+  sourceLabel:  text('source_label'),         // human-readable source description
+  // Task conversion
+  converted:    boolean('converted').notNull().default(false),
+  convertedAt:  bigint('converted_at', { mode: 'number' }),
+  convertedRunId: text('converted_run_id'),   // workflow run created from this item
+  convertedWorkflowId: text('converted_workflow_id'),
+  priority:     integer('priority').notNull().default(50),
+  metadata:     jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('bi_briefing_idx').on(t.briefingId),
+  index('bi_workspace_idx').on(t.workspaceId),
+  index('bi_section_idx').on(t.section),
+  index('bi_converted_idx').on(t.converted),
+])
+
+// ─── API Tokens ───────────────────────────────────────────────────────────────
+
+export const apiTokens = pgTable('api_tokens', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  name:        text('name').notNull(),
+  tokenHash:   text('token_hash').notNull().unique(),   // SHA-256 of the token
+  prefix:      text('prefix').notNull(),                 // first 8 chars for display
+  scopes:      text('scopes').array().notNull().default(['read', 'write']),
+  lastUsedAt:  bigint('last_used_at', { mode: 'number' }),
+  expiresAt:   bigint('expires_at', { mode: 'number' }),
+  revokedAt:   bigint('revoked_at', { mode: 'number' }),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('token_hash_idx').on(t.tokenHash),
+  index('token_workspace_idx').on(t.workspaceId),
+])
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+export const notifications = pgTable('notifications', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  title:       text('title').notNull(),
+  body:        text('body').notNull(),
+  type:        text('type').notNull().default('info'),       // info | warning | error | success
+  category:    text('category').notNull().default('system'), // system | workflow | approval | risk | opportunity | goal
+  read:        boolean('read').notNull().default(false),
+  dismissed:   boolean('dismissed').notNull().default(false),
+  sourceType:  text('source_type'),   // e.g. 'workflow_run', 'opportunity', 'risk'
+  sourceId:    text('source_id'),
+  actionUrl:   text('action_url'),
+  expiresAt:   bigint('expires_at', { mode: 'number' }),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('notif_workspace_idx').on(t.workspaceId),
+  index('notif_read_idx').on(t.read),
+  index('notif_created_idx').on(t.createdAt),
+])
+
+// ─── Webhooks ─────────────────────────────────────────────────────────────────
+
+export const webhooks = pgTable('webhooks', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  name:        text('name').notNull(),
+  secret:      text('secret').notNull(),      // HMAC secret for signature verification
+  events:      text('events').array().notNull().default([]),  // event type filters, empty = all
+  targetUrl:   text('target_url'),             // for outbound webhooks (future)
+  workflowId:  text('workflow_id'),            // if set, incoming webhook triggers this workflow
+  active:      boolean('active').notNull().default(true),
+  callCount:   integer('call_count').notNull().default(0),
+  lastCalledAt: bigint('last_called_at', { mode: 'number' }),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('webhook_workspace_idx').on(t.workspaceId),
+  index('webhook_active_idx').on(t.active),
+])
+
+// ─── Scheduled triggers ───────────────────────────────────────────────────────
+
+export const scheduledTriggers = pgTable('scheduled_triggers', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  workflowId: text('workflow_id').notNull(),
+  cronExpression: text('cron_expression').notNull(), // e.g. "0 9 * * 1" = every Monday 9am
+  timezone: text('timezone').notNull().default('UTC'),
+  enabled: boolean('enabled').notNull().default(true),
+  lastRunAt: bigint('last_run_at', { mode: 'number' }),
+  nextRunAt: bigint('next_run_at', { mode: 'number' }),
+  lastRunStatus: text('last_run_status'), // 'success' | 'failed' | 'skipped'
+  runCount: integer('run_count').notNull().default(0),
+  failureCount: integer('failure_count').notNull().default(0),
+  payload: jsonb('payload').$type<Record<string, unknown>>(),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => ({
+  wsIdx: index('scheduled_triggers_ws_idx').on(t.workspaceId),
+  enabledIdx: index('scheduled_triggers_enabled_idx').on(t.enabled, t.nextRunAt),
+}))
+
+export const webhookDeliveries = pgTable('webhook_deliveries', {
+  id:          text('id').primaryKey(),
+  webhookId:   text('webhook_id').notNull().references(() => webhooks.id, { onDelete: 'cascade' }),
+  workspaceId: text('workspace_id').notNull(),
+  eventType:   text('event_type').notNull(),
+  payload:     jsonb('payload').notNull().default({}),
+  status:      text('status').notNull().default('received'),   // received | processed | failed | triggered
+  runId:       text('run_id'),    // workflow run triggered
+  error:       text('error'),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('wdel_webhook_idx').on(t.webhookId),
+  index('wdel_workspace_idx').on(t.workspaceId),
+])
+
+// ─── Learning Runtime ──────────────────────────────────────────────────────────
+// All tables are workspace-scoped. Evidence is always required.
+// Confidence: 0.0–1.0. Status fields control review/approval flow.
+
+export const learningSignals = pgTable('learning_signals', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  source:          text('source').notNull(), // workflow_success|workflow_failure|task_duration|approval|dlq|recovery|memory_retrieval|briefing_usage|browser_outcome|ai_provider|user_correction|feedback|manual
+  sourceEventId:   text('source_event_id'),
+  sourceWorkflowId: text('source_workflow_id'),
+  sourceRunId:     text('source_run_id'),
+  sourceMemoryId:  text('source_memory_id'),
+  signal:          text('signal').notNull(),   // short descriptor e.g. "workflow_failed"
+  evidence:        jsonb('evidence').notNull().default({}), // structured evidence payload
+  confidence:      real('confidence').notNull().default(1.0),
+  status:          text('status').notNull().default('new'), // new|scored|pattern_candidate|archived
+  reviewRequired:  boolean('review_required').notNull().default(false),
+  patternId:       text('pattern_id'),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:       bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ls_workspace_idx').on(t.workspaceId),
+  index('ls_source_idx').on(t.source),
+  index('ls_status_idx').on(t.status),
+  index('ls_created_idx').on(t.createdAt),
+])
+
+export const learningPatterns = pgTable('learning_patterns', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  patternType:  text('pattern_type').notNull(), // repeated_failure|approval_friction|recurring_bottleneck|high_performing_workflow|slow_route|recovery_path|content_pattern|abandoned_workflow|duplicate_task|stale_context
+  title:        text('title').notNull(),
+  description:  text('description').notNull(),
+  occurrences:  integer('occurrences').notNull().default(1),
+  confidence:   real('confidence').notNull(),
+  evidence:     jsonb('evidence').notNull().default([]),  // array of signal_ids + summaries
+  affectedIds:  jsonb('affected_ids').notNull().default([]),  // workflow/run/memory ids
+  status:       text('status').notNull().default('active'), // active|resolved|ignored|superseded
+  firstSeenAt:  bigint('first_seen_at', { mode: 'number' }).notNull(),
+  lastSeenAt:   bigint('last_seen_at', { mode: 'number' }).notNull(),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('lp_workspace_idx').on(t.workspaceId),
+  index('lp_type_idx').on(t.patternType),
+  index('lp_status_idx').on(t.status),
+  index('lp_confidence_idx').on(t.confidence),
+])
+
+export const learningInsights = pgTable('learning_insights', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  title:          text('title').notNull(),
+  body:           text('body').notNull(),
+  category:       text('category').notNull(), // operational|content|revenue|performance|reliability|security
+  confidence:     real('confidence').notNull(),
+  evidence:       jsonb('evidence').notNull().default([]),  // array of pattern_ids + signal summaries
+  actionRequired: boolean('action_required').notNull().default(false),
+  approved:       boolean('approved'),  // null=pending, true=approved, false=rejected
+  approvedBy:     text('approved_by'),
+  approvedAt:     bigint('approved_at', { mode: 'number' }),
+  patternId:      text('pattern_id'),
+  embedding:      vector('embedding', { dimensions: 768 }),
+  status:         text('status').notNull().default('pending_review'), // pending_review|approved|rejected|executed|archived
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:      bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('li_workspace_idx').on(t.workspaceId),
+  index('li_category_idx').on(t.category),
+  index('li_status_idx').on(t.status),
+  index('li_confidence_idx').on(t.confidence),
+])
+
+export const learningFeedback = pgTable('learning_feedback', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  recommendationId: text('recommendation_id').notNull(),
+  insightId:        text('insight_id'),
+  action:           text('action').notNull(), // accepted|rejected|ignored|executed
+  outcome:          text('outcome'), // successful|failed|partial|pending
+  outcomeNotes:     text('outcome_notes'),
+  userId:           text('user_id'),
+  deltaMetric:      real('delta_metric'),   // measurable change after execution
+  metricName:       text('metric_name'),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:        bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('lf_workspace_idx').on(t.workspaceId),
+  index('lf_rec_idx').on(t.recommendationId),
+  index('lf_action_idx').on(t.action),
+])
+
+export const learningScores = pgTable('learning_scores', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  entityType:  text('entity_type').notNull(),  // workflow|memory|provider|worker|route
+  entityId:    text('entity_id').notNull(),
+  scoreType:   text('score_type').notNull(),   // quality|reliability|performance|relevance
+  scoreValue:  real('score_value').notNull(),
+  history:     jsonb('history').notNull().default([]), // [{ts, value, reason}]
+  sampleCount: integer('sample_count').notNull().default(1),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('lsc_workspace_idx').on(t.workspaceId),
+  index('lsc_entity_idx').on(t.entityType, t.entityId),
+  index('lsc_type_idx').on(t.scoreType),
+])
+
+export const memoryEmbeddings = pgTable('memory_embeddings', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  memoryId:     text('memory_id').notNull(),
+  chunkIndex:   integer('chunk_index').notNull().default(0),
+  chunkText:    text('chunk_text').notNull(),
+  embedding:    vector('embedding', { dimensions: 768 }),
+  embeddingModel: text('embedding_model').notNull().default('nomic-embed-text'),
+  isStale:      boolean('is_stale').notNull().default(false),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('me_workspace_idx').on(t.workspaceId),
+  index('me_memory_idx').on(t.memoryId),
+  index('me_stale_idx').on(t.isStale),
+])
+
+export const memoryClusters = pgTable('memory_clusters', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  label:          text('label').notNull(),
+  description:    text('description'),
+  memberMemoryIds: jsonb('member_memory_ids').notNull().default([]),
+  centroid:       vector('centroid', { dimensions: 768 }),
+  memberCount:    integer('member_count').notNull().default(0),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:      bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('mc_workspace_idx').on(t.workspaceId),
+])
+
+export const retrievalLogs = pgTable('retrieval_logs', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  query:           text('query').notNull(),
+  queryEmbedding:  vector('query_embedding', { dimensions: 768 }),
+  memoryIdsReturned: jsonb('memory_ids_returned').notNull().default([]),
+  scores:          jsonb('scores').notNull().default([]),
+  retrievalType:   text('retrieval_type').notNull().default('hybrid'), // semantic|keyword|hybrid
+  latencyMs:       integer('latency_ms'),
+  wasUsed:         boolean('was_used').notNull().default(false),
+  usedByRunId:     text('used_by_run_id'),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rl_workspace_idx').on(t.workspaceId),
+  index('rl_used_idx').on(t.wasUsed),
+  index('rl_created_idx').on(t.createdAt),
+])
+
+export const recommendationOutcomes = pgTable('recommendation_outcomes', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  recommendationId: text('recommendation_id').notNull(),
+  insightId:        text('insight_id'),
+  outcome:          text('outcome').notNull(), // accepted|rejected|ignored|executed|successful|failed
+  deltaMetric:      real('delta_metric'),
+  metricName:       text('metric_name'),
+  notes:            text('notes'),
+  executedBy:       text('executed_by'),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ro_workspace_idx').on(t.workspaceId),
+  index('ro_rec_idx').on(t.recommendationId),
+])
+
+export const modelQualityScores = pgTable('model_quality_scores', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  provider:    text('provider').notNull(),   // ollama|openai|anthropic|local
+  model:       text('model').notNull(),
+  taskType:    text('task_type').notNull(),  // embedding|completion|classification|summarization
+  scoreValue:  real('score_value').notNull(),
+  sampleCount: integer('sample_count').notNull().default(1),
+  latencyP50:  real('latency_p50'),
+  latencyP99:  real('latency_p99'),
+  errorRate:   real('error_rate').notNull().default(0),
+  history:     jsonb('history').notNull().default([]),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('mqs_workspace_idx').on(t.workspaceId),
+  index('mqs_provider_idx').on(t.provider, t.model),
+  index('mqs_task_idx').on(t.taskType),
+])
+
+// ─── Remote Compute Router ────────────────────────────────────────────────────
+// Persistent provider registry: API keys (AES-256-GCM encrypted), remote
+// endpoints, health log, failure log, and per-workspace budget state.
+
+/** Per-workspace configuration for an API provider (Groq, OpenAI, etc.) */
+export const providerConfigs = pgTable('provider_configs', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  providerId:       text('provider_id').notNull(), // groq|openrouter|openai|anthropic|gemini|ollama_remote
+  label:            text('label').notNull(),
+  apiKeyEncrypted:  text('api_key_encrypted'),     // AES-256-GCM ciphertext (hex)
+  apiKeyIv:         text('api_key_iv'),             // AES-256-GCM nonce (hex)
+  enabled:          boolean('enabled').notNull().default(true),
+  priority:         integer('priority').notNull().default(50), // lower = preferred
+  maxCostPerReqUsd: real('max_cost_per_req_usd'),
+  notes:            text('notes'),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:        bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('pc_workspace_idx').on(t.workspaceId),
+  index('pc_provider_idx').on(t.providerId),
+  index('pc_enabled_idx').on(t.enabled),
+])
+
+/** Private remote endpoints (self-hosted Ollama, vLLM, RunPod, etc.) */
+export const remoteEndpoints = pgTable('remote_endpoints', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  name:            text('name').notNull(),
+  type:            text('type').notNull(), // ollama|vllm|localai|tgi|openai_compat|runpod|vastai|lambda
+  baseUrl:         text('base_url').notNull(),
+  apiKeyEncrypted: text('api_key_encrypted'),
+  apiKeyIv:        text('api_key_iv'),
+  // Custom auth headers stored encrypted (JSON object: Record<string,string>)
+  customHeadersEncrypted: text('custom_headers_encrypted'),
+  customHeadersIv:        text('custom_headers_iv'),
+  modelIds:        text('model_ids').array().notNull().default([]), // models available on this endpoint
+  // Capacity / pricing
+  maxContextTokens: integer('max_context_tokens').notNull().default(8192),
+  promptPer1kUsd:   real('prompt_per_1k_usd').notNull().default(0),   // 0 = self-hosted / free
+  outputPer1kUsd:   real('output_per_1k_usd').notNull().default(0),
+  timeoutMs:        integer('timeout_ms').notNull().default(60_000),    // request timeout
+  enabled:         boolean('enabled').notNull().default(true),
+  paused:          boolean('paused').notNull().default(false),          // soft-disable without removing
+  priority:        integer('priority').notNull().default(10), // private preferred over API
+  healthStatus:    text('health_status').notNull().default('unknown'), // healthy|degraded|down|unknown
+  lastHealthCheck: bigint('last_health_check', { mode: 'number' }),
+  latencyMs:       real('latency_ms'),
+  // Model discovery
+  modelCount:           integer('model_count').notNull().default(0),
+  lastModelDiscovery:   bigint('last_model_discovery', { mode: 'number' }),
+  lastDiscoveryError:   text('last_discovery_error'),
+  notes:           text('notes'),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:       bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('re_workspace_idx').on(t.workspaceId),
+  index('re_enabled_idx').on(t.enabled),
+  index('re_health_idx').on(t.healthStatus),
+  index('re_priority_idx').on(t.priority),
+])
+
+/** Per-request usage log for remote endpoints */
+export const endpointUsageLogs = pgTable('endpoint_usage_logs', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  endpointId:   text('endpoint_id').notNull(),
+  model:        text('model').notNull(),
+  taskType:     text('task_type').notNull(),
+  promptTokens: integer('prompt_tokens').notNull().default(0),
+  outputTokens: integer('output_tokens').notNull().default(0),
+  costUsd:      real('cost_usd').notNull().default(0),
+  latencyMs:    integer('latency_ms').notNull().default(0),
+  streamed:     boolean('streamed').notNull().default(false),
+  success:      boolean('success').notNull().default(true),
+  errorMessage: text('error_message'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('eul_workspace_idx').on(t.workspaceId),
+  index('eul_endpoint_idx').on(t.endpointId),
+  index('eul_created_idx').on(t.createdAt),
+])
+
+/** Time-series health check results */
+export const providerHealthLog = pgTable('provider_health_log', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  providerId:  text('provider_id').notNull(),   // provider id or endpoint id
+  sourceType:  text('source_type').notNull().default('provider'), // provider|endpoint
+  status:      text('status').notNull(),         // healthy|degraded|down
+  latencyMs:   real('latency_ms'),
+  errorRate:   real('error_rate').notNull().default(0),
+  checkedAt:   bigint('checked_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('phl_workspace_idx').on(t.workspaceId),
+  index('phl_provider_idx').on(t.providerId),
+  index('phl_checked_idx').on(t.checkedAt),
+])
+
+/** Per-request failure log for debugging and routing intelligence */
+export const providerFailures = pgTable('provider_failures', {
+  id:                 text('id').primaryKey(),
+  workspaceId:        text('workspace_id').notNull(),
+  providerId:         text('provider_id').notNull(),
+  endpointId:         text('endpoint_id'),             // set if remote endpoint
+  taskType:           text('task_type').notNull(),
+  model:              text('model').notNull(),
+  errorType:          text('error_type').notNull(),    // rate_limit|auth|timeout|server_error|budget_blocked|unknown
+  errorMessage:       text('error_message').notNull(),
+  fallbackUsed:       boolean('fallback_used').notNull().default(false),
+  fallbackProviderId: text('fallback_provider_id'),
+  costUsd:            real('cost_usd').notNull().default(0),
+  latencyMs:          real('latency_ms'),
+  createdAt:          bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('pf_workspace_idx').on(t.workspaceId),
+  index('pf_provider_idx').on(t.providerId),
+  index('pf_created_idx').on(t.createdAt),
+  index('pf_error_idx').on(t.errorType),
+])
+
+/** Per-workspace budget state (spend tracking + limits) */
+export const providerBudgets = pgTable('provider_budgets', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull().unique(),
+  dailyLimitUsd:    real('daily_limit_usd').notNull().default(10),
+  weeklyLimitUsd:   real('weekly_limit_usd').notNull().default(0),
+  monthlyLimitUsd:  real('monthly_limit_usd').notNull().default(100),
+  dailySpendUsd:    real('daily_spend_usd').notNull().default(0),
+  weeklySpendUsd:   real('weekly_spend_usd').notNull().default(0),
+  monthlySpendUsd:  real('monthly_spend_usd').notNull().default(0),
+  dailyResetAt:     bigint('daily_reset_at', { mode: 'number' }).notNull(),
+  weeklyResetAt:    bigint('weekly_reset_at', { mode: 'number' }),
+  monthlyResetAt:   bigint('monthly_reset_at', { mode: 'number' }).notNull(),
+  alertThreshold:   real('alert_threshold').notNull().default(0.8),
+  maxPerJobUsd:     real('max_per_job_usd').notNull().default(0),
+  maxBrowserSessionSecs: integer('max_browser_session_secs').notNull().default(0),
+  maxAiRequestSecs: integer('max_ai_request_secs').notNull().default(0),
+  maxRetries:       integer('max_retries').notNull().default(10),
+  maxConcurrentRemote: integer('max_concurrent_remote').notNull().default(5),
+  hardStop:         boolean('hard_stop').notNull().default(false),
+  updatedAt:        bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('pb_workspace_idx').on(t.workspaceId),
+])
+
+/** Kill switches — per-workspace per-type circuit breakers */
+export const killSwitches = pgTable('kill_switches', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  switchType:  text('switch_type').notNull(), // remote_worker | provider | browser_job | ai_request
+  enabled:     boolean('enabled').notNull().default(false),
+  reason:      text('reason'),
+  enabledBy:   text('enabled_by'),
+  enabledAt:   bigint('enabled_at', { mode: 'number' }),
+  disabledAt:  bigint('disabled_at', { mode: 'number' }),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('ks_workspace_type_idx').on(t.workspaceId, t.switchType),
+  index('ks_workspace_idx').on(t.workspaceId),
+])
+
+/** Runaway job log — jobs detected and stopped for exceeding limits */
+export const runawayJobs = pgTable('runaway_jobs', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  jobId:       text('job_id').notNull(),
+  jobType:     text('job_type').notNull(), // ai | browser | remote | workflow
+  endpointId:  text('endpoint_id'),
+  providerId:  text('provider_id'),
+  costUsd:     real('cost_usd').notNull().default(0),
+  durationMs:  bigint('duration_ms', { mode: 'number' }).notNull().default(0),
+  reason:      text('reason').notNull(), // cost_exceeded | duration_exceeded | retry_exceeded | manual
+  stopped:     boolean('stopped').notNull().default(false),
+  stoppedAt:   bigint('stopped_at', { mode: 'number' }),
+  detectedAt:  bigint('detected_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rj_workspace_idx').on(t.workspaceId),
+  index('rj_job_id_idx').on(t.jobId),
+  index('rj_detected_idx').on(t.detectedAt),
+  index('rj_stopped_idx').on(t.stopped),
+])
+
+// ─── Remote Runtime Foundation ────────────────────────────────────────────────
+
+/** Remote worker registry — GPU / browser / CPU workers */
+export const workerRegistry = pgTable('worker_registry', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  workerName:       text('worker_name').notNull(),
+  workerType:       text('worker_type').notNull().default('cpu'),  // cpu|gpu|browser|hybrid
+  capabilities:     text('capabilities').array().notNull().default([]),
+  endpointUrl:      text('endpoint_url'),
+  metadata:         jsonb('metadata').notNull().default({}),
+  status:           text('status').notNull().default('idle'),  // idle|busy|offline|draining
+  maxConcurrent:    integer('max_concurrent').notNull().default(1),
+  activeLeases:     integer('active_leases').notNull().default(0),
+  lastHeartbeatAt:  bigint('last_heartbeat_at', { mode: 'number' }),
+  registeredAt:     bigint('registered_at', { mode: 'number' }).notNull(),
+  staleThresholdMs: integer('stale_threshold_ms').notNull().default(60_000),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:        bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('wr_workspace_idx').on(t.workspaceId),
+  index('wr_status_idx').on(t.status),
+  index('wr_type_idx').on(t.workerType),
+  index('wr_heartbeat_idx').on(t.lastHeartbeatAt),
+])
+
+/** Execution leases — job ownership by worker with timeout enforcement */
+export const executionLeases = pgTable('execution_leases', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  workerId:    text('worker_id').notNull(),
+  jobId:       text('job_id').notNull(),
+  jobType:     text('job_type').notNull().default('ai'),  // ai|browser|remote|workflow
+  status:      text('status').notNull().default('active'),  // active|completed|expired|reclaimed|cancelled
+  startedAt:   bigint('started_at', { mode: 'number' }).notNull(),
+  expiresAt:   bigint('expires_at', { mode: 'number' }).notNull(),
+  renewedAt:   bigint('renewed_at', { mode: 'number' }),
+  completedAt: bigint('completed_at', { mode: 'number' }),
+  reclaimedAt: bigint('reclaimed_at', { mode: 'number' }),
+  timeoutMs:   integer('timeout_ms').notNull().default(300_000),
+  costUsd:     real('cost_usd').notNull().default(0),
+  metadata:    jsonb('metadata').notNull().default({}),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('el_workspace_idx').on(t.workspaceId),
+  index('el_worker_idx').on(t.workerId),
+  index('el_job_idx').on(t.jobId),
+  index('el_status_idx').on(t.status),
+  index('el_expires_idx').on(t.expiresAt),
+])
+
+/** Provider composite scores + circuit breaker state */
+export const providerScores = pgTable('provider_scores', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  providerId:       text('provider_id').notNull(),
+  latencyScore:     real('latency_score').notNull().default(1.0),
+  successScore:     real('success_score').notNull().default(1.0),
+  costScore:        real('cost_score').notNull().default(1.0),
+  capabilityScore:  real('capability_score').notNull().default(1.0),
+  compositeScore:   real('composite_score').notNull().default(1.0),
+  sampleCount:      integer('sample_count').notNull().default(0),
+  lastLatencyMs:    real('last_latency_ms'),
+  lastErrorRate:    real('last_error_rate').notNull().default(0),
+  circuitState:     text('circuit_state').notNull().default('closed'),  // closed|open|half_open
+  circuitOpenedAt:  bigint('circuit_opened_at', { mode: 'number' }),
+  circuitFailures:  integer('circuit_failures').notNull().default(0),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:        bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('ps_workspace_provider_idx').on(t.workspaceId, t.providerId),
+  index('ps_workspace_idx').on(t.workspaceId),
+  index('ps_composite_idx').on(t.compositeScore),
+  index('ps_circuit_idx').on(t.circuitState),
+])
+
+// ─── Runtime Protection (Phase 2) ────────────────────────────────────────────
+
+/** Fine-grained budget caps: per-user, per-project, per-provider, per-workflow */
+export const budgetCaps = pgTable('budget_caps', {
+  id:                   text('id').primaryKey(),
+  workspaceId:          text('workspace_id').notNull(),
+  scopeType:            text('scope_type').notNull(),   // workspace|user|project|provider|workflow
+  scopeId:              text('scope_id').notNull(),
+  maxDailyUsd:          real('max_daily_usd').notNull().default(0),
+  maxMonthlyUsd:        real('max_monthly_usd').notNull().default(0),
+  maxPerExecutionUsd:   real('max_per_execution_usd').notNull().default(0),
+  maxWorkflowUsd:       real('max_workflow_usd').notNull().default(0),
+  currentDailyUsd:      real('current_daily_usd').notNull().default(0),
+  currentMonthlyUsd:    real('current_monthly_usd').notNull().default(0),
+  dailyResetAt:         bigint('daily_reset_at', { mode: 'number' }).notNull(),
+  monthlyResetAt:       bigint('monthly_reset_at', { mode: 'number' }).notNull(),
+  enabled:              boolean('enabled').notNull().default(true),
+  createdAt:            bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:            bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('bc_scope_idx').on(t.workspaceId, t.scopeType, t.scopeId),
+  index('bc_workspace_idx').on(t.workspaceId),
+  index('bc_scope_type_idx').on(t.scopeType),
+])
+
+/** Per-execution preflight cost estimates and hard-block decisions */
+export const executionGuards = pgTable('execution_guards', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  executionId:      text('execution_id').notNull(),    // run_id or job_id
+  scopeType:        text('scope_type').notNull(),
+  scopeId:          text('scope_id').notNull(),
+  providerId:       text('provider_id').notNull(),
+  estimatedCostUsd: real('estimated_cost_usd').notNull().default(0),
+  decision:         text('decision').notNull(),        // approved | blocked
+  blockReason:      text('block_reason'),
+  capId:            text('cap_id'),
+  actualCostUsd:    real('actual_cost_usd'),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('eg_workspace_idx').on(t.workspaceId),
+  index('eg_execution_idx').on(t.executionId),
+  index('eg_decision_idx').on(t.decision),
+  index('eg_created_idx').on(t.createdAt),
+])
+
+/** Provider quarantine — beyond circuit breaker; manual or timed release */
+export const providerQuarantine = pgTable('provider_quarantine', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  providerId:     text('provider_id').notNull(),
+  reason:         text('reason').notNull(),
+  quarantinedAt:  bigint('quarantined_at', { mode: 'number' }).notNull(),
+  releaseAt:      bigint('release_at', { mode: 'number' }),       // null = manual only
+  releasedAt:     bigint('released_at', { mode: 'number' }),
+  autoRelease:    boolean('auto_release').notNull().default(false),
+  releasedBy:     text('released_by'),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:      bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('pq_workspace_provider_idx').on(t.workspaceId, t.providerId),
+  index('pq_workspace_idx').on(t.workspaceId),
+  index('pq_released_idx').on(t.releasedAt),
+])
+
+/** Queue pause state — per-workspace per-queue */
+export const queuePauses = pgTable('queue_pauses', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  queueName:   text('queue_name').notNull(),
+  paused:      boolean('paused').notNull().default(false),
+  reason:      text('reason'),
+  pausedBy:    text('paused_by'),
+  pausedAt:    bigint('paused_at', { mode: 'number' }),
+  resumedAt:   bigint('resumed_at', { mode: 'number' }),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('qp_workspace_queue_idx').on(t.workspaceId, t.queueName),
+  index('qp_workspace_idx').on(t.workspaceId),
+  index('qp_paused_idx').on(t.paused),
+])
+
+// ─── Replay & Recovery (Phase 3) ─────────────────────────────────────────────
+
+/** Audit trail for workflow replay attempts */
+export const replayRuns = pgTable('replay_runs', {
+  id:                  text('id').primaryKey(),
+  workspaceId:         text('workspace_id').notNull(),
+  sourceRunId:         text('source_run_id').notNull(),
+  checkpointId:        text('checkpoint_id'),
+  status:              text('status').notNull().default('running'),  // running|completed|failed|diverged
+  eventCount:          integer('event_count').notNull().default(0),
+  replayedCount:       integer('replayed_count').notNull().default(0),
+  divergedAtEventId:   text('diverged_at_event_id'),
+  divergenceReason:    text('divergence_reason'),
+  startedAt:           bigint('started_at', { mode: 'number' }).notNull(),
+  completedAt:         bigint('completed_at', { mode: 'number' }),
+  createdAt:           bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:           bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rpr_workspace_idx').on(t.workspaceId),
+  index('rpr_source_run_idx').on(t.sourceRunId),
+  index('rpr_status_idx').on(t.status),
+  index('rpr_created_idx').on(t.createdAt),
+])
+
+/** State divergences detected during replay */
+export const replayDivergences = pgTable('replay_divergences', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  replayRunId:    text('replay_run_id').notNull(),
+  eventId:        text('event_id').notNull(),
+  eventType:      text('event_type').notNull(),
+  expectedState:  jsonb('expected_state').notNull(),
+  actualState:    jsonb('actual_state').notNull(),
+  divergenceType: text('divergence_type').notNull(),  // state_mismatch|missing_event|extra_event|unexpected_error
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rpd_workspace_idx').on(t.workspaceId),
+  index('rpd_replay_run_idx').on(t.replayRunId),
+  index('rpd_created_idx').on(t.createdAt),
+])
+
+// ─── Cloud / API-Only Runtime Mode (Phase 4) ─────────────────────────────────
+
+/** Per-workspace runtime mode configuration */
+export const runtimeSettings = pgTable('runtime_settings', {
+  id:                 text('id').primaryKey(),
+  workspaceId:        text('workspace_id').notNull(),
+  mode:               text('mode').notNull().default('local'),  // local|hybrid|cloud-api-only
+  allowLocalGpu:      boolean('allow_local_gpu').notNull().default(true),
+  allowLocalBrowser:  boolean('allow_local_browser').notNull().default(true),
+  preferredProviders: text('preferred_providers').array().notNull().default([]),
+  createdAt:          bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:          bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('rs_workspace_idx').on(t.workspaceId),
+  index('rs_mode_idx').on(t.mode),
+])
+
+/** Per-user provider API credentials (scoped to user within workspace) */
+export const userProviderCreds = pgTable('user_provider_creds', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  userId:           text('user_id').notNull(),
+  providerId:       text('provider_id').notNull(),
+  label:            text('label').notNull(),
+  apiKeyEncrypted:  text('api_key_encrypted'),
+  apiKeyIv:         text('api_key_iv'),
+  enabled:          boolean('enabled').notNull().default(true),
+  lastValidatedAt:  bigint('last_validated_at', { mode: 'number' }),
+  validationStatus: text('validation_status').notNull().default('unknown'),  // unknown|valid|invalid
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:        bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('upc_user_provider_idx').on(t.workspaceId, t.userId, t.providerId),
+  index('upc_workspace_idx').on(t.workspaceId),
+  index('upc_user_idx').on(t.userId),
+])
+
+/** Budget alerts — fired threshold notifications */
+export const budgetAlerts = pgTable('budget_alerts', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  alertType:    text('alert_type').notNull(), // daily | weekly | monthly | per_job
+  thresholdPct: real('threshold_pct').notNull(),
+  currentUsd:   real('current_usd').notNull(),
+  limitUsd:     real('limit_usd').notNull(),
+  dismissed:    boolean('dismissed').notNull().default(false),
+  dismissedAt:  bigint('dismissed_at', { mode: 'number' }),
+  firedAt:      bigint('fired_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ba_workspace_idx').on(t.workspaceId),
+  index('ba_fired_idx').on(t.firedAt),
+  index('ba_dismissed_idx').on(t.dismissed),
+])
+
+// ─── Autonomous Agent System ──────────────────────────────────────────────────
+
+/** Top-level autonomous run — persisted state machine */
+export const autonomousRuns = pgTable('autonomous_runs', {
+  id:                  text('id').primaryKey(),
+  workspaceId:         text('workspace_id').notNull(),
+  status:              text('status').notNull().default('queued'),  // queued|running|paused|blocked|failed|complete|cancelled
+  phase:               text('phase'),  // scan|audit|plan|patch|verify|done
+  masterPrompt:        text('master_prompt').notNull(),
+  currentAgent:        text('current_agent'),
+  activeJobId:         text('active_job_id'),
+  lastEvent:           text('last_event'),
+  failureReason:       text('failure_reason'),
+  verificationResults: jsonb('verification_results'),
+  completedAt:         bigint('completed_at', { mode: 'number' }),
+  createdAt:           bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:           bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ar_workspace_idx').on(t.workspaceId),
+  index('ar_status_idx').on(t.status),
+  index('ar_created_idx').on(t.createdAt),
+])
+
+/** Individual agent job within an autonomous run */
+export const autonomousJobs = pgTable('autonomous_jobs', {
+  id:           text('id').primaryKey(),
+  runId:        text('run_id').notNull(),
+  workspaceId:  text('workspace_id').notNull(),
+  agentName:    text('agent_name').notNull(),  // repo-scanner|auditor|planner|patch-executor|verifier
+  phase:        text('phase').notNull(),
+  status:       text('status').notNull().default('queued'),  // queued|running|paused|blocked|failed|complete|unverified
+  bullmqJobId:  text('bullmq_job_id'),
+  input:        jsonb('input').notNull().default({}),
+  output:       jsonb('output'),
+  errorMessage: text('error_message'),
+  attempt:      integer('attempt').notNull().default(1),
+  startedAt:    bigint('started_at', { mode: 'number' }),
+  completedAt:  bigint('completed_at', { mode: 'number' }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('aj_run_idx').on(t.runId),
+  index('aj_workspace_idx').on(t.workspaceId),
+  index('aj_status_idx').on(t.status),
+  index('aj_phase_idx').on(t.phase),
+  index('aj_created_idx').on(t.createdAt),
+])
+
+/** Verification evidence — real command output required before marking verified */
+export const verificationEvidence = pgTable('verification_evidence', {
+  id:           text('id').primaryKey(),
+  jobId:        text('job_id').notNull(),
+  runId:        text('run_id').notNull(),
+  workspaceId:  text('workspace_id').notNull(),
+  command:      text('command').notNull(),  // e.g. "tsc --noEmit"
+  args:         text('args').array().notNull().default([]),
+  exitCode:     integer('exit_code').notNull(),
+  stdout:       text('stdout').notNull().default(''),
+  stderr:       text('stderr').notNull().default(''),
+  passed:       boolean('passed').notNull(),
+  durationMs:   integer('duration_ms').notNull().default(0),
+  filesChanged: text('files_changed').array().notNull().default([]),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ve_job_idx').on(t.jobId),
+  index('ve_run_idx').on(t.runId),
+  index('ve_workspace_idx').on(t.workspaceId),
+  index('ve_passed_idx').on(t.passed),
+  index('ve_created_idx').on(t.createdAt),
+])
+
+/** Patch records — file changes applied by the patch executor */
+export const patchRecords = pgTable('patch_records', {
+  id:              text('id').primaryKey(),
+  jobId:           text('job_id').notNull(),
+  runId:           text('run_id').notNull(),
+  workspaceId:     text('workspace_id').notNull(),
+  filePath:        text('file_path').notNull(),
+  originalContent: text('original_content').notNull(),  // stored for rollback
+  patchedContent:  text('patched_content').notNull(),
+  linesAdded:      integer('lines_added').notNull().default(0),
+  linesRemoved:    integer('lines_removed').notNull().default(0),
+  status:          text('status').notNull().default('applied'),  // applied|rolled_back|verified
+  rolledBackAt:    bigint('rolled_back_at', { mode: 'number' }),
+  rollbackReason:  text('rollback_reason'),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('pr_job_idx').on(t.jobId),
+  index('pr_run_idx').on(t.runId),
+  index('pr_workspace_idx').on(t.workspaceId),
+  index('pr_status_idx').on(t.status),
+  index('pr_file_idx').on(t.filePath),
+])
+
+/** Repo snapshots — lightweight file inventory before patching */
+export const repoSnapshots = pgTable('repo_snapshots', {
+  id:          text('id').primaryKey(),
+  runId:       text('run_id').notNull(),
+  workspaceId: text('workspace_id').notNull(),
+  rootPath:    text('root_path').notNull(),
+  fileCount:   integer('file_count').notNull().default(0),
+  totalLines:  integer('total_lines').notNull().default(0),
+  fileTree:    jsonb('file_tree').notNull().default([]),  // array of { path, size, lines, type }
+  summary:     jsonb('summary').notNull().default({}),   // { byType, byDirectory }
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rss_run_idx').on(t.runId),
+  index('rss_workspace_idx').on(t.workspaceId),
+])
+
+// ─── Audit System ─────────────────────────────────────────────────────────────
+
+/** Top-level audit run — tracks a full-repo scan */
+export const auditRuns = pgTable('audit_runs', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  status:       text('status').notNull().default('running'),  // running|complete|failed
+  rootPath:     text('root_path').notNull(),
+  filesScanned: integer('files_scanned').notNull().default(0),
+  findingCount: integer('finding_count').notNull().default(0),
+  criticalCount: integer('critical_count').notNull().default(0),
+  highCount:    integer('high_count').notNull().default(0),
+  taskCount:    integer('task_count').notNull().default(0),
+  errorMessage: text('error_message'),
+  completedAt:  bigint('completed_at', { mode: 'number' }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ar2_workspace_idx').on(t.workspaceId),
+  index('ar2_status_idx').on(t.status),
+  index('ar2_created_idx').on(t.createdAt),
+])
+
+/** Individual audit finding — references a real file and line */
+export const auditFindings = pgTable('audit_findings', {
+  id:          text('id').primaryKey(),
+  auditRunId:  text('audit_run_id').notNull(),
+  workspaceId: text('workspace_id').notNull(),
+  category:    text('category').notNull(),    // critical_runtime|security|budget_cost|replay_rollback|provider_routing|ui_wiring|testing|polish
+  severity:    text('severity').notNull(),    // critical|high|medium|low
+  patternId:   text('pattern_id').notNull(),  // which pattern matched
+  filePath:    text('file_path').notNull(),   // absolute path
+  lineNumber:  integer('line_number').notNull().default(1),
+  matchedText: text('matched_text').notNull(),
+  description: text('description').notNull(),
+  suggestion:  text('suggestion').notNull(),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('af_run_idx').on(t.auditRunId),
+  index('af_workspace_idx').on(t.workspaceId),
+  index('af_category_idx').on(t.category),
+  index('af_severity_idx').on(t.severity),
+  index('af_file_idx').on(t.filePath),
+])
+
+/** Prioritised build task generated from audit findings */
+export const buildTasks = pgTable('build_tasks', {
+  id:               text('id').primaryKey(),
+  auditRunId:       text('audit_run_id').notNull(),
+  findingId:        text('finding_id'),            // primary finding that triggered this
+  workspaceId:      text('workspace_id').notNull(),
+  title:            text('title').notNull(),
+  description:      text('description').notNull(),
+  category:         text('category').notNull(),
+  severity:         text('severity').notNull(),
+  priority:         integer('priority').notNull().default(50),  // lower = higher priority
+  status:           text('status').notNull().default('pending'), // pending|assigned|in_progress|complete|blocked|approval_required
+  requiresApproval: boolean('requires_approval').notNull().default(false),
+  assignedAgent:    text('assigned_agent'),
+  blastRadius:      text('blast_radius').notNull().default('low'), // low|medium|high|critical
+  filePath:         text('file_path'),
+  autonomousJobId:  text('autonomous_job_id'),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:        bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('bt_run_idx').on(t.auditRunId),
+  index('bt_workspace_idx').on(t.workspaceId),
+  index('bt_status_idx').on(t.status),
+  index('bt_priority_idx').on(t.priority),
+  index('bt_severity_idx').on(t.severity),
+  index('bt_category_idx').on(t.category),
+])
+
+// ─── Patch Approval Gates ─────────────────────────────────────────────────────
+
+/**
+ * Patch-level approval records — separate from workflow approvals.
+ * Created by the risk classifier when a build task is classified as risky.
+ * Agent enforcement blocks execution until status = 'approved'.
+ */
+export const patchApprovals = pgTable('patch_approvals', {
+  id:              text('id').primaryKey(),
+  taskId:          text('task_id').notNull(),          // buildTasks.id
+  auditRunId:      text('audit_run_id').notNull(),
+  workspaceId:     text('workspace_id').notNull(),
+  // Risk classification
+  riskLevel:       text('risk_level').notNull(),        // low|medium|high|critical
+  riskCategories:  text('risk_categories').array().notNull().default([]),  // auth|payment|database|...
+  riskReason:      text('risk_reason').notNull(),        // human-readable explanation
+  // Task context
+  taskTitle:       text('task_title').notNull(),
+  filePath:        text('file_path'),
+  affectedFiles:   text('affected_files').array().notNull().default([]),
+  diffPreview:     text('diff_preview'),               // truncated diff shown to reviewer
+  // Lifecycle
+  status:          text('status').notNull().default('pending'), // pending|approved|rejected|changes_requested
+  reviewerId:      text('reviewer_id'),
+  reviewerNote:    text('reviewer_note'),
+  reviewedAt:      bigint('reviewed_at', { mode: 'number' }),
+  expiresAt:       bigint('expires_at', { mode: 'number' }),   // auto-expire after 7 days
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:       bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('pa_task_idx').on(t.taskId),
+  index('pa_run_idx').on(t.auditRunId),
+  index('pa_workspace_idx').on(t.workspaceId),
+  index('pa_status_idx').on(t.status),
+  index('pa_risk_idx').on(t.riskLevel),
+  index('pa_created_idx').on(t.createdAt),
+])
+
+// ─── Sandbox Execution System ─────────────────────────────────────────────────
+
+/**
+ * One record per sandboxed command execution.
+ * Tracks lease ownership, heartbeat, timeout, and worker identity.
+ */
+export const sandboxSessions = pgTable('sandbox_sessions', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  jobId:          text('job_id'),           // links to autonomousJobs if from orchestrator
+  runId:          text('run_id'),
+  // Worker lease — one owner at a time
+  leaseOwner:     text('lease_owner').notNull(),     // workerId that claimed this session
+  leaseExpiresAt: bigint('lease_expires_at', { mode: 'number' }).notNull(),
+  lastHeartbeat:  bigint('last_heartbeat',   { mode: 'number' }).notNull(),
+  // Execution metadata
+  command:        text('command').notNull(),
+  args:           text('args').array().notNull().default([]),
+  workingDir:     text('working_dir').notNull(),
+  status:         text('status').notNull().default('running'), // running|complete|failed|timeout|cancelled|isolation_violation
+  exitCode:       integer('exit_code'),
+  durationMs:     integer('duration_ms'),
+  timeoutMs:      integer('timeout_ms').notNull().default(120000),
+  startedAt:      bigint('started_at',   { mode: 'number' }).notNull(),
+  completedAt:    bigint('completed_at', { mode: 'number' }),
+  // Redacted output (never raw secrets)
+  stdoutRedacted: text('stdout_redacted').notNull().default(''),
+  stderrRedacted: text('stderr_redacted').notNull().default(''),
+  secretsRedacted: integer('secrets_redacted').notNull().default(0), // count of redacted tokens
+  violationReason: text('violation_reason'),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:      bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ss_workspace_idx').on(t.workspaceId),
+  index('ss_job_idx').on(t.jobId),
+  index('ss_status_idx').on(t.status),
+  index('ss_lease_owner_idx').on(t.leaseOwner),
+  index('ss_started_idx').on(t.startedAt),
+])
+
+/**
+ * Structured lifecycle events per sandbox session.
+ * All events contain only redacted output — no raw secrets.
+ */
+export const sandboxEvents = pgTable('sandbox_events', {
+  id:          text('id').primaryKey(),
+  sessionId:   text('session_id').notNull(),
+  workspaceId: text('workspace_id').notNull(),
+  eventType:   text('event_type').notNull(), // started|command_executed|heartbeat|timeout|failed|completed|secret_redacted|isolation_violation
+  leaseOwner:  text('lease_owner').notNull(),
+  payload:     jsonb('payload').notNull().default({}),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('sev_session_idx').on(t.sessionId),
+  index('sev_workspace_idx').on(t.workspaceId),
+  index('sev_type_idx').on(t.eventType),
+  index('sev_created_idx').on(t.createdAt),
+])
+
+// ─── Incident Response System ─────────────────────────────────────────────────
+
+/**
+ * Production incidents — each one references real runtime signals.
+ * Created by the detector or manually; never fake.
+ */
+export const incidents = pgTable('incidents', {
+  id:              text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  // Classification
+  type:            text('type').notNull(),     // failed_workflow_spike|provider_outage|worker_heartbeat_failure|queue_backlog|budget_burn|replay_divergence|rollback_failure
+  severity:        text('severity').notNull(), // info|warning|critical|emergency
+  status:          text('status').notNull().default('open'), // open|acknowledged|mitigating|resolved|escalated
+  // Title + context
+  title:           text('title').notNull(),
+  summary:         text('summary').notNull(),
+  rootCauseHypothesis: text('root_cause_hypothesis'),
+  // Affected systems (real, queried from DB)
+  affectedSystems: jsonb('affected_systems').notNull().default({}), // { workflowIds, providerId, workerId, queueName, projectId }
+  // Linked runtime evidence — pointers to real DB rows
+  linkedEventIds:  text('linked_event_ids').array().notNull().default([]),
+  signalCount:     integer('signal_count').notNull().default(0),  // how many real signals contributed
+  // Triage output
+  recommendedAction: text('recommended_action'),
+  assignedAgent:   text('assigned_agent'),
+  repairTaskId:    text('repair_task_id'),
+  requiresApproval: boolean('requires_approval').notNull().default(false),
+  // Lifecycle
+  acknowledgedBy:  text('acknowledged_by'),
+  acknowledgedAt:  bigint('acknowledged_at', { mode: 'number' }),
+  resolvedBy:      text('resolved_by'),
+  resolvedAt:      bigint('resolved_at', { mode: 'number' }),
+  resolutionNote:  text('resolution_note'),
+  escalatedAt:     bigint('escalated_at', { mode: 'number' }),
+  escalationReason: text('escalation_reason'),
+  // Metadata
+  detectedAt:      bigint('detected_at', { mode: 'number' }).notNull(),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:       bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('inc_workspace_idx').on(t.workspaceId),
+  index('inc_status_idx').on(t.status),
+  index('inc_severity_idx').on(t.severity),
+  index('inc_type_idx').on(t.type),
+  index('inc_detected_idx').on(t.detectedAt),
+])
+
+/** Append-only timeline of actions on an incident */
+export const incidentTimeline = pgTable('incident_timeline', {
+  id:          text('id').primaryKey(),
+  incidentId:  text('incident_id').notNull(),
+  workspaceId: text('workspace_id').notNull(),
+  actionType:  text('action_type').notNull(), // opened|updated|acknowledged|escalated|resolved|triage_completed|repair_task_created|mitigation_started
+  actor:       text('actor').notNull().default('system'),
+  note:        text('note'),
+  payload:     jsonb('payload').notNull().default({}),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('inct_incident_idx').on(t.incidentId),
+  index('inct_workspace_idx').on(t.workspaceId),
+  index('inct_created_idx').on(t.createdAt),
+])
+
+// ─── Learning Runtime: Failure Memory ─────────────────────────────────────────
+
+/**
+ * Failure memory — every failed patch/command/provider call/worker run.
+ * Backed by real evidence IDs. Used to block repeat-failure attempts.
+ */
+export const failureMemory = pgTable('failure_memory', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  // Classification
+  failureType:       text('failure_type').notNull(),    // patch|command|provider_call|worker_exec|recovery
+  rootCauseClass:    text('root_cause_class').notNull(),// syntax|build|runtime|data|ui|performance|security|infra|unknown
+  // Target (what failed)
+  targetRef:         text('target_ref').notNull(),     // file path | command | providerId | workerId
+  targetKind:        text('target_kind').notNull(),    // file|command|provider|worker|job
+  // Signature for dedup/grouping
+  signature:         text('signature').notNull(),       // hash of failureType + targetRef + rootCauseClass + errorPattern
+  errorPattern:      text('error_pattern').notNull(),   // truncated error message pattern
+  // Context
+  agentId:           text('agent_id'),                  // which agent caused/handled this
+  // Evidence pointers — real row IDs only
+  evidenceIds:       text('evidence_ids').array().notNull().default([]),
+  // Fix attempt tracking
+  attemptedFixIds:   text('attempted_fix_ids').array().notNull().default([]),
+  occurrenceCount:   integer('occurrence_count').notNull().default(1),
+  blocked:           boolean('blocked').notNull().default(false), // true once we refuse further retries
+  firstSeenAt:       bigint('first_seen_at', { mode: 'number' }).notNull(),
+  lastSeenAt:        bigint('last_seen_at',  { mode: 'number' }).notNull(),
+  createdAt:         bigint('created_at',    { mode: 'number' }).notNull(),
+  updatedAt:         bigint('updated_at',    { mode: 'number' }).notNull(),
+}, (t) => [
+  index('fm_workspace_idx').on(t.workspaceId),
+  index('fm_signature_idx').on(t.signature),
+  index('fm_target_idx').on(t.targetRef),
+  index('fm_type_idx').on(t.failureType),
+  index('fm_agent_idx').on(t.agentId),
+  index('fm_count_idx').on(t.occurrenceCount),
+])
+
+/**
+ * Successful fixes — verified patches/commands that resolved a failure.
+ * Linked to verification evidence with passed=true.
+ */
+export const successfulFixes = pgTable('successful_fixes', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  failureSignature:  text('failure_signature').notNull(), // matches failureMemory.signature
+  fixDescription:    text('fix_description').notNull(),
+  targetRef:         text('target_ref').notNull(),
+  agentId:           text('agent_id'),
+  // Real evidence — verificationEvidence row IDs where passed=true
+  verificationEvidenceIds: text('verification_evidence_ids').array().notNull().default([]),
+  patchRecordIds:    text('patch_record_ids').array().notNull().default([]),
+  successCount:      integer('success_count').notNull().default(1),
+  firstAppliedAt:    bigint('first_applied_at', { mode: 'number' }).notNull(),
+  lastAppliedAt:     bigint('last_applied_at',  { mode: 'number' }).notNull(),
+  createdAt:         bigint('created_at',       { mode: 'number' }).notNull(),
+  updatedAt:         bigint('updated_at',       { mode: 'number' }).notNull(),
+}, (t) => [
+  index('sf_workspace_idx').on(t.workspaceId),
+  index('sf_signature_idx').on(t.failureSignature),
+  index('sf_target_idx').on(t.targetRef),
+  index('sf_agent_idx').on(t.agentId),
+])
+
+// ─── Multi-Agent Orchestrator ─────────────────────────────────────────────────
+
+/** Registered agent workers — capabilities, heartbeat, metrics */
+export const agentRegistrations = pgTable('agent_registrations', {
+  id:               text('id').primaryKey(),       // agentId
+  workspaceId:      text('workspace_id').notNull(),
+  agentName:        text('agent_name').notNull(),
+  capabilities:     text('capabilities').array().notNull().default([]),
+  status:           text('status').notNull().default('idle'), // idle|busy|down|disabled|restarting
+  lastHeartbeat:    bigint('last_heartbeat', { mode: 'number' }).notNull(),
+  // Health metrics
+  activeAssignments: integer('active_assignments').notNull().default(0),
+  successCount:     integer('success_count').notNull().default(0),
+  failureCount:     integer('failure_count').notNull().default(0),
+  rollbackCount:    integer('rollback_count').notNull().default(0),
+  registeredAt:     bigint('registered_at', { mode: 'number' }).notNull(),
+  updatedAt:        bigint('updated_at',    { mode: 'number' }).notNull(),
+}, (t) => [
+  index('areg_workspace_idx').on(t.workspaceId),
+  index('areg_status_idx').on(t.status),
+  index('areg_heartbeat_idx').on(t.lastHeartbeat),
+])
+
+/** Assignment of a task to an agent (1:1 ownership) */
+export const agentAssignments = pgTable('agent_assignments', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  agentId:      text('agent_id').notNull(),
+  taskKind:     text('task_kind').notNull(),   // build_task|incident_repair|workflow|audit_task
+  taskRef:      text('task_ref').notNull(),    // ID into the target table
+  status:       text('status').notNull().default('assigned'), // assigned|running|complete|failed|cancelled|blocked
+  // Dependency tracking
+  dependsOn:    text('depends_on').array().notNull().default([]),  // other assignment IDs
+  priority:     integer('priority').notNull().default(50),
+  assignedAt:   bigint('assigned_at',  { mode: 'number' }).notNull(),
+  startedAt:    bigint('started_at',   { mode: 'number' }),
+  completedAt:  bigint('completed_at', { mode: 'number' }),
+  errorMessage: text('error_message'),
+  updatedAt:    bigint('updated_at',   { mode: 'number' }).notNull(),
+}, (t) => [
+  index('aa_workspace_idx').on(t.workspaceId),
+  index('aa_agent_idx').on(t.agentId),
+  index('aa_task_idx').on(t.taskRef),
+  index('aa_status_idx').on(t.status),
+  index('aa_priority_idx').on(t.priority),
+])
+
+/** Execution locks — file / workflow / queue level */
+export const executionLocks = pgTable('execution_locks', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  lockKind:     text('lock_kind').notNull(),    // file|workflow|queue|task
+  resourceKey:  text('resource_key').notNull(), // canonical path or ID
+  holderId:     text('holder_id').notNull(),    // agentId or assignmentId
+  holderKind:   text('holder_kind').notNull().default('agent'), // agent|assignment|worker
+  acquiredAt:   bigint('acquired_at', { mode: 'number' }).notNull(),
+  expiresAt:    bigint('expires_at',  { mode: 'number' }).notNull(),
+  releasedAt:   bigint('released_at', { mode: 'number' }),
+  recoveredAt:  bigint('recovered_at', { mode: 'number' }), // if stale-recovered
+}, (t) => [
+  // Unique active lock per (kind, key) when not released — enforced in service layer
+  index('el_workspace_idx').on(t.workspaceId),
+  index('el_resource_idx').on(t.lockKind, t.resourceKey),
+  index('el_holder_idx').on(t.holderId),
+  index('el_expires_idx').on(t.expiresAt),
+])
+
+// ─── Production Readiness Audits + Launch Lock ────────────────────────────────
+
+/**
+ * Persisted production readiness audit report.
+ * Each row = one full audit run with per-check results.
+ */
+export const launchAudits = pgTable('launch_audits', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  // Overall result
+  readinessScore:    integer('readiness_score').notNull().default(0),  // 0-100
+  passedCount:       integer('passed_count').notNull().default(0),
+  failedCount:       integer('failed_count').notNull().default(0),
+  skippedCount:      integer('skipped_count').notNull().default(0),
+  unverifiedCount:   integer('unverified_count').notNull().default(0),
+  criticalBlockers:  integer('critical_blockers').notNull().default(0),
+  // Per-check results (jsonb array)
+  checkResults:      jsonb('check_results').notNull().default([]),  // [{ name, status, severity, evidence, reason }]
+  recommendedFixes:  jsonb('recommended_fixes').notNull().default([]),
+  // Triggered-by metadata
+  triggeredBy:       text('triggered_by').notNull().default('system'),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('la_workspace_idx').on(t.workspaceId),
+  index('la_score_idx').on(t.readinessScore),
+  index('la_created_idx').on(t.createdAt),
+])
+
+/**
+ * Launch lock — single row per workspace.
+ * Blocks production launch until critical checks pass.
+ */
+export const launchLocks = pgTable('launch_locks', {
+  id:                text('id').primaryKey(),     // = workspaceId
+  workspaceId:       text('workspace_id').notNull(),
+  locked:            boolean('locked').notNull().default(true),
+  blockingReasons:   text('blocking_reasons').array().notNull().default([]),
+  lastAuditId:       text('last_audit_id'),
+  lastAuditScore:    integer('last_audit_score'),
+  // Override
+  overrideActive:    boolean('override_active').notNull().default(false),
+  overrideBy:        text('override_by'),
+  overrideReason:    text('override_reason'),
+  overrideAt:        bigint('override_at', { mode: 'number' }),
+  overrideExpiresAt: bigint('override_expires_at', { mode: 'number' }),
+  updatedAt:         bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ll_workspace_idx').on(t.workspaceId),
+  index('ll_locked_idx').on(t.locked),
+])
+
+// ─── Self-Improvement Runtime ─────────────────────────────────────────────────
+
+/** Evidence-backed improvement recommendations */
+export const optimizationRecommendations = pgTable('optimization_recommendations', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  // Classification
+  category:        text('category').notNull(),   // reliability|performance|cost|ux|tests|observability|infra
+  subject:         text('subject').notNull(),    // free-form target (file, provider, agent, workflow id)
+  title:           text('title').notNull(),
+  description:     text('description').notNull(),
+  // Ranking
+  impact:          integer('impact').notNull().default(50),  // 0-100
+  risk:            integer('risk').notNull().default(50),    // 0-100
+  priorityScore:   integer('priority_score').notNull().default(0),  // computed
+  // Evidence — real row IDs only
+  evidenceRefs:    jsonb('evidence_refs').notNull().default([]),  // [{ table, id }]
+  // Lifecycle
+  status:          text('status').notNull().default('open'),  // open|in_roadmap|applied|blocked|dismissed
+  requiresApproval: boolean('requires_approval').notNull().default(false),
+  recommendedAgent: text('recommended_agent'),
+  dismissedReason: text('dismissed_reason'),
+  detectedAt:      bigint('detected_at', { mode: 'number' }).notNull(),
+  updatedAt:       bigint('updated_at',  { mode: 'number' }).notNull(),
+}, (t) => [
+  index('opt_workspace_idx').on(t.workspaceId),
+  index('opt_category_idx').on(t.category),
+  index('opt_status_idx').on(t.status),
+  index('opt_priority_idx').on(t.priorityScore),
+])
+
+/** Roadmap tasks generated from recommendations */
+export const roadmapTasks = pgTable('roadmap_tasks', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  recommendationId: text('recommendation_id'),       // source recommendation
+  phase:           text('phase').notNull(),          // immediate|near_term|backlog
+  title:           text('title').notNull(),
+  description:     text('description').notNull(),
+  category:        text('category').notNull(),
+  impact:          integer('impact').notNull(),
+  risk:            integer('risk').notNull(),
+  priorityScore:   integer('priority_score').notNull(),
+  assignedAgent:   text('assigned_agent'),
+  requiresApproval: boolean('requires_approval').notNull().default(false),
+  status:          text('status').notNull().default('pending'), // pending|approved|in_progress|complete|blocked|skipped
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:       bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rt_workspace_idx').on(t.workspaceId),
+  index('rt_phase_idx').on(t.phase),
+  index('rt_status_idx').on(t.status),
+  index('rt_priority_idx').on(t.priorityScore),
+])
+
+// ─── Multi-Tenant Billing + Subscriptions ─────────────────────────────────────
+
+/** Plan definitions — feature gates + numeric limits */
+export const plans = pgTable('plans', {
+  id:                text('id').primaryKey(),       // free|starter|pro|enterprise
+  name:              text('name').notNull(),
+  monthlyPriceUsd:   integer('monthly_price_usd').notNull().default(0),
+  seatLimit:         integer('seat_limit').notNull().default(1),
+  workflowLimit:     integer('workflow_limit').notNull().default(5),
+  workspaceLimit:    integer('workspace_limit').notNull().default(1),
+  monthlyTokenLimit: integer('monthly_token_limit').notNull().default(100000),
+  monthlySpendLimitUsd: integer('monthly_spend_limit_usd').notNull().default(10),
+  featureFlags:      jsonb('feature_flags').notNull().default({}),
+  isActive:          boolean('is_active').notNull().default(true),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+})
+
+/** Per-workspace subscription */
+export const subscriptions = pgTable('subscriptions', {
+  id:                  text('id').primaryKey(),
+  workspaceId:         text('workspace_id').notNull(),
+  planId:              text('plan_id').notNull(),
+  status:              text('status').notNull().default('trialing'),
+  // trialing|active|past_due|canceled|paused|expired
+  stripeCustomerId:    text('stripe_customer_id'),        // never the secret key
+  stripeSubscriptionId: text('stripe_subscription_id'),
+  currentPeriodStart:  bigint('current_period_start', { mode: 'number' }),
+  currentPeriodEnd:    bigint('current_period_end',   { mode: 'number' }),
+  trialEndsAt:         bigint('trial_ends_at',        { mode: 'number' }),
+  canceledAt:          bigint('canceled_at',          { mode: 'number' }),
+  createdAt:           bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:           bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('sub_workspace_idx').on(t.workspaceId),
+  index('sub_status_idx').on(t.status),
+])
+
+/** Usage meters — counters per workspace per period */
+export const usageMeters = pgTable('usage_meters', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  meterKey:     text('meter_key').notNull(),  // provider_spend_usd|tokens|workflow_runs|remote_worker_min|storage_mb|replay_count|autonomous_runs
+  periodStart:  bigint('period_start', { mode: 'number' }).notNull(),
+  periodEnd:    bigint('period_end',   { mode: 'number' }).notNull(),
+  amount:       integer('amount').notNull().default(0),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('um_workspace_period_idx').on(t.workspaceId, t.periodStart),
+  index('um_key_idx').on(t.meterKey),
+])
+
+// ─── Enterprise Security: RBAC + Secrets + Audit ──────────────────────────────
+
+/** Granular permission grants — per (userId, workspaceId, permission) */
+export const permissions = pgTable('permissions', {
+  id:           text('id').primaryKey(),
+  userId:       text('user_id').notNull(),
+  workspaceId:  text('workspace_id').notNull(),
+  role:         text('role').notNull(),     // owner|admin|member|viewer
+  grants:       text('grants').array().notNull().default([]),  // specific permission strings
+  grantedBy:    text('granted_by'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('perm_user_workspace_idx').on(t.userId, t.workspaceId),
+  index('perm_role_idx').on(t.role),
+])
+
+/**
+ * Encrypted secrets vault — AES-GCM ciphertext, never raw.
+ * `valueCiphertext` is base64(nonce||tag||ciphertext).
+ * `valueRedacted` is a UI-safe redacted form (e.g. "sk-***********abcd").
+ */
+export const secretsVault = pgTable('secrets_vault', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  name:              text('name').notNull(),       // e.g. "openai_api_key"
+  provider:          text('provider'),             // openai|anthropic|stripe|... or null
+  valueCiphertext:   text('value_ciphertext').notNull(),
+  valueRedacted:     text('value_redacted').notNull(),
+  keyVersion:        integer('key_version').notNull().default(1),
+  rotatedAt:         bigint('rotated_at', { mode: 'number' }),
+  lastAccessedAt:    bigint('last_accessed_at', { mode: 'number' }),
+  accessCount:       integer('access_count').notNull().default(0),
+  createdBy:         text('created_by'),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:         bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('sv_workspace_idx').on(t.workspaceId),
+  index('sv_name_idx').on(t.name),
+  index('sv_provider_idx').on(t.provider),
+])
+
+/**
+ * Security audit log — IMMUTABLE: no UPDATE/DELETE in service layer.
+ * Tracks every auth attempt, permission check, secret access, suspicious event.
+ */
+export const securityAudits = pgTable('security_audits', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id'),  // nullable for global events (failed login w/o workspace)
+  userId:       text('user_id'),
+  eventType:    text('event_type').notNull(),
+  // auth_failure|permission_denied|secret_accessed|secret_rotated|provider_abuse|
+  // suspicious_activity|unsafe_patch_blocked|audit_exported|compliance_action
+  severity:     text('severity').notNull().default('info'), // info|warning|critical
+  resource:     text('resource'),       // affected resource ID
+  action:       text('action'),         // attempted action
+  outcome:      text('outcome').notNull(), // allowed|denied|recorded
+  context:      jsonb('context').notNull().default({}),
+  ipAddress:    text('ip_address'),
+  userAgent:    text('user_agent'),
+  immutable:    boolean('immutable').notNull().default(true),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('sa_workspace_idx').on(t.workspaceId),
+  index('sa_user_idx').on(t.userId),
+  index('sa_event_idx').on(t.eventType),
+  index('sa_severity_idx').on(t.severity),
+  index('sa_created_idx').on(t.createdAt),
+])
+
+/** Audit log exports — for compliance / GDPR / SOC */
+export const auditExports = pgTable('audit_exports', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  requestedBy:     text('requested_by').notNull(),
+  format:          text('format').notNull().default('json'), // json|csv
+  fromTs:          bigint('from_ts', { mode: 'number' }).notNull(),
+  toTs:            bigint('to_ts',   { mode: 'number' }).notNull(),
+  recordCount:     integer('record_count').notNull().default(0),
+  status:          text('status').notNull().default('pending'), // pending|complete|failed
+  downloadRef:     text('download_ref'),  // opaque ID; never a raw URL
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+  completedAt:     bigint('completed_at', { mode: 'number' }),
+}, (t) => [
+  index('ae_workspace_idx').on(t.workspaceId),
+  index('ae_status_idx').on(t.status),
+])
+
+// ─── Cyber Security Force Team ────────────────────────────────────────────────
+
+/** Registered security agents — distinct from general agentRegistrations. */
+export const securityAgents = pgTable('security_agents', {
+  id:                text('id').primaryKey(),       // e.g. cso|appsec|cloud|secrets|...
+  name:              text('name').notNull(),
+  role:              text('role').notNull(),        // cso|appsec|cloud|secrets|runtime|tenant|patch|red|blue|compliance
+  description:       text('description').notNull(),
+  capabilities:      text('capabilities').array().notNull().default([]),
+  isActive:          boolean('is_active').notNull().default(true),
+  lastRunAt:         bigint('last_run_at', { mode: 'number' }),
+  findingsProduced:  integer('findings_produced').notNull().default(0),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:         bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('seca_role_idx').on(t.role),
+  index('seca_active_idx').on(t.isActive),
+])
+
+/** Security findings produced by the security team. */
+export const securityFindings = pgTable('security_findings', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id'),         // nullable for global findings
+  agentId:           text('agent_id').notNull(),
+  agentRole:         text('agent_role').notNull(),
+  severity:          text('severity').notNull(),   // info|low|medium|high|critical
+  category:          text('category').notNull(),   // appsec|cloud|secrets|runtime|tenant|patch|red_team|compliance
+  title:             text('title').notNull(),
+  description:       text('description').notNull(),
+  // Real evidence pointers
+  evidenceRefs:      jsonb('evidence_refs').notNull().default([]),  // [{ table, id }]
+  affectedResource:  text('affected_resource'),    // file/endpoint/agent/provider
+  recommendedAction: text('recommended_action').notNull(),
+  // Lifecycle
+  status:            text('status').notNull().default('open'), // open|acknowledged|mitigating|resolved|false_positive
+  requiresApproval:  boolean('requires_approval').notNull().default(false),
+  blocksLaunch:      boolean('blocks_launch').notNull().default(false),
+  mitigationTaskId:  text('mitigation_task_id'),
+  reviewedBy:        text('reviewed_by'),
+  reviewedAt:        bigint('reviewed_at', { mode: 'number' }),
+  resolutionNote:    text('resolution_note'),
+  detectedAt:        bigint('detected_at', { mode: 'number' }).notNull(),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:         bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('secf_workspace_idx').on(t.workspaceId),
+  index('secf_agent_idx').on(t.agentId),
+  index('secf_severity_idx').on(t.severity),
+  index('secf_status_idx').on(t.status),
+  index('secf_blocks_idx').on(t.blocksLaunch),
+  index('secf_detected_idx').on(t.detectedAt),
+])
+
+// ─── Launch Tonight Mode: Runtime Safety Flags ────────────────────────────────
+
+/**
+ * Per-workspace safety flags. Tonight Mode sets the dangerous flags to false
+ * and the safe flags to true. Every gate point in the codebase consults these.
+ */
+export const runtimeSafetyFlags = pgTable('runtime_safety_flags', {
+  id:                              text('id').primaryKey(),  // = workspaceId
+  workspaceId:                     text('workspace_id').notNull(),
+  // DISABLED in tonight mode (false = blocked, true = permitted)
+  autonomousDeployAllowed:         boolean('autonomous_deploy_allowed').notNull().default(false),
+  selfEditLoopsAllowed:            boolean('self_edit_loops_allowed').notNull().default(false),
+  autonomousDepsUpgradesAllowed:   boolean('autonomous_deps_upgrades_allowed').notNull().default(false),
+  destructiveMigrationsAllowed:    boolean('destructive_migrations_allowed').notNull().default(false),
+  internetLearningSwarmAllowed:    boolean('internet_learning_swarm_allowed').notNull().default(false),
+  // ENABLED in tonight mode (true = on, false = off)
+  approvalGatedPatchesEnabled:     boolean('approval_gated_patches_enabled').notNull().default(true),
+  failureLearningEnabled:          boolean('failure_learning_enabled').notNull().default(true),
+  observabilityEnabled:            boolean('observability_enabled').notNull().default(true),
+  warRoomEnabled:                  boolean('war_room_enabled').notNull().default(true),
+  cronScansEnabled:                boolean('cron_scans_enabled').notNull().default(true),
+  incidentAlertsEnabled:           boolean('incident_alerts_enabled').notNull().default(true),
+  // Metadata
+  tonightModeActive:               boolean('tonight_mode_active').notNull().default(true),
+  setBy:                           text('set_by'),
+  notes:                           text('notes'),
+  updatedAt:                       bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rsf_workspace_idx').on(t.workspaceId),
+  index('rsf_tonight_idx').on(t.tonightModeActive),
+])

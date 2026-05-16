@@ -1,0 +1,24 @@
+{
+  "name": "@ops/ai-router",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".":            "./src/index.ts",
+    "./encryption": "./src/encryption.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ops/db": "workspace:*",
+    "@ops/shared-types": "workspace:*",
+    "drizzle-orm": "^0.36.0",
+    "openai": "^4.67.0",
+    "postgres": "^3.4.4",
+    "pino": "^9.2.0",
+    "uuid": "^11.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

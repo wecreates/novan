@@ -1,0 +1,38 @@
+:8080 {
+  root * /srv
+  encode gzip zstd
+  file_server
+  try_files {path} /index.html
+
+  # Proxy API calls to api service
+  handle /api/* {
+    reverse_proxy {$API_UPSTREAM:api:3001}
+  }
+  handle /docs* {
+    reverse_proxy {$API_UPSTREAM:api:3001}
+  }
+  handle /metrics* {
+    reverse_proxy {$API_UPSTREAM:api:3001}
+  }
+  handle /health* {
+    reverse_proxy {$API_UPSTREAM:api:3001}
+  }
+
+  # Long-cache static assets
+  @assets path /assets/*
+  header @assets Cache-Control "public, max-age=31536000, immutable"
+
+  # No-cache the entry HTML
+  @html path / /index.html
+  header @html Cache-Control "no-cache, no-store, must-revalidate"
+
+  # Security headers
+  header {
+    Strict-Transport-Security "max-age=63072000; includeSubDomains"
+    X-Content-Type-Options    "nosniff"
+    X-Frame-Options           "DENY"
+    Referrer-Policy           "strict-origin-when-cross-origin"
+    Permissions-Policy        "geolocation=(), camera=(), microphone=()"
+    -Server
+  }
+}

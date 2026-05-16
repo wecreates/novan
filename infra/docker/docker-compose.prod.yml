@@ -1,0 +1,223 @@
+version: '3.9'
+
+services:
+  # ─── Infrastructure ───────────────────────────────────────────────────────────
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ops-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ops_platform
+      POSTGRES_USER:     ops
+      POSTGRES_PASSWORD: ops_secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ops -d ops_platform"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ops-redis
+    restart: unless-stopped
+    command: redis-server /usr/local/etc/redis/redis.conf
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ../../infra/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+
+  # ─── API ─────────────────────────────────────────────────────────────────────
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    container_name: ops-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV:    production
+      DATABASE_URL: postgres://ops:ops_secret@postgres:5432/ops_platform
+      REDIS_URL:   redis://redis:6379
+      API_PORT:    3001
+      AUTH_SECRET: change-me-in-production
+      # AI providers
+      OPENAI_API_KEY:   ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY:   ${GEMINI_API_KEY:-}
+      GROQ_API_KEY:     ${GROQ_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OLLAMA_BASE_URL:  ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      RUNPOD_OLLAMA_URL: ${RUNPOD_OLLAMA_URL:-}
+      AI_BUDGET_DAILY_USD:   ${AI_BUDGET_DAILY_USD:-10}
+      AI_BUDGET_MONTHLY_USD: ${AI_BUDGET_MONTHLY_USD:-100}
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ─── Workers ─────────────────────────────────────────────────────────────────
+
+  workflow-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.worker
+      args:
+        WORKER: workflow-worker
+    container_name: ops-workflow-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV:    production
+      DATABASE_URL: postgres://ops:ops_secret@postgres:5432/ops_platform
+      REDIS_URL:   redis://redis:6379
+      WORKFLOW_WORKER_CONCURRENCY: "5"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+
+  recovery-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.worker
+      args:
+        WORKER: recovery-worker
+    container_name: ops-recovery-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV:    production
+      DATABASE_URL: postgres://ops:ops_secret@postgres:5432/ops_platform
+      REDIS_URL:   redis://redis:6379
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+
+  memory-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.worker
+      args:
+        WORKER: memory-worker
+    container_name: ops-memory-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV:    production
+      DATABASE_URL: postgres://ops:ops_secret@postgres:5432/ops_platform
+      REDIS_URL:   redis://redis:6379
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+
+  analytics-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.worker
+      args:
+        WORKER: analytics-worker
+    container_name: ops-analytics-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV:    production
+      DATABASE_URL: postgres://ops:ops_secret@postgres:5432/ops_platform
+      REDIS_URL:   redis://redis:6379
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+
+  learning-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.worker
+      args:
+        WORKER: learning-worker
+    container_name: ops-learning-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV:    production
+      DATABASE_URL: postgres://ops:ops_secret@postgres:5432/ops_platform
+      REDIS_URL:   redis://redis:6379
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ─── Nginx reverse proxy + SSL ────────────────────────────────────────────────
+
+  nginx:
+    image: nginx:alpine
+    container_name: ops-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../../infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../../infra/nginx/ops-platform.conf:/etc/nginx/conf.d/ops-platform.conf:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_conf:/etc/letsencrypt:ro
+    depends_on:
+      - api
+    profiles:
+      - production
+
+  certbot:
+    image: certbot/certbot
+    container_name: ops-certbot
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    profiles:
+      - production
+
+  # ─── Monitoring ──────────────────────────────────────────────────────────────
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ops-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../../infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ops-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED:  "false"
+    ports:
+      - "3003:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  certbot_www:
+  certbot_conf:

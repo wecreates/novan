@@ -1,0 +1,8 @@
+﻿{
+    "label":  "dr-test",
+    "host":  "localhost",
+    "timestamp":  "20260515-101819",
+    "size_bytes":  374249,
+    "database":  "ops",
+    "file":  "C:\\Users\\19496\\ops-platform\\backups\\ops-backup-20260515-101819-dr-test.sql"
+}

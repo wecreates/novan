@@ -1,0 +1,49 @@
+﻿{
+    "fail":  2,
+    "timestamp":  "2026-05-15T10:18:40.6062220-07:00",
+    "baseline":  "422,39,16,16",
+    "pass":  8,
+    "results":  {
+                    "DR-01: Database Backup":  {
+                                                   "detail":  "File: C:\\Users\\19496\\ops-platform\\backups\\ops-backup-20260515-101819-dr-test.sql  Size: 365.5 KB",
+                                                   "status":  "PASS"
+                                               },
+                    "DR-02: Pre-restore canary injection":  {
+                                                                "detail":  "Canary workflow ID: 019e2ca5-7bb8-7126-b3bd-e26578c1cdb0",
+                                                                "status":  "PASS"
+                                                            },
+                    "DR-03: Database Restore":  {
+                                                    "detail":  "time=\"2026-05-15T10:18:23-07:00\" level=warning msg=\"C:\\\\Users\\\\19496\\\\ops-platform\\\\docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion\"",
+                                                    "status":  "FAIL"
+                                                },
+                    "DR-04: Redis Restart Recovery":  {
+                                                          "detail":  "Redis restarted and responded PONG. API healthy. Queue wait was: 0",
+                                                          "status":  "PASS"
+                                                      },
+                    "DR-05: API Restart Recovery (process)":  {
+                                                                  "detail":  "API stable after Redis restart. 5/5 health checks passed. Workflows count: 48",
+                                                                  "status":  "PASS"
+                                                              },
+                    "DR-06: Worker Restart Recovery (queue durability)":  {
+                                                                              "detail":  "Run 019e2ca5-9cbf-7202-9f66-f28e316915f6 queued. Queue wait depth: 0. Status: completed (job survives worker restart via Redis)",
+                                                                              "status":  "PASS"
+                                                                          },
+                    "DR-07: Browser Worker Crash Recovery":  {
+                                                                 "detail":  "Browser task queued approval. TraceId=019e2ca5-aac5-74fb-a0c9-f7a9ac57cdc8. Pending approvals: 0. Crash recovery: BullMQ job persisted in Redis — survives crash.",
+                                                                 "status":  "PASS"
+                                                             },
+                    "DR-08: Stuck Workflow Recovery (recovery worker)":  {
+                                                                             "detail":  "Stuck run not created (status: failed)",
+                                                                             "status":  "FAIL"
+                                                                         },
+                    "DR-09: Workspace Export/Import":  {
+                                                           "detail":  "Export: C:\\Users\\19496\\ops-platform\\backups\\workspace-default-20260515-101836.json  Workflows: 48  Memories: 0  Import dry-run: OK",
+                                                           "status":  "PASS"
+                                                       },
+                    "DR-10: Snapshot Restore (workflow checkpoint)":  {
+                                                                          "detail":  "Snapshots: table-missing  Checkpoints: 24  Approval records: 0. Checkpoint state preserved across restarts via DB.",
+                                                                          "status":  "PASS"
+                                                                      }
+                },
+    "finalState":  "430,40,16,16"
+}

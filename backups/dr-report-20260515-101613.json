@@ -1,0 +1,49 @@
+﻿{
+    "fail":  3,
+    "timestamp":  "2026-05-15T10:16:13.7825444-07:00",
+    "baseline":  "413,37,16,16",
+    "pass":  7,
+    "results":  {
+                    "DR-01: Database Backup":  {
+                                                   "detail":  "File: C:\\Users\\19496\\ops-platform\\backups\\ops-backup-20260515-101436-dr-test.sql  Size: 361.2 KB",
+                                                   "status":  "PASS"
+                                               },
+                    "DR-02: Pre-restore canary injection":  {
+                                                                "detail":  "Canary workflow ID: 019e2ca2-1599-758d-84cd-48f8c0b6cb17",
+                                                                "status":  "PASS"
+                                                            },
+                    "DR-03: Database Restore":  {
+                                                    "detail":  "At C:\\Users\\19496\\ops-platform\\scripts\\db-restore.ps1:48 char:35\r\n+     (SELECT COUNT(*) FROM events) as events,\r\n+                                   ~~\nUnexpected token \u0027as\u0027 in expression or statement.\r\n\r\nAt C:\\Users\\19496\\ops-platform\\scripts\\db-restore.ps1:54 char:13\r\n+ Write-Host \"Post-restore counts:\" -ForegroundColor Cyan\r\n+             ~~~~~~~~~~~~\nUnexpected token \u0027Post-restore\u0027 in expression or statement.\r\n\r\nAt C:\\Users\\19496\\ops-platform\\scripts\\db-restore.ps1:57 char:30\r\n+ Write-Host \"Restore complete.\" -ForegroundColor Green\r\n+                              ~~~~~~~~~~~~~~~~~~~~~~~~\nThe string is missing the terminator: \".\r\n\r\nAt C:\\Users\\19496\\ops-platform\\scripts\\db-restore.ps1:40 char:70\r\n+ ... f ($LASTEXITCODE -and $LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 3) {\r\n+                                                                         ~\nMissing closing \u0027}\u0027 in statement block or type definition.",
+                                                    "status":  "FAIL"
+                                                },
+                    "DR-04: Redis Restart Recovery":  {
+                                                          "detail":  "Redis restarted and responded PONG. API healthy. Queue wait was: 0",
+                                                          "status":  "PASS"
+                                                      },
+                    "DR-05: API Restart Recovery (process)":  {
+                                                                  "detail":  "API stable after Redis restart. 5/5 health checks passed. Workflows count: 47",
+                                                                  "status":  "PASS"
+                                                              },
+                    "DR-06: Worker Restart Recovery (queue durability)":  {
+                                                                              "detail":  "Run 019e2ca2-3ac5-7431-9573-3840e7cc190b queued. Queue wait depth: 0. Status: completed (job survives worker restart via Redis)",
+                                                                              "status":  "PASS"
+                                                                          },
+                    "DR-07: Browser Worker Crash Recovery":  {
+                                                                 "detail":  "Browser task queued approval. TraceId=019e2ca2-4957-779e-ae65-c29cdacd7814. Pending approvals: 0. Crash recovery: BullMQ job persisted in Redis — survives crash.",
+                                                                 "status":  "PASS"
+                                                             },
+                    "DR-08: Stuck Workflow Recovery (recovery worker)":  {
+                                                                             "detail":  "Stuck run recovered after 60s. Final status: failed",
+                                                                             "status":  "PASS"
+                                                                         },
+                    "DR-09: Workspace Export/Import":  {
+                                                           "detail":  "At C:\\Users\\19496\\ops-platform\\scripts\\workspace-export.ps1:52 char:19\r\n+     Write-Host \"  $key: $count items\" -ForegroundColor DarkCyan\r\n+                   ~~~~~\nVariable reference is not valid. \u0027:\u0027 was not followed by a valid variable name character. Consider using ${} to delimit the name.\r\n\r\nAt C:\\Users\\19496\\ops-platform\\scripts\\workspace-export.ps1:54 char:19\r\n+     Write-Host \"  $key: FAILED â€” $($_.Exception.Message)\" -Foregrou ...\r\n+                   ~~~~~\nVariable reference is not valid. \u0027:\u0027 was not followed by a valid variable name character. Consider using ${} to delimit the name.\r\n\r\nAt C:\\Users\\19496\\ops-platform\\scripts\\workspace-export.ps1:68 char:65\r\n+ ... -Host \"Export saved: $file ($([math]::Round($size/1KB, 1)) KB)\" -Fore ...\r\n+                                                                ~~\nUnexpected token \u0027KB\u0027 in expression or statement.\r\n\r\nAt C:\\Users\\19496\\ops-platform\\scripts\\workspace-export.ps1:68 char:64\r\n+ ... ite-Host \"Export saved: $file ($([math]::Round($size/1KB, 1)) KB)\" -F ...\r\n+                                                                  ~\nMissing closing \u0027)\u0027 in expression.\r\n\r\nAt C:\\Users\\19496\\ops-platform\\scripts\\workspace-export.ps1:53 char:11\r\n+   } catch {\r\n+           ~\nMissing closing \u0027}\u0027 in statement block or type definition.\r\n\r\nAt C:\\Users\\19496\\ops-platform\\scripts\\workspace-export.ps1:47 char:35\r\n+ foreach ($key in $endpoints.Keys) {\r\n+                                   ~\nMissing closing \u0027}\u0027 in statement block or type definition.\r\n\r\nAt C:\\Users\\19496\\ops-platform\\scripts\\workspace-export.ps1:68 char:67\r\n+ ... Host \"Export saved: $file ($([math]::Round($size/1KB, 1)) KB)\" -Foreg ...\r\n+                                                                 ~\nUnexpected token \u0027)\u0027 in expression or statement.\r\n\r\nAt C:\\Users\\19496\\ops-platform\\scripts\\workspace-export.ps1:68 char:68\r\n+ ... ed: $file ($([math]::Round($size/1KB, 1)) KB)\" -ForegroundColor Green\r\n+                                                  ~~~~~~~~~~~~~~~~~~~~~~~~\nThe string is missing the terminator: \".",
+                                                           "status":  "FAIL"
+                                                       },
+                    "DR-10: Snapshot Restore (workflow checkpoint)":  {
+                                                                          "detail":  "You cannot call a method on a null-valued expression.",
+                                                                          "status":  "FAIL"
+                                                                      }
+                },
+    "finalState":  "422,39,16,16"
+}

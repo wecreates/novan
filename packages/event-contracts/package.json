@@ -1,0 +1,17 @@
+{
+  "name": "@ops/event-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types":  "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@ops/shared-types": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "*"
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "uid":          "ops-platform-v1",
+  "title":        "Ops Platform",
+  "description":  "Queue depths, workflow runtime, worker health",
+  "tags":         ["ops", "platform"],
+  "timezone":     "browser",
+  "refresh":      "15s",
+  "schemaVersion": 38,
+  "panels": [
+    {
+      "id":    1,
+      "type":  "stat",
+      "title": "Waiting Jobs (all queues)",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "expr":         "sum(ops_queue_waiting)",
+        "legendFormat": "Waiting"
+      }],
+      "options": { "colorMode": "background", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "thresholds": {
+        "steps": [
+          { "color": "green",  "value": 0   },
+          { "color": "yellow", "value": 50  },
+          { "color": "red",    "value": 200 }
+        ]
+      }}}
+    },
+    {
+      "id":    2,
+      "type":  "stat",
+      "title": "Active Jobs",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "sum(ops_queue_active)", "legendFormat": "Active" }],
+      "options": { "colorMode": "background" },
+      "fieldConfig": { "defaults": { "color": { "fixedColor": "blue", "mode": "fixed" }}}
+    },
+    {
+      "id":    3,
+      "type":  "stat",
+      "title": "Failed Jobs",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "sum(ops_queue_failed)", "legendFormat": "Failed" }],
+      "options": { "colorMode": "background" },
+      "fieldConfig": { "defaults": { "thresholds": {
+        "steps": [
+          { "color": "green", "value": 0  },
+          { "color": "red",   "value": 1  }
+        ]
+      }}}
+    },
+    {
+      "id":    4,
+      "type":  "timeseries",
+      "title": "Queue Depth by Queue",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [{
+        "expr":         "ops_queue_waiting",
+        "legendFormat": "{{queue}} waiting"
+      }, {
+        "expr":         "ops_queue_active",
+        "legendFormat": "{{queue}} active"
+      }],
+      "options": { "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id":    5,
+      "type":  "timeseries",
+      "title": "Failed Jobs over Time",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [{
+        "expr":         "ops_queue_failed",
+        "legendFormat": "{{queue}}"
+      }],
+      "fieldConfig": { "defaults": { "color": { "fixedColor": "red", "mode": "fixed" }}}
+    }
+  ]
+}

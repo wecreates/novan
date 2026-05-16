@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:      ops-workflow-worker
+  namespace: ops-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ops-workflow-worker
+  template:
+    metadata:
+      labels:
+        app: ops-workflow-worker
+    spec:
+      containers:
+        - name:  workflow-worker
+          image: ops-platform/workflow-worker:latest
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: ops-secrets, key: database-url }
+            - name: REDIS_HOST
+              valueFrom:
+                secretKeyRef: { name: ops-secrets, key: redis-host }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+          securityContext:
+            runAsNonRoot: true
+            runAsUser:    1000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:      ops-memory-worker
+  namespace: ops-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ops-memory-worker
+  template:
+    metadata:
+      labels:
+        app: ops-memory-worker
+    spec:
+      containers:
+        - name:  memory-worker
+          image: ops-platform/memory-worker:latest
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: ops-secrets, key: database-url }
+            - name: REDIS_HOST
+              valueFrom:
+                secretKeyRef: { name: ops-secrets, key: redis-host }
+            - name: OLLAMA_URL
+              valueFrom:
+                configMapKeyRef: { name: ops-config, key: ollama-url }
+          resources:
+            requests: { cpu: 200m, memory: 256Mi }
+            limits:   { cpu: 1000m, memory: 1Gi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:      ops-recovery-worker
+  namespace: ops-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ops-recovery-worker
+  template:
+    metadata:
+      labels:
+        app: ops-recovery-worker
+    spec:
+      containers:
+        - name:  recovery-worker
+          image: ops-platform/recovery-worker:latest
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: ops-secrets, key: database-url }
+            - name: REDIS_HOST
+              valueFrom:
+                secretKeyRef: { name: ops-secrets, key: redis-host }
+          resources:
+            requests: { cpu: 50m,  memory: 128Mi }
+            limits:   { cpu: 200m, memory: 256Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:      ops-browser-worker
+  namespace: ops-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ops-browser-worker
+  template:
+    metadata:
+      labels:
+        app: ops-browser-worker
+    spec:
+      containers:
+        - name:  browser-worker
+          image: ops-platform/browser-worker:latest
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: ops-secrets, key: database-url }
+            - name: REDIS_HOST
+              valueFrom:
+                secretKeyRef: { name: ops-secrets, key: redis-host }
+            - name: SCREENSHOT_DIR
+              value: /tmp/screenshots
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits:   { cpu: 1000m, memory: 2Gi }
+          volumeMounts:
+            - name:      screenshot-storage
+              mountPath: /tmp/screenshots
+      volumes:
+        - name: screenshot-storage
+          emptyDir: {}

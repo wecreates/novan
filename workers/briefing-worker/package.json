@@ -1,0 +1,28 @@
+{
+  "name": "@ops/briefing-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev":       "tsx watch src/worker.ts",
+    "start":     "tsx src/worker.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ops/db":              "workspace:*",
+    "@ops/event-contracts": "workspace:*",
+    "@ops/runtime-kernel":  "workspace:*",
+    "@ops/shared-types":    "workspace:*",
+    "bullmq":               "^5.24.0",
+    "drizzle-orm":          "^0.36.0",
+    "pino":                 "^9.5.0",
+    "postgres":             "^3.4.5",
+    "uuid":                 "^11.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/uuid": "^11.0.0",
+    "tsx":         "^4.19.2",
+    "typescript":  "*"
+  }
+}

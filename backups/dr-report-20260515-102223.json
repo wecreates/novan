@@ -1,0 +1,49 @@
+﻿{
+    "fail":  0,
+    "timestamp":  "2026-05-15T10:22:23.7867714-07:00",
+    "baseline":  "438,41,16,16",
+    "pass":  10,
+    "results":  {
+                    "DR-01: Database Backup":  {
+                                                   "detail":  "File: C:\\Users\\19496\\ops-platform\\backups\\ops-backup-20260515-102145-dr-test.sql  Size: 372.6 KB",
+                                                   "status":  "PASS"
+                                               },
+                    "DR-02: Pre-restore canary injection":  {
+                                                                "detail":  "Canary workflow ID: 019e2ca8-a409-7436-b8a2-3f4854de30f8",
+                                                                "status":  "PASS"
+                                                            },
+                    "DR-03: Database Restore":  {
+                                                    "detail":  "Restore OK. Counts after restore: 438,41,16,16",
+                                                    "status":  "PASS"
+                                                },
+                    "DR-04: Redis Restart Recovery":  {
+                                                          "detail":  "Redis restarted and responded PONG. API healthy. Queue wait was: 0",
+                                                          "status":  "PASS"
+                                                      },
+                    "DR-05: API Restart Recovery (process)":  {
+                                                                  "detail":  "API stable after Redis restart. 5/5 health checks passed. Workflows count: 48",
+                                                                  "status":  "PASS"
+                                                              },
+                    "DR-06: Worker Restart Recovery (queue durability)":  {
+                                                                              "detail":  "Run 019e2ca8-dafa-741b-9046-db35850f3c72 queued. Queue wait depth: 0. Status: completed (job survives worker restart via Redis)",
+                                                                              "status":  "PASS"
+                                                                          },
+                    "DR-07: Browser Worker Crash Recovery":  {
+                                                                 "detail":  "Browser task queued approval. TraceId=019e2ca8-e925-717b-8bf1-fa3e8dd13ea9. Pending approvals: 0. Crash recovery: BullMQ job persisted in Redis — survives crash.",
+                                                                 "status":  "PASS"
+                                                             },
+                    "DR-08: Stuck Workflow Recovery (recovery worker)":  {
+                                                                             "detail":  "Stuck run recovered after 0s. Final status: failed",
+                                                                             "status":  "PASS"
+                                                                         },
+                    "DR-09: Workspace Export/Import":  {
+                                                           "detail":  "Export: C:\\Users\\19496\\ops-platform\\backups\\workspace-default-20260515-102220.json  Workflows: 48  Memories: 0  Import dry-run: OK",
+                                                           "status":  "PASS"
+                                                       },
+                    "DR-10: Snapshot Restore (workflow checkpoint)":  {
+                                                                          "detail":  "Snapshots: table-missing  Checkpoints: 26  Approval records: 0. Checkpoint state preserved across restarts via DB.",
+                                                                          "status":  "PASS"
+                                                                      }
+                },
+    "finalState":  "446,42,16,16"
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "buildCommand": "pnpm install --frozen-lockfile && pnpm --filter @ops/web build",
+  "outputDirectory": "apps/web/dist",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "framework": null,
+  "rewrites": [
+    { "source": "/api/:path*",     "destination": "https://novan-api.onrender.com/api/:path*" },
+    { "source": "/health",         "destination": "https://novan-api.onrender.com/health" },
+    { "source": "/metrics",        "destination": "https://novan-api.onrender.com/metrics" },
+    { "source": "/docs",           "destination": "https://novan-api.onrender.com/docs" },
+    { "source": "/docs/:path*",    "destination": "https://novan-api.onrender.com/docs/:path*" },
+    { "source": "/((?!assets/|icon\\.|manifest\\.).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options",         "value": "DENY" },
+        { "key": "Referrer-Policy",         "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy",      "value": "geolocation=(), camera=(), microphone=()" }
+      ]
+    }
+  ],
+  "env": {
+    "VITE_API_BASE_URL": "@vite_api_base_url"
+  }
+}

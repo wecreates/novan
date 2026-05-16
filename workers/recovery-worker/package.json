@@ -1,0 +1,28 @@
+{
+  "name": "@ops/recovery-worker",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/worker.ts",
+  "scripts": {
+    "dev":       "tsx watch src/worker.ts",
+    "start":     "tsx src/worker.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ops/event-contracts":  "workspace:*",
+    "@ops/shared-types":     "workspace:*",
+    "@ops/runtime-kernel":   "workspace:*",
+    "@ops/db":               "workspace:*",
+    "bullmq":               "^5.7.0",
+    "drizzle-orm":          "^0.36.0",
+    "pino":                 "^9.2.0",
+    "postgres":             "^3.4.4",
+    "uuid":                 "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/uuid": "^10.0.0",
+    "tsx":         "^4.15.0",
+    "typescript":  "^5.4.5"
+  }
+}
