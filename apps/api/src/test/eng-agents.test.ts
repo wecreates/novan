@@ -261,7 +261,8 @@ describe('runPipeline', () => {
   })
 
   it('completes pipeline for simple planner job', async () => {
-    const job = await createJob(WS, 'planner', 'Plan architecture review', [], false)
+    const samplePatch = '--- a/src/plan.ts\n+++ b/src/plan.ts\n@@ -1,1 +1,2 @@\n line 1\n+added by planner'
+    const job = await createJob(WS, 'planner', 'Plan architecture review', ['src/plan.ts'], false, samplePatch)
     const result = await runPipeline(job.id)
     expect(result.success).toBe(true)
     expect(result.applied).toBe(true)
@@ -281,7 +282,8 @@ describe('runPipeline', () => {
   })
 
   it('runs after approval', async () => {
-    const job = await createJob(WS, 'coder', 'add util', [], true)
+    const samplePatch = '--- a/src/util.ts\n+++ b/src/util.ts\n@@ -0,0 +1,1 @@\n+// add util by coder'
+    const job = await createJob(WS, 'coder', 'add util', ['src/util.ts'], true, samplePatch)
     job.status = 'awaiting_approval'
     await approveJob(job.id)
     const result = await runPipeline(job.id)
@@ -290,7 +292,8 @@ describe('runPipeline', () => {
   })
 
   it('job record updated to completed after success', async () => {
-    const job = await createJob(WS, 'reviewer', 'code review', [], false)
+    const samplePatch = '--- a/src/x.ts\n+++ b/src/x.ts\n@@ -1,1 +1,2 @@\n line 1\n+// updated by reviewer'
+    const job = await createJob(WS, 'reviewer', 'code review', ['src/x.ts'], false, samplePatch)
     await runPipeline(job.id)
     const updated = getJob(job.id)
     expect(updated?.status).toBe('completed')
@@ -404,6 +407,8 @@ describe('POST /api/v1/eng-agents/jobs', () => {
       payload: JSON.stringify({
         workspaceId: 'ws-1', agentType: 'reliability',
         description: 'Check uptime metrics', autoRun: true,
+        targetFiles: ['src/uptime.ts'],
+        patch: '--- a/src/uptime.ts\n+++ b/src/uptime.ts\n@@ -1,1 +1,2 @@\n line\n+// reliability check',
       }),
     })
     expect(res.statusCode).toBe(201)
@@ -480,6 +485,8 @@ describe('Full job lifecycle — create → run → rollback', () => {
       payload: JSON.stringify({
         workspaceId: 'ws-lifecycle', agentType: 'planner',
         description: 'Plan system upgrade', autoRun: true,
+        targetFiles: ['src/upgrade.ts'],
+        patch: '--- a/src/upgrade.ts\n+++ b/src/upgrade.ts\n@@ -1,1 +1,2 @@\n line\n+// upgraded by planner',
       }),
     })
     expect(createRes.statusCode).toBe(201)
@@ -506,6 +513,7 @@ describe('Full job lifecycle — create → run → rollback', () => {
         description: 'Refactor API handlers',
         targetFiles: ['src/routes/api.ts'],
         autoRun: true,
+        patch: '--- a/src/routes/api.ts\n+++ b/src/routes/api.ts\n@@ -1,1 +1,2 @@\n line\n+// refactor by coder',
       }),
     })
     expect(createRes.statusCode).toBe(201)

@@ -136,9 +136,13 @@ const engAgentsRoutes: FastifyPluginAsync = async (app) => {
     const workspaceId  = body.workspaceId ?? 'default'
     const targetFiles  = body.targetFiles ?? []
     const needApproval = requiresApproval(body.agentType, targetFiles)
+    // Optional unified-diff patch + rollback content supplied by caller
+    const patch         = (body as { patch?: string }).patch         ?? null
+    const rollbackPatch = (body as { rollbackPatch?: string }).rollbackPatch ?? null
 
     const job = await createJob(
       workspaceId, body.agentType, body.description, targetFiles, needApproval,
+      patch, rollbackPatch,
     )
 
     if (body.autoRun) {

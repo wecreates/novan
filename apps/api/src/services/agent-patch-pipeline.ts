@@ -15,6 +15,7 @@ import { events }              from '../db/schema.js'
 import { getJob, updateJob }   from './agent-job-store.js'
 import { recordAgentSuccess, recordAgentFailure } from './agent-registry.js'
 import type { AgentType }      from './agent-registry.js'
+import { runTypecheck, runTests } from './verification-engine.js'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -58,13 +59,29 @@ function requiresApproval(agentType: AgentType, targetFiles: string[]): boolean 
   return targetFiles.some(f => HIGH_RISK_PATTERNS.some(p => p.test(f)))
 }
 
-/** Deterministic simulation — real impl would run tsc/vitest. */
-function simulatePatch(description: string, targetFiles: string[]): {
-  lines: number; files: string[]
-} {
-  const lines = Math.min(Math.max(description.length, 10), 200)
-  const files  = targetFiles.length > 0 ? targetFiles : [`src/generated/${description.slice(0, 24).replace(/\s+/g, '-')}.ts`]
-  return { lines, files }
+/**
+ * Plan the shape of a patch from the job description + declared targets.
+ * Returns the planned scope (file list + estimated line count from the patch
+ * content the job provides). Does NOT fabricate patch contents.
+ *
+ * If `job.patch` is empty, returns null — the caller MUST fail honestly
+ * rather than apply a made-up patch.
+ */
+function planPatch(
+  patchContent: string | null | undefined,
+  targetFiles: string[],
+): { lines: number; files: string[] } | null {
+  if (!patchContent || patchContent.trim().length === 0) return null
+  if (targetFiles.length === 0) return null
+
+  // Count real changed lines from the unified-diff content the job provides.
+  // Lines beginning with '+' or '-' (excluding diff headers) are counted.
+  const lines = patchContent.split('\n').filter(
+    (l) => (l.startsWith('+') && !l.startsWith('+++')) ||
+           (l.startsWith('-') && !l.startsWith('---')),
+  ).length
+
+  return { lines, files: targetFiles }
 }
 
 async function emitStage(
@@ -128,7 +145,20 @@ export async function runPipeline(jobId: string): Promise<PipelineResult> {
 
   // ── generate ─────────────────────────────────────────────────────────────
   await updateJob(jobId, { stage: 'generate' })
-  const { lines, files } = simulatePatch(job.description, job.targetFiles)
+
+  // Honest gate: this pipeline does NOT fabricate patches. The job must
+  // arrive with `patch` content provided by the agent (LLM or operator).
+  // If no patch content is present, fail explicitly rather than apply a stub.
+  const plan = planPatch(job.patch, job.targetFiles)
+  if (!plan) {
+    const msg = 'No patch content provided — autonomous LLM-driven patch generation is not wired. ' +
+                'Job must arrive with `patch` (unified diff) and non-empty `targetFiles`.'
+    await updateJob(jobId, { status: 'failed', errorMessage: msg, completedAt: Date.now(), stage: 'failed' })
+    recordAgentFailure(ws, job.agentType)
+    await emitStage(ws, jobId, 'generate.no_patch', { reason: msg })
+    return fail(jobId, 'generate', msg, 0, 0, retryCount)
+  }
+  const { lines, files } = plan
   await emitStage(ws, jobId, 'generate', { linesChanged: lines, filesChanged: files.length })
 
   // Safety: patch size
@@ -147,22 +177,63 @@ export async function runPipeline(jobId: string): Promise<PipelineResult> {
     return fail(jobId, 'generate', msg, lines, files.length, retryCount)
   }
 
-  // ── validate ─────────────────────────────────────────────────────────────
+  // ── validate (real tsc --noEmit) ─────────────────────────────────────────
+  // In tests, skip real spawning (would recurse). Production runs real tsc.
+  const skipRealVerification = process.env['NODE_ENV'] === 'test'
   await updateJob(jobId, { stage: 'validate' })
-  await emitStage(ws, jobId, 'validate', {})
-  const validationPassed = true // real: spawn tsc --noEmit
+  await emitStage(ws, jobId, 'validate', { skipped: skipRealVerification })
+  const cwd = process.env['REPO_ROOT'] ?? process.cwd()
+  const tscResult = skipRealVerification
+    ? { evidenceId: 'test-skip', command: 'tsc', args: [], exitCode: 0,
+        stdout: '', stderr: '', passed: true, durationMs: 0 }
+    : await runTypecheck({
+        jobId, runId: jobId, workspaceId: ws, cwd,
+      }).catch((e) => ({
+        evidenceId: '', command: 'tsc', args: [], exitCode: 1,
+        stdout: '', stderr: (e as Error).message, passed: false, durationMs: 0,
+      }))
+  const validationPassed = tscResult.passed
+  await emitStage(ws, jobId, 'validate.result', {
+    passed: validationPassed, evidenceId: tscResult.evidenceId,
+  })
+  if (!validationPassed) {
+    const msg = `Typecheck failed (real tsc run): ${tscResult.stderr.slice(0, 200)}`
+    await updateJob(jobId, { status: 'failed', errorMessage: msg, completedAt: Date.now(), stage: 'failed' })
+    recordAgentFailure(ws, job.agentType)
+    return fail(jobId, 'validate', msg, lines, files.length, retryCount)
+  }
 
-  // ── test ─────────────────────────────────────────────────────────────────
+  // ── test (real vitest run) ───────────────────────────────────────────────
   await updateJob(jobId, { stage: 'test' })
-  await emitStage(ws, jobId, 'test', {})
-  const testsPassed = true // real: spawn vitest run --reporter=json
+  await emitStage(ws, jobId, 'test', { skipped: skipRealVerification })
+  const testResult = skipRealVerification
+    ? { evidenceId: 'test-skip', command: 'vitest', args: [], exitCode: 0,
+        stdout: '', stderr: '', passed: true, durationMs: 0 }
+    : await runTests({
+        jobId, runId: jobId, workspaceId: ws, cwd,
+      }).catch((e) => ({
+        evidenceId: '', command: 'vitest', args: [], exitCode: 1,
+        stdout: '', stderr: (e as Error).message, passed: false, durationMs: 0,
+      }))
+  const testsPassed = testResult.passed
+  await emitStage(ws, jobId, 'test.result', {
+    passed: testsPassed, evidenceId: testResult.evidenceId,
+  })
+  if (!testsPassed) {
+    const msg = `Tests failed (real vitest run): ${testResult.stderr.slice(0, 200)}`
+    await updateJob(jobId, { status: 'failed', errorMessage: msg, completedAt: Date.now(), stage: 'failed' })
+    recordAgentFailure(ws, job.agentType)
+    return fail(jobId, 'test', msg, lines, files.length, retryCount)
+  }
 
-  // ── apply ─────────────────────────────────────────────────────────────────
-  const patch         = `--- a/generated.ts\n+++ b/generated.ts\n@@ -0,0 +1,${lines} @@\n// patch by ${job.agentType}`
-  const rollbackPatch = `--- b/generated.ts\n+++ a/generated.ts\n@@ -1,${lines} +0,0 @@\n// rollback`
-
+  // ── apply (uses real job-provided patch content) ─────────────────────────
+  // Note: actual filesystem writes are handled by patch-executor.ts when the
+  // dispatching route calls applyPatches(). This pipeline records the planned
+  // patch and lets the executor own the apply step — single source of truth.
   await updateJob(jobId, {
-    stage: 'apply', patch, rollbackPatch,
+    stage: 'apply',
+    patch: job.patch,
+    rollbackPatch: job.rollbackPatch ?? null,
     status: 'completed', completedAt: Date.now(),
   })
   await emitStage(ws, jobId, 'apply', { linesChanged: lines, filesChanged: files.length })

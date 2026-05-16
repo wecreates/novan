@@ -64,13 +64,15 @@ export async function createJob(
   description: string,
   targetFiles: string[],
   requiresApproval: boolean,
+  patch:         string | null = null,
+  rollbackPatch: string | null = null,
 ): Promise<AgentJob> {
   const job: AgentJob = {
     id: uuidv7(),
     workspaceId, agentType,
     status: 'queued',
     description, targetFiles,
-    patch: null, rollbackPatch: null,
+    patch, rollbackPatch,
     requiresApproval,
     approvedAt: null, startedAt: null, completedAt: null,
     errorMessage: null,
