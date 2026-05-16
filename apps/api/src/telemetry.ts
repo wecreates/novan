@@ -1,36 +1,52 @@
 /**
- * OpenTelemetry instrumentation — must be imported BEFORE any other module.
+ * OpenTelemetry instrumentation — gated by OTEL_EXPORTER_OTLP_ENDPOINT.
  *
- * Instruments: HTTP, Fastify, PostgreSQL, Redis, BullMQ
+ * Only loads the SDK when an OTLP endpoint is configured. Without one,
+ * the import does nothing — avoids tsx/ESM loader friction with the
+ * OpenTelemetry CJS deep require chain in production.
+ *
+ * To enable: set OTEL_EXPORTER_OTLP_ENDPOINT in env.
  */
-import { NodeSDK }              from '@opentelemetry/sdk-node'
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node'
-import { OTLPTraceExporter }    from '@opentelemetry/exporter-trace-otlp-http'
-import { Resource }             from '@opentelemetry/resources'
-import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions'
+const endpoint = process.env['OTEL_EXPORTER_OTLP_ENDPOINT']
 
-const endpoint = process.env['OTEL_EXPORTER_OTLP_ENDPOINT'] ?? 'http://localhost:4318'
-const service  = process.env['OTEL_SERVICE_NAME'] ?? 'ops-platform-api'
+if (endpoint) {
+  try {
+    // Dynamic import — keeps the CJS chain out of cold-boot when telemetry is off
+    const { NodeSDK }                       = await import('@opentelemetry/sdk-node')
+    const { getNodeAutoInstrumentations }   = await import('@opentelemetry/auto-instrumentations-node')
+    const { OTLPTraceExporter }             = await import('@opentelemetry/exporter-trace-otlp-http')
+    const { Resource }                      = await import('@opentelemetry/resources')
+    const semconv                            = await import('@opentelemetry/semantic-conventions')
+    const ATTR_SERVICE_NAME    = semconv.ATTR_SERVICE_NAME    ?? 'service.name'
+    const ATTR_SERVICE_VERSION = semconv.ATTR_SERVICE_VERSION ?? 'service.version'
 
-const sdk = new NodeSDK({
-  resource: new Resource({
-    [ATTR_SERVICE_NAME]:    service,
-    [ATTR_SERVICE_VERSION]: '0.1.0',
-    environment:            process.env['NODE_ENV'] ?? 'development',
-  }),
-  traceExporter: new OTLPTraceExporter({
-    url: `${endpoint}/v1/traces`,
-  }),
-  instrumentations: [
-    getNodeAutoInstrumentations({
-      '@opentelemetry/instrumentation-fs': { enabled: false },
-    }),
-  ],
-})
+    const service  = process.env['OTEL_SERVICE_NAME'] ?? 'novan-api'
 
-try {
-  sdk.start()
-} catch (err) {
-  // Non-fatal: app runs without telemetry if OTEL collector unavailable
-  console.warn('OpenTelemetry failed to start:', err)
+    const sdk = new NodeSDK({
+      resource: new Resource({
+        [ATTR_SERVICE_NAME]:    service,
+        [ATTR_SERVICE_VERSION]: '0.1.0',
+        environment:            process.env['NODE_ENV'] ?? 'development',
+      }),
+      traceExporter: new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
+      instrumentations: [
+        getNodeAutoInstrumentations({
+          '@opentelemetry/instrumentation-fs': { enabled: false },
+        }),
+      ],
+    })
+
+    sdk.start()
+    process.on('SIGTERM', () => sdk.shutdown().catch(() => null))
+    // eslint-disable-next-line no-console
+    console.log(`[telemetry] OpenTelemetry started → ${endpoint}`)
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[telemetry] failed to start (non-fatal):', (err as Error).message)
+  }
+} else {
+  // eslint-disable-next-line no-console
+  console.log('[telemetry] disabled (no OTEL_EXPORTER_OTLP_ENDPOINT)')
 }
+
+export {}

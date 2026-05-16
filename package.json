@@ -32,7 +32,8 @@
     "ws:import":  "powershell -ExecutionPolicy Bypass -File scripts/workspace-import.ps1",
     "dr:validate":"powershell -ExecutionPolicy Bypass -File scripts/dr-validate.ps1",
     "verify:launch": "node scripts/verify-launch.mjs",
-    "start":      "node apps/api/dist/server.js"
+    "start":         "pnpm --filter @ops/api start:prod",
+    "seed:cloud":    "node scripts/neon-seed-and-check.mjs"
   },
   "devDependencies": {
     "turbo":                              "^2.3.0",
