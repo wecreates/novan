@@ -61,7 +61,7 @@ const BRIEFING_2 = uuidv7()
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  console.log('Seeding ops-platform database…\n')
+  console.log('Seeding Novan database…\n')
 
   // 1. Workspace
   await seed('workspaces', () =>

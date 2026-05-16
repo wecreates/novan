@@ -1,6 +1,6 @@
 # @ops/workflow-engine
 
-Workflow state machine, step executor registry, retry policies, and checkpoint/replay for Ops Platform.
+Workflow state machine, step executor registry, retry policies, and checkpoint/replay for Novan.
 
 Used by:
 - `apps/api` — workflow registration and run scheduling

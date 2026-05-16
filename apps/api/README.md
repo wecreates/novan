@@ -1,6 +1,6 @@
 # @ops/api
 
-Fastify 5 REST API for Ops Platform. Handles authentication, workspace scoping, business logic, and queue dispatch.
+Fastify 5 REST API for Novan. Handles authentication, workspace scoping, business logic, and queue dispatch.
 
 **Port:** `3001` (default) · **Swagger UI:** `http://localhost:3001/docs`
 

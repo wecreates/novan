@@ -1,4 +1,4 @@
-# Contributing to Ops Platform
+# Contributing to Novan
 
 ## Development Setup
 

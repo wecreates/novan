@@ -86,7 +86,7 @@ export async function buildTestApp(): Promise<FastifyInstance> {
   await app.register(swagger, {
     openapi: {
       openapi: '3.1.0',
-      info: { title: 'Ops Platform API', version: '1.0.0', description: 'Test' },
+      info: { title: 'Novan API', version: '1.0.0', description: 'Test' },
     },
   })
   await app.register(swaggerUi, { routePrefix: '/docs' })

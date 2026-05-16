@@ -1,4 +1,4 @@
-# Ops Platform
+# Novan
 
 **AI-powered operational intelligence runtime** — a multi-agent workflow engine with semantic memory, real-time event bus, risk/opportunity tracking, and automated briefing generation.
 
@@ -21,7 +21,7 @@
 ## Architecture
 
 ```
-ops-platform/
+novan/
 ├── apps/
 │   ├── api/          Fastify REST API (port 3001)
 │   └── web/          React + Vite dashboard (port 5173)

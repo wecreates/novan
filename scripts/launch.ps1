@@ -1,22 +1,22 @@
 
 # ╔══════════════════════════════════════════════════════════════════════╗
-# ║              OPS PLATFORM — SYSTEM LAUNCHER                        ║
+# ║                NOVAN — SYSTEM LAUNCHER                              ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 
-$Host.UI.RawUI.WindowTitle = "Ops Platform"
+$Host.UI.RawUI.WindowTitle = "Novan"
 $ErrorActionPreference = "Stop"
 
 $ROOT = Split-Path $PSScriptRoot -Parent
 
 function Write-Header {
   Write-Host ""
-  Write-Host "  ██████╗ ██████╗ ███████╗" -ForegroundColor Cyan
-  Write-Host "  ██╔═══██╗██╔══██╗██╔════╝" -ForegroundColor Cyan
-  Write-Host "  ██║   ██║██████╔╝███████╗" -ForegroundColor Cyan
-  Write-Host "  ██║   ██║██╔═══╝ ╚════██║" -ForegroundColor Cyan
-  Write-Host "  ╚██████╔╝██║     ███████║" -ForegroundColor Cyan
-  Write-Host "   ╚═════╝ ╚═╝     ╚══════╝" -ForegroundColor Cyan
-  Write-Host "  Operational Intelligence Platform" -ForegroundColor DarkCyan
+  Write-Host "  ███╗   ██╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗" -ForegroundColor White
+  Write-Host "  ████╗  ██║██╔═══██╗██║   ██║██╔══██╗████╗  ██║" -ForegroundColor White
+  Write-Host "  ██╔██╗ ██║██║   ██║██║   ██║███████║██╔██╗ ██║" -ForegroundColor Gray
+  Write-Host "  ██║╚██╗██║██║   ██║╚██╗ ██╔╝██╔══██║██║╚██╗██║" -ForegroundColor Gray
+  Write-Host "  ██║ ╚████║╚██████╔╝ ╚████╔╝ ██║  ██║██║ ╚████║" -ForegroundColor DarkGray
+  Write-Host "  ╚═╝  ╚═══╝ ╚═════╝   ╚═══╝  ╚═╝  ╚═╝╚═╝  ╚═══╝" -ForegroundColor DarkGray
+  Write-Host "  Autonomous Operational Intelligence Platform" -ForegroundColor DarkCyan
   Write-Host ""
 }
 
