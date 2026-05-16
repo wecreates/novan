@@ -79,7 +79,8 @@ import { validateEnvOrThrow }   from './services/secrets-vault.js'
 import { startLearningCron }    from './services/learning-cron.js'
 import { registerAutonomousWorker } from './services/autonomous-orchestrator.js'
 
-const PORT = Number(process.env['API_PORT'] ?? 3001)
+// Render/Heroku/Fly inject PORT; fall back to API_PORT for local dev
+const PORT = Number(process.env['PORT'] ?? process.env['API_PORT'] ?? 3001)
 const HOST = process.env['API_HOST'] ?? '0.0.0.0'
 
 const app = Fastify({

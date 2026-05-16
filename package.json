@@ -10,7 +10,8 @@
   ],
   "scripts": {
     "dev":        "turbo run dev --parallel",
-    "build":      "turbo run build",
+    "build":      "turbo run build --filter=@ops/api...",
+    "build:all":  "turbo run build",
     "test":       "turbo run test",
     "typecheck":  "turbo run typecheck",
     "lint":       "eslint . --max-warnings 0",
@@ -27,7 +28,6 @@
     "db:seed":    "pnpm --filter @ops/db db:seed",
     "db:backup":  "powershell -ExecutionPolicy Bypass -File scripts/db-backup.ps1",
     "db:restore": "powershell -ExecutionPolicy Bypass -File scripts/db-restore.ps1",
-    "db:migrate": "pnpm --filter @ops/db db:migrate",
     "ws:export":  "powershell -ExecutionPolicy Bypass -File scripts/workspace-export.ps1",
     "ws:import":  "powershell -ExecutionPolicy Bypass -File scripts/workspace-import.ps1",
     "dr:validate":"powershell -ExecutionPolicy Bypass -File scripts/dr-validate.ps1",
