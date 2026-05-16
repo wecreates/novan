@@ -1,0 +1,36 @@
+# Novan — run locally in Docker against Neon Postgres + Upstash Redis + Gemini.
+# One command:
+#   docker compose -f docker-compose.local.yml up --build
+#
+# Then visit:
+#   API:  http://localhost:3001/health
+#   Docs: http://localhost:3001/docs
+#   Web:  http://localhost:5173  (run `pnpm --filter @ops/web dev` in a second window)
+
+services:
+  api:
+    build:
+      context:    .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV:         production
+      PORT:             "3001"
+      API_HOST:         0.0.0.0
+      RUNTIME_MODE:     cloud-api-only
+      LOG_LEVEL:        info
+
+      DATABASE_URL:     postgresql://neondb_owner:npg_n2wGjmuWzrU9@ep-bitter-snow-ak0w2voz-pooler.c-3.us-west-2.aws.neon.tech/neondb?sslmode=require
+      REDIS_URL:        rediss://default:gQAAAAAAAewCAAIgcDIzOWIwNjU2NjA3MTY0MzRhODExNmZkOGEwYjJlY2QwNA@lucky-anemone-125954.upstash.io:6379
+
+      AUTH_SECRET:      VSgXZQD6x4S+2boM+cJAvNbEd93oL7af+fy0nSXI6QRribja6DIhSupgEHAjTqUK
+      VAULT_MASTER_KEY: L3ysQ8LdgB0I/R7gXdRzIcERe753TQVkH9N7f+OGfqY=
+
+      GEMINI_API_KEY:   AIzaSyBm3feOLMYlfzqtxKGA9UMF18bUQDwstNM
+
+      CORS_ORIGINS:     "http://localhost:5173,http://localhost:3000"
+      PROVIDER_ROUTER_ENABLED: "true"
+      BUDGET_GUARDS_ENABLED:   "true"
+      KILL_SWITCH_ENABLED:     "true"

@@ -16,8 +16,7 @@ import cors                  from '@fastify/cors'
 import helmet                from '@fastify/helmet'
 import rateLimit             from '@fastify/rate-limit'
 import jwt                   from '@fastify/jwt'
-import swagger               from '@fastify/swagger'
-import swaggerUi             from '@fastify/swagger-ui'
+// Swagger lazy-imported below to survive Node 24's strict JSON parsing of @fastify/swagger-ui's csp.json
 import { redisClient }       from './redis/client.js'
 import { registerQueues }    from './queues/index.js'
 import { healthRoutes }      from './routes/health.js'
@@ -108,7 +107,11 @@ await app.register(errorHandlerPlugin)
 await app.register(auditPlugin)
 await app.register(authPlugin)
 
-await app.register(swagger, {
+// Swagger is optional — wrap so a CJS/JSON quirk in @fastify/swagger-ui doesn't crash boot
+try {
+  const { default: swagger }   = await import('@fastify/swagger')
+  const { default: swaggerUi } = await import('@fastify/swagger-ui')
+  await app.register(swagger, {
   openapi: {
     openapi: '3.1.0',
     info: {
@@ -159,7 +162,11 @@ await app.register(swagger, {
     security: [{ bearerAuth: [] }],
   },
 })
-await app.register(swaggerUi, { routePrefix: '/docs' })
+  await app.register(swaggerUi, { routePrefix: '/docs' })
+} catch (err) {
+  // eslint-disable-next-line no-console
+  console.warn('[swagger] disabled (non-fatal):', (err as Error).message)
+}
 
 // ─── Register routes ───────────────────────────────────────────────────────────
 
