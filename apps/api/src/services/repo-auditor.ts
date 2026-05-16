@@ -85,7 +85,9 @@ const PATTERNS: AuditPattern[] = [
   },
   {
     id:          'in-memory-map',
-    regex:       /(?:const|let)\s+\w+\s*=\s*new Map(?:<[^>]*>)?\(\)/,
+    // Only flag MODULE-LEVEL stores (no indentation). Local Maps inside
+    // functions for lookup/aggregation are not persistent state.
+    regex:       /^(?:const|let)\s+\w+\s*=\s*new Map(?:<[^>]*>)?\(\)/m,
     category:    'critical_runtime',
     severity:    'high',
     description: 'In-memory Map store — not persisted across restarts',
@@ -95,16 +97,21 @@ const PATTERNS: AuditPattern[] = [
   },
   {
     id:          'fake-marker',
-    regex:       /\/\/\s*(?:FAKE|MOCK|STUB|placeholder|simulated)[:!]?\s*.{0,60}/i,
+    // Test files legitimately use mocks/stubs — exclude them.
+    // Tightened: only catch explicit FAKE/placeholder markers, not 'MOCK' or
+    // 'simulated' which appear in legitimate test/docstring contexts.
+    regex:       /\/\/\s*(?:FAKE|placeholder)[:!]\s*.{0,60}/i,
     category:    'critical_runtime',
     severity:    'high',
     description: 'Fake/mock/stub marker in production code',
     suggestion:  'Replace with real implementation before production deploy',
-    excludeFile: /repo-auditor/,
+    excludeFile: /test|spec|repo-auditor/,
   },
   {
     id:          'hardcoded-ws',
-    regex:       /['"](?:default|ws-test-001|workspace-1|test-workspace)['"]/,
+    // 'default' is a legitimate fallback string ('?? "default"'); keep only
+    // the obviously-test-only workspace ids.
+    regex:       /['"](?:ws-test-001|workspace-1|test-workspace)['"]/,
     category:    'ui_wiring',
     severity:    'medium',
     description: 'Hardcoded workspace ID in production code',
