@@ -939,6 +939,37 @@ export const intelligenceApi = {
     ),
 }
 
+export interface OperatorPreferencesDTO {
+  workspaceId: string
+  theme: 'dark' | 'light'
+  defaultPage: string | null
+  maxConcurrentAgents: number | null
+  maxResearchPerHour: number | null
+  maxImagesPerHour: number | null
+  maxAutonomousPatchesPerDay: number | null
+  maxDeploymentsPerDay: number | null
+  approvalAutoApplyMinConfidence: number
+  riskTolerance: 'conservative' | 'balanced' | 'aggressive'
+}
+
+export const enhancementsApi = {
+  getPreferences: (workspaceId: string) =>
+    api.get<{ success: true; data: OperatorPreferencesDTO }>(`/api/v1/x/preferences?workspace_id=${encodeURIComponent(workspaceId)}`),
+  setPreferences: (workspaceId: string, patch: Partial<OperatorPreferencesDTO>) =>
+    api.post<{ success: true; data: OperatorPreferencesDTO }>(`/api/v1/x/preferences`, { workspace_id: workspaceId, ...patch }),
+  actOnRecommendation: (workspaceId: string, recommendationId: string, action: string, outcome?: string) =>
+    api.post<{ success: true; data: { eventId: string; recommendationId: string } }>(
+      `/api/v1/x/recommendations/${encodeURIComponent(recommendationId)}/act-on`,
+      { workspace_id: workspaceId, action, outcome },
+    ),
+  rewritePrompt: (workspaceId: string, prompt: string, purpose: 'image' | 'research' | 'general' = 'general') =>
+    api.post<{ success: true; data: { improved: string; rationale: string[]; modelProvenance: string; cacheHit: boolean } }>(
+      `/api/v1/x/rewrite-prompt`, { workspace_id: workspaceId, prompt, purpose },
+    ),
+  divisionsCsvUrl: (workspaceId: string): string =>
+    `${(import.meta as { env?: Record<string, string> }).env?.['VITE_API_URL'] ?? 'http://localhost:3001'}/api/v1/x/export/divisions.csv?workspace_id=${encodeURIComponent(workspaceId)}`,
+}
+
 export interface DivisionSnapshotDTO {
   division:   string
   capturedAt: number

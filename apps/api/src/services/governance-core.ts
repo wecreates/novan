@@ -16,7 +16,7 @@
  * All decisions emit `governance.*` events. No hidden throttling.
  */
 import { db }                          from '../db/client.js'
-import { events, failureMemory, providerBudgets, incidents, killSwitches, agents } from '../db/schema.js'
+import { events, failureMemory, providerBudgets, incidents, killSwitches, agents, stabilityStreaks } from '../db/schema.js'
 import { and, desc, eq, gte, sql }     from 'drizzle-orm'
 import { v7 as uuidv7 }                from 'uuid'
 import { notify }                      from './notifications.js'
@@ -347,16 +347,33 @@ export async function autoEngageThrottle(workspaceId: string, reason: string): P
  * own switches by enabledBy='governance-core' to avoid undoing manual
  * operator overrides.
  */
-const STABILITY_STREAK = new Map<string, number>()
 const STREAK_NEEDED = 2
+
+async function readStreak(workspaceId: string): Promise<number> {
+  const row = await db.select().from(stabilityStreaks)
+    .where(eq(stabilityStreaks.workspaceId, workspaceId)).limit(1)
+    .then(r => r[0]).catch(() => null)
+  return row ? Number(row.consecutiveStable ?? 0) : 0
+}
+
+async function writeStreak(workspaceId: string, value: number): Promise<void> {
+  const now = Date.now()
+  await db.insert(stabilityStreaks)
+    .values({ workspaceId, consecutiveStable: value, lastUpdatedAt: now })
+    .onConflictDoUpdate({
+      target: stabilityStreaks.workspaceId,
+      set: { consecutiveStable: value, lastUpdatedAt: now },
+    }).catch(() => null)
+}
 
 export async function autoDisengageThrottleIfStable(workspaceId: string, stableNow: boolean): Promise<{ disengaged: string[] }> {
   if (!stableNow) {
-    STABILITY_STREAK.delete(workspaceId)
+    await writeStreak(workspaceId, 0)
     return { disengaged: [] }
   }
-  const streak = (STABILITY_STREAK.get(workspaceId) ?? 0) + 1
-  STABILITY_STREAK.set(workspaceId, streak)
+  const prev = await readStreak(workspaceId)
+  const streak = prev + 1
+  await writeStreak(workspaceId, streak)
   if (streak < STREAK_NEEDED) return { disengaged: [] }
 
   const disengaged: string[] = []
@@ -373,7 +390,7 @@ export async function autoDisengageThrottleIfStable(workspaceId: string, stableN
     disengaged.push(switchType)
   }
   if (disengaged.length > 0) {
-    STABILITY_STREAK.delete(workspaceId)  // reset streak after acting
+    await writeStreak(workspaceId, 0)  // reset streak after acting
     await emitGovernance(workspaceId, 'auto_throttle_disengaged', { disengaged, streak })
     await notify({
       workspaceId, type: 'governance.auto_throttle_disengaged',

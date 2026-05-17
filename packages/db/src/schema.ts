@@ -2248,6 +2248,41 @@ export const imageGenerations = pgTable('image_generations', {
   index('ig_created_idx').on(t.createdAt),
 ])
 
+// ─── Persistent Stability Streak (governance auto-disengage) ────────────────
+
+/** One row per workspace — survives container restart for accurate streak tracking. */
+export const stabilityStreaks = pgTable('stability_streaks', {
+  workspaceId:        text('workspace_id').primaryKey(),
+  consecutiveStable:  integer('consecutive_stable').notNull().default(0),
+  lastUpdatedAt:      bigint('last_updated_at', { mode: 'number' }).notNull(),
+})
+
+// ─── Operator Preferences (per-workspace settings) ───────────────────────────
+
+/**
+ * Per-workspace operator preferences. Single row per workspace.
+ * Supersedes env-var-only governor limits, theme, default views, etc.
+ */
+export const operatorPreferences = pgTable('operator_preferences', {
+  workspaceId:           text('workspace_id').primaryKey(),
+  // Theme + UI
+  theme:                 text('theme').notNull().default('dark'),    // dark | light
+  defaultPage:           text('default_page'),                        // e.g. '/strategic-home'
+  // Governor overrides (null = use env default)
+  maxConcurrentAgents:    integer('max_concurrent_agents'),
+  maxResearchPerHour:     integer('max_research_per_hour'),
+  maxImagesPerHour:       integer('max_images_per_hour'),
+  maxAutonomousPatchesPerDay: integer('max_autonomous_patches_per_day'),
+  maxDeploymentsPerDay:    integer('max_deployments_per_day'),
+  // Risk + approval bias
+  approvalAutoApplyMinConfidence: real('approval_auto_apply_min_confidence').notNull().default(0.8),
+  riskTolerance:          text('risk_tolerance').notNull().default('balanced'),  // conservative | balanced | aggressive
+  // Misc
+  metadata:              jsonb('metadata').notNull().default({}),
+  createdAt:             bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:             bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
 // ─── Operator Feedback + Telemetry ────────────────────────────────────────────
 
 /**

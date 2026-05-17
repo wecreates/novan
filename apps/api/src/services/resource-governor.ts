@@ -98,13 +98,29 @@ async function imagesThisHour(workspaceId: string): Promise<number> {
     .catch(() => 0)
 }
 
+/** Read overrides from operator_preferences if present. Falls back to env defaults. */
+async function effectiveLimits(workspaceId: string, override?: Partial<GovernorLimits>): Promise<GovernorLimits> {
+  // Lazy import to avoid circular dependency
+  const { getPreferences } = await import('./operator-preferences.js')
+  const prefs = await getPreferences(workspaceId).catch(() => null)
+  const fromPrefs: Partial<GovernorLimits> = {}
+  if (prefs) {
+    if (prefs.maxConcurrentAgents        !== null) fromPrefs.maxConcurrentAgents        = prefs.maxConcurrentAgents
+    if (prefs.maxResearchPerHour         !== null) fromPrefs.maxResearchPerHour         = prefs.maxResearchPerHour
+    if (prefs.maxImagesPerHour           !== null) fromPrefs.maxImagesPerHour           = prefs.maxImagesPerHour
+    if (prefs.maxAutonomousPatchesPerDay !== null) fromPrefs.maxAutonomousPatchesPerDay = prefs.maxAutonomousPatchesPerDay
+    if (prefs.maxDeploymentsPerDay       !== null) fromPrefs.maxDeploymentsPerDay       = prefs.maxDeploymentsPerDay
+  }
+  return { ...DEFAULT_LIMITS, ...fromPrefs, ...(override ?? {}) }
+}
+
 export async function checkBeforeAction(opts: {
   workspaceId: string
   kind:        'agent' | 'research' | 'image' | 'queue_push' | 'autonomous_patch' | 'deployment'
   queueDepth?: number
   limits?:     Partial<GovernorLimits>
 }): Promise<GovernorDecision> {
-  const limits = { ...DEFAULT_LIMITS, ...(opts.limits ?? {}) }
+  const limits = await effectiveLimits(opts.workspaceId, opts.limits)
   const [crit, imgHour] = await Promise.all([
     openCriticalIncidents(opts.workspaceId),
     opts.kind === 'image' ? imagesThisHour(opts.workspaceId) : Promise.resolve(peekHourly(`img:${opts.workspaceId}`)),

@@ -68,14 +68,38 @@ function extrapolate(fit: LinFit, ahead = 2): number {
 
 // ─── Likelihood classifier ────────────────────────────────────────────────────
 
-/** Map (slope direction × r²) → likelihood bucket. */
+/** Standard deviation of a numeric series (population). */
+function stddev(values: number[]): number {
+  if (values.length < 2) return 0
+  const mean = values.reduce((s, v) => s + v, 0) / values.length
+  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length
+  return Math.sqrt(variance)
+}
+
+/**
+ * Map (slope × r² × sample size × z-score sanity) → likelihood bucket.
+ * Anti-overconfidence guards (item #18):
+ *   - Need ≥3 non-zero buckets to forecast (was 0).
+ *   - The last value must move ≥1σ from the series mean to count as a real signal.
+ *   - r² ≥ 0.3 still required.
+ */
 function classifyLikelihood(
   slope: number,
   r2: number,
+  rawSeries: number[],
   worseIsHigher: boolean,
   thresholds: { mediumSlope: number; highSlope: number; criticalSlope: number },
 ): Forecast['likelihood'] {
-  if (r2 < 0.3) return 'insufficient_data'
+  const nonZeroBuckets = rawSeries.filter(v => v > 0).length
+  if (nonZeroBuckets < 3) return 'insufficient_data'
+  if (r2 < 0.3)            return 'insufficient_data'
+
+  const last = rawSeries[rawSeries.length - 1] ?? 0
+  const mean = rawSeries.reduce((s, v) => s + v, 0) / rawSeries.length
+  const sd   = stddev(rawSeries)
+  // Require last point to be >=1σ from mean — protects against tiny-slope-but-high-r² illusions
+  if (sd > 0 && Math.abs(last - mean) < sd) return 'low'
+
   const isWorsening = worseIsHigher ? slope > 0 : slope < 0
   if (!isWorsening) return 'low'
   const m = Math.abs(slope)
@@ -92,12 +116,12 @@ function buildForecast(
   series: TrendSeries,
   valueKey: string,
   worseIsHigher: boolean,
-  thresholds: Parameters<typeof classifyLikelihood>[3],
+  thresholds: Parameters<typeof classifyLikelihood>[4],
   horizonWeeks = 2,
 ): Forecast {
   const raw = series.series.map(b => Number(b.metrics[valueKey] ?? 0))
   const fit = linearFit(raw)
-  const likelihood = classifyLikelihood(fit.slope, fit.r2, worseIsHigher, thresholds)
+  const likelihood = classifyLikelihood(fit.slope, fit.r2, raw, worseIsHigher, thresholds)
   const projected = likelihood === 'insufficient_data'
     ? null
     : Number(extrapolate(fit, horizonWeeks).toFixed(3))

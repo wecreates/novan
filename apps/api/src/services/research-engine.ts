@@ -25,6 +25,7 @@ import { webSearch }                   from './search-providers.js'
 import { checkBeforeAction, acquireAgentSlot, releaseAgentSlot, emitGovernorBlock } from './resource-governor.js'
 import { claimTask, releaseTask, shouldEmit } from './agent-coordinator.js'
 import crypto2                         from 'node:crypto'
+import { embed }                       from './embeddings.js'
 
 const FRESHNESS_MS = 7 * 24 * 60 * 60_000   // findings stay 'fresh' for 7 days
 
@@ -272,6 +273,10 @@ export async function runTopic(topicId: string, agentId?: string): Promise<RunRe
       : extracted.facts.some(f => f.kind === 'opinion') ? 'opinion' : 'guess'
 
     const now = Date.now()
+    // Compute embedding if a provider is configured — degrades gracefully to null
+    const embedText = `${fetched.title ?? ''}\n${extracted.summary}`
+    const embedding = await embed(embedText).catch(() => null)
+
     await db.insert(researchFindings).values({
       id:           uuidv7(),
       workspaceId:  topic.workspaceId,
@@ -287,6 +292,7 @@ export async function runTopic(topicId: string, agentId?: string): Promise<RunRe
       contentHash,
       fetchedAt:    now,
       freshAt:      now + FRESHNESS_MS,
+      embedding:    embedding ?? null,
       createdAt:    now,
       updatedAt:    now,
     }).onConflictDoNothing()

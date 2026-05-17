@@ -10,13 +10,13 @@
  * Premium / minimal / mission-focused. No dashboard clutter.
  */
 import { useEffect, useState } from 'react'
-import { useQuery }            from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link }                from 'react-router-dom'
 import {
   AlertOctagon, AlertTriangle, CheckCircle2, Target, Brain,
-  TrendingUp, Activity, Bell, Shield, ChevronRight, Clock,
+  TrendingUp, Activity, Bell, Shield, ChevronRight, Clock, Check, X,
 } from 'lucide-react'
-import { intelligenceApi, type ExplanationDTO } from '../api.js'
+import { intelligenceApi, enhancementsApi, type ExplanationDTO } from '../api.js'
 
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
 
@@ -64,7 +64,18 @@ function headlineStyle(status: string): { icon: JSX.Element; class: string; labe
 
 export default function StrategicHomePage() {
   const { workspaceId } = useWorkspace()
+  const qc = useQueryClient()
   const [lastVisit, setLastVisit] = useState<number | null>(null)
+  const [actedOn, setActedOn] = useState<Record<string, string>>({})
+
+  const actOn = useMutation({
+    mutationFn: ({ id, action }: { id: string; action: string }) =>
+      enhancementsApi.actOnRecommendation(workspaceId, id, action),
+    onSuccess: (_d, vars) => {
+      setActedOn(s => ({ ...s, [vars.id]: vars.action }))
+      void qc.invalidateQueries({ queryKey: ['strategic-home', workspaceId] })
+    },
+  })
 
   useEffect(() => {
     const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(LAST_VISIT_KEY) : null
@@ -142,6 +153,7 @@ export default function StrategicHomePage() {
           <ul className="divide-y divide-[var(--border)]">
             {d.topRecommendations.map(r => {
               const e = expByRecId.get(r.id)
+              const acted = actedOn[r.id]
               return (
                 <li key={r.id} className="px-5 py-4">
                   <div className="flex items-start gap-3">
@@ -153,6 +165,36 @@ export default function StrategicHomePage() {
                       <div className="text-xs text-[var(--text-muted)] mt-1">
                         {r.kind.replace(/_/g, ' ')}  ·  impact: {r.estimatedImpact}  ·  score {r.decision.score.toFixed(2)}
                       </div>
+                      {/* Operator action buttons — log a recommendation.acted_on event */}
+                      {acted ? (
+                        <div className="mt-2 text-xs text-emerald-400">
+                          ✓ logged: {acted}
+                        </div>
+                      ) : (
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            disabled={actOn.isPending}
+                            onClick={() => actOn.mutate({ id: r.id, action: 'accepted' })}
+                            className="text-xs px-2 py-1 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 flex items-center gap-1"
+                          >
+                            <Check className="w-3 h-3" /> Accept
+                          </button>
+                          <button
+                            disabled={actOn.isPending}
+                            onClick={() => actOn.mutate({ id: r.id, action: 'deferred' })}
+                            className="text-xs px-2 py-1 rounded border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
+                          >
+                            Defer
+                          </button>
+                          <button
+                            disabled={actOn.isPending}
+                            onClick={() => actOn.mutate({ id: r.id, action: 'dismissed' })}
+                            className="text-xs px-2 py-1 rounded border border-slate-500/40 bg-slate-500/10 text-slate-300 hover:bg-slate-500/20 flex items-center gap-1"
+                          >
+                            <X className="w-3 h-3" /> Dismiss
+                          </button>
+                        </div>
+                      )}
                       {e && (
                         <details className="mt-2">
                           <summary className="text-xs text-sky-400 cursor-pointer hover:text-sky-300">

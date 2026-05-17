@@ -15,8 +15,9 @@ import {
   Building2, Cpu, ShieldCheck, Activity, Search, Package, TrendingUp, HeartHandshake, Network,
   AlertOctagon, ArrowRight, CheckCircle2, FileText, Tag, Users, Wand2,
 } from 'lucide-react'
-import { intelligenceApi, type DivisionSnapshotDTO, type CrossDivisionBlockerDTO } from '../api.js'
+import { intelligenceApi, enhancementsApi, type DivisionSnapshotDTO, type CrossDivisionBlockerDTO } from '../api.js'
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
+import { Download } from 'lucide-react'
 
 const DIVISION_META: Record<string, { icon: JSX.Element; description: string }> = {
   engineering:    { icon: <Cpu className="w-4 h-4" />,        description: 'Workflows, patches, audits, tests' },
@@ -131,6 +132,15 @@ export default function CompanyOperationsPage() {
             <FileText className="w-3 h-3" />
             {generateBriefing.isPending ? 'Generating…' : generateBriefing.data ? 'Briefing emitted' : 'Weekly Briefing'}
           </button>
+          <a
+            href={enhancementsApi.divisionsCsvUrl(workspaceId)}
+            download
+            className="text-xs px-3 py-1.5 rounded border border-[var(--border)] hover:bg-[var(--bg-elevated)] flex items-center gap-1.5"
+            title="Download division snapshot as CSV"
+          >
+            <Download className="w-3 h-3" />
+            Export CSV
+          </a>
         </div>
       </div>
 
