@@ -31,6 +31,8 @@ import { weeklyOperationalReport }            from './executive-briefings.js'
 import { runHourlyHealthReview, runSixHourlyOperationalReview } from './executive-loop.js'
 import { reconcileRecommendationOutcomes }    from './reasoning-chains.js'
 import { evaluateOutcomes }                    from './outcome-evaluator.js'
+import { runCompression }                      from './knowledge-compression.js'
+import { extractPatterns }                     from './pattern-extractor.js'
 import { stabilitySnapshot, emitGovernance, autoEngageThrottle, pauseUnstableAgents, autoDisengageThrottleIfStable } from './governance-core.js'
 import { crossDivisionBlockers, type CrossDivisionBlocker } from './divisions.js'
 import { notify }                            from './notifications.js'
@@ -162,6 +164,22 @@ async function runCrossDivisionScan() {
       }
     }
   } catch (e) { await emit('cron.error', { task: 'cross_division', error: (e as Error).message }) }
+}
+
+async function runDailyCompressionAndPatterns() {
+  try {
+    const ids = await listWorkspaceIds()
+    let totalLessons = 0, totalPatterns = 0
+    for (const ws of ids) {
+      const c = await runCompression(ws).catch(() => null)
+      if (c) totalLessons += c.totalCreated
+      const p = await extractPatterns(ws).catch(() => null)
+      if (p) totalPatterns += p.preventiveRecsCreated
+    }
+    if (totalLessons + totalPatterns > 0) {
+      await emit('cron.compression_completed', { totalLessons, totalPatterns })
+    }
+  } catch (e) { await emit('cron.error', { task: 'daily_compression', error: (e as Error).message }) }
 }
 
 async function runWeeklyExecutiveBriefings() {
@@ -297,6 +315,7 @@ const INTERVALS = {
   crossDivision:    10 * 60_000, // 10 min — scan cross-division blockers and notify on critical
   execHourly:       60 * 60_000, // 1 hour — executive hourly health review
   execSixHourly:    6  * 60 * 60_000, // 6 hours — executive ops optimization review
+  dailyCompression: 24 * 60 * 60_000, // 24 hours — knowledge compression + pattern extraction
 }
 
 export function startLearningCron(): void {
@@ -319,6 +338,7 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runCrossDivisionScan(),        INTERVALS.crossDivision))
   handles.push(setInterval(() => void runExecutiveHourly(),          INTERVALS.execHourly))
   handles.push(setInterval(() => void runExecutiveSixHourly(),       INTERVALS.execSixHourly))
+  handles.push(setInterval(() => void runDailyCompressionAndPatterns(), INTERVALS.dailyCompression))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

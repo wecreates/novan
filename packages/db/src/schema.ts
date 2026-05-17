@@ -2286,6 +2286,56 @@ export const promptTemplates = pgTable('prompt_templates', {
   index('promptt_category_idx').on(t.category),
 ])
 
+// ─── Knowledge Compression + Pattern Extraction ─────────────────────────────
+
+/**
+ * Compressed lessons — operator-readable summaries derived from real
+ * source rows. sourceRefs MUST point back to real records; never
+ * fabricated.
+ */
+export const compressedLessons = pgTable('compressed_lessons', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  kind:              text('kind').notNull(),               // failure_cluster | fix_pattern | research_synthesis | incident_pattern | operator_friction
+  title:             text('title').notNull(),
+  summary:           text('summary').notNull(),
+  abstractedLesson:  text('abstracted_lesson'),
+  sourceTable:       text('source_table').notNull(),       // failure_memory | successful_fixes | etc.
+  sourceRefs:        text('source_refs').array().notNull().default([]),  // row IDs in source table
+  sourceCount:       integer('source_count').notNull(),
+  confidence:        real('confidence').notNull().default(0.5),
+  confidenceProvenance: text('confidence_provenance').notNull().default('heuristic'),
+  embedding:         vector('embedding', { dimensions: 768 }),
+  archivedAt:        bigint('archived_at', { mode: 'number' }),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:         bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('cl_workspace_idx').on(t.workspaceId),
+  index('cl_kind_idx').on(t.kind),
+  index('cl_archived_idx').on(t.archivedAt),
+])
+
+/**
+ * Duplicate merge log — every dedup decision is auditable.
+ */
+export const duplicateMergeLog = pgTable('duplicate_merge_log', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  entityType:        text('entity_type').notNull(),   // incident | recommendation | research_finding | mission | skill
+  primaryId:         text('primary_id').notNull(),
+  duplicateId:       text('duplicate_id').notNull(),
+  similarity:        real('similarity').notNull(),
+  reason:            text('reason').notNull(),
+  status:            text('status').notNull().default('suggested'),  // suggested | merged | dismissed
+  decidedBy:         text('decided_by'),
+  decidedAt:         bigint('decided_at', { mode: 'number' }),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('dml_workspace_idx').on(t.workspaceId),
+  index('dml_status_idx').on(t.status),
+  index('dml_entity_idx').on(t.entityType),
+])
+
 // ─── Cognitive Architecture ───────────────────────────────────────────────────
 
 /**
