@@ -9,6 +9,7 @@ import {
 } from '../services/governance-core.js'
 import { currentLimits, snapshot as governorSnapshot } from '../services/resource-governor.js'
 import { explainRecommendation, explainTop, confidenceSurfaces } from '../services/explainability.js'
+import { notify, configuredDrivers } from '../services/notifications.js'
 
 const governanceRoutes: FastifyPluginAsync = async (fastify) => {
 
@@ -68,6 +69,30 @@ const governanceRoutes: FastifyPluginAsync = async (fastify) => {
     const ws = req.query.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     return { success: true, data: await stabilitySnapshot(ws) }
+  })
+
+  /** Notification dispatch — manual fire (operator-triggered). */
+  fastify.post<{
+    Body: {
+      workspace_id?: string; type?: string; title?: string; body?: string;
+      severity?: 'normal' | 'high' | 'critical'; link?: string; signature?: string;
+    }
+  }>('/notify', async (req, reply) => {
+    const b = req.body
+    if (!b.workspace_id || !b.type || !b.title || !b.body || !b.severity) {
+      return reply.code(400).send({ success: false, error: 'workspace_id, type, title, body, severity required' })
+    }
+    const result = await notify({
+      workspaceId: b.workspace_id, type: b.type, title: b.title, body: b.body,
+      severity: b.severity,
+      ...(b.link      !== undefined ? { link: b.link } : {}),
+      ...(b.signature !== undefined ? { signature: b.signature } : {}),
+    })
+    return { success: true, data: result }
+  })
+
+  fastify.get('/notifications/drivers', async () => {
+    return { success: true, data: { configured: configuredDrivers() } }
   })
 }
 

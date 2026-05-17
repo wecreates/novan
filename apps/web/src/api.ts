@@ -790,6 +790,80 @@ export const workersApi = {
   queues: () => api.get<{ success: true; data: QueueDetail[] }>('/api/v1/workers/queues'),
 }
 
+// ─── Strategic Intelligence client ────────────────────────────────────────────
+
+export interface StrategicHomePayload {
+  workspaceId: string
+  composedAt:  number
+  headline: { status: 'critical' | 'attention_needed' | 'healthy'; summary: string }
+  topRecommendations: Array<{
+    id: string; kind: string; title: string
+    decision: { score: number; bucket: 'P0' | 'P1' | 'P2' | 'P3'; autoApplyOk: boolean; warnings: string[] }
+    estimatedImpact: 'low' | 'medium' | 'high' | 'critical'
+    evidence: Record<string, unknown>
+  }>
+  missions: {
+    active:    Array<{ id: string; title: string; horizon: string; progress: number; targetDate: number | null; estimatedImpact: string }>
+    blocked:   Array<{ id: string; title: string; horizon: string }>
+    completed: Array<{ id: string; title: string }>
+    pendingApprovals: number
+  }
+  accomplishments24h: Array<{ kind: string; count: number; latestAt: number | null }>
+  sinceLastVisit: {
+    windowStart: number; windowEnd: number
+    newIncidents: number; resolvedIncidents: number
+    newResearchFindings: number; newApprovals: number; newRoadmapItems: number
+    newFeedback: number; rollbacks: number
+    failureRateDelta: number | null
+  }
+  unresolvedCritical: { openIncidents: number; pendingApprovals: number; securityAudit: number }
+}
+
+export interface GovernanceSnapshot {
+  capturedAt: number
+  stability: {
+    overall: 'stable' | 'attention' | 'unstable'
+    indicators: Array<{ name: string; value: number; threshold: number; unstable: boolean; detail?: string }>
+    recommendedThrottle: boolean
+  }
+  runtimeGovernor: {
+    limits: Record<string, number>
+    state:  Record<string, unknown>
+    dailyCounters: { autonomousPatchesToday: number; deploymentsToday: number; limits: Record<string, number> }
+  }
+}
+
+export interface ExplanationDTO {
+  recommendationId: string
+  recommendation:   StrategicHomePayload['topRecommendations'][number]
+  why:              string
+  score:            number
+  confidenceProvenance: 'model_reported' | 'heuristic' | 'verified'
+  estimatedImpact:  'low' | 'medium' | 'high' | 'critical'
+  risks:            string[]
+  rollbackProven:   boolean
+  rollbackEngineAvailable: boolean
+  whatHappensIfIgnored: string
+  interpretationType: 'template' | 'model'
+}
+
+export const intelligenceApi = {
+  home: (workspaceId: string) =>
+    api.get<{ success: true; data: StrategicHomePayload }>(
+      `/api/v1/intelligence/war-room/home?workspace_id=${encodeURIComponent(workspaceId)}`,
+    ),
+  governance: (workspaceId: string) =>
+    api.get<{ success: true; data: GovernanceSnapshot }>(
+      `/api/v1/governance/snapshot?workspace_id=${encodeURIComponent(workspaceId)}`,
+    ),
+  explainTop: (workspaceId: string, limit = 5) =>
+    api.get<{ success: true; data: ExplanationDTO[] }>(
+      `/api/v1/explain/top?workspace_id=${encodeURIComponent(workspaceId)}&limit=${limit}`,
+    ),
+  notificationDrivers: () =>
+    api.get<{ success: true; data: { configured: string[] } }>(`/api/v1/governance/notifications/drivers`),
+}
+
 // ─── SSE stream helper ────────────────────────────────────────────────────────
 
 export function createEventStream(

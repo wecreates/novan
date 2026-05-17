@@ -19,6 +19,8 @@ import { db }                          from '../db/client.js'
 import { events, failureMemory, providerBudgets, incidents, killSwitches, agents } from '../db/schema.js'
 import { and, desc, eq, gte, sql }     from 'drizzle-orm'
 import { v7 as uuidv7 }                from 'uuid'
+import { notify }                      from './notifications.js'
+import { shouldEmit }                  from './agent-coordinator.js'
 
 // ─── Protected paths ─────────────────────────────────────────────────────────
 
@@ -328,8 +330,60 @@ export async function autoEngageThrottle(workspaceId: string, reason: string): P
   }
   if (engaged.length > 0) {
     await emitGovernance(workspaceId, 'auto_throttle_engaged', { engaged, reason })
+    await notify({
+      workspaceId, type: 'governance.auto_throttle_engaged',
+      title: `Novan: auto-throttle engaged (${engaged.join(', ')})`,
+      body:  `Reason: ${reason}. Kill switches enabled for: ${engaged.join(', ')}. Disable via /api/v1/kill-switches when stability returns.`,
+      severity: 'high',
+      signature: `auto_throttle:${engaged.sort().join(',')}`,
+    }).catch(() => null)
   }
   return { engaged }
+}
+
+/**
+ * Auto-disengage: when stability has been good for >=2 consecutive 5-min
+ * scans, disable the kill switches we previously enabled. Identifies our
+ * own switches by enabledBy='governance-core' to avoid undoing manual
+ * operator overrides.
+ */
+const STABILITY_STREAK = new Map<string, number>()
+const STREAK_NEEDED = 2
+
+export async function autoDisengageThrottleIfStable(workspaceId: string, stableNow: boolean): Promise<{ disengaged: string[] }> {
+  if (!stableNow) {
+    STABILITY_STREAK.delete(workspaceId)
+    return { disengaged: [] }
+  }
+  const streak = (STABILITY_STREAK.get(workspaceId) ?? 0) + 1
+  STABILITY_STREAK.set(workspaceId, streak)
+  if (streak < STREAK_NEEDED) return { disengaged: [] }
+
+  const disengaged: string[] = []
+  const now = Date.now()
+  for (const switchType of ['research', 'image'] as const) {
+    const row = await db.select().from(killSwitches)
+      .where(and(eq(killSwitches.workspaceId, workspaceId), eq(killSwitches.switchType, switchType)))
+      .limit(1).then(r => r[0]).catch(() => null)
+    if (!row?.enabled) continue
+    if (row.enabledBy !== 'governance-core') continue   // respect manual operator overrides
+    await db.update(killSwitches).set({
+      enabled: false, disabledAt: now, updatedAt: now, reason: 'auto-disengage: stability returned',
+    }).where(eq(killSwitches.id, row.id)).catch(() => null)
+    disengaged.push(switchType)
+  }
+  if (disengaged.length > 0) {
+    STABILITY_STREAK.delete(workspaceId)  // reset streak after acting
+    await emitGovernance(workspaceId, 'auto_throttle_disengaged', { disengaged, streak })
+    await notify({
+      workspaceId, type: 'governance.auto_throttle_disengaged',
+      title: `Novan: auto-throttle released (${disengaged.join(', ')})`,
+      body:  `Stability returned for ${streak} consecutive scans. Kill switches lifted for: ${disengaged.join(', ')}.`,
+      severity: 'normal',
+      signature: `auto_disengage:${disengaged.sort().join(',')}`,
+    }).catch(() => null)
+  }
+  return { disengaged }
 }
 
 /**
@@ -339,18 +393,29 @@ export async function autoEngageThrottle(workspaceId: string, reason: string): P
  */
 export async function pauseUnstableAgents(workspaceId: string): Promise<{ paused: string[] }> {
   const hourAgo = Date.now() - 60 * 60_000
-  // Find agents whose IDs appear in recent failure-style events
+  // Find agents whose IDs appear in recent failure-style events. Try multiple
+  // payload shapes so emitters using any common convention are caught:
+  //   payload->>'agentId'         (canonical)
+  //   payload->>'agent_id'        (snake_case)
+  //   payload->'agent'->>'id'     (nested object)
+  //   payload->>'assignedAgent'   (orchestrator convention)
+  const agentIdExpr = sql<string>`coalesce(
+    ${events.payload}->>'agentId',
+    ${events.payload}->>'agent_id',
+    ${events.payload}->'agent'->>'id',
+    ${events.payload}->>'assignedAgent'
+  )`
   const failingAgentRows = await db.select({
-    agentId: sql<string>`${events.payload}->>'agentId'`,
+    agentId: agentIdExpr,
     failures: sql<number>`count(*)::int`,
   }).from(events)
     .where(and(
       eq(events.workspaceId, workspaceId),
-      sql`${events.type} in ('agent.failed','agent.error')`,
+      sql`${events.type} in ('agent.failed','agent.error','agent.crashed')`,
       gte(events.createdAt, hourAgo),
     ))
-    .groupBy(sql`${events.payload}->>'agentId'`)
-    .having(sql`count(*) >= 5`)
+    .groupBy(agentIdExpr)
+    .having(sql`count(*) >= 5 AND ${agentIdExpr} is not null`)
     .catch(() => [] as Array<{ agentId: string | null; failures: number }>)
 
   const paused: string[] = []
@@ -364,6 +429,15 @@ export async function pauseUnstableAgents(workspaceId: string): Promise<{ paused
       paused.push(row.agentId)
       await emitGovernance(workspaceId, 'agent_auto_paused', { agentId: row.agentId, failures: row.failures })
     }
+  }
+  if (paused.length > 0) {
+    await notify({
+      workspaceId, type: 'governance.agent_auto_paused',
+      title: `Novan: ${paused.length} agent(s) auto-paused`,
+      body:  `Agents flagged for repeated failures (>=5 in 1h): ${paused.join(', ')}. Inspect via /agents and resume manually after fixing.`,
+      severity: 'high',
+      signature: `agent_paused:${paused.sort().join(',')}`,
+    }).catch(() => null)
   }
   return { paused }
 }

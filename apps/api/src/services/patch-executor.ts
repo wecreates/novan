@@ -16,6 +16,8 @@ import { patchRecords, events }         from '../db/schema.js'
 import { v7 as uuidv7 }                 from 'uuid'
 import { recordFailure }                from './failure-memory.js'
 import { gate, isProtectedPath, invalidateDailyCounter } from './governance-core.js'
+import { shouldEmit }                  from './agent-coordinator.js'
+import crypto                          from 'node:crypto'
 
 // Files that must never be patched autonomously
 const PROTECTED_PATTERNS = [
@@ -95,12 +97,18 @@ export async function applyPatches(opts: {
     workspaceId, intent: 'apply_patch', context: { filePaths, jobId, runId },
   })
   if (govDecision.decision !== 'auto_apply_ok') {
-    await db.insert(events).values({
-      id: uuidv7(), type: 'patch.blocked_by_governance', workspaceId,
-      payload: { jobId, runId, decision: govDecision.decision, reason: govDecision.reason, filePaths },
-      traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
-      source: 'patch-executor', version: 1, createdAt: Date.now(),
-    }).catch(() => null)
+    // Dedup: collapse identical block events within the agent-coordinator
+    // dedup window so spammed attempts don't flood the events table.
+    const pathSig = crypto.createHash('sha256').update(filePaths.sort().join('|')).digest('hex').slice(0, 16)
+    const eventSig = `${govDecision.decision}:${pathSig}`
+    if (shouldEmit(workspaceId, 'patch.blocked_by_governance', eventSig)) {
+      await db.insert(events).values({
+        id: uuidv7(), type: 'patch.blocked_by_governance', workspaceId,
+        payload: { jobId, runId, decision: govDecision.decision, reason: govDecision.reason, filePaths },
+        traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
+        source: 'patch-executor', version: 1, createdAt: Date.now(),
+      }).catch(() => null)
+    }
     return {
       results: patches.map(p => ({
         recordId: '', filePath: p.filePath, linesAdded: 0, linesRemoved: 0,

@@ -26,7 +26,7 @@ import { purgeExpired as purgeStretchCache } from './token-stretcher.js'
 import { runDueTopics, seedResearchAgents } from './research-engine.js'
 import { runDailyReview }                    from './daily-review.js'
 import { convertFindings }                   from './research-to-action.js'
-import { stabilitySnapshot, emitGovernance, autoEngageThrottle, pauseUnstableAgents } from './governance-core.js'
+import { stabilitySnapshot, emitGovernance, autoEngageThrottle, pauseUnstableAgents, autoDisengageThrottleIfStable } from './governance-core.js'
 
 const handles: NodeJS.Timeout[] = []
 
@@ -115,7 +115,9 @@ async function runStabilityScan() {
     for (const ws of ids) {
       const snap = await stabilitySnapshot(ws).catch(() => null)
       if (!snap) continue
-      if (snap.overall === 'unstable' || snap.recommendedThrottle) {
+      const stableNow = snap.overall === 'stable' && !snap.recommendedThrottle
+
+      if (!stableNow) {
         const unstableIndicators = snap.indicators.filter(i => i.unstable)
         await emitGovernance(ws, 'stability_alert', {
           overall: snap.overall,
@@ -130,6 +132,9 @@ async function runStabilityScan() {
         }
         await pauseUnstableAgents(ws).catch(() => null)
       }
+
+      // Auto-disengage: requires >=2 consecutive stable scans (≈10 min)
+      await autoDisengageThrottleIfStable(ws, stableNow).catch(() => null)
     }
   } catch (e) { await emit('cron.error', { task: 'stability_scan', error: (e as Error).message }) }
 }

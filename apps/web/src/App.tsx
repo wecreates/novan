@@ -6,6 +6,7 @@ import {
   Shield, ScanSearch, ShieldCheck, Terminal, Siren, GitMerge, Lock, BookOpen, TrendingUp, Rocket,
 } from 'lucide-react'
 import WarRoom                  from './pages/WarRoom.js'
+import StrategicHomePage        from './pages/StrategicHomePage.js'
 import Timeline                 from './pages/Timeline.js'
 import Settings                 from './pages/Settings.js'
 import GoalsPage                from './pages/GoalsPage.js'
@@ -55,6 +56,7 @@ import LaunchTonightPage       from './pages/LaunchTonightPage.js'
 import { WorkspaceSwitcher } from './components/WorkspaceSwitcher.js'
 
 const NAV_ITEMS = [
+  { to: '/strategic-home', icon: Rocket,       label: 'Strategic Home' },
   { to: '/war-room',    icon: Activity,        label: 'War Room' },
   { to: '/timeline',    icon: Clock,           label: 'Timeline' },
   { to: '/goals',       icon: Target,          label: 'Goals' },
@@ -127,7 +129,8 @@ export default function App() {
       <Sidebar />
       <div className="flex-1 min-w-0 overflow-hidden">
         <Routes>
-          <Route path="/"          element={<Navigate to="/war-room" replace />} />
+          <Route path="/"            element={<Navigate to="/strategic-home" replace />} />
+          <Route path="/strategic-home" element={<StrategicHomePage />} />
           <Route path="/war-room"    element={<WarRoom />} />
           <Route path="/timeline"    element={<Timeline />} />
           <Route path="/goals"       element={<GoalsPage />} />
