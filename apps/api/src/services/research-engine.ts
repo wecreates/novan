@@ -20,6 +20,11 @@ import { v7 as uuidv7 }                from 'uuid'
 import { webFetch }                    from './web-fetch.js'
 import { gateResearch, emitLearningEvent } from './research-safety.js'
 import { stretch }                     from './token-stretcher.js'
+import { isResearchEnabled }           from './provider-validation.js'
+import { webSearch }                   from './search-providers.js'
+import { checkBeforeAction, acquireAgentSlot, releaseAgentSlot, emitGovernorBlock } from './resource-governor.js'
+import { claimTask, releaseTask, shouldEmit } from './agent-coordinator.js'
+import crypto2                         from 'node:crypto'
 
 const FRESHNESS_MS = 7 * 24 * 60 * 60_000   // findings stay 'fresh' for 7 days
 
@@ -183,6 +188,28 @@ export async function runTopic(topicId: string, agentId?: string): Promise<RunRe
     topicId, sourcesTried: 0, findingsAdded: 0, duplicates: 0, blocked: 0, errors: [],
   }
 
+  // Feature flag
+  if (!isResearchEnabled()) {
+    result.blocked++; result.errors.push('RESEARCH_ENABLED=false')
+    return result
+  }
+
+  // Resource governor + dedup claim
+  const gov = await checkBeforeAction({ workspaceId: topic.workspaceId, kind: 'research' })
+  if (!gov.ok) {
+    await emitGovernorBlock(topic.workspaceId, gov, 'research')
+    result.blocked++; result.errors.push(`governor: ${gov.reason}`)
+    return result
+  }
+  const taskSig = crypto2.createHash('sha256').update(`${topicId}|${topic.updatedAt}`).digest('hex').slice(0, 16)
+  if (!claimTask(topic.workspaceId, 'web_research', taskSig)) {
+    result.blocked++; result.errors.push('duplicate claim — another agent already running this topic')
+    return result
+  }
+  acquireAgentSlot(topic.workspaceId)
+
+  try {
+
   // Pre-gate the task text once
   const taskGate = await gateResearch({ workspaceId: topic.workspaceId, taskText: `${topic.topic}\n${topic.description ?? ''}` })
   if (!taskGate.ok) {
@@ -194,9 +221,22 @@ export async function runTopic(topicId: string, agentId?: string): Promise<RunRe
   }
 
   const max = topic.maxFindingsPerRun ?? 10
-  await emit(topic.workspaceId, 'research.run_started', { topicId, sources: topic.approvedSources.length })
 
-  for (const url of topic.approvedSources.slice(0, max)) {
+  // Discover sources via web search if approvedSources is empty
+  let sources = [...topic.approvedSources]
+  if (sources.length === 0) {
+    const search = await webSearch(topic.topic, { max })
+    if (search.hits.length > 0) {
+      sources = search.hits.map(h => h.url)
+      await emit(topic.workspaceId, 'research.sources_discovered', { topicId, provider: search.provider, count: sources.length })
+    } else if (search.error) {
+      result.errors.push(`search: ${search.error}`)
+    }
+  }
+
+  await emit(topic.workspaceId, 'research.run_started', { topicId, sources: sources.length, agentId: agentId ?? null })
+
+  for (const url of sources.slice(0, max)) {
     result.sourcesTried++
 
     const urlGate = await gateResearch({ workspaceId: topic.workspaceId, url })
@@ -267,8 +307,14 @@ export async function runTopic(topicId: string, agentId?: string): Promise<RunRe
     updatedAt:     now,
   }).where(eq(researchTopics.id, topicId))
 
-  await emit(topic.workspaceId, 'research.run_completed', result as unknown as Record<string, unknown>)
+  if (shouldEmit(topic.workspaceId, 'research.run_completed', `${topicId}:${result.findingsAdded}:${result.errors.length}`)) {
+    await emit(topic.workspaceId, 'research.run_completed', result as unknown as Record<string, unknown>)
+  }
   return result
+  } finally {
+    releaseAgentSlot(topic.workspaceId)
+    releaseTask(topic.workspaceId, 'web_research', taskSig)
+  }
 }
 
 /** Cron entry — run every topic whose interval has elapsed. */

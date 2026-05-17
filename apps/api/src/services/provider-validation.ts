@@ -35,7 +35,26 @@ const TARGETS: ProviderTarget[] = [
   { id: 'openai',     envKey: 'OPENAI_API_KEY',     probeUrl: 'https://status.openai.com/api/v2/status.json' },
   { id: 'anthropic',  envKey: 'ANTHROPIC_API_KEY',  probeUrl: 'https://status.anthropic.com/api/v2/status.json' },
   { id: 'stripe',     envKey: 'STRIPE_SECRET_KEY',  probeUrl: 'https://status.stripe.com/api/v2/status.json' },
+  { id: 'replicate',  envKey: 'REPLICATE_API_TOKEN', probeUrl: 'https://api.replicate.com/' },
+  { id: 'stability',  envKey: 'STABILITY_API_KEY',  probeUrl: 'https://api.stability.ai/' },
+  { id: 'fal',        envKey: 'FAL_KEY',            probeUrl: 'https://fal.run/' },
+  { id: 'search',     envKey: 'SEARCH_API_KEY',     probeUrl: 'https://api.tavily.com/' },
 ]
+
+/** Feature-flag accessors — default ON unless explicitly 'false'. */
+export function isResearchEnabled(): boolean {
+  return process.env['RESEARCH_ENABLED'] !== 'false'
+}
+export function isImageGenerationEnabled(): boolean {
+  return process.env['IMAGE_GENERATION_ENABLED'] !== 'false'
+}
+export function defaultImageProvider(): string | null {
+  return process.env['IMAGE_PROVIDER_DEFAULT'] ?? null
+}
+export function searchProvider(): string | null {
+  const p = process.env['SEARCH_PROVIDER']
+  return p && process.env['SEARCH_API_KEY'] ? p.toLowerCase() : null
+}
 
 const PROBE_TIMEOUT_MS = 5000
 

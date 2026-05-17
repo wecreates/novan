@@ -20,6 +20,8 @@ import { imageGenerations, events, killSwitches } from '../db/schema.js'
 import { and, eq, desc }               from 'drizzle-orm'
 import { v7 as uuidv7 }                from 'uuid'
 import { redactSecrets }               from './secret-redactor.js'
+import { isImageGenerationEnabled, defaultImageProvider } from './provider-validation.js'
+import { checkBeforeAction, emitGovernorBlock } from './resource-governor.js'
 
 export type ImageProvider = 'openai' | 'stability' | 'replicate' | 'fal'
 
@@ -221,6 +223,25 @@ export async function generateImage(input: GenerateInput): Promise<GenerateResul
     createdBy:       input.createdBy    ?? null,
     createdAt:       now,
   }).catch(() => null)
+
+  // 0. Feature flag
+  if (!isImageGenerationEnabled()) {
+    await db.update(imageGenerations).set({
+      status: 'blocked', blockedReason: 'IMAGE_GENERATION_ENABLED=false', completedAt: Date.now(),
+    }).where(eq(imageGenerations.id, id))
+    await emit(input.workspaceId, 'image.blocked', { id, reason: 'feature_flag_off' })
+    return { id, status: 'blocked', costEstimateUsd: 0, blockedReason: 'image generation disabled by flag', provider: input.provider }
+  }
+
+  // 0b. Governor (rate limit + emergency throttle)
+  const gov = await checkBeforeAction({ workspaceId: input.workspaceId, kind: 'image' })
+  if (!gov.ok) {
+    await emitGovernorBlock(input.workspaceId, gov, 'image')
+    await db.update(imageGenerations).set({
+      status: 'blocked', blockedReason: `governor: ${gov.reason}`, completedAt: Date.now(),
+    }).where(eq(imageGenerations.id, id))
+    return { id, status: 'blocked', costEstimateUsd: 0, blockedReason: gov.reason ?? 'governor block', provider: input.provider }
+  }
 
   // 1. Kill switch
   if (await imageKillSwitchOn(input.workspaceId)) {

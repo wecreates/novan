@@ -24,6 +24,7 @@ import { runSecurityScan }          from './security-team.js'
 import { pollDueFeeds }             from './feed-ingester.js'
 import { purgeExpired as purgeStretchCache } from './token-stretcher.js'
 import { runDueTopics, seedResearchAgents } from './research-engine.js'
+import { runDailyReview }                    from './daily-review.js'
 
 const handles: NodeJS.Timeout[] = []
 
@@ -106,6 +107,18 @@ async function runBillingSweep() {
   } catch (e) { await emit('cron.error', { task: 'billing', error: (e as Error).message }) }
 }
 
+async function runDailyReviews() {
+  try {
+    const ids = await listWorkspaceIds()
+    let generated = 0
+    for (const ws of ids) {
+      const r = await runDailyReview(ws).catch(() => null)
+      if (r) generated++
+    }
+    if (generated > 0) await emit('cron.daily_reviews_generated', { count: generated })
+  } catch (e) { await emit('cron.error', { task: 'daily_review', error: (e as Error).message }) }
+}
+
 async function runResearchScans() {
   try {
     const ids = await listWorkspaceIds()
@@ -153,6 +166,7 @@ const INTERVALS = {
   feeds:        10 * 60_000,   // 10 min — RSS/Atom ingestion (per-feed intervals enforced inside)
   stretchPurge: 60 * 60_000,   // 1 hour — expire stale AI cache rows
   research:     15 * 60_000,   // 15 min — research topic polling (per-topic intervals enforced inside)
+  dailyReview:  60 * 60_000,   // 1 hour — emits at most one review/24h via idempotency check
 }
 
 export function startLearningCron(): void {
@@ -168,6 +182,7 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runFeedIngestion(),    INTERVALS.feeds))
   handles.push(setInterval(() => void runStretchCachePurge(),INTERVALS.stretchPurge))
   handles.push(setInterval(() => void runResearchScans(),    INTERVALS.research))
+  handles.push(setInterval(() => void runDailyReviews(),     INTERVALS.dailyReview))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
