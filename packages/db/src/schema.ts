@@ -2104,6 +2104,34 @@ export const externalKnowledge = pgTable('external_knowledge', {
   index('ek_expires_idx').on(t.expiresAt),
 ])
 
+/**
+ * External feeds Novan subscribes to (RSS/Atom).
+ * Cron periodically polls each enabled feed, fetches new items, lands content
+ * in external_knowledge for the brain to reference.
+ */
+export const externalFeeds = pgTable('external_feeds', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  feedUrl:           text('feed_url').notNull(),
+  name:              text('name').notNull(),
+  tags:              text('tags').array().notNull().default([]),
+  intervalSeconds:   integer('interval_seconds').notNull().default(3600),
+  enabled:           boolean('enabled').notNull().default(true),
+  lastPolledAt:      bigint('last_polled_at', { mode: 'number' }),
+  lastSuccessAt:     bigint('last_success_at', { mode: 'number' }),
+  lastError:         text('last_error'),
+  itemsIngested:     integer('items_ingested').notNull().default(0),
+  pollCount:         integer('poll_count').notNull().default(0),
+  errorCount:        integer('error_count').notNull().default(0),
+  maxItemsPerPoll:   integer('max_items_per_poll').notNull().default(5),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:         bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ef_workspace_idx').on(t.workspaceId),
+  index('ef_enabled_idx').on(t.enabled),
+  index('ef_polled_idx').on(t.lastPolledAt),
+])
+
 // ─── Multi-Tenant Billing + Subscriptions ─────────────────────────────────────
 
 /** Plan definitions — feature gates + numeric limits */

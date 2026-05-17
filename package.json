@@ -33,7 +33,8 @@
     "dr:validate":"powershell -ExecutionPolicy Bypass -File scripts/dr-validate.ps1",
     "verify:launch": "node scripts/verify-launch.mjs",
     "start":         "pnpm --filter @ops/api start:prod",
-    "seed:cloud":    "node scripts/neon-seed-and-check.mjs"
+    "seed:cloud":    "node scripts/neon-seed-and-check.mjs",
+    "brain:plan":    "node scripts/brain-plan.mjs"
   },
   "devDependencies": {
     "turbo":                              "^2.3.0",

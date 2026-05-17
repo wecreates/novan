@@ -21,6 +21,7 @@ import { failStuckAssignments, detectStuckAgents } from './orchestrator.js'
 import { recoverStaleLocks }        from './lock-manager.js'
 import { expireTrials }             from './billing.js'
 import { runSecurityScan }          from './security-team.js'
+import { pollDueFeeds }             from './feed-ingester.js'
 
 const handles: NodeJS.Timeout[] = []
 
@@ -103,6 +104,19 @@ async function runBillingSweep() {
   } catch (e) { await emit('cron.error', { task: 'billing', error: (e as Error).message }) }
 }
 
+async function runFeedIngestion() {
+  try {
+    const ids = await listWorkspaceIds()
+    let polled = 0, ingested = 0
+    for (const ws of ids) {
+      const r = await pollDueFeeds(ws).catch(() => ({ polled: 0, results: [] as Array<{ itemsIngested: number }> }))
+      polled += r.polled
+      ingested += r.results.reduce((n, x) => n + (x.itemsIngested ?? 0), 0)
+    }
+    if (polled > 0) await emit('cron.feeds_polled', { polled, ingested })
+  } catch (e) { await emit('cron.error', { task: 'feeds', error: (e as Error).message }) }
+}
+
 // ─── Public boot/stop ─────────────────────────────────────────────────────────
 
 const INTERVALS = {
@@ -112,6 +126,7 @@ const INTERVALS = {
   orchestrator: 2  * 60_000,   // 2 min
   securityTeam: 10 * 60_000,   // 10 min — full security team sweep
   billing:      60 * 60_000,   // 1 hour
+  feeds:        10 * 60_000,   // 10 min — RSS/Atom ingestion (per-feed intervals enforced inside)
 }
 
 export function startLearningCron(): void {
@@ -124,6 +139,7 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runOrchestratorSweep(),INTERVALS.orchestrator))
   handles.push(setInterval(() => void runSecurityTeamScans(),INTERVALS.securityTeam))
   handles.push(setInterval(() => void runBillingSweep(),     INTERVALS.billing))
+  handles.push(setInterval(() => void runFeedIngestion(),    INTERVALS.feeds))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
