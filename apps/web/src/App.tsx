@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import WarRoom                  from './pages/WarRoom.js'
 import StrategicHomePage        from './pages/StrategicHomePage.js'
+import { useThemeAndShortcuts } from './hooks/useThemeAndShortcuts.js'
 import MissionIntelligencePage  from './pages/MissionIntelligencePage.js'
 import ExecutiveWarRoomPage     from './pages/ExecutiveWarRoomPage.js'
 import CompanyOperationsPage    from './pages/CompanyOperationsPage.js'
@@ -130,6 +131,7 @@ function Sidebar() {
 }
 
 export default function App() {
+  useThemeAndShortcuts()
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--bg-primary)]">
       <Sidebar />

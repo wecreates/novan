@@ -3,11 +3,13 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
+  :root, [data-theme='dark'] {
     --bg-primary:    #0a0a0f;
     --bg-surface:    #111118;
     --bg-elevated:   #1a1a24;
+    --surface:       #111118;
     --border:        #22222e;
+    --text:          #f0f0f8;
     --text-primary:  #f0f0f8;
     --text-secondary: #8888aa;
     --text-muted:    #44445a;
@@ -16,6 +18,23 @@
     --accent-yellow: #f59e0b;
     --accent-orange: #f97316;
     --accent-red:    #ef4444;
+  }
+
+  [data-theme='light'] {
+    --bg-primary:    #fafafb;
+    --bg-surface:    #ffffff;
+    --bg-elevated:   #f1f1f5;
+    --surface:       #ffffff;
+    --border:        #e4e4eb;
+    --text:          #18181b;
+    --text-primary:  #18181b;
+    --text-secondary: #52525b;
+    --text-muted:    #a1a1aa;
+    --accent-blue:   #2563eb;
+    --accent-green:  #059669;
+    --accent-yellow: #d97706;
+    --accent-orange: #ea580c;
+    --accent-red:    #dc2626;
   }
 
   * { box-sizing: border-box; }

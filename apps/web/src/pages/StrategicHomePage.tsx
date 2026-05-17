@@ -17,6 +17,10 @@ import {
   TrendingUp, Activity, Bell, Shield, ChevronRight, Clock, Check, X,
 } from 'lucide-react'
 import { intelligenceApi, enhancementsApi, type ExplanationDTO } from '../api.js'
+import { VoiceCommandBar } from '../components/VoiceCommandBar.js'
+import { MissingKeysBanner } from '../components/MissingKeysBanner.js'
+import { setTheme, currentTheme } from '../hooks/useThemeAndShortcuts.js'
+import { Sun, Moon } from 'lucide-react'
 
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
 
@@ -125,6 +129,22 @@ export default function StrategicHomePage() {
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+      {/* Missing keys banner */}
+      <MissingKeysBanner />
+
+      {/* Top toolbar: voice + theme */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1" />
+        <VoiceCommandBar />
+        <button
+          onClick={() => setTheme(currentTheme() === 'light' ? 'dark' : 'light')}
+          title="Toggle theme (or press 't')"
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--bg-elevated)]"
+        >
+          {currentTheme() === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+        </button>
+      </div>
+
       {/* Headline */}
       <div className={`flex items-center gap-3 px-5 py-4 rounded-lg border ${headline.class}`}>
         {headline.icon}
