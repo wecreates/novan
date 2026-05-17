@@ -862,6 +862,71 @@ export const intelligenceApi = {
     ),
   notificationDrivers: () =>
     api.get<{ success: true; data: { configured: string[] } }>(`/api/v1/governance/notifications/drivers`),
+  continuity: (workspaceId: string) =>
+    api.get<{ success: true; data: ContinuitySnapshotDTO }>(
+      `/api/v1/intelligence/continuity?workspace_id=${encodeURIComponent(workspaceId)}`,
+    ),
+  trends: (workspaceId: string) =>
+    api.get<{ success: true; data: AllTrendsDTO }>(
+      `/api/v1/intelligence/trends?workspace_id=${encodeURIComponent(workspaceId)}`,
+    ),
+  rankedMemory: (workspaceId: string, limit = 20, tags?: string[]) => {
+    const q = new URLSearchParams({ workspace_id: workspaceId, limit: String(limit) })
+    if (tags && tags.length > 0) q.set('tags', tags.join(','))
+    return api.get<{ success: true; data: RankedMemoryItemDTO[] }>(`/api/v1/intelligence/memory/ranked?${q.toString()}`)
+  },
+  priorityHeatmap: (workspaceId: string) =>
+    api.get<{ success: true; data: { categories: string[]; heatmap: Record<string, { total: number; active: number; completed: number; avgProgress: number }>; dominant: string[] } }>(
+      `/api/v1/intelligence/priorities/heatmap?workspace_id=${encodeURIComponent(workspaceId)}`,
+    ),
+}
+
+export interface ContinuitySnapshotDTO {
+  workspaceId: string
+  capturedAt:  number
+  previousIncidents: Array<{ id: string; title: string; severity: string; status: string; ageDays: number }>
+  previousFixes:     Array<{ signature: string; description: string; appliedCount: number; lastAppliedAt: number | null }>
+  previousFailures:  Array<{ signature: string; type: string; occurrences: number; blocked: boolean; lastSeenAt: number | null }>
+  operatorDecisions: {
+    patchApprovals: { approved: number; rejected: number; pending: number; approvalRate: number | null }
+    feedbackByKind: Record<string, number>
+  }
+  unresolvedRisks:      Array<{ source: string; id: string; title: string; severity: string; ageDays: number }>
+  recurringBottlenecks: Array<{ signature: string; type: string; occurrences: number }>
+  lessonsLearned:       Array<{ pattern: string; fix: string; provenAppliedCount: number }>
+}
+
+export interface TrendBucketDTO {
+  weekStart: number
+  weekEnd:   number
+  weekLabel: string
+  metrics:   Record<string, number>
+}
+export interface TrendSeriesDTO {
+  series:    TrendBucketDTO[]
+  direction: 'improving' | 'degrading' | 'flat' | 'insufficient_data'
+  delta:     number | null
+  note:      string
+}
+export interface AllTrendsDTO {
+  reliability:     TrendSeriesDTO
+  providerQuality: TrendSeriesDTO
+  cost:            TrendSeriesDTO
+  incident:        TrendSeriesDTO
+  deployment:      TrendSeriesDTO
+  productivity:    TrendSeriesDTO
+  generatedAt:     number
+}
+
+export interface RankedMemoryItemDTO {
+  kind:           'successful_fix' | 'failure_pattern'
+  id:             string
+  text:           string
+  reinforcement:  number
+  ageDays:        number
+  decayWeight:    number
+  relevanceScore: number
+  matchedTags?:   string[]
 }
 
 // ─── SSE stream helper ────────────────────────────────────────────────────────

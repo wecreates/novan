@@ -17,6 +17,8 @@ import {
 } from '../db/schema.js'
 import { and, desc, eq, gte, sql }     from 'drizzle-orm'
 import { prioritize, type PriorityInput, type PriorityDecision } from './agent-coordinator.js'
+import { findPastFix }                from './continuity-engine.js'
+import { dominantCategories }          from './strategic-priorities.js'
 
 export type RecKind =
   | 'critical_runtime_fix'
@@ -34,6 +36,12 @@ export interface Recommendation {
   evidence:     Record<string, unknown>
   decision:     PriorityDecision
   estimatedImpact: 'low' | 'medium' | 'high' | 'critical'
+  /** Set when historical context boosted or downweighted this rec. */
+  context?: {
+    pastFix?:        { signature: string; description: string; appliedCount: number }
+    missionAlignment?: string[]   // priority categories that matched
+    contextScore:    number        // multiplier applied to decision.score (1.0 = no change)
+  }
 }
 
 const DAY = 24 * 60 * 60_000
@@ -267,7 +275,46 @@ async function generateRecommendationsImpl(workspaceId: string): Promise<Recomme
     })
   }
 
-  // Sort by score desc
+  // ─── Context-aware augmentation ──────────────────────────────────────────
+  // For each rec, look up: (a) past fix for similar signature → boost;
+  // (b) alignment with dominant priority categories → boost.
+  const dominant = await dominantCategories(workspaceId).catch(() => [] as string[])
+  for (const r of recs) {
+    let contextScore = 1.0
+    const ctx: NonNullable<Recommendation['context']> = { contextScore }
+
+    // Past-fix lookup for failure-shaped recs
+    const sig = (r.evidence['signature'] as string | undefined)
+                ?? (r.evidence['incidentId'] as string | undefined)
+                ?? r.title
+    if (sig && (r.kind === 'reliability_improvement' || r.kind === 'critical_runtime_fix')) {
+      const past = await findPastFix(workspaceId, sig).catch(() => null)
+      if (past && past.appliedCount > 0) {
+        ctx.pastFix = past
+        contextScore *= 1.2  // we've fixed this before → higher confidence
+      }
+    }
+
+    // Mission-category alignment
+    const aligned: string[] = []
+    if (dominant.includes('reliability_target') && (r.kind === 'reliability_improvement' || r.kind === 'critical_runtime_fix')) aligned.push('reliability_target')
+    if (dominant.includes('cost_target')         &&  r.kind === 'budget_optimization')      aligned.push('cost_target')
+    if (dominant.includes('security_priority')   &&  r.kind === 'security_risk')             aligned.push('security_priority')
+    if (dominant.includes('roadmap_priority')    &&  r.kind === 'operator_approval')         aligned.push('roadmap_priority')
+    if (aligned.length > 0) {
+      ctx.missionAlignment = aligned
+      contextScore *= 1.15
+    }
+
+    if (contextScore !== 1.0) {
+      ctx.contextScore = Number(contextScore.toFixed(3))
+      r.context = ctx
+      // Apply boost to the decision score so it surfaces higher.
+      r.decision = { ...r.decision, score: Math.min(1, r.decision.score * contextScore) }
+    }
+  }
+
+  // Sort by score desc (post-context-boost)
   recs.sort((a, b) => b.decision.score - a.decision.score)
   return recs
 }

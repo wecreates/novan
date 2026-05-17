@@ -12,6 +12,10 @@ import { runDailyReview, generateDailyReview } from '../services/daily-review.js
 import { convertFindings, recentRoadmapFromResearch } from '../services/research-to-action.js'
 import { topRecommendations, generateRecommendations } from '../services/recommendation-engine.js'
 import { missionFeed, accomplishmentFeed, sinceLastVisit, warRoomHome } from '../services/engagement-feed.js'
+import { snapshot as continuitySnapshot, findPastFix } from '../services/continuity-engine.js'
+import { allTrends, reliabilityTrend, providerQualityTrend, costTrend, incidentTrend, deploymentStabilityTrend, operatorProductivityTrend } from '../services/trend-analysis.js'
+import { rankedMemory, missionMemory, prunableMemory } from '../services/memory-compression.js'
+import { listByCategory, categoryHeatmap, dominantCategories, PRIORITY_CATEGORIES, type PriorityCategory } from '../services/strategic-priorities.js'
 
 const intelligenceRoutes: FastifyPluginAsync = async (fastify) => {
 
@@ -141,6 +145,83 @@ const intelligenceRoutes: FastifyPluginAsync = async (fastify) => {
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     const last = req.query.last_visit_at ? Number(req.query.last_visit_at) : undefined
     return { success: true, data: await warRoomHome(ws, last) }
+  })
+
+  // ─── Continuity engine ─────────────────────────────────────────────────────
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/continuity', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await continuitySnapshot(ws) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string; signature?: string } }>('/past-fix', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws || !req.query.signature) return reply.code(400).send({ success: false, error: 'workspace_id, signature required' })
+    return { success: true, data: await findPastFix(ws, req.query.signature) }
+  })
+
+  // ─── Trend analysis ────────────────────────────────────────────────────────
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/trends', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await allTrends(ws) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string; metric?: string } }>('/trends/:metric', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const m = (req.params as { metric: string }).metric
+    let data
+    switch (m) {
+      case 'reliability':  data = await reliabilityTrend(ws); break
+      case 'provider':     data = await providerQualityTrend(ws); break
+      case 'cost':         data = await costTrend(ws); break
+      case 'incidents':    data = await incidentTrend(ws); break
+      case 'deployment':   data = await deploymentStabilityTrend(ws); break
+      case 'productivity': data = await operatorProductivityTrend(ws); break
+      default: return reply.code(400).send({ success: false, error: `unknown metric: ${m}` })
+    }
+    return { success: true, data }
+  })
+
+  // ─── Memory compression ────────────────────────────────────────────────────
+  fastify.get<{ Querystring: { workspace_id?: string; limit?: string; tags?: string } }>('/memory/ranked', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const opts: { limit?: number; missionTags?: string[] } = {}
+    if (req.query.limit) opts.limit = Number(req.query.limit)
+    if (req.query.tags)  opts.missionTags = req.query.tags.split(',').map(s => s.trim())
+    return { success: true, data: await rankedMemory(ws, opts) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string; mission_id?: string; limit?: string } }>('/memory/mission', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws || !req.query.mission_id) return reply.code(400).send({ success: false, error: 'workspace_id, mission_id required' })
+    const limit = req.query.limit ? Number(req.query.limit) : 10
+    return { success: true, data: await missionMemory(ws, req.query.mission_id, limit) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/memory/prunable', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await prunableMemory(ws) }
+  })
+
+  // ─── Strategic priorities ──────────────────────────────────────────────────
+  fastify.get<{ Querystring: { workspace_id?: string; category?: string } }>('/priorities', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const cat = req.query.category as PriorityCategory | undefined
+    if (cat && !PRIORITY_CATEGORIES.includes(cat)) {
+      return reply.code(400).send({ success: false, error: `category must be one of ${PRIORITY_CATEGORIES.join(',')}` })
+    }
+    return { success: true, data: await listByCategory(ws, cat) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/priorities/heatmap', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: { categories: PRIORITY_CATEGORIES, heatmap: await categoryHeatmap(ws), dominant: await dominantCategories(ws) } }
   })
 
   fastify.get<{ Querystring: { workspace_id?: string; limit?: string } }>('/research-roadmap', async (req, reply) => {
