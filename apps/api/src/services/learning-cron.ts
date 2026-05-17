@@ -29,6 +29,8 @@ import { runDailyReview }                    from './daily-review.js'
 import { convertFindings }                   from './research-to-action.js'
 import { weeklyOperationalReport }            from './executive-briefings.js'
 import { stabilitySnapshot, emitGovernance, autoEngageThrottle, pauseUnstableAgents, autoDisengageThrottleIfStable } from './governance-core.js'
+import { crossDivisionBlockers, type CrossDivisionBlocker } from './divisions.js'
+import { notify }                            from './notifications.js'
 
 const handles: NodeJS.Timeout[] = []
 
@@ -109,6 +111,29 @@ async function runBillingSweep() {
     const expired = await expireTrials().catch(() => 0)
     if (expired > 0) await emit('cron.trials_expired', { count: expired })
   } catch (e) { await emit('cron.error', { task: 'billing', error: (e as Error).message }) }
+}
+
+async function runCrossDivisionScan() {
+  try {
+    const ids = await listWorkspaceIds()
+    for (const ws of ids) {
+      const blockers: CrossDivisionBlocker[] = await crossDivisionBlockers(ws).catch(() => [])
+      for (const b of blockers) {
+        // Notify on high/critical only — the dedup-window inside notify()
+        // collapses repeats within 5 min.
+        if (b.severity === 'critical' || b.severity === 'high') {
+          await notify({
+            workspaceId: ws,
+            type:        'cross_division.blocker',
+            title:       `Cross-division blocker (${b.severity}): ${b.from} → ${b.to.join(', ')}`,
+            body:        b.title,
+            severity:    b.severity === 'critical' ? 'critical' : 'high',
+            signature:   `xdiv:${b.blockerId}`,
+          }).catch(() => null)
+        }
+      }
+    }
+  } catch (e) { await emit('cron.error', { task: 'cross_division', error: (e as Error).message }) }
 }
 
 async function runWeeklyExecutiveBriefings() {
@@ -241,6 +266,7 @@ const INTERVALS = {
   researchToAction: 30 * 60_000, // 30 min — convert recent findings → roadmap tasks
   stabilityScan:    5  * 60_000, // 5 min — emit governance.stability_alert when unstable
   weeklyBriefing:   60 * 60_000, // 1 hour tick — actually emits once per 6 days via idempotency
+  crossDivision:    10 * 60_000, // 10 min — scan cross-division blockers and notify on critical
 }
 
 export function startLearningCron(): void {
@@ -260,6 +286,7 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runResearchToAction(), INTERVALS.researchToAction))
   handles.push(setInterval(() => void runStabilityScan(),    INTERVALS.stabilityScan))
   handles.push(setInterval(() => void runWeeklyExecutiveBriefings(), INTERVALS.weeklyBriefing))
+  handles.push(setInterval(() => void runCrossDivisionScan(),        INTERVALS.crossDivision))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

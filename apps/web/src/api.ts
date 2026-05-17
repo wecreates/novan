@@ -917,6 +917,26 @@ export const intelligenceApi = {
     api.get<{ success: true; data: { facts: { highConfidenceResearchFindings: number; featureUseEvents7d: number; distinctFeaturesUsed7d: number; growthKeywordFindings: Array<{ summary: string; sourceUrl: string; confidence: number }> }; division: DivisionSnapshotDTO } }>(
       `/api/v1/intelligence/company/growth-opportunity?workspace_id=${encodeURIComponent(workspaceId)}`,
     ),
+  seedOrganizationalAgents: (workspaceId: string) =>
+    api.post<{ success: true; data: { created: number; skipped: number } }>(
+      `/api/v1/intelligence/company/seed-organizational-agents`, { workspace_id: workspaceId },
+    ),
+  autoTagMissions: (workspaceId: string) =>
+    api.post<{ success: true; data: { scanned: number; updated: number; bindings: Array<{ missionId: string; title: string; added: string[] }> } }>(
+      `/api/v1/intelligence/company/auto-tag-missions`, { workspace_id: workspaceId },
+    ),
+  generateWeeklyBriefing: (workspaceId: string) =>
+    api.post<{ success: true; data: WeeklyReportDTO }>(
+      `/api/v1/intelligence/company/generate-weekly-briefing`, { workspace_id: workspaceId },
+    ),
+  forecastsByDivision: (workspaceId: string, division: string) =>
+    api.get<{ success: true; data: { division: string; forecasts: ForecastDTO[]; generatedAt: number } }>(
+      `/api/v1/intelligence/divisions/${encodeURIComponent(division)}/forecasts?workspace_id=${encodeURIComponent(workspaceId)}`,
+    ),
+  searchByTag: (workspaceId: string, tag: string) =>
+    api.get<{ success: true; data: { tag: string; missions: Array<{ id: string; title: string; horizon: string; status: string; progress: number; tags: string[]; divisions: string[] }> } }>(
+      `/api/v1/intelligence/search/by-tag?workspace_id=${encodeURIComponent(workspaceId)}&tag=${encodeURIComponent(tag)}`,
+    ),
 }
 
 export interface DivisionSnapshotDTO {

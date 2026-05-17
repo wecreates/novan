@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { intelligenceApi, type TrendSeriesDTO } from '../api.js'
 
-const WORKSPACE = 'default'
+import { useWorkspace } from '../contexts/WorkspaceContext.js'
 
 function trendIcon(d: TrendSeriesDTO['direction']) {
   if (d === 'improving') return <TrendingDown className="w-4 h-4 text-emerald-400" />
@@ -46,24 +46,25 @@ function fmtDays(d: number): string {
 }
 
 export default function MissionIntelligencePage() {
+  const { workspaceId } = useWorkspace()
   const continuity = useQuery({
-    queryKey: ['continuity', WORKSPACE],
-    queryFn:  () => intelligenceApi.continuity(WORKSPACE),
+    queryKey: ['continuity', workspaceId],
+    queryFn:  () => intelligenceApi.continuity(workspaceId),
     refetchInterval: 120_000,
   })
   const trends = useQuery({
-    queryKey: ['trends', WORKSPACE],
-    queryFn:  () => intelligenceApi.trends(WORKSPACE),
+    queryKey: ['trends', workspaceId],
+    queryFn:  () => intelligenceApi.trends(workspaceId),
     refetchInterval: 5 * 60_000,
   })
   const memory = useQuery({
-    queryKey: ['ranked-memory', WORKSPACE],
-    queryFn:  () => intelligenceApi.rankedMemory(WORKSPACE, 15),
+    queryKey: ['ranked-memory', workspaceId],
+    queryFn:  () => intelligenceApi.rankedMemory(workspaceId, 15),
     refetchInterval: 5 * 60_000,
   })
   const heatmap = useQuery({
-    queryKey: ['priority-heatmap', WORKSPACE],
-    queryFn:  () => intelligenceApi.priorityHeatmap(WORKSPACE),
+    queryKey: ['priority-heatmap', workspaceId],
+    queryFn:  () => intelligenceApi.priorityHeatmap(workspaceId),
     refetchInterval: 5 * 60_000,
   })
 

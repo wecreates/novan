@@ -18,7 +18,8 @@ import {
 } from 'lucide-react'
 import { intelligenceApi, type ExplanationDTO } from '../api.js'
 
-const WORKSPACE = 'default'
+import { useWorkspace } from '../contexts/WorkspaceContext.js'
+
 const LAST_VISIT_KEY = 'novan:last_visit_at'
 
 function fmtTime(n: number | null | undefined): string {
@@ -62,6 +63,7 @@ function headlineStyle(status: string): { icon: JSX.Element; class: string; labe
 }
 
 export default function StrategicHomePage() {
+  const { workspaceId } = useWorkspace()
   const [lastVisit, setLastVisit] = useState<number | null>(null)
 
   useEffect(() => {
@@ -73,20 +75,20 @@ export default function StrategicHomePage() {
   }, [])
 
   const home = useQuery({
-    queryKey: ['strategic-home', WORKSPACE, lastVisit ?? 0],
-    queryFn: () => intelligenceApi.home(WORKSPACE),
+    queryKey: ['strategic-home', workspaceId, lastVisit ?? 0],
+    queryFn: () => intelligenceApi.home(workspaceId),
     refetchInterval: 60_000,
   })
 
   const gov = useQuery({
-    queryKey: ['governance-snapshot', WORKSPACE],
-    queryFn: () => intelligenceApi.governance(WORKSPACE),
+    queryKey: ['governance-snapshot', workspaceId],
+    queryFn: () => intelligenceApi.governance(workspaceId),
     refetchInterval: 60_000,
   })
 
   const explain = useQuery({
-    queryKey: ['explain-top', WORKSPACE],
-    queryFn: () => intelligenceApi.explainTop(WORKSPACE, 5),
+    queryKey: ['explain-top', workspaceId],
+    queryFn: () => intelligenceApi.explainTop(workspaceId, 5),
     refetchInterval: 120_000,
   })
 

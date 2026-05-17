@@ -19,7 +19,7 @@ import {
 } from 'lucide-react'
 import { intelligenceApi, type ForecastDTO, type TradeoffDTO } from '../api.js'
 
-const WORKSPACE = 'default'
+import { useWorkspace } from '../contexts/WorkspaceContext.js'
 
 function fmtDays(d: number | null): string {
   if (d === null) return '—'
@@ -45,12 +45,13 @@ function forecastLabel(type: string): string {
 }
 
 export default function ExecutiveWarRoomPage() {
-  const forecasts = useQuery({ queryKey: ['forecasts', WORKSPACE], queryFn: () => intelligenceApi.forecasts(WORKSPACE), refetchInterval: 5 * 60_000 })
-  const tradeoffs = useQuery({ queryKey: ['tradeoffs', WORKSPACE], queryFn: () => intelligenceApi.tradeoffs(WORKSPACE, 5), refetchInterval: 5 * 60_000 })
-  const reliability = useQuery({ queryKey: ['exec-reliability', WORKSPACE], queryFn: () => intelligenceApi.executiveReliability(WORKSPACE), refetchInterval: 2 * 60_000 })
-  const security    = useQuery({ queryKey: ['exec-security',    WORKSPACE], queryFn: () => intelligenceApi.executiveSecurity(WORKSPACE),    refetchInterval: 5 * 60_000 })
-  const cost        = useQuery({ queryKey: ['exec-cost',        WORKSPACE], queryFn: () => intelligenceApi.executiveCost(WORKSPACE),        refetchInterval: 5 * 60_000 })
-  const mission     = useQuery({ queryKey: ['exec-mission',     WORKSPACE], queryFn: () => intelligenceApi.executiveMissionProgress(WORKSPACE), refetchInterval: 2 * 60_000 })
+  const { workspaceId } = useWorkspace()
+  const forecasts = useQuery({ queryKey: ['forecasts', workspaceId], queryFn: () => intelligenceApi.forecasts(workspaceId), refetchInterval: 5 * 60_000 })
+  const tradeoffs = useQuery({ queryKey: ['tradeoffs', workspaceId], queryFn: () => intelligenceApi.tradeoffs(workspaceId, 5), refetchInterval: 5 * 60_000 })
+  const reliability = useQuery({ queryKey: ['exec-reliability', workspaceId], queryFn: () => intelligenceApi.executiveReliability(workspaceId), refetchInterval: 2 * 60_000 })
+  const security    = useQuery({ queryKey: ['exec-security',    workspaceId], queryFn: () => intelligenceApi.executiveSecurity(workspaceId),    refetchInterval: 5 * 60_000 })
+  const cost        = useQuery({ queryKey: ['exec-cost',        workspaceId], queryFn: () => intelligenceApi.executiveCost(workspaceId),        refetchInterval: 5 * 60_000 })
+  const mission     = useQuery({ queryKey: ['exec-mission',     workspaceId], queryFn: () => intelligenceApi.executiveMissionProgress(workspaceId), refetchInterval: 2 * 60_000 })
 
   if (forecasts.isLoading) return <div className="p-8 text-[var(--text-muted)]">Loading…</div>
   const fs = forecasts.data?.data

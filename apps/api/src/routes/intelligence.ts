@@ -25,7 +25,12 @@ import {
 import {
   divisionSnapshot, allDivisionsSnapshot, crossDivisionBlockers,
   companyMissionStatus, DIVISIONS, type Division,
+  seedOrganizationalAgents, autoTagMissions, forecastsByDivision, searchByTag,
 } from '../services/divisions.js'
+import { weeklyOperationalReport as weeklyExecBrief } from '../services/executive-briefings.js'
+import { db as dbClient }              from '../db/client.js'
+import { events as eventsTable }       from '../db/schema.js'
+import { v7 as uuidv7Lib }              from 'uuid'
 import {
   engineeringHealthReport, operationalEfficiencyReport, growthOpportunityReport,
 } from '../services/company-reports.js'
@@ -338,6 +343,45 @@ const intelligenceRoutes: FastifyPluginAsync = async (fastify) => {
     const ws = req.query.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     return { success: true, data: await operationalEfficiencyReport(ws) }
+  })
+
+  fastify.post<{ Body: { workspace_id?: string } }>('/company/seed-organizational-agents', async (req, reply) => {
+    const ws = req.body.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await seedOrganizationalAgents(ws) }
+  })
+
+  fastify.post<{ Body: { workspace_id?: string } }>('/company/auto-tag-missions', async (req, reply) => {
+    const ws = req.body.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await autoTagMissions(ws) }
+  })
+
+  fastify.post<{ Body: { workspace_id?: string } }>('/company/generate-weekly-briefing', async (req, reply) => {
+    const ws = req.body.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const report = await weeklyExecBrief(ws)
+    await dbClient.insert(eventsTable).values({
+      id: uuidv7Lib(), type: 'briefing.weekly_executive', workspaceId: ws,
+      payload: report as unknown as Record<string, unknown>,
+      traceId: uuidv7Lib(), correlationId: uuidv7Lib(), causationId: null,
+      source: 'manual-trigger', version: 1, createdAt: Date.now(),
+    }).catch(() => null)
+    return { success: true, data: report }
+  })
+
+  fastify.get<{ Params: { name: string }; Querystring: { workspace_id?: string } }>('/divisions/:name/forecasts', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const name = req.params.name as Division
+    if (!DIVISIONS.includes(name)) return reply.code(400).send({ success: false, error: `unknown division: ${name}` })
+    return { success: true, data: await forecastsByDivision(ws, name) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string; tag?: string } }>('/search/by-tag', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws || !req.query.tag) return reply.code(400).send({ success: false, error: 'workspace_id, tag required' })
+    return { success: true, data: await searchByTag(ws, req.query.tag) }
   })
 
   fastify.get<{ Querystring: { workspace_id?: string } }>('/company/growth-opportunity', async (req, reply) => {

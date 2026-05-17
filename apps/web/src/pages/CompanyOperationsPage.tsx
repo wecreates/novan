@@ -9,14 +9,14 @@
  *   /intelligence/company/operational-efficiency
  *   /intelligence/company/growth-opportunity
  */
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Building2, Cpu, ShieldCheck, Activity, Search, Package, TrendingUp, HeartHandshake, Network,
-  AlertOctagon, AlertTriangle, CheckCircle2, ArrowRight,
+  AlertOctagon, ArrowRight, CheckCircle2, FileText, Tag, Users, Wand2,
 } from 'lucide-react'
 import { intelligenceApi, type DivisionSnapshotDTO, type CrossDivisionBlockerDTO } from '../api.js'
-
-const WORKSPACE = 'default'
+import { useWorkspace } from '../contexts/WorkspaceContext.js'
 
 const DIVISION_META: Record<string, { icon: JSX.Element; description: string }> = {
   engineering:    { icon: <Cpu className="w-4 h-4" />,        description: 'Workflows, patches, audits, tests' },
@@ -46,24 +46,46 @@ function fmtDays(d: number): string {
 }
 
 export default function CompanyOperationsPage() {
+  const { workspaceId } = useWorkspace()
+  const qc = useQueryClient()
+  const [searchTag, setSearchTag] = useState<string>('')
+
   const divisions = useQuery({
-    queryKey: ['divisions', WORKSPACE],
-    queryFn:  () => intelligenceApi.divisions(WORKSPACE),
+    queryKey: ['divisions', workspaceId],
+    queryFn:  () => intelligenceApi.divisions(workspaceId),
     refetchInterval: 2 * 60_000,
   })
   const blockers = useQuery({
-    queryKey: ['cross-blockers', WORKSPACE],
-    queryFn:  () => intelligenceApi.crossDivisionBlockers(WORKSPACE),
+    queryKey: ['cross-blockers', workspaceId],
+    queryFn:  () => intelligenceApi.crossDivisionBlockers(workspaceId),
     refetchInterval: 2 * 60_000,
   })
   const missionStatus = useQuery({
-    queryKey: ['company-mission-status', WORKSPACE],
-    queryFn:  () => intelligenceApi.companyMissionStatus(WORKSPACE),
+    queryKey: ['company-mission-status', workspaceId],
+    queryFn:  () => intelligenceApi.companyMissionStatus(workspaceId),
     refetchInterval: 5 * 60_000,
   })
-  const eng = useQuery({ queryKey: ['eng-health',  WORKSPACE], queryFn: () => intelligenceApi.engineeringHealth(WORKSPACE), refetchInterval: 5 * 60_000 })
-  const ops = useQuery({ queryKey: ['ops-efficiency', WORKSPACE], queryFn: () => intelligenceApi.operationalEfficiency(WORKSPACE), refetchInterval: 5 * 60_000 })
-  const growth = useQuery({ queryKey: ['growth-opportunity', WORKSPACE], queryFn: () => intelligenceApi.growthOpportunity(WORKSPACE), refetchInterval: 5 * 60_000 })
+  const eng = useQuery({ queryKey: ['eng-health',  workspaceId], queryFn: () => intelligenceApi.engineeringHealth(workspaceId), refetchInterval: 5 * 60_000 })
+  const ops = useQuery({ queryKey: ['ops-efficiency', workspaceId], queryFn: () => intelligenceApi.operationalEfficiency(workspaceId), refetchInterval: 5 * 60_000 })
+  const growth = useQuery({ queryKey: ['growth-opportunity', workspaceId], queryFn: () => intelligenceApi.growthOpportunity(workspaceId), refetchInterval: 5 * 60_000 })
+
+  const seedAgents = useMutation({
+    mutationFn: () => intelligenceApi.seedOrganizationalAgents(workspaceId),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['divisions', workspaceId] }) },
+  })
+  const autoTag = useMutation({
+    mutationFn: () => intelligenceApi.autoTagMissions(workspaceId),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['divisions', workspaceId] }) },
+  })
+  const generateBriefing = useMutation({
+    mutationFn: () => intelligenceApi.generateWeeklyBriefing(workspaceId),
+  })
+
+  const tagSearch = useQuery({
+    queryKey: ['tag-search', workspaceId, searchTag],
+    queryFn:  () => intelligenceApi.searchByTag(workspaceId, searchTag),
+    enabled:  searchTag.length >= 2,
+  })
 
   if (divisions.isLoading) return <div className="p-8 text-[var(--text-muted)]">Loading…</div>
   const data = divisions.data?.data
@@ -77,11 +99,72 @@ export default function CompanyOperationsPage() {
     <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
       <div className="flex items-center gap-3">
         <Building2 className="w-6 h-6 text-sky-400" />
-        <div>
+        <div className="flex-1">
           <h1 className="text-xl font-medium text-[var(--text)]">Company Operations</h1>
           <p className="text-xs text-[var(--text-muted)]">8 operational divisions over real runtime data</p>
         </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => seedAgents.mutate()}
+            disabled={seedAgents.isPending}
+            className="text-xs px-3 py-1.5 rounded border border-[var(--border)] hover:bg-[var(--bg-elevated)] flex items-center gap-1.5"
+            title="Create engineering/ops/infrastructure/security agent rows that aren't yet seeded"
+          >
+            <Users className="w-3 h-3" />
+            {seedAgents.isPending ? 'Seeding…' : seedAgents.data ? `Seeded (${seedAgents.data.data.created} new)` : 'Seed Org Agents'}
+          </button>
+          <button
+            onClick={() => autoTag.mutate()}
+            disabled={autoTag.isPending}
+            className="text-xs px-3 py-1.5 rounded border border-[var(--border)] hover:bg-[var(--bg-elevated)] flex items-center gap-1.5"
+            title="Infer division tags for missions that don't have any"
+          >
+            <Wand2 className="w-3 h-3" />
+            {autoTag.isPending ? 'Tagging…' : autoTag.data ? `Tagged ${autoTag.data.data.updated}/${autoTag.data.data.scanned}` : 'Auto-tag Missions'}
+          </button>
+          <button
+            onClick={() => generateBriefing.mutate()}
+            disabled={generateBriefing.isPending}
+            className="text-xs px-3 py-1.5 rounded border border-[var(--border)] hover:bg-[var(--bg-elevated)] flex items-center gap-1.5"
+            title="Manually trigger a weekly executive briefing (normally fires on 6-day cron)"
+          >
+            <FileText className="w-3 h-3" />
+            {generateBriefing.isPending ? 'Generating…' : generateBriefing.data ? 'Briefing emitted' : 'Weekly Briefing'}
+          </button>
+        </div>
       </div>
+
+      {/* Cross-tag search */}
+      <Section title="Search Missions by Tag" icon={<Tag className="w-4 h-4" />}>
+        <div className="px-5 py-3">
+          <input
+            type="text"
+            placeholder="e.g. reliability_target, growth, frontend"
+            value={searchTag}
+            onChange={e => setSearchTag(e.target.value.trim().toLowerCase())}
+            className="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-sky-500"
+          />
+          {searchTag.length >= 2 && tagSearch.data && (
+            <div className="mt-3 space-y-1.5 text-sm">
+              {tagSearch.data.data.missions.length === 0 ? (
+                <div className="text-[var(--text-muted)] text-xs">No missions match tag <span className="font-mono">{searchTag}</span>.</div>
+              ) : (
+                tagSearch.data.data.missions.map(m => (
+                  <div key={m.id} className="flex items-center gap-3 py-1.5 border-b border-[var(--border)] last:border-0">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300">{m.horizon}</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-300">{m.status}</span>
+                    <span className="flex-1 truncate text-[var(--text)]">{m.title}</span>
+                    <span className="text-xs text-[var(--text-muted)] font-mono">{Math.round(m.progress*100)}%</span>
+                    {m.divisions.length > 0 && (
+                      <span className="text-[10px] font-mono text-[var(--text-muted)]">[{m.divisions.join(', ')}]</span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      </Section>
 
       {/* Division grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">

@@ -194,7 +194,7 @@ export async function divisionSnapshot(workspaceId: string, division: Division):
         .then(rs => rs.map(r => ({
           type: r.type,
           at: Number(r.at),
-          summary: JSON.stringify(r.payload).slice(0, 140),
+          summary: summarizeEventPayload(r.type, r.payload),
         }))).catch(() => [])
     : []
 
@@ -314,7 +314,246 @@ export async function crossDivisionBlockers(workspaceId: string): Promise<CrossD
     })
   }
 
+  // Research feed failure rate >50% → blocks product + growth (signals stale data)
+  const feedStats = await db.select({
+    success: sql<number>`count(*) filter (where ${events.type} = 'feed.poll_completed')::int`,
+    failed:  sql<number>`count(*) filter (where ${events.type} = 'feed.poll_failed')::int`,
+  }).from(events)
+    .where(and(eq(events.workspaceId, workspaceId), sql`${events.type} like 'feed.%'`, gte(events.createdAt, now - 2 * DAY)))
+    .then(r => r[0] ?? { success: 0, failed: 0 }).catch(() => ({ success: 0, failed: 0 }))
+  const totalFeed = Number(feedStats.success) + Number(feedStats.failed)
+  if (totalFeed >= 4 && Number(feedStats.failed) / totalFeed > 0.5) {
+    out.push({
+      from: 'research',
+      to:   ['product', 'growth'],
+      blockerId: 'feed_failure:48h',
+      kind: 'failed_workflow',
+      title: `Research feed failure rate ${Math.round((Number(feedStats.failed)/totalFeed)*100)}% (last 48h) — downstream insights stale`,
+      severity: 'medium',
+      ageDays: 0,
+    })
+  }
+
+  // Budget cap > 90% → blocks all autonomous divisions
+  const budget = await db.select().from(providerHealthLog).limit(0).catch(() => [])  // placeholder no-op import use
+  const { providerBudgets: pb } = await import('../db/schema.js')
+  const budgetRow = await db.select().from(pb).where(eq(pb.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch(() => null)
+  if (budgetRow) {
+    const dailyPct = budgetRow.dailyLimitUsd > 0 ? budgetRow.dailySpendUsd / budgetRow.dailyLimitUsd : 0
+    if (dailyPct > 0.9) {
+      out.push({
+        from: 'infrastructure',
+        to:   ['engineering', 'research', 'growth', 'operations'],
+        blockerId: 'budget:daily_90pct',
+        kind: 'audit_cluster',
+        title: `Daily budget at ${Math.round(dailyPct*100)}% — autonomous AI calls likely throttled`,
+        severity: dailyPct > 0.95 ? 'critical' : 'high',
+        ageDays: 0,
+      })
+    }
+  }
+
+  // Open patch approvals waiting >24h → blocks engineering + ops
+  const { patchApprovals: pa } = await import('../db/schema.js')
+  const stalePending = await db.select({ c: sql<number>`count(*)::int` }).from(pa)
+    .where(and(eq(pa.workspaceId, workspaceId), eq(pa.status, 'pending'), sql`${pa.createdAt} < ${now - DAY}`))
+    .then(r => Number(r[0]?.c ?? 0)).catch(() => 0)
+  if (stalePending > 0) {
+    out.push({
+      from: 'operations',
+      to:   ['engineering'],
+      blockerId: 'pending_approvals:stale',
+      kind: 'pending_approval',
+      title: `${stalePending} pending patch approval(s) waiting >24h — engineering flow stalled`,
+      severity: stalePending >= 5 ? 'high' : 'medium',
+      ageDays: 1,
+    })
+  }
+
   return out
+}
+
+// ─── Premium event-summary renderer ──────────────────────────────────────────
+
+/** Convert a raw event payload into a one-line operator-facing summary. */
+export function summarizeEventPayload(type: string, payload: unknown): string {
+  const p = (payload ?? {}) as Record<string, unknown>
+  const getStr = (k: string) => (typeof p[k] === 'string' ? p[k] as string : null)
+  const getNum = (k: string) => (typeof p[k] === 'number' ? p[k] as number : null)
+
+  if (type === 'patch.applied')           return `${getStr('filePath') ?? 'patch'} (+${getNum('linesAdded') ?? 0}/-${getNum('linesRemoved') ?? 0})`
+  if (type === 'patch.rolled_back')       return `${getStr('filePath') ?? 'patch'} rolled back: ${getStr('reason') ?? 'unknown'}`
+  if (type === 'patch.blocked_by_governance') return `blocked: ${getStr('reason') ?? 'governance'}`
+  if (type === 'research.run_completed')  return `${getNum('findingsAdded') ?? 0} findings · ${getNum('duplicates') ?? 0} dups`
+  if (type === 'research.finding_added')  return `${getStr('factType') ?? 'finding'} from ${getStr('url') ?? '?'} (conf ${getNum('confidence') ?? '?'})`
+  if (type === 'feed.poll_completed')     return `${getStr('feedUrl') ?? '?'}: ${getNum('itemsIngested') ?? 0} new / ${getNum('itemsCached') ?? 0} cached`
+  if (type === 'incident.opened')         return `${getStr('severity') ?? ''} ${getStr('title') ?? ''}`
+  if (type === 'incident.resolved')       return `${getStr('title') ?? ''} (resolved)`
+  if (type === 'governance.auto_throttle_engaged') return `engaged: ${Array.isArray(p['engaged']) ? (p['engaged'] as string[]).join(', ') : ''}`
+  if (type === 'governance.auto_throttle_disengaged') return `released: ${Array.isArray(p['disengaged']) ? (p['disengaged'] as string[]).join(', ') : ''}`
+  if (type === 'governance.agent_auto_paused') return `agent ${getStr('agentId') ?? '?'} paused (${getNum('failures') ?? 0} fails)`
+  if (type === 'web_fetch.completed')     return `${getStr('url') ?? '?'} (${getNum('contentBytes') ?? 0}b)`
+  if (type === 'image.generation_completed') return `${getStr('provider') ?? '?'}: $${getNum('costUsd') ?? 0}`
+  if (type === 'image.blocked')           return `blocked: ${getStr('reason') ?? '?'}`
+  if (type === 'cron.research_scan_completed') return `${getNum('runs') ?? 0} topics scanned, ${getNum('findings') ?? 0} findings`
+  if (type === 'daily.review')            return `daily review emitted`
+  if (type === 'briefing.weekly_executive') return `weekly briefing emitted`
+
+  // Default: short slice
+  return JSON.stringify(payload).slice(0, 100)
+}
+
+// ─── Division-level forecasting ──────────────────────────────────────────────
+
+import { generateForecasts as wsForecasts } from './forecasting.js'
+
+const DIVISION_FORECAST_TYPES: Record<Division, string[]> = {
+  engineering:    ['runtime_bottleneck_likely', 'deployment_instability_likely'],
+  security:       ['security_risk_growing'],
+  operations:     ['runtime_bottleneck_likely', 'scaling_pressure_growing'],
+  research:       [],
+  product:        [],
+  growth:         [],
+  support:        [],
+  infrastructure: ['provider_failure_likely', 'budget_overrun_likely', 'scaling_pressure_growing'],
+}
+
+export async function forecastsByDivision(workspaceId: string, division: Division) {
+  const all = await wsForecasts(workspaceId)
+  const types = new Set(DIVISION_FORECAST_TYPES[division])
+  return {
+    division,
+    forecasts: all.forecasts.filter(f => types.has(f.type)),
+    generatedAt: all.generatedAt,
+  }
+}
+
+// ─── Cross-division priority search ──────────────────────────────────────────
+
+export async function searchByTag(workspaceId: string, tag: string) {
+  const lower = tag.toLowerCase()
+  const missions = await db.select().from(strategicGoals)
+    .where(and(eq(strategicGoals.workspaceId, workspaceId), sql`${strategicGoals.tags} @> ARRAY[${lower}]::text[]`))
+    .catch(() => [])
+  return {
+    tag: lower,
+    missions: missions.map(m => ({
+      id: m.id, title: String(m.title ?? ''),
+      horizon: String(m.horizon ?? ''),
+      status: String(m.status ?? ''),
+      progress: Number(m.progress ?? 0),
+      tags: (Array.isArray(m.tags) ? m.tags : []) as string[],
+      // Determine which divisions this mission spans by intersecting tags with DIVISIONS
+      divisions: ((Array.isArray(m.tags) ? m.tags : []) as string[]).filter(t => (DIVISIONS as readonly string[]).includes(t)),
+    })),
+  }
+}
+
+// ─── Organizational agents (engineering/operations/infrastructure) ──────────
+
+/**
+ * Agent definitions for divisions that the research seed doesn't cover.
+ * Idempotent — only inserts agents that don't already exist for the type.
+ */
+const ORG_AGENT_DEFS: Array<{ name: string; type: string; capabilities: string[] }> = [
+  // Engineering
+  { name: 'Runtime Architect',       type: 'runtime_architect',     capabilities: ['workflow.design', 'orchestration.review'] },
+  { name: 'Backend Engineer',        type: 'backend_engineer',      capabilities: ['api.build', 'queue.optimize', 'db.tune'] },
+  { name: 'Frontend Engineer',       type: 'frontend_engineer',     capabilities: ['ui.build', 'render.optimize'] },
+  { name: 'Reliability Engineer',    type: 'reliability_engineer',  capabilities: ['recovery.design', 'rollback.validate'] },
+  { name: 'QA Engineer',             type: 'qa_engineer',           capabilities: ['test.author', 'smoke.run', 'edge.discover'] },
+  { name: 'Patch Executor',          type: 'patch_executor',        capabilities: ['patch.apply', 'rollback.execute'] },
+  { name: 'Reviewer',                type: 'reviewer',              capabilities: ['patch.review', 'risk.assess'] },
+  // Operations
+  { name: 'CTO',                     type: 'cto',                   capabilities: ['strategy', 'architecture.review'] },
+  { name: 'Mission Planner',         type: 'mission_planner',       capabilities: ['roadmap.compose', 'priority.balance'] },
+  { name: 'Orchestrator',            type: 'orchestrator',          capabilities: ['agent.coordinate', 'workflow.dispatch'] },
+  // Infrastructure
+  { name: 'Infrastructure Engineer', type: 'infrastructure',        capabilities: ['deploy.manage', 'scaling.tune'] },
+  // Security (the additional types beyond security_research)
+  { name: 'Chief Security Officer',  type: 'chief_security',        capabilities: ['security.strategy', 'incident.escalate'] },
+  { name: 'AppSec Engineer',         type: 'appsec',                capabilities: ['code.scan', 'api.security'] },
+  { name: 'Cloud Security Engineer', type: 'cloud_security',        capabilities: ['infra.harden', 'tenant.isolate'] },
+  { name: 'Runtime Threat Detector', type: 'runtime_threat_detection', capabilities: ['abuse.detect', 'exploit.detect'] },
+  { name: 'Secrets Security Engineer', type: 'secrets_security',    capabilities: ['secret.scan', 'rotation.audit'] },
+  { name: 'Tenant Isolation Engineer', type: 'tenant_isolation',    capabilities: ['rbac.validate', 'workspace.isolate'] },
+  { name: 'Red Team Agent',          type: 'red_team',              capabilities: ['adversarial.test', 'vuln.discover'] },
+  { name: 'Blue Team Agent',         type: 'blue_team',             capabilities: ['mitigation.deploy', 'incident.respond'] },
+  { name: 'Compliance Auditor',      type: 'compliance',            capabilities: ['audit.retain', 'policy.verify'] },
+]
+
+export async function seedOrganizationalAgents(workspaceId: string): Promise<{ created: number; skipped: number }> {
+  let created = 0, skipped = 0
+  const now = Date.now()
+  for (const def of ORG_AGENT_DEFS) {
+    const existing = await db.select({ id: agents.id }).from(agents)
+      .where(and(eq(agents.workspaceId, workspaceId), eq(agents.type, def.type)))
+      .limit(1).then(r => r[0]).catch(() => null)
+    if (existing) { skipped++; continue }
+    const { v7: uuidv7 } = await import('uuid')
+    await db.insert(agents).values({
+      id: uuidv7(), workspaceId, name: def.name, type: def.type,
+      description: `Organizational agent: ${def.name}`,
+      capabilities: [...def.capabilities],
+      config: {}, status: 'idle',
+      createdAt: now, updatedAt: now,
+    }).catch(() => null)
+    created++
+  }
+  return { created, skipped }
+}
+
+// ─── Mission auto-tagging ────────────────────────────────────────────────────
+
+/**
+ * Infer a division tag from a mission's title + existing tags. Operator
+ * keeps explicit tags they set; we only add what they didn't.
+ */
+function inferDivisionTags(title: string, existing: string[]): Division[] {
+  const t = (title ?? '').toLowerCase()
+  const has = (s: string) => t.includes(s)
+  const out = new Set<Division>()
+  if (has('frontend') || has('ui') || has('web') || has('render')) out.add('engineering')
+  if (has('deploy') || has('vercel') || has('docker') || has('compose') || has('cdn')) out.add('infrastructure')
+  if (has('research') || has('learn') || has('feed') || has('source')) out.add('research')
+  if (has('feedback') || has('telemetry') || has('product')) out.add('product')
+  if (has('growth') || has('market') || has('adoption') || has('pricing')) out.add('growth')
+  if (has('support') || has('help') || has('user')) out.add('support')
+  if (has('security') || has('audit') || has('rbac')) out.add('security')
+  if (has('incident') || has('reliability') || has('runtime') || has('ops')) out.add('operations')
+  if (has('backend') || has('api') || has('queue') || has('patch') || has('test')) out.add('engineering')
+
+  // Strip any divisions already in the existing tag list
+  for (const e of existing) if ((DIVISIONS as readonly string[]).includes(e)) out.delete(e as Division)
+  return [...out]
+}
+
+export interface AutoTagResult {
+  scanned:   number
+  updated:   number
+  bindings:  Array<{ missionId: string; title: string; added: Division[] }>
+}
+
+/** Apply inferred division tags to all missions that lack one. */
+export async function autoTagMissions(workspaceId: string): Promise<AutoTagResult> {
+  const rows = await db.select().from(strategicGoals)
+    .where(eq(strategicGoals.workspaceId, workspaceId))
+    .catch(() => [])
+
+  const result: AutoTagResult = { scanned: rows.length, updated: 0, bindings: [] }
+  for (const r of rows) {
+    const existing = (Array.isArray(r.tags) ? r.tags : []) as string[]
+    // Already has at least one division tag → skip
+    if (existing.some(t => (DIVISIONS as readonly string[]).includes(t))) continue
+    const added = inferDivisionTags(String(r.title ?? ''), existing)
+    if (added.length === 0) continue
+    await db.update(strategicGoals).set({
+      tags: [...existing, ...added], updatedAt: Date.now(),
+    }).where(eq(strategicGoals.id, r.id)).catch(() => null)
+    result.updated++
+    result.bindings.push({ missionId: r.id, title: String(r.title ?? '').slice(0, 80), added })
+  }
+  return result
 }
 
 // ─── Company-wide priority summary ───────────────────────────────────────────
