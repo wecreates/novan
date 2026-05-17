@@ -23,6 +23,7 @@ import { expireTrials }             from './billing.js'
 import { runSecurityScan }          from './security-team.js'
 import { pollDueFeeds }             from './feed-ingester.js'
 import { purgeExpired as purgeStretchCache } from './token-stretcher.js'
+import { runDueTopics, seedResearchAgents } from './research-engine.js'
 
 const handles: NodeJS.Timeout[] = []
 
@@ -105,6 +106,21 @@ async function runBillingSweep() {
   } catch (e) { await emit('cron.error', { task: 'billing', error: (e as Error).message }) }
 }
 
+async function runResearchScans() {
+  try {
+    const ids = await listWorkspaceIds()
+    let totalRuns = 0, totalFindings = 0
+    for (const ws of ids) {
+      // Seed research agents on first run (idempotent)
+      await seedResearchAgents(ws).catch(() => null)
+      const r = await runDueTopics(ws).catch(() => ({ ran: 0, results: [] as Array<{ findingsAdded: number }> }))
+      totalRuns += r.ran
+      totalFindings += r.results.reduce((n, x) => n + (x.findingsAdded ?? 0), 0)
+    }
+    if (totalRuns > 0) await emit('cron.research_scan_completed', { runs: totalRuns, findings: totalFindings })
+  } catch (e) { await emit('cron.error', { task: 'research', error: (e as Error).message }) }
+}
+
 async function runStretchCachePurge() {
   try {
     const purged = await purgeStretchCache()
@@ -136,6 +152,7 @@ const INTERVALS = {
   billing:      60 * 60_000,   // 1 hour
   feeds:        10 * 60_000,   // 10 min — RSS/Atom ingestion (per-feed intervals enforced inside)
   stretchPurge: 60 * 60_000,   // 1 hour — expire stale AI cache rows
+  research:     15 * 60_000,   // 15 min — research topic polling (per-topic intervals enforced inside)
 }
 
 export function startLearningCron(): void {
@@ -150,6 +167,7 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runBillingSweep(),     INTERVALS.billing))
   handles.push(setInterval(() => void runFeedIngestion(),    INTERVALS.feeds))
   handles.push(setInterval(() => void runStretchCachePurge(),INTERVALS.stretchPurge))
+  handles.push(setInterval(() => void runResearchScans(),    INTERVALS.research))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

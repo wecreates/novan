@@ -2156,6 +2156,98 @@ export const aiResponseCache = pgTable('ai_response_cache', {
   index('arc_expires_idx').on(t.expiresAt),
 ])
 
+// ─── Research Learning Engine ─────────────────────────────────────────────────
+
+/**
+ * User-approved research topics. The research engine polls active topics
+ * on a schedule and persists findings to research_findings.
+ */
+export const researchTopics = pgTable('research_topics', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  topic:             text('topic').notNull(),
+  description:       text('description'),
+  approvedSources:   text('approved_sources').array().notNull().default([]),
+  approvedAgents:    text('approved_agents').array().notNull().default([]),
+  status:            text('status').notNull().default('active'),   // active | paused | killed
+  pollIntervalSec:   integer('poll_interval_sec').notNull().default(21600),  // 6h default
+  maxFindingsPerRun: integer('max_findings_per_run').notNull().default(10),
+  lastRunAt:         bigint('last_run_at', { mode: 'number' }),
+  lastSuccessAt:     bigint('last_success_at', { mode: 'number' }),
+  lastError:         text('last_error'),
+  runCount:          integer('run_count').notNull().default(0),
+  findingsCount:     integer('findings_count').notNull().default(0),
+  createdBy:         text('created_by'),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:         bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rtopic_workspace_idx').on(t.workspaceId),
+  index('rtopic_status_idx').on(t.status),
+  index('rtopic_last_run_idx').on(t.lastRunAt),
+])
+
+/**
+ * Persisted research findings — every fact, summary, and citation lands here.
+ * factType: 'fact' | 'opinion' | 'guess' (per safety spec).
+ */
+export const researchFindings = pgTable('research_findings', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  topicId:           text('topic_id'),
+  agentId:           text('agent_id'),                    // which research agent produced this
+  sourceUrl:         text('source_url').notNull(),
+  sourceTitle:       text('source_title'),
+  factType:          text('fact_type').notNull().default('fact'),  // fact | opinion | guess
+  summary:           text('summary').notNull(),
+  extractedFacts:    jsonb('extracted_facts').notNull().default([]),  // array of {text, kind}
+  citations:         jsonb('citations').notNull().default([]),        // [{url, title, anchor}]
+  confidence:        real('confidence').notNull().default(0.5),
+  contentHash:       text('content_hash').notNull(),                  // sha256 for dedup
+  fetchedAt:         bigint('fetched_at', { mode: 'number' }).notNull(),
+  freshAt:           bigint('fresh_at', { mode: 'number' }).notNull(),
+  embedding:         vector('embedding', { dimensions: 768 }),        // optional; filled when embeddings enabled
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:         bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rf_workspace_idx').on(t.workspaceId),
+  index('rf_topic_idx').on(t.topicId),
+  index('rf_agent_idx').on(t.agentId),
+  uniqueIndex('rf_hash_idx').on(t.workspaceId, t.contentHash),
+  index('rf_fresh_idx').on(t.freshAt),
+])
+
+// ─── AI Image Generation ──────────────────────────────────────────────────────
+
+/** Audit + history of every image generation call. */
+export const imageGenerations = pgTable('image_generations', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  prompt:            text('prompt').notNull(),
+  negativePrompt:    text('negative_prompt'),
+  provider:          text('provider').notNull(),     // openai | stability | replicate | fal
+  model:             text('model'),
+  stylePreset:       text('style_preset'),
+  aspectRatio:       text('aspect_ratio'),
+  width:             integer('width'),
+  height:            integer('height'),
+  costEstimateUsd:   real('cost_estimate_usd').notNull().default(0),
+  actualCostUsd:     real('actual_cost_usd'),
+  status:            text('status').notNull().default('pending'),  // pending | succeeded | failed | blocked
+  blockedReason:     text('blocked_reason'),
+  imageUrl:          text('image_url'),
+  imagePath:         text('image_path'),
+  providerResponse:  jsonb('provider_response'),
+  errorMessage:      text('error_message'),
+  createdBy:         text('created_by'),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+  completedAt:       bigint('completed_at', { mode: 'number' }),
+}, (t) => [
+  index('ig_workspace_idx').on(t.workspaceId),
+  index('ig_status_idx').on(t.status),
+  index('ig_provider_idx').on(t.provider),
+  index('ig_created_idx').on(t.createdAt),
+])
+
 /** Aggregated stretching metrics — one row per workspace. */
 export const tokenStretchMetrics = pgTable('token_stretch_metrics', {
   workspaceId:           text('workspace_id').primaryKey(),
