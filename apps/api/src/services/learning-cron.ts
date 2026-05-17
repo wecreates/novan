@@ -33,6 +33,9 @@ import { reconcileRecommendationOutcomes }    from './reasoning-chains.js'
 import { evaluateOutcomes }                    from './outcome-evaluator.js'
 import { runCompression }                      from './knowledge-compression.js'
 import { extractPatterns }                     from './pattern-extractor.js'
+import { scanDrift }                           from './drift-detector.js'
+import { applyCorrections }                    from './reality-correction.js'
+import { sweepStale }                          from './assumption-tracker.js'
 import { stabilitySnapshot, emitGovernance, autoEngageThrottle, pauseUnstableAgents, autoDisengageThrottleIfStable } from './governance-core.js'
 import { crossDivisionBlockers, type CrossDivisionBlocker } from './divisions.js'
 import { notify }                            from './notifications.js'
@@ -164,6 +167,23 @@ async function runCrossDivisionScan() {
       }
     }
   } catch (e) { await emit('cron.error', { task: 'cross_division', error: (e as Error).message }) }
+}
+
+async function runRealityVerification() {
+  try {
+    const ids = await listWorkspaceIds()
+    let totalWarnings = 0, totalCorrections = 0
+    for (const ws of ids) {
+      await sweepStale(ws).catch(() => null)
+      const drift = await scanDrift(ws).catch(() => null)
+      if (drift) totalWarnings += drift.totalCreated
+      const corr = await applyCorrections(ws).catch(() => null)
+      if (corr) totalCorrections += corr.warningsHandled
+    }
+    if (totalWarnings + totalCorrections > 0) {
+      await emit('cron.reality_verification', { newWarnings: totalWarnings, correctionsApplied: totalCorrections })
+    }
+  } catch (e) { await emit('cron.error', { task: 'reality_verification', error: (e as Error).message }) }
 }
 
 async function runDailyCompressionAndPatterns() {
@@ -316,6 +336,7 @@ const INTERVALS = {
   execHourly:       60 * 60_000, // 1 hour — executive hourly health review
   execSixHourly:    6  * 60 * 60_000, // 6 hours — executive ops optimization review
   dailyCompression: 24 * 60 * 60_000, // 24 hours — knowledge compression + pattern extraction
+  realityVerify:    60 * 60_000,      // 1 hour — drift scan + safe corrections + assumption staleness
 }
 
 export function startLearningCron(): void {
@@ -339,6 +360,7 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runExecutiveHourly(),          INTERVALS.execHourly))
   handles.push(setInterval(() => void runExecutiveSixHourly(),       INTERVALS.execSixHourly))
   handles.push(setInterval(() => void runDailyCompressionAndPatterns(), INTERVALS.dailyCompression))
+  handles.push(setInterval(() => void runRealityVerification(),         INTERVALS.realityVerify))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

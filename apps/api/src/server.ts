@@ -88,6 +88,7 @@ import studioRoutes             from './routes/image-studio.js'
 import capabilityRoutes         from './routes/capability.js'
 import { cognitionRoutes, executiveRoutes, skillsRoutes } from './routes/cognition.js'
 import intelEffRoutes           from './routes/intelligence-efficiency.js'
+import truthRoutes              from './routes/truth.js'
 import { validateEnvOrThrow }   from './services/secrets-vault.js'
 import { startLearningCron }    from './services/learning-cron.js'
 import { registerAutonomousWorker } from './services/autonomous-orchestrator.js'
@@ -251,6 +252,7 @@ await app.register(cognitionRoutes,        { prefix: '/api/v1/cognition' })
 await app.register(executiveRoutes,        { prefix: '/api/v1/executive' })
 await app.register(skillsRoutes,           { prefix: '/api/v1/skills' })
 await app.register(intelEffRoutes,         { prefix: '/api/v1/intel-eff' })
+await app.register(truthRoutes,            { prefix: '/api/v1/truth' })
 
 // Environment validation — fails fast in production if VAULT_MASTER_KEY missing/invalid
 validateEnvOrThrow()

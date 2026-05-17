@@ -2286,6 +2286,63 @@ export const promptTemplates = pgTable('prompt_templates', {
   index('promptt_category_idx').on(t.category),
 ])
 
+// ─── Reality Anchoring + Ground Truth ───────────────────────────────────────
+
+/**
+ * Assumptions tracker — every load-bearing belief the platform holds.
+ * Tracked through a verification lifecycle.
+ *
+ * Status:
+ *   unverified  — recorded, no evidence yet
+ *   verifying   — re-check in progress
+ *   verified    — at least one piece of supporting evidence
+ *   invalidated — direct contradicting evidence found
+ *   stale       — verified once but not re-checked in >7 days
+ */
+export const assumptions = pgTable('assumptions', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  category:          text('category').notNull(),         // runtime|provider|operator|telemetry|test|recommendation|forecast|strategic
+  statement:         text('statement').notNull(),
+  evidenceRefs:      jsonb('evidence_refs').notNull().default([]),  // [{table, id, extract}]
+  confidence:        real('confidence').notNull().default(0.5),
+  confidenceProvenance: text('confidence_provenance').notNull().default('heuristic'),
+  status:            text('status').notNull().default('unverified'),
+  source:            text('source').notNull(),           // service or operator name
+  lastVerifiedAt:    bigint('last_verified_at', { mode: 'number' }),
+  lastInvalidatedAt: bigint('last_invalidated_at', { mode: 'number' }),
+  verificationCount: integer('verification_count').notNull().default(0),
+  invalidationCount: integer('invalidation_count').notNull().default(0),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:         bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('asm_workspace_idx').on(t.workspaceId),
+  index('asm_status_idx').on(t.status),
+  index('asm_category_idx').on(t.category),
+  index('asm_last_verified_idx').on(t.lastVerifiedAt),
+])
+
+/**
+ * Drift warnings — automated flags when reality contradicts platform belief.
+ */
+export const driftWarnings = pgTable('drift_warnings', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  kind:              text('kind').notNull(),             // repeated_wrong_prediction|stale_belief|failed_recommendations|low_confidence_loop|unsupported_conclusion
+  subjectId:         text('subject_id'),                 // chain id, assumption id, etc.
+  severity:          text('severity').notNull(),         // low|medium|high|critical
+  evidence:          jsonb('evidence').notNull().default([]),
+  recommendedAction: text('recommended_action').notNull(),
+  appliedAction:     text('applied_action'),             // 'confidence_reduced' | 'revalidation_required' | etc.
+  status:            text('status').notNull().default('open'),  // open | acknowledged | resolved
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+  resolvedAt:        bigint('resolved_at', { mode: 'number' }),
+}, (t) => [
+  index('drift_workspace_idx').on(t.workspaceId),
+  index('drift_status_idx').on(t.status),
+  index('drift_kind_idx').on(t.kind),
+])
+
 // ─── Knowledge Compression + Pattern Extraction ─────────────────────────────
 
 /**
