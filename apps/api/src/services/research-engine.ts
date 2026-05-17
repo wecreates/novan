@@ -360,6 +360,11 @@ export const RESEARCH_AGENT_DEFS = [
   { name: 'Product Research Agent',  type: 'product_research',        capabilities: ['feature.compare', 'pricing.track'] },
   { name: 'Security Research Agent', type: 'security_research',       capabilities: ['cve.track', 'advisory.parse'] },
   { name: 'Market Research Agent',   type: 'market_research',         capabilities: ['market.size', 'audience.profile'] },
+  // Operator-success insight agents — read-side analysts of real usage
+  { name: 'UX Insight Agent',        type: 'ux_insight',              capabilities: ['ux.friction.detect', 'flow.simplify.suggest'] },
+  { name: 'Workflow Friction Agent', type: 'workflow_friction',       capabilities: ['workflow.failure.rank', 'approval.friction.score'] },
+  { name: 'Reliability Trend Agent', type: 'reliability_trend',       capabilities: ['reliability.trend', 'rollback.signal'] },
+  { name: 'Adoption Agent',          type: 'adoption',                capabilities: ['feature.adoption', 'retention.score'] },
 ] as const
 
 export async function seedResearchAgents(workspaceId: string): Promise<{ created: number }> {

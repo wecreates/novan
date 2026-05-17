@@ -2248,6 +2248,54 @@ export const imageGenerations = pgTable('image_generations', {
   index('ig_created_idx').on(t.createdAt),
 ])
 
+// ─── Operator Feedback + Telemetry ────────────────────────────────────────────
+
+/**
+ * Operator-reported feedback. Anything the user explicitly files goes here.
+ * Kind:   issue | confusion | request | praise | abandoned
+ * Status: open | acknowledged | resolved | dismissed
+ */
+export const feedbackReports = pgTable('feedback_reports', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  kind:         text('kind').notNull(),
+  surface:      text('surface'),               // route or UI screen
+  severity:     text('severity').notNull().default('normal'),
+  title:        text('title').notNull(),
+  body:         text('body'),
+  context:      jsonb('context').notNull().default({}),  // {url, user_agent, last_actions, ...}
+  status:       text('status').notNull().default('open'),
+  reportedBy:   text('reported_by'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('fb_workspace_idx').on(t.workspaceId),
+  index('fb_status_idx').on(t.status),
+  index('fb_created_idx').on(t.createdAt),
+])
+
+/**
+ * Product telemetry — feature usage, friction signals, drop-offs.
+ * Lightweight numeric/categorical events; richer audit goes through `events`.
+ * Workspace-scoped only — no cross-tenant aggregation.
+ */
+export const telemetryEvents = pgTable('telemetry_events', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  category:     text('category').notNull(),  // feature_use|friction|completion|abandonment|approval
+  name:         text('name').notNull(),       // e.g. 'research.topic.created'
+  surface:      text('surface'),
+  outcome:      text('outcome'),               // success|failure|cancelled|blocked
+  durationMs:   integer('duration_ms'),
+  attributes:   jsonb('attributes').notNull().default({}),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('tel_workspace_idx').on(t.workspaceId),
+  index('tel_category_idx').on(t.category),
+  index('tel_name_idx').on(t.name),
+  index('tel_created_idx').on(t.createdAt),
+])
+
 /** Aggregated stretching metrics — one row per workspace. */
 export const tokenStretchMetrics = pgTable('token_stretch_metrics', {
   workspaceId:           text('workspace_id').primaryKey(),
