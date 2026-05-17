@@ -82,6 +82,7 @@ import imageRoutes              from './routes/images.js'
 import platformStatusRoutes     from './routes/platform-status.js'
 import operatorRoutes           from './routes/operator.js'
 import intelligenceRoutes       from './routes/intelligence.js'
+import { governanceRoutes, explainRoutes } from './routes/governance.js'
 import { validateEnvOrThrow }   from './services/secrets-vault.js'
 import { startLearningCron }    from './services/learning-cron.js'
 import { registerAutonomousWorker } from './services/autonomous-orchestrator.js'
@@ -236,6 +237,8 @@ await app.register(imageRoutes,            { prefix: '/api/v1/images' })
 await app.register(platformStatusRoutes,   { prefix: '/api/v1/platform' })
 await app.register(operatorRoutes,         { prefix: '/api/v1/operator' })
 await app.register(intelligenceRoutes,     { prefix: '/api/v1/intelligence' })
+await app.register(governanceRoutes,       { prefix: '/api/v1/governance' })
+await app.register(explainRoutes,          { prefix: '/api/v1/explain' })
 
 // Environment validation — fails fast in production if VAULT_MASTER_KEY missing/invalid
 validateEnvOrThrow()

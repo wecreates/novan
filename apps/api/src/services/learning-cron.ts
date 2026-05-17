@@ -26,6 +26,7 @@ import { purgeExpired as purgeStretchCache } from './token-stretcher.js'
 import { runDueTopics, seedResearchAgents } from './research-engine.js'
 import { runDailyReview }                    from './daily-review.js'
 import { convertFindings }                   from './research-to-action.js'
+import { stabilitySnapshot, emitGovernance } from './governance-core.js'
 
 const handles: NodeJS.Timeout[] = []
 
@@ -108,6 +109,23 @@ async function runBillingSweep() {
   } catch (e) { await emit('cron.error', { task: 'billing', error: (e as Error).message }) }
 }
 
+async function runStabilityScan() {
+  try {
+    const ids = await listWorkspaceIds()
+    for (const ws of ids) {
+      const snap = await stabilitySnapshot(ws).catch(() => null)
+      if (!snap) continue
+      if (snap.overall === 'unstable' || snap.recommendedThrottle) {
+        await emitGovernance(ws, 'stability_alert', {
+          overall: snap.overall,
+          recommendedThrottle: snap.recommendedThrottle,
+          unstableIndicators: snap.indicators.filter(i => i.unstable),
+        })
+      }
+    }
+  } catch (e) { await emit('cron.error', { task: 'stability_scan', error: (e as Error).message }) }
+}
+
 async function runResearchToAction() {
   try {
     const ids = await listWorkspaceIds()
@@ -181,6 +199,7 @@ const INTERVALS = {
   research:     15 * 60_000,   // 15 min — research topic polling (per-topic intervals enforced inside)
   dailyReview:  60 * 60_000,   // 1 hour — emits at most one review/24h via idempotency check
   researchToAction: 30 * 60_000, // 30 min — convert recent findings → roadmap tasks
+  stabilityScan:    5  * 60_000, // 5 min — emit governance.stability_alert when unstable
 }
 
 export function startLearningCron(): void {
@@ -198,6 +217,7 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runResearchScans(),    INTERVALS.research))
   handles.push(setInterval(() => void runDailyReviews(),     INTERVALS.dailyReview))
   handles.push(setInterval(() => void runResearchToAction(), INTERVALS.researchToAction))
+  handles.push(setInterval(() => void runStabilityScan(),    INTERVALS.stabilityScan))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

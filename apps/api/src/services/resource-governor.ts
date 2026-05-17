@@ -15,20 +15,39 @@ import { db }                     from '../db/client.js'
 import { events, incidents, imageGenerations } from '../db/schema.js'
 import { and, eq, gte, sql }      from 'drizzle-orm'
 
+// Local re-impl (avoid circular import to governance-core)
+const DAY_MS = 24 * 60 * 60_000
+async function autonomousPatchesTodayCount(workspaceId: string): Promise<number> {
+  const since = Date.now() - DAY_MS
+  return db.select({ c: sql<number>`count(*)::int` }).from(events)
+    .where(and(eq(events.workspaceId, workspaceId), sql`${events.type} in ('patch.applied','patch.auto_applied')`, gte(events.createdAt, since)))
+    .then(r => Number(r[0]?.c ?? 0)).catch(() => 0)
+}
+async function deploymentsTodayCount(workspaceId: string): Promise<number> {
+  const since = Date.now() - DAY_MS
+  return db.select({ c: sql<number>`count(*)::int` }).from(events)
+    .where(and(eq(events.workspaceId, workspaceId), sql`${events.type} in ('deployment.started','deployment.completed')`, gte(events.createdAt, since)))
+    .then(r => Number(r[0]?.c ?? 0)).catch(() => 0)
+}
+
 export interface GovernorLimits {
   maxConcurrentAgents:    number
   maxResearchPerHour:     number
   maxImagesPerHour:       number
   maxProviderSpendUsdPerHour: number
   maxQueueDepth:          number
+  maxAutonomousPatchesPerDay: number
+  maxDeploymentsPerDay:    number
 }
 
 const DEFAULT_LIMITS: GovernorLimits = {
-  maxConcurrentAgents:        Number(process.env['GOV_MAX_AGENTS']     ?? 8),
-  maxResearchPerHour:         Number(process.env['GOV_MAX_RESEARCH_HR']?? 30),
-  maxImagesPerHour:           Number(process.env['GOV_MAX_IMAGES_HR']  ?? 20),
-  maxProviderSpendUsdPerHour: Number(process.env['GOV_MAX_SPEND_HR']   ?? 1.0),
-  maxQueueDepth:              Number(process.env['GOV_MAX_QUEUE']      ?? 200),
+  maxConcurrentAgents:        Number(process.env['GOV_MAX_AGENTS']         ?? 8),
+  maxResearchPerHour:         Number(process.env['GOV_MAX_RESEARCH_HR']    ?? 30),
+  maxImagesPerHour:           Number(process.env['GOV_MAX_IMAGES_HR']      ?? 20),
+  maxProviderSpendUsdPerHour: Number(process.env['GOV_MAX_SPEND_HR']       ?? 1.0),
+  maxQueueDepth:              Number(process.env['GOV_MAX_QUEUE']          ?? 200),
+  maxAutonomousPatchesPerDay: Number(process.env['GOV_MAX_AUTO_PATCHES_DAY'] ?? 20),
+  maxDeploymentsPerDay:       Number(process.env['GOV_MAX_DEPLOYS_DAY']    ?? 5),
 }
 
 // In-process counters — token-bucket style, reset hourly per process
@@ -81,7 +100,7 @@ async function imagesThisHour(workspaceId: string): Promise<number> {
 
 export async function checkBeforeAction(opts: {
   workspaceId: string
-  kind:        'agent' | 'research' | 'image' | 'queue_push'
+  kind:        'agent' | 'research' | 'image' | 'queue_push' | 'autonomous_patch' | 'deployment'
   queueDepth?: number
   limits?:     Partial<GovernorLimits>
 }): Promise<GovernorDecision> {
@@ -113,6 +132,18 @@ export async function checkBeforeAction(opts: {
   }
   if (opts.kind === 'queue_push' && (opts.queueDepth ?? 0) > limits.maxQueueDepth) {
     return { ok: false, reason: `queue depth ${opts.queueDepth} exceeds limit ${limits.maxQueueDepth}`, current, limits }
+  }
+  if (opts.kind === 'autonomous_patch') {
+    const today = await autonomousPatchesTodayCount(opts.workspaceId)
+    if (today >= limits.maxAutonomousPatchesPerDay) {
+      return { ok: false, reason: `max autonomous patches/day reached (${limits.maxAutonomousPatchesPerDay})`, current, limits }
+    }
+  }
+  if (opts.kind === 'deployment') {
+    const today = await deploymentsTodayCount(opts.workspaceId)
+    if (today >= limits.maxDeploymentsPerDay) {
+      return { ok: false, reason: `max deployments/day reached (${limits.maxDeploymentsPerDay})`, current, limits }
+    }
   }
 
   // Bump the appropriate bucket
