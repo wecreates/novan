@@ -88,6 +88,10 @@ async function engageKillSwitchIfCritical(workspaceId: string, reason: string): 
 }
 
 export async function applyCorrections(workspaceId: string): Promise<CorrectionResult> {
+  const { getPreferences } = await import('./operator-preferences.js')
+  const prefs = await getPreferences(workspaceId).catch(() => null)
+  const policy = prefs?.driftCorrectionPolicy ?? 'balanced'
+
   const open = await db.select().from(driftWarnings)
     .where(and(eq(driftWarnings.workspaceId, workspaceId), eq(driftWarnings.status, 'open')))
     .catch(() => [])
@@ -103,6 +107,29 @@ export async function applyCorrections(workspaceId: string): Promise<CorrectionR
 
   for (const w of open) {
     let action = 'noop'
+
+    // notify_only policy: emit notification + log, but do not apply automatic
+    // confidence reductions or kill switches. Operator decides what to do.
+    if (policy === 'notify_only') {
+      const { notify } = await import('./notifications.js')
+      await notify({
+        workspaceId,
+        type: 'drift.detected',
+        title: `Drift warning: ${w.kind}`,
+        body: `Subject: ${w.subjectId ?? 'n/a'}. Recommended: ${w.recommendedAction}. Policy is notify_only — no auto-correction applied.`,
+        severity: w.severity === 'critical' || w.severity === 'high' ? 'high' : 'normal',
+        signature: `drift:${w.id}`,
+      }).catch(() => null)
+      action = 'notify_only — no auto-correction'
+      await db.update(driftWarnings).set({
+        status: 'acknowledged', appliedAction: action,
+      }).where(eq(driftWarnings.id, w.id)).catch(() => null)
+      result.warningsHandled++
+      result.details.push({ warningId: w.id, kind: w.kind, action })
+      await emit(workspaceId, 'governance.reality_correction', { warningId: w.id, kind: w.kind, action, policy })
+      continue
+    }
+
     if (w.kind === 'repeated_wrong_prediction' && w.subjectId) {
       const n = await reduceChainConfidence(workspaceId, w.subjectId)
       result.confidenceReductions += n
@@ -124,10 +151,19 @@ export async function applyCorrections(workspaceId: string): Promise<CorrectionR
       }
       action = `reduced confidence on failing subject ${w.subjectId}`
     } else if (w.kind === 'low_confidence_loop') {
-      // Critical: low confidence + loop → throttle autonomous research
-      const engaged = await engageKillSwitchIfCritical(workspaceId, `drift: low_confidence_loop on ${w.subjectId ?? '?'}`)
-      if (engaged) result.killSwitchEngagements++
-      action = engaged ? 'research kill_switch ENGAGED' : 'kill_switch already engaged or skipped'
+      // Kill-switch engagement gated by driftCorrectionPolicy:
+      //   aggressive → engage on any low_confidence_loop warning
+      //   balanced   → engage only when severity is high/critical (default)
+      //   notify_only → already handled above (continue branch)
+      const shouldEngage = policy === 'aggressive'
+        || (policy === 'balanced' && (w.severity === 'high' || w.severity === 'critical'))
+      if (shouldEngage) {
+        const engaged = await engageKillSwitchIfCritical(workspaceId, `drift: low_confidence_loop on ${w.subjectId ?? '?'}`)
+        if (engaged) result.killSwitchEngagements++
+        action = engaged ? 'research kill_switch ENGAGED' : 'kill_switch already engaged or skipped'
+      } else {
+        action = `kill_switch NOT engaged (policy=${policy}, severity=${w.severity})`
+      }
     } else if (w.kind === 'unsupported_conclusion' && w.subjectId) {
       await db.update(assumptions).set({ status: 'unverified', updatedAt: Date.now() })
         .where(and(eq(assumptions.workspaceId, workspaceId), eq(assumptions.id, w.subjectId)))

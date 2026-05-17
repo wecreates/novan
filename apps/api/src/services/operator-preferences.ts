@@ -21,6 +21,7 @@ export interface OperatorPreferences {
   maxDeploymentsPerDay:           number | null
   approvalAutoApplyMinConfidence: number
   riskTolerance:                  'conservative' | 'balanced' | 'aggressive'
+  driftCorrectionPolicy:          'aggressive' | 'balanced' | 'notify_only'
   metadata:                       Record<string, unknown>
   createdAt:                      number
   updatedAt:                      number
@@ -36,6 +37,7 @@ const DEFAULTS: Omit<OperatorPreferences, 'workspaceId' | 'createdAt' | 'updated
   maxDeploymentsPerDay:           null,
   approvalAutoApplyMinConfidence: 0.8,
   riskTolerance:                  'balanced',
+  driftCorrectionPolicy:          'balanced',
   metadata:                       {},
 }
 
@@ -58,6 +60,7 @@ export async function getPreferences(workspaceId: string): Promise<OperatorPrefe
     maxDeploymentsPerDay:           row.maxDeploymentsPerDay,
     approvalAutoApplyMinConfidence: row.approvalAutoApplyMinConfidence,
     riskTolerance:                  row.riskTolerance as 'conservative' | 'balanced' | 'aggressive',
+    driftCorrectionPolicy:          (row.driftCorrectionPolicy as 'aggressive' | 'balanced' | 'notify_only') ?? 'balanced',
     metadata:                       (row.metadata as Record<string, unknown>) ?? {},
     createdAt:                      row.createdAt,
     updatedAt:                      row.updatedAt,
@@ -84,6 +87,7 @@ export async function setPreferences(workspaceId: string, patch: Patch): Promise
       maxDeploymentsPerDay:           patch.maxDeploymentsPerDay       ?? null,
       approvalAutoApplyMinConfidence: patch.approvalAutoApplyMinConfidence ?? DEFAULTS.approvalAutoApplyMinConfidence,
       riskTolerance:                  patch.riskTolerance              ?? DEFAULTS.riskTolerance,
+      driftCorrectionPolicy:          patch.driftCorrectionPolicy      ?? DEFAULTS.driftCorrectionPolicy,
       metadata:                       patch.metadata                   ?? {},
       createdAt: now, updatedAt: now,
     }).onConflictDoNothing().catch(() => null)
@@ -98,6 +102,7 @@ export async function setPreferences(workspaceId: string, patch: Patch): Promise
     if (patch.maxDeploymentsPerDay       !== undefined) update['maxDeploymentsPerDay']       = patch.maxDeploymentsPerDay
     if (patch.approvalAutoApplyMinConfidence !== undefined) update['approvalAutoApplyMinConfidence'] = patch.approvalAutoApplyMinConfidence
     if (patch.riskTolerance !== undefined) update['riskTolerance'] = patch.riskTolerance
+    if (patch.driftCorrectionPolicy !== undefined) update['driftCorrectionPolicy'] = patch.driftCorrectionPolicy
     if (patch.metadata      !== undefined) update['metadata']      = patch.metadata
     await db.update(operatorPreferences).set(update)
       .where(eq(operatorPreferences.workspaceId, workspaceId)).catch(() => null)

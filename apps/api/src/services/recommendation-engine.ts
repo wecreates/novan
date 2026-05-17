@@ -20,6 +20,8 @@ import { prioritize, type PriorityInput, type PriorityDecision } from './agent-c
 import { findPastFix }                from './continuity-engine.js'
 import { dominantCategories }          from './strategic-priorities.js'
 import { record as recordChain }       from './reasoning-chains.js'
+import { declare as declareAssumption } from './assumption-tracker.js'
+import { check as groundTruthCheck, type Evidence } from './ground-truth-engine.js'
 
 export type RecKind =
   | 'critical_runtime_fix'
@@ -318,10 +320,30 @@ async function generateRecommendationsImpl(workspaceId: string): Promise<Recomme
   // Sort by score desc (post-context-boost)
   recs.sort((a, b) => b.decision.score - a.decision.score)
 
-  // Persist a reasoning chain for each rec, idempotent via subjectId.
-  // Doing this fire-and-forget so the rec response is not delayed.
+  // Ground-truth gate for P0 (critical) recs: count distinct evidence
+  // categories. If insufficient, demote autoApplyOk to false and add a
+  // warning flag in evidence. We do NOT drop the rec — operator should
+  // still see it; just block auto-apply.
+  for (const r of recs) {
+    if (r.decision.bucket !== 'P0') continue
+    const evidenceCats = inferEvidenceCategories(r.evidence)
+    const evidenceForGate: Evidence[] = evidenceCats.map((c, i) => ({
+      category: c, table: 'recommendation_evidence', id: `${r.id}:${i}`,
+      extract: String(Object.values(r.evidence)[i] ?? '').slice(0, 80),
+    }))
+    const gt = await groundTruthCheck({
+      workspaceId, decisionId: r.id, criticality: 'critical', evidence: evidenceForGate,
+    }).catch(() => null)
+    if (gt && !gt.passed) {
+      r.decision = { ...r.decision, autoApplyOk: false, warnings: [...r.decision.warnings, `ground-truth gate: ${gt.reason}`] }
+    }
+  }
+
+  // Persist a reasoning chain + load-bearing assumption for each rec
+  // (gaps #2 and #3 wiring). Fire-and-forget — does not delay response.
   void (async () => {
     for (const r of recs) {
+      // Chain
       await recordChain({
         workspaceId,
         kind: 'recommendation',
@@ -335,10 +357,38 @@ async function generateRecommendationsImpl(workspaceId: string): Promise<Recomme
         prediction: { bucket: r.decision.bucket, estimatedImpact: r.estimatedImpact, autoApplyOk: r.decision.autoApplyOk },
         source: 'recommendation-engine',
       }).catch(() => null)
+
+      // Implicit assumption: this rec's evidence remains valid for the action window.
+      // Declared so drift-detector can flag if evidence ages out without re-verification.
+      await declareAssumption({
+        workspaceId, category: 'recommendation',
+        statement: `Evidence remains valid for: ${r.title.slice(0, 200)}`,
+        evidenceRefs: Object.entries(r.evidence).slice(0, 4).map(([k, v]) => ({
+          table: 'recommendation_evidence', id: `${r.id}:${k}`, extract: String(v).slice(0, 80),
+        })),
+        confidence: r.decision.score,
+        source: 'recommendation-engine',
+      }).catch(() => null)
     }
   })()
 
   return recs
+}
+
+/** Heuristic: map evidence-row keys to ground-truth source categories. */
+function inferEvidenceCategories(evidence: Record<string, unknown>): Array<'runtime' | 'verification' | 'provider' | 'operator' | 'telemetry' | 'test'> {
+  const cats: Array<'runtime' | 'verification' | 'provider' | 'operator' | 'telemetry' | 'test'> = []
+  for (const k of Object.keys(evidence)) {
+    const l = k.toLowerCase()
+    if (l.includes('incident') || l.includes('event') || l.includes('runtime')) cats.push('runtime')
+    else if (l.includes('test') || l.includes('verif'))                          cats.push('verification')
+    else if (l.includes('provider') || l.includes('budget'))                     cats.push('provider')
+    else if (l.includes('approval') || l.includes('feedback'))                   cats.push('operator')
+    else if (l.includes('telemetry'))                                            cats.push('telemetry')
+    else if (l.includes('rolled_back') || l.includes('failed_workflow'))         cats.push('verification')
+    else                                                                          cats.push('runtime')
+  }
+  return [...new Set(cats)]
 }
 
 export async function topRecommendations(workspaceId: string, limit = 10): Promise<Recommendation[]> {

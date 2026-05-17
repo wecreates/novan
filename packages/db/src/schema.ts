@@ -2529,6 +2529,7 @@ export const operatorPreferences = pgTable('operator_preferences', {
   // Risk + approval bias
   approvalAutoApplyMinConfidence: real('approval_auto_apply_min_confidence').notNull().default(0.8),
   riskTolerance:          text('risk_tolerance').notNull().default('balanced'),  // conservative | balanced | aggressive
+  driftCorrectionPolicy:  text('drift_correction_policy').notNull().default('balanced'),  // aggressive | balanced | notify_only
   // Misc
   metadata:              jsonb('metadata').notNull().default({}),
   createdAt:             bigint('created_at', { mode: 'number' }).notNull(),

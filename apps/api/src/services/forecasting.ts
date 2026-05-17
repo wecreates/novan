@@ -16,6 +16,7 @@
  */
 import { allTrends, type TrendSeries } from './trend-analysis.js'
 import { record as recordChain }       from './reasoning-chains.js'
+import { declare as declareAssumption } from './assumption-tracker.js'
 
 export type ForecastType =
   | 'provider_failure_likely'
@@ -220,6 +221,20 @@ export async function generateForecasts(workspaceId: string): Promise<AllForecas
           likelihood:     f.likelihood,
           historicalEndsAt: Date.now(),  // when the forecast was made
         },
+        source: 'forecasting',
+      }).catch(() => null)
+
+      // Declare the underlying assumption explicitly: "current trend
+      // continues for next horizonWeeks weeks." Drift detector can
+      // flag if the trend reverses before horizon end.
+      await declareAssumption({
+        workspaceId, category: 'forecast',
+        statement: `Trend continuation: ${f.type} continues at ${f.basis.slopePerWeek}/wk for ${f.horizonWeeks}w`,
+        evidenceRefs: [{
+          table: 'trend_analysis', id: f.type,
+          extract: `slope=${f.basis.slopePerWeek}, r²=${f.confidence}, n=${f.basis.sampleSize}`,
+        }],
+        confidence: f.confidence,
         source: 'forecasting',
       }).catch(() => null)
     }
