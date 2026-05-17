@@ -6,7 +6,13 @@ $env:DATABASE_URL      = "postgresql://neondb_owner:npg_n2wGjmuWzrU9@ep-bitter-s
 $env:REDIS_URL         = "rediss://default:gQAAAAAAAewCAAIgcDIzOWIwNjU2NjA3MTY0MzRhODExNmZkOGEwYjJlY2QwNA@lucky-anemone-125954.upstash.io:6379"
 $env:AUTH_SECRET       = "VSgXZQD6x4S+2boM+cJAvNbEd93oL7af+fy0nSXI6QRribja6DIhSupgEHAjTqUK"
 $env:VAULT_MASTER_KEY  = "L3ysQ8LdgB0I/R7gXdRzIcERe753TQVkH9N7f+OGfqY="
-$env:GEMINI_API_KEY    = "AIzaSyBm3feOLMYlfzqtxKGA9UMF18bUQDwstNM"
+# GEMINI_API_KEY is read from gitignored .env at repo root.
+# To set: create .env with `GEMINI_API_KEY=...` (NOT in version control).
+if (Test-Path "$PSScriptRoot\..\.env") {
+  Get-Content "$PSScriptRoot\..\.env" | Where-Object { $_ -match '^GEMINI_API_KEY=' } | ForEach-Object {
+    $env:GEMINI_API_KEY = ($_ -split '=', 2)[1].Trim()
+  }
+}
 $env:CORS_ORIGINS      = "http://localhost:5173,http://localhost:3000"
 $env:RUNTIME_MODE      = "cloud-api-only"
 $env:NODE_ENV          = "development"

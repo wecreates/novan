@@ -118,14 +118,20 @@ export const PROVIDERS: ProviderConfig[] = [
     enabled:   () => !!process.env['GEMINI_API_KEY'],
     models: [
       {
-        provider: 'gemini', modelId: 'gemini-1.5-flash', displayName: 'Gemini 1.5 Flash',
-        contextWindow: 1_000_000, promptPer1k: 0.000075, outputPer1k: 0.0003,
+        provider: 'gemini', modelId: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash',
+        contextWindow: 1_000_000, promptPer1k: 0.00015, outputPer1k: 0.0006,
         supportsVision: true, supportsStream: true, maxOutputTokens: 8192,
         taskAffinities: ['fast_chat', 'vision', 'summarize', 'classify'],
       },
       {
-        provider: 'gemini', modelId: 'gemini-1.5-pro', displayName: 'Gemini 1.5 Pro',
-        contextWindow: 2_000_000, promptPer1k: 0.00125, outputPer1k: 0.005,
+        provider: 'gemini', modelId: 'gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash Lite',
+        contextWindow: 1_000_000, promptPer1k: 0.00010, outputPer1k: 0.0004,
+        supportsVision: true, supportsStream: true, maxOutputTokens: 8192,
+        taskAffinities: ['fast_chat', 'classify'],
+      },
+      {
+        provider: 'gemini', modelId: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro',
+        contextWindow: 2_000_000, promptPer1k: 0.00125, outputPer1k: 0.010,
         supportsVision: true, supportsStream: true, maxOutputTokens: 8192,
         taskAffinities: ['reasoning', 'code', 'vision'],
       },

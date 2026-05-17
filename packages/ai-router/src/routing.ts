@@ -15,7 +15,7 @@ const TASK_PREFERENCE: Record<TaskType, Array<{ provider: ProviderId; modelId: s
   fast_chat: [
     { provider: 'groq',        modelId: 'llama3-70b-8192' },
     { provider: 'openrouter',  modelId: 'google/gemini-flash-1.5' },
-    { provider: 'gemini',      modelId: 'gemini-1.5-flash' },
+    { provider: 'gemini',      modelId: 'gemini-2.5-flash' },
     { provider: 'openai',      modelId: 'gpt-4o-mini' },
     { provider: 'anthropic',   modelId: 'claude-3-haiku-20240307' },
     { provider: 'ollama_remote', modelId: 'llama3' },
@@ -24,7 +24,7 @@ const TASK_PREFERENCE: Record<TaskType, Array<{ provider: ProviderId; modelId: s
   reasoning: [
     { provider: 'anthropic',     modelId: 'claude-3-5-sonnet-20241022' },
     { provider: 'openai',        modelId: 'gpt-4o' },
-    { provider: 'gemini',        modelId: 'gemini-1.5-pro' },
+    { provider: 'gemini',        modelId: 'gemini-2.5-pro' },
     { provider: 'ollama_remote', modelId: 'llama3:70b' },
     { provider: 'groq',          modelId: 'llama3-70b-8192' },
   ],
@@ -38,12 +38,12 @@ const TASK_PREFERENCE: Record<TaskType, Array<{ provider: ProviderId; modelId: s
   vision: [
     { provider: 'openai',       modelId: 'gpt-4o' },
     { provider: 'anthropic',    modelId: 'claude-3-5-sonnet-20241022' },
-    { provider: 'gemini',       modelId: 'gemini-1.5-flash' },
+    { provider: 'gemini',       modelId: 'gemini-2.5-flash' },
     { provider: 'openrouter',   modelId: 'google/gemini-flash-1.5' },
   ],
   summarize: [
     { provider: 'groq',        modelId: 'llama3-70b-8192' },
-    { provider: 'gemini',      modelId: 'gemini-1.5-flash' },
+    { provider: 'gemini',      modelId: 'gemini-2.5-flash' },
     { provider: 'anthropic',   modelId: 'claude-3-haiku-20240307' },
     { provider: 'openai',      modelId: 'gpt-4o-mini' },
     { provider: 'ollama_remote', modelId: 'llama3' },

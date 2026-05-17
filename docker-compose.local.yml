@@ -29,7 +29,8 @@ services:
       AUTH_SECRET:      VSgXZQD6x4S+2boM+cJAvNbEd93oL7af+fy0nSXI6QRribja6DIhSupgEHAjTqUK
       VAULT_MASTER_KEY: L3ysQ8LdgB0I/R7gXdRzIcERe753TQVkH9N7f+OGfqY=
 
-      GEMINI_API_KEY:   AIzaSyBm3feOLMYlfzqtxKGA9UMF18bUQDwstNM
+      # Read from gitignored .env at repo root (Docker Compose auto-loads .env)
+      GEMINI_API_KEY:   ${GEMINI_API_KEY:-}
 
       CORS_ORIGINS:     "http://localhost:5173,http://localhost:3000"
       PROVIDER_ROUTER_ENABLED: "true"
