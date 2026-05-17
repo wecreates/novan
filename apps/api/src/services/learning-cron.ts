@@ -25,6 +25,7 @@ import { pollDueFeeds }             from './feed-ingester.js'
 import { purgeExpired as purgeStretchCache } from './token-stretcher.js'
 import { runDueTopics, seedResearchAgents } from './research-engine.js'
 import { runDailyReview }                    from './daily-review.js'
+import { convertFindings }                   from './research-to-action.js'
 
 const handles: NodeJS.Timeout[] = []
 
@@ -107,6 +108,18 @@ async function runBillingSweep() {
   } catch (e) { await emit('cron.error', { task: 'billing', error: (e as Error).message }) }
 }
 
+async function runResearchToAction() {
+  try {
+    const ids = await listWorkspaceIds()
+    let totalCreated = 0
+    for (const ws of ids) {
+      const r = await convertFindings(ws, { maxFindings: 10 }).catch(() => ({ created: 0 } as { created: number }))
+      totalCreated += r.created
+    }
+    if (totalCreated > 0) await emit('cron.research_to_action_completed', { created: totalCreated })
+  } catch (e) { await emit('cron.error', { task: 'research_to_action', error: (e as Error).message }) }
+}
+
 async function runDailyReviews() {
   try {
     const ids = await listWorkspaceIds()
@@ -167,6 +180,7 @@ const INTERVALS = {
   stretchPurge: 60 * 60_000,   // 1 hour — expire stale AI cache rows
   research:     15 * 60_000,   // 15 min — research topic polling (per-topic intervals enforced inside)
   dailyReview:  60 * 60_000,   // 1 hour — emits at most one review/24h via idempotency check
+  researchToAction: 30 * 60_000, // 30 min — convert recent findings → roadmap tasks
 }
 
 export function startLearningCron(): void {
@@ -183,6 +197,7 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runStretchCachePurge(),INTERVALS.stretchPurge))
   handles.push(setInterval(() => void runResearchScans(),    INTERVALS.research))
   handles.push(setInterval(() => void runDailyReviews(),     INTERVALS.dailyReview))
+  handles.push(setInterval(() => void runResearchToAction(), INTERVALS.researchToAction))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

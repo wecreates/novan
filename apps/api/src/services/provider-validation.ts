@@ -72,11 +72,22 @@ async function probeUrl(url: string): Promise<{ ok: boolean; latencyMs: number; 
   }
 }
 
-export async function validateProviders(workspaceId: string): Promise<{
+// Small response cache — provider probes hit 6+ external endpoints; reuse
+// the result for 30s to keep War Room snappy. Bypass with forceRefresh.
+const PROBE_CACHE = new Map<string, { value: { results: ProviderProbe[]; configuredCount: number; reachableCount: number }; expiresAt: number }>()
+const PROBE_TTL_MS = 30_000
+
+export async function validateProviders(workspaceId: string, opts?: { forceRefresh?: boolean }): Promise<{
   results: ProviderProbe[]
   configuredCount: number
   reachableCount: number
 }> {
+  // Test env bypasses the cache so per-test mocks remain authoritative.
+  const useCache = process.env['NODE_ENV'] !== 'test' && !opts?.forceRefresh
+  if (useCache) {
+    const cached = PROBE_CACHE.get(workspaceId)
+    if (cached && cached.expiresAt > Date.now()) return cached.value
+  }
   const results: ProviderProbe[] = []
   let configuredCount = 0
   let reachableCount = 0
@@ -128,5 +139,7 @@ export async function validateProviders(workspaceId: string): Promise<{
     source: 'provider-validation', version: 1, createdAt: now,
   }).catch(() => null)
 
-  return { results, configuredCount, reachableCount }
+  const out = { results, configuredCount, reachableCount }
+  if (useCache) PROBE_CACHE.set(workspaceId, { value: out, expiresAt: Date.now() + PROBE_TTL_MS })
+  return out
 }

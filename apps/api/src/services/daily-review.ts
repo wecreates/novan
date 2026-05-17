@@ -11,6 +11,7 @@ import { db }                     from '../db/client.js'
 import {
   events, incidents, researchFindings, imageGenerations,
   auditFindings, failureMemory, successfulFixes,
+  patchApprovals, roadmapTasks,
 } from '../db/schema.js'
 import { and, desc, eq, gte, sql } from 'drizzle-orm'
 import { v7 as uuidv7 }            from 'uuid'
@@ -24,6 +25,9 @@ export interface DailyReview {
   topCosts:        Array<{ provider: string; spendUsd: number; count: number }>
   topInsights:     Array<{ summary: string; sourceUrl: string; confidence: number }>
   topBlockers:     Array<{ title: string; severity: string }>
+  pendingApprovals: Array<{ id: string; reason: string; createdAt: number }>
+  topPriorities:   Array<{ title: string; category: string; priorityScore: number; phase: string }>
+  providerHealth:  { connected: number; degraded: number; unconfigured: number; flags: { researchEnabled: boolean; imageGenerationEnabled: boolean } }
   nextRecommended: string[]
 }
 
@@ -43,7 +47,7 @@ export async function generateDailyReview(workspaceId: string): Promise<DailyRev
   const now = Date.now()
   const dayAgo = now - 24 * 60 * 60_000
 
-  const [failures, wins, imageSpend, insights, openIncidents, audit] = await Promise.all([
+  const [failures, wins, imageSpend, insights, openIncidents, audit, pending, priorities] = await Promise.all([
     db.select({
       signature: failureMemory.signature,
       occurrences: failureMemory.occurrenceCount,
@@ -85,6 +89,23 @@ export async function generateDailyReview(workspaceId: string): Promise<DailyRev
     db.select({ c: sql<number>`count(*)::int` }).from(auditFindings)
       .where(eq(auditFindings.workspaceId, workspaceId))
       .then(r => Number(r[0]?.c ?? 0)).catch(() => 0),
+
+    db.select({
+      id: patchApprovals.id, reason: patchApprovals.riskReason, createdAt: patchApprovals.createdAt,
+    }).from(patchApprovals)
+      .where(and(eq(patchApprovals.workspaceId, workspaceId), eq(patchApprovals.status, 'pending')))
+      .orderBy(desc(patchApprovals.createdAt))
+      .limit(5).catch(() => []),
+
+    db.select({
+      title:         roadmapTasks.title,
+      category:      roadmapTasks.category,
+      priorityScore: roadmapTasks.priorityScore,
+      phase:         roadmapTasks.phase,
+    }).from(roadmapTasks)
+      .where(and(eq(roadmapTasks.workspaceId, workspaceId), eq(roadmapTasks.status, 'pending')))
+      .orderBy(desc(roadmapTasks.priorityScore))
+      .limit(5).catch(() => []),
   ])
 
   const next: string[] = []
@@ -104,7 +125,25 @@ export async function generateDailyReview(workspaceId: string): Promise<DailyRev
     topCosts:    imageSpend.map(s => ({ provider: String(s.provider), spendUsd: Number(s.spendUsd), count: Number(s.count) })),
     topInsights: insights.map(i => ({ summary: String(i.summary ?? '').slice(0, 200), sourceUrl: String(i.sourceUrl), confidence: Number(i.confidence) })),
     topBlockers: openIncidents.map(i => ({ title: String(i.title ?? ''), severity: String(i.severity ?? '') })),
+    pendingApprovals: pending.map(p => ({ id: String(p.id), reason: String(p.reason ?? ''), createdAt: Number(p.createdAt ?? 0) })),
+    topPriorities: priorities.map(p => ({
+      title: String(p.title ?? ''), category: String(p.category ?? ''),
+      priorityScore: Number(p.priorityScore ?? 0), phase: String(p.phase ?? ''),
+    })),
+    providerHealth: await snapshotProviderHealth(),
     nextRecommended: next,
+  }
+}
+
+async function snapshotProviderHealth() {
+  const { validateProviders, isResearchEnabled, isImageGenerationEnabled } = await import('./provider-validation.js')
+  const probe = await validateProviders('default').catch(() => ({ results: [], configuredCount: 0, reachableCount: 0 }))
+  const connected    = probe.results.filter(r => r.status === 'healthy').length
+  const degraded     = probe.results.filter(r => r.status === 'degraded' || r.status === 'down').length
+  const unconfigured = probe.results.filter(r => r.status === 'unconfigured').length
+  return {
+    connected, degraded, unconfigured,
+    flags: { researchEnabled: isResearchEnabled(), imageGenerationEnabled: isImageGenerationEnabled() },
   }
 }
 
