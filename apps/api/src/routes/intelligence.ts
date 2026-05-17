@@ -10,6 +10,8 @@ import {
 import { snapshot as strategicSnapshot } from '../services/strategic-memory.js'
 import { runDailyReview, generateDailyReview } from '../services/daily-review.js'
 import { convertFindings, recentRoadmapFromResearch } from '../services/research-to-action.js'
+import { topRecommendations, generateRecommendations } from '../services/recommendation-engine.js'
+import { missionFeed, accomplishmentFeed, sinceLastVisit, warRoomHome } from '../services/engagement-feed.js'
 
 const intelligenceRoutes: FastifyPluginAsync = async (fastify) => {
 
@@ -97,6 +99,48 @@ const intelligenceRoutes: FastifyPluginAsync = async (fastify) => {
     if (req.body.since_ms     !== undefined) opts.sinceMs     = req.body.since_ms
     if (req.body.max_findings !== undefined) opts.maxFindings = req.body.max_findings
     return { success: true, data: await convertFindings(ws, opts) }
+  })
+
+  // ─── Recommendation engine ─────────────────────────────────────────────────
+  fastify.get<{ Querystring: { workspace_id?: string; limit?: string } }>('/recommendations', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const limit = req.query.limit ? Number(req.query.limit) : 10
+    return { success: true, data: await topRecommendations(ws, limit) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/recommendations/all', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await generateRecommendations(ws) }
+  })
+
+  // ─── Engagement feeds ──────────────────────────────────────────────────────
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/mission-feed', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await missionFeed(ws) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string; window_ms?: string } }>('/accomplishments', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const window = req.query.window_ms ? Number(req.query.window_ms) : 24 * 60 * 60_000
+    return { success: true, data: await accomplishmentFeed(ws, window) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string; since?: string } }>('/since-last-visit', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const since = req.query.since ? Number(req.query.since) : undefined
+    return { success: true, data: await sinceLastVisit(ws, since) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string; last_visit_at?: string } }>('/war-room/home', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const last = req.query.last_visit_at ? Number(req.query.last_visit_at) : undefined
+    return { success: true, data: await warRoomHome(ws, last) }
   })
 
   fastify.get<{ Querystring: { workspace_id?: string; limit?: string } }>('/research-roadmap', async (req, reply) => {
