@@ -22,6 +22,13 @@ import {
   executiveDailyBriefing, weeklyOperationalReport,
   reliabilitySummary, securitySummary, costSummary, missionProgressReport,
 } from '../services/executive-briefings.js'
+import {
+  divisionSnapshot, allDivisionsSnapshot, crossDivisionBlockers,
+  companyMissionStatus, DIVISIONS, type Division,
+} from '../services/divisions.js'
+import {
+  engineeringHealthReport, operationalEfficiencyReport, growthOpportunityReport,
+} from '../services/company-reports.js'
 
 const intelligenceRoutes: FastifyPluginAsync = async (fastify) => {
 
@@ -292,6 +299,51 @@ const intelligenceRoutes: FastifyPluginAsync = async (fastify) => {
     const ws = req.query.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     return { success: true, data: await pastOutcomeStats(ws) }
+  })
+
+  // ─── Divisions ─────────────────────────────────────────────────────────────
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/divisions', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: { divisions: DIVISIONS, snapshot: await allDivisionsSnapshot(ws) } }
+  })
+
+  fastify.get<{ Params: { name: string }; Querystring: { workspace_id?: string } }>('/divisions/:name', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const name = req.params.name as Division
+    if (!DIVISIONS.includes(name)) return reply.code(400).send({ success: false, error: `unknown division: ${name}` })
+    return { success: true, data: await divisionSnapshot(ws, name) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/divisions-coordination/blockers', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await crossDivisionBlockers(ws) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/company/mission-status', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await companyMissionStatus(ws) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/company/engineering-health', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await engineeringHealthReport(ws) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/company/operational-efficiency', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await operationalEfficiencyReport(ws) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/company/growth-opportunity', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await growthOpportunityReport(ws) }
   })
 
   fastify.get<{ Querystring: { workspace_id?: string; limit?: string } }>('/research-roadmap', async (req, reply) => {

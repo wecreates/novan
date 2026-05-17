@@ -13,6 +13,7 @@
  */
 import { db }                       from '../db/client.js'
 import { workspaces, events }       from '../db/schema.js'
+import { and, eq, gte }             from 'drizzle-orm'
 import { v7 as uuidv7 }             from 'uuid'
 import { scanAndOpenIncidents }     from './incident-service.js'
 import { runImprovementScan }       from './improvement-engine.js'
@@ -26,6 +27,7 @@ import { purgeExpired as purgeStretchCache } from './token-stretcher.js'
 import { runDueTopics, seedResearchAgents } from './research-engine.js'
 import { runDailyReview }                    from './daily-review.js'
 import { convertFindings }                   from './research-to-action.js'
+import { weeklyOperationalReport }            from './executive-briefings.js'
 import { stabilitySnapshot, emitGovernance, autoEngageThrottle, pauseUnstableAgents, autoDisengageThrottleIfStable } from './governance-core.js'
 
 const handles: NodeJS.Timeout[] = []
@@ -107,6 +109,31 @@ async function runBillingSweep() {
     const expired = await expireTrials().catch(() => 0)
     if (expired > 0) await emit('cron.trials_expired', { count: expired })
   } catch (e) { await emit('cron.error', { task: 'billing', error: (e as Error).message }) }
+}
+
+async function runWeeklyExecutiveBriefings() {
+  try {
+    const ids = await listWorkspaceIds()
+    let generated = 0
+    for (const ws of ids) {
+      // Only emit once per 6 days — idempotent via events check
+      const day6 = Date.now() - 6 * 24 * 60 * 60_000
+      const recent = await db.select({ id: events.id }).from(events)
+        .where(and(eq(events.workspaceId, ws), eq(events.type, 'briefing.weekly_executive'), gte(events.createdAt, day6)))
+        .limit(1).then(r => r[0]).catch(() => null)
+      if (recent) continue
+      const report = await weeklyOperationalReport(ws).catch(() => null)
+      if (!report) continue
+      await db.insert(events).values({
+        id: uuidv7(), type: 'briefing.weekly_executive', workspaceId: ws,
+        payload: report as unknown as Record<string, unknown>,
+        traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
+        source: 'learning-cron', version: 1, createdAt: Date.now(),
+      }).catch(() => null)
+      generated++
+    }
+    if (generated > 0) await emit('cron.weekly_briefings_generated', { count: generated })
+  } catch (e) { await emit('cron.error', { task: 'weekly_briefings', error: (e as Error).message }) }
 }
 
 async function runStabilityScan() {
@@ -213,6 +240,7 @@ const INTERVALS = {
   dailyReview:  60 * 60_000,   // 1 hour — emits at most one review/24h via idempotency check
   researchToAction: 30 * 60_000, // 30 min — convert recent findings → roadmap tasks
   stabilityScan:    5  * 60_000, // 5 min — emit governance.stability_alert when unstable
+  weeklyBriefing:   60 * 60_000, // 1 hour tick — actually emits once per 6 days via idempotency
 }
 
 export function startLearningCron(): void {
@@ -231,6 +259,7 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runDailyReviews(),     INTERVALS.dailyReview))
   handles.push(setInterval(() => void runResearchToAction(), INTERVALS.researchToAction))
   handles.push(setInterval(() => void runStabilityScan(),    INTERVALS.stabilityScan))
+  handles.push(setInterval(() => void runWeeklyExecutiveBriefings(), INTERVALS.weeklyBriefing))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

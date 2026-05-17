@@ -893,6 +893,60 @@ export const intelligenceApi = {
     api.get<{ success: true; data: CostSummaryDTO }>(`/api/v1/intelligence/executive/cost?workspace_id=${encodeURIComponent(workspaceId)}`),
   executiveMissionProgress: (workspaceId: string) =>
     api.get<{ success: true; data: MissionProgressDTO }>(`/api/v1/intelligence/executive/mission-progress?workspace_id=${encodeURIComponent(workspaceId)}`),
+  divisions: (workspaceId: string) =>
+    api.get<{ success: true; data: { divisions: string[]; snapshot: Record<string, DivisionSnapshotDTO> } }>(
+      `/api/v1/intelligence/divisions?workspace_id=${encodeURIComponent(workspaceId)}`,
+    ),
+  crossDivisionBlockers: (workspaceId: string) =>
+    api.get<{ success: true; data: CrossDivisionBlockerDTO[] }>(
+      `/api/v1/intelligence/divisions-coordination/blockers?workspace_id=${encodeURIComponent(workspaceId)}`,
+    ),
+  companyMissionStatus: (workspaceId: string) =>
+    api.get<{ success: true; data: Array<{ status: string; horizon: string; count: number; avgProgress: number }> }>(
+      `/api/v1/intelligence/company/mission-status?workspace_id=${encodeURIComponent(workspaceId)}`,
+    ),
+  engineeringHealth: (workspaceId: string) =>
+    api.get<{ success: true; data: { facts: Record<string, number>; division: DivisionSnapshotDTO } }>(
+      `/api/v1/intelligence/company/engineering-health?workspace_id=${encodeURIComponent(workspaceId)}`,
+    ),
+  operationalEfficiency: (workspaceId: string) =>
+    api.get<{ success: true; data: { facts: Record<string, number | null>; division: DivisionSnapshotDTO } }>(
+      `/api/v1/intelligence/company/operational-efficiency?workspace_id=${encodeURIComponent(workspaceId)}`,
+    ),
+  growthOpportunity: (workspaceId: string) =>
+    api.get<{ success: true; data: { facts: { highConfidenceResearchFindings: number; featureUseEvents7d: number; distinctFeaturesUsed7d: number; growthKeywordFindings: Array<{ summary: string; sourceUrl: string; confidence: number }> }; division: DivisionSnapshotDTO } }>(
+      `/api/v1/intelligence/company/growth-opportunity?workspace_id=${encodeURIComponent(workspaceId)}`,
+    ),
+}
+
+export interface DivisionSnapshotDTO {
+  division:   string
+  capturedAt: number
+  health:     'thriving' | 'healthy' | 'attention' | 'critical'
+  metrics: {
+    activeAgents:   number
+    activeMissions: number
+    openBlockers:   number
+    eventsLast24h:  number
+  }
+  missions: {
+    active:    Array<{ id: string; title: string; horizon: string; progress: number }>
+    completed: number
+    total:     number
+  }
+  blockers: Array<{ kind: string; title: string; severity?: string; createdAt: number }>
+  recommendations: Array<{ id: string; kind: string; title: string; decision: { score: number; bucket: string } }>
+  recentReports: Array<{ type: string; at: number; summary: string }>
+}
+
+export interface CrossDivisionBlockerDTO {
+  from: string
+  to:   string[]
+  blockerId: string
+  kind:      'incident' | 'audit_cluster' | 'pending_approval' | 'failed_workflow'
+  title:     string
+  severity:  string
+  ageDays:   number
 }
 
 export interface ForecastDTO {
