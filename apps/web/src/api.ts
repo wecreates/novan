@@ -1053,6 +1053,49 @@ export const studioApi = {
     api.get<{ success: true; data: StudioStats }>(`/api/v1/studio/stats?workspace_id=${encodeURIComponent(workspaceId)}`),
 }
 
+// ─── Capability Gap Builder client ──────────────────────────────────────────
+
+export interface CapabilityStatusDTO {
+  id: string; dimension: string; title: string; description: string
+  exists: boolean
+  maturity: 'missing' | 'scaffolded' | 'basic' | 'healthy' | 'mature'
+  evidence: string[]
+  recentEventCount: number
+  buildVsBuy: {
+    score: number
+    verdict: 'build' | 'buy' | 'hybrid' | 'defer'
+    rationale: string
+    notes: string
+  }
+}
+
+export interface BuildPlanDTO {
+  capabilityId: string; capabilityTitle: string; rationale: string
+  buildVsBuy: CapabilityStatusDTO['buildVsBuy']
+  architecture: { services: string[]; routes: string[]; tables: string[]; ui: string[]; workers: string[] }
+  tasks: Array<{ title: string; description: string; phase: string; category: string; impact: number; risk: number; requiresApproval: boolean; assignedAgent?: string }>
+  agentAssignments: Array<{ role: string; agentId: string | null }>
+  rolloutPlan: string[]; rollbackPlan: string[]; approvalsRequired: string[]
+}
+
+export const capabilityApi = {
+  status: (workspaceId: string) =>
+    api.get<{ success: true; data: CapabilityStatusDTO[] }>(`/api/v1/capability/status?workspace_id=${encodeURIComponent(workspaceId)}`),
+  gaps: (workspaceId: string) =>
+    api.get<{ success: true; data: CapabilityStatusDTO[] }>(`/api/v1/capability/gaps?workspace_id=${encodeURIComponent(workspaceId)}`),
+  dimensions: (workspaceId: string) =>
+    api.get<{ success: true; data: Array<{ dimension: string; total: number; missing: number; scaffolded: number; basic: number; healthy: number; mature: number }> }>(
+      `/api/v1/capability/dimensions?workspace_id=${encodeURIComponent(workspaceId)}`),
+  plan: (workspaceId: string, capabilityId: string) =>
+    api.get<{ success: true; data: BuildPlanDTO }>(`/api/v1/capability/plan/${encodeURIComponent(capabilityId)}?workspace_id=${encodeURIComponent(workspaceId)}`),
+  persistPlan: (workspaceId: string, capabilityId: string) =>
+    api.post<{ success: true; data: { plan: BuildPlanDTO; persisted: { created: number; skipped: number } } }>(
+      `/api/v1/capability/plan/${encodeURIComponent(capabilityId)}/persist`, { workspace_id: workspaceId }),
+  planAllGaps: (workspaceId: string) =>
+    api.post<{ success: true; data: { planned: BuildPlanDTO[]; totalTasksCreated: number; skipped: Array<{ capabilityId: string; reason: string }> } }>(
+      `/api/v1/capability/plan-all-gaps`, { workspace_id: workspaceId }),
+}
+
 export interface DivisionSnapshotDTO {
   division:   string
   capturedAt: number
