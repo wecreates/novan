@@ -16,6 +16,12 @@ import { snapshot as continuitySnapshot, findPastFix } from '../services/continu
 import { allTrends, reliabilityTrend, providerQualityTrend, costTrend, incidentTrend, deploymentStabilityTrend, operatorProductivityTrend } from '../services/trend-analysis.js'
 import { rankedMemory, missionMemory, prunableMemory } from '../services/memory-compression.js'
 import { listByCategory, categoryHeatmap, dominantCategories, PRIORITY_CATEGORIES, type PriorityCategory } from '../services/strategic-priorities.js'
+import { generateForecasts }           from '../services/forecasting.js'
+import { tradeoffsForTop, tradeoffForRecommendation, pastOutcomeStats } from '../services/tradeoff-analysis.js'
+import {
+  executiveDailyBriefing, weeklyOperationalReport,
+  reliabilitySummary, securitySummary, costSummary, missionProgressReport,
+} from '../services/executive-briefings.js'
 
 const intelligenceRoutes: FastifyPluginAsync = async (fastify) => {
 
@@ -222,6 +228,70 @@ const intelligenceRoutes: FastifyPluginAsync = async (fastify) => {
     const ws = req.query.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     return { success: true, data: { categories: PRIORITY_CATEGORIES, heatmap: await categoryHeatmap(ws), dominant: await dominantCategories(ws) } }
+  })
+
+  // ─── Executive intelligence ────────────────────────────────────────────────
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/executive/daily', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await executiveDailyBriefing(ws) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/executive/weekly', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await weeklyOperationalReport(ws) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/executive/reliability', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await reliabilitySummary(ws) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/executive/security', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await securitySummary(ws) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/executive/cost', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await costSummary(ws) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/executive/mission-progress', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await missionProgressReport(ws) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/forecasts', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await generateForecasts(ws) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string; limit?: string } }>('/tradeoffs', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const limit = req.query.limit ? Number(req.query.limit) : 5
+    return { success: true, data: await tradeoffsForTop(ws, limit) }
+  })
+
+  fastify.get<{ Params: { id: string }; Querystring: { workspace_id?: string } }>('/tradeoffs/:id', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const t = await tradeoffForRecommendation(ws, req.params.id)
+    if (!t) return reply.code(404).send({ success: false, error: 'recommendation not found' })
+    return { success: true, data: t }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/past-outcome-stats', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await pastOutcomeStats(ws) }
   })
 
   fastify.get<{ Querystring: { workspace_id?: string; limit?: string } }>('/research-roadmap', async (req, reply) => {

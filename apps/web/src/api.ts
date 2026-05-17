@@ -879,6 +879,93 @@ export const intelligenceApi = {
     api.get<{ success: true; data: { categories: string[]; heatmap: Record<string, { total: number; active: number; completed: number; avgProgress: number }>; dominant: string[] } }>(
       `/api/v1/intelligence/priorities/heatmap?workspace_id=${encodeURIComponent(workspaceId)}`,
     ),
+  forecasts: (workspaceId: string) =>
+    api.get<{ success: true; data: AllForecastsDTO }>(`/api/v1/intelligence/forecasts?workspace_id=${encodeURIComponent(workspaceId)}`),
+  tradeoffs: (workspaceId: string, limit = 5) =>
+    api.get<{ success: true; data: TradeoffDTO[] }>(`/api/v1/intelligence/tradeoffs?workspace_id=${encodeURIComponent(workspaceId)}&limit=${limit}`),
+  executiveWeekly: (workspaceId: string) =>
+    api.get<{ success: true; data: WeeklyReportDTO }>(`/api/v1/intelligence/executive/weekly?workspace_id=${encodeURIComponent(workspaceId)}`),
+  executiveReliability: (workspaceId: string) =>
+    api.get<{ success: true; data: ReliabilitySummaryDTO }>(`/api/v1/intelligence/executive/reliability?workspace_id=${encodeURIComponent(workspaceId)}`),
+  executiveSecurity: (workspaceId: string) =>
+    api.get<{ success: true; data: SecuritySummaryDTO }>(`/api/v1/intelligence/executive/security?workspace_id=${encodeURIComponent(workspaceId)}`),
+  executiveCost: (workspaceId: string) =>
+    api.get<{ success: true; data: CostSummaryDTO }>(`/api/v1/intelligence/executive/cost?workspace_id=${encodeURIComponent(workspaceId)}`),
+  executiveMissionProgress: (workspaceId: string) =>
+    api.get<{ success: true; data: MissionProgressDTO }>(`/api/v1/intelligence/executive/mission-progress?workspace_id=${encodeURIComponent(workspaceId)}`),
+}
+
+export interface ForecastDTO {
+  type:         string
+  factType:     'prediction'
+  likelihood:   'low' | 'medium' | 'high' | 'critical' | 'insufficient_data'
+  confidence:   number
+  horizonWeeks: number
+  basis: { historicalSeries: number[]; slopePerWeek: number; projectedValue: number | null; sampleSize: number }
+  evidence:     string
+}
+export interface AllForecastsDTO {
+  forecasts: ForecastDTO[]
+  generatedAt: number
+  summary: { critical: number; high: number; medium: number; low: number; insufficientData: number }
+}
+
+export interface TradeoffDTO {
+  recommendationId: string
+  recommendation:   { id: string; kind: string; title: string; decision: { score: number; bucket: string } }
+  expectedBenefit:  { value: number; unit: string; provenance: string; derivedFrom: string }
+  expectedRisk:     { value: number; unit: string; provenance: string; derivedFrom: string }
+  estimatedCost:    { value: number; unit: string; provenance: string; derivedFrom: string }
+  operationalImpact: 'low' | 'medium' | 'high' | 'critical'
+  implementationComplexity: { value: number; unit: string; provenance: string; derivedFrom: string }
+  rollbackDifficulty:       { value: number; unit: string; provenance: string; derivedFrom: string }
+  netScore:         number
+}
+
+export interface WeeklyReportDTO {
+  workspaceId: string; composedAt: number; windowStart: number; windowEnd: number
+  facts: {
+    week:      Record<string, number>
+    priorWeek: Record<string, number>
+    deltas:    Record<string, number>
+  }
+  predictions: { forecasts: ForecastDTO[] }
+}
+
+export interface ReliabilitySummaryDTO {
+  facts: {
+    openIncidents: number; openCriticalIncidents: number
+    failedWorkflows24h: number; rollbacks24h: number
+  }
+  predictions: { runtimeBottleneck: ForecastDTO | null; deploymentInstability: ForecastDTO | null }
+}
+
+export interface SecuritySummaryDTO {
+  facts: {
+    securityAuditFindings: number; criticalSecurityFindings: number
+    governanceBlocks7d:    number; patchesBlocked7d:         number
+  }
+  predictions: { securityRiskGrowing: ForecastDTO | null }
+}
+
+export interface CostSummaryDTO {
+  facts: {
+    dailyBudget:   { limitUsd: number; spentUsd: number; pctUsed: number } | null
+    monthlyBudget: { limitUsd: number; spentUsd: number; pctUsed: number } | null
+    imageSpend24h: { spendUsd: number; count: number }
+    imageSpend7d:  { spendUsd: number; count: number }
+  }
+  predictions: { budgetOverrun: ForecastDTO | null }
+}
+
+export interface MissionProgressDTO {
+  facts: {
+    counts: { active: number; completed: number; paused: number }
+    activeMissions: Array<{ id: string; title: string; horizon: string; progress: number; targetDate: number | null }>
+    atRisk: Array<{ id: string; title: string; progress: number; daysUntilTarget: number | null }>
+    unresolvedRisks:      Array<{ source: string; id: string; title: string; severity: string; ageDays: number }>
+    recurringBottlenecks: Array<{ signature: string; type: string; occurrences: number }>
+  }
 }
 
 export interface ContinuitySnapshotDTO {

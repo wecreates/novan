@@ -8,6 +8,7 @@ import {
 import WarRoom                  from './pages/WarRoom.js'
 import StrategicHomePage        from './pages/StrategicHomePage.js'
 import MissionIntelligencePage  from './pages/MissionIntelligencePage.js'
+import ExecutiveWarRoomPage     from './pages/ExecutiveWarRoomPage.js'
 import Timeline                 from './pages/Timeline.js'
 import Settings                 from './pages/Settings.js'
 import GoalsPage                from './pages/GoalsPage.js'
@@ -59,6 +60,7 @@ import { WorkspaceSwitcher } from './components/WorkspaceSwitcher.js'
 const NAV_ITEMS = [
   { to: '/strategic-home', icon: Rocket,       label: 'Strategic Home' },
   { to: '/mission-intelligence', icon: Brain,  label: 'Mission Intelligence' },
+  { to: '/executive-war-room',   icon: TrendingUp, label: 'Executive War Room' },
   { to: '/war-room',    icon: Activity,        label: 'War Room' },
   { to: '/timeline',    icon: Clock,           label: 'Timeline' },
   { to: '/goals',       icon: Target,          label: 'Goals' },
@@ -134,6 +136,7 @@ export default function App() {
           <Route path="/"            element={<Navigate to="/strategic-home" replace />} />
           <Route path="/strategic-home" element={<StrategicHomePage />} />
           <Route path="/mission-intelligence" element={<MissionIntelligencePage />} />
+          <Route path="/executive-war-room"   element={<ExecutiveWarRoomPage />} />
           <Route path="/war-room"    element={<WarRoom />} />
           <Route path="/timeline"    element={<Timeline />} />
           <Route path="/goals"       element={<GoalsPage />} />
