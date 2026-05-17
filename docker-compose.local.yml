@@ -31,6 +31,7 @@ services:
 
       # Read from gitignored .env at repo root (Docker Compose auto-loads .env)
       GEMINI_API_KEY:   ${GEMINI_API_KEY:-}
+      GROQ_API_KEY:     ${GROQ_API_KEY:-}
 
       CORS_ORIGINS:     "http://localhost:5173,http://localhost:3000"
       PROVIDER_ROUTER_ENABLED: "true"

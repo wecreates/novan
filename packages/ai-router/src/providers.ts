@@ -12,14 +12,14 @@ export const PROVIDERS: ProviderConfig[] = [
     rateLimit: { rpm: 30, tpm: 14_400 },
     models: [
       {
-        provider: 'groq', modelId: 'llama3-70b-8192', displayName: 'Llama3 70B',
-        contextWindow: 8192, promptPer1k: 0.00059, outputPer1k: 0.00079,
-        supportsVision: false, supportsStream: true, maxOutputTokens: 8192,
-        taskAffinities: ['fast_chat', 'summarize', 'classify', 'extract'],
+        provider: 'groq', modelId: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B',
+        contextWindow: 128_000, promptPer1k: 0.00059, outputPer1k: 0.00079,
+        supportsVision: false, supportsStream: true, maxOutputTokens: 32_768,
+        taskAffinities: ['fast_chat', 'summarize', 'classify', 'extract', 'reasoning'],
       },
       {
-        provider: 'groq', modelId: 'llama3-8b-8192', displayName: 'Llama3 8B',
-        contextWindow: 8192, promptPer1k: 0.00005, outputPer1k: 0.00008,
+        provider: 'groq', modelId: 'llama-3.1-8b-instant', displayName: 'Llama 3.1 8B',
+        contextWindow: 128_000, promptPer1k: 0.00005, outputPer1k: 0.00008,
         supportsVision: false, supportsStream: true, maxOutputTokens: 8192,
         taskAffinities: ['fast_chat', 'classify'],
       },

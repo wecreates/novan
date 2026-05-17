@@ -41,22 +41,22 @@ const sql = postgres(DATABASE_URL, { ssl: 'require' })
 console.log('🧠  Brain plan — gathering platform state…\n')
 
 const [audit, failures, fixes, incidents, knowledge, feeds] = await Promise.all([
-  sql`SELECT category, severity, description, file_path FROM audit_findings
+  sql`SELECT category, severity, substr(description, 1, 120) as description, file_path FROM audit_findings
       WHERE workspace_id = ${WORKSPACE}
-      ORDER BY severity DESC, created_at DESC LIMIT 30`,
-  sql`SELECT failure_type, signature, occurrence_count, last_seen_at FROM failure_memory
+      ORDER BY severity DESC, created_at DESC LIMIT 12`,
+  sql`SELECT failure_type, substr(signature, 1, 100) as signature, occurrence_count FROM failure_memory
       WHERE workspace_id = ${WORKSPACE}
-      ORDER BY last_seen_at DESC LIMIT 15`,
-  sql`SELECT failure_signature, fix_description, success_count FROM successful_fixes
+      ORDER BY last_seen_at DESC LIMIT 8`,
+  sql`SELECT substr(failure_signature, 1, 80) as failure_signature, substr(fix_description, 1, 120) as fix_description, success_count FROM successful_fixes
       WHERE workspace_id = ${WORKSPACE}
-      ORDER BY last_applied_at DESC LIMIT 10`,
+      ORDER BY last_applied_at DESC LIMIT 5`,
   sql`SELECT severity, title, status FROM incidents
       WHERE workspace_id = ${WORKSPACE} AND status != 'resolved'
-      ORDER BY detected_at DESC LIMIT 10`,
-  sql`SELECT url, title, fetched_at FROM external_knowledge
+      ORDER BY detected_at DESC LIMIT 5`,
+  sql`SELECT substr(url, 1, 80) as url, substr(title, 1, 100) as title FROM external_knowledge
       WHERE workspace_id = ${WORKSPACE}
-      ORDER BY fetched_at DESC LIMIT 15`,
-  sql`SELECT name, feed_url, enabled, items_ingested, last_polled_at FROM external_feeds
+      ORDER BY fetched_at DESC LIMIT 8`,
+  sql`SELECT name, enabled, items_ingested FROM external_feeds
       WHERE workspace_id = ${WORKSPACE}`,
 ])
 
@@ -72,8 +72,8 @@ const state = {
   failure_memory: failures,
   successful_fixes: fixes,
   open_incidents: incidents,
-  recent_knowledge: knowledge.map(k => ({ url: k.url, title: k.title })),
-  feeds: feeds.map(f => ({ name: f.name, enabled: f.enabled, ingested: f.items_ingested })),
+  recent_knowledge: knowledge.map(k => k.title || k.url),
+  feeds: feeds.map(f => `${f.name}(${f.enabled?'on':'off'},${f.items_ingested})`),
 }
 
 // ─── Compose prompt ──────────────────────────────────────────────────────────
@@ -91,37 +91,49 @@ Based on this state, propose the next 3 concrete patches to ship. For each:
 
 Return strict JSON: { "patches": [{ "what": "...", "why": "...", "risk": "...", "files": [...], "validation": "..." }, ...] }`
 
+console.log(`  • prompt size: ${prompt.length} chars\n`)
+
 // ─── Call AI router ──────────────────────────────────────────────────────────
 let plan = null
 let planError = null
 
-try {
-  const res = await fetch(`${API_URL}/api/v1/ai-router/chat`, {
-    method:  'POST',
-    headers: { 'content-type': 'application/json' },
-    body:    JSON.stringify({
-      workspace_id: WORKSPACE,
-      task_type: 'reasoning',
-      messages: [{ role: 'user', content: prompt }],
-      model: 'gemini-2.5-pro',
-    }),
-    signal: AbortSignal.timeout(60_000),
-  })
+// Call Groq directly — free-tier router routes everything to 70B which
+// exceeds 12k TPM. Going direct lets us pick 8B-instant (much higher TPM).
+const GROQ_KEY = process.env.GROQ_API_KEY
+if (!GROQ_KEY) {
+  planError = 'GROQ_API_KEY not set in environment.'
+} else {
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method:  'POST',
+      headers: {
+        'content-type':  'application/json',
+        'authorization': `Bearer ${GROQ_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.2,
+        max_tokens: 2048,
+      }),
+      signal: AbortSignal.timeout(60_000),
+    })
 
-  const body = await res.json().catch(() => ({}))
+    const body = await res.json().catch(() => ({}))
+    const bodyStr = JSON.stringify(body)
 
-  const bodyStr = JSON.stringify(body)
-  if (res.status === 429 || /\b429\b|credit|quota|rate.limit/i.test(bodyStr)) {
-    planError = 'Gemini account has no credits/quota. Add billing at https://ai.studio/projects to enable planning.'
-  } else if (!res.ok) {
-    planError = `AI router returned ${res.status}: ${JSON.stringify(body).slice(0, 200)}`
-  } else {
-    const content = body?.data?.content || body?.content || ''
-    const m = content.match(/\{[\s\S]*"patches"[\s\S]*\}/)
-    plan = m ? JSON.parse(m[0]) : { raw: content }
+    if (res.status === 429) {
+      planError = `Groq rate limited: ${bodyStr.slice(0, 300)}`
+    } else if (!res.ok) {
+      planError = `Groq returned ${res.status}: ${bodyStr.slice(0, 400)}`
+    } else {
+      const content = body?.choices?.[0]?.message?.content || ''
+      const m = content.match(/\{[\s\S]*"patches"[\s\S]*\}/)
+      plan = m ? JSON.parse(m[0]) : { raw: content }
+    }
+  } catch (e) {
+    planError = `Could not reach Groq: ${e.message}`
   }
-} catch (e) {
-  planError = `Could not reach AI router at ${API_URL}: ${e.message}`
 }
 
 // ─── Persist + display ───────────────────────────────────────────────────────

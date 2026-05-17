@@ -13,7 +13,7 @@ const TASK_PREFERENCE: Record<TaskType, Array<{ provider: ProviderId; modelId: s
     { provider: 'openai',        modelId: 'text-embedding-3-small' },
   ],
   fast_chat: [
-    { provider: 'groq',        modelId: 'llama3-70b-8192' },
+    { provider: 'groq',        modelId: 'llama-3.3-70b-versatile' },
     { provider: 'openrouter',  modelId: 'google/gemini-flash-1.5' },
     { provider: 'gemini',      modelId: 'gemini-2.5-flash' },
     { provider: 'openai',      modelId: 'gpt-4o-mini' },
@@ -26,14 +26,14 @@ const TASK_PREFERENCE: Record<TaskType, Array<{ provider: ProviderId; modelId: s
     { provider: 'openai',        modelId: 'gpt-4o' },
     { provider: 'gemini',        modelId: 'gemini-2.5-pro' },
     { provider: 'ollama_remote', modelId: 'llama3:70b' },
-    { provider: 'groq',          modelId: 'llama3-70b-8192' },
+    { provider: 'groq',          modelId: 'llama-3.3-70b-versatile' },
   ],
   code: [
     { provider: 'anthropic',     modelId: 'claude-3-5-sonnet-20241022' },
     { provider: 'openai',        modelId: 'gpt-4o' },
     { provider: 'ollama_remote', modelId: 'llama3:70b' },
     { provider: 'openai',        modelId: 'gpt-4o-mini' },
-    { provider: 'groq',          modelId: 'llama3-70b-8192' },
+    { provider: 'groq',          modelId: 'llama-3.3-70b-versatile' },
   ],
   vision: [
     { provider: 'openai',       modelId: 'gpt-4o' },
@@ -42,7 +42,7 @@ const TASK_PREFERENCE: Record<TaskType, Array<{ provider: ProviderId; modelId: s
     { provider: 'openrouter',   modelId: 'google/gemini-flash-1.5' },
   ],
   summarize: [
-    { provider: 'groq',        modelId: 'llama3-70b-8192' },
+    { provider: 'groq',        modelId: 'llama-3.3-70b-versatile' },
     { provider: 'gemini',      modelId: 'gemini-2.5-flash' },
     { provider: 'anthropic',   modelId: 'claude-3-haiku-20240307' },
     { provider: 'openai',      modelId: 'gpt-4o-mini' },
@@ -50,13 +50,13 @@ const TASK_PREFERENCE: Record<TaskType, Array<{ provider: ProviderId; modelId: s
     { provider: 'ollama_local',  modelId: 'llama3' },
   ],
   classify: [
-    { provider: 'groq',        modelId: 'llama3-8b-8192' },
+    { provider: 'groq',        modelId: 'llama-3.1-8b-instant' },
     { provider: 'openrouter',  modelId: 'mistralai/mistral-7b-instruct' },
     { provider: 'openai',      modelId: 'gpt-4o-mini' },
     { provider: 'ollama_local', modelId: 'llama3' },
   ],
   extract: [
-    { provider: 'groq',        modelId: 'llama3-70b-8192' },
+    { provider: 'groq',        modelId: 'llama-3.3-70b-versatile' },
     { provider: 'openai',      modelId: 'gpt-4o-mini' },
     { provider: 'anthropic',   modelId: 'claude-3-haiku-20240307' },
     { provider: 'ollama_remote', modelId: 'llama3' },
