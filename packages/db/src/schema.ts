@@ -381,9 +381,14 @@ export const aiUsage = pgTable('ai_usage', {
   cached:       boolean('cached').notNull().default(false),
   taskType:     text('task_type').notNull(),
   timestamp:    bigint('timestamp', { mode: 'number' }).notNull(),
+  // Attribution (nullable; callers may populate for FACT-level per-trace/per-workflow cost rollups)
+  traceId:       text('trace_id'),
+  workflowRunId: text('workflow_run_id'),
 }, (t) => [
   index('ai_usage_workspace_idx').on(t.workspaceId),
   index('ai_usage_timestamp_idx').on(t.timestamp),
+  index('ai_usage_trace_idx').on(t.traceId),
+  index('ai_usage_workflow_idx').on(t.workflowRunId),
 ])
 
 // ─── Dead-letter jobs ─────────────────────────────────────────────────────────
@@ -1278,6 +1283,7 @@ export const executionLeases = pgTable('execution_leases', {
   timeoutMs:   integer('timeout_ms').notNull().default(300_000),
   costUsd:     real('cost_usd').notNull().default(0),
   metadata:    jsonb('metadata').notNull().default({}),
+  workflowRunId: text('workflow_run_id'),     // attribution (nullable)
   createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
   updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
 }, (t) => [
@@ -1285,6 +1291,7 @@ export const executionLeases = pgTable('execution_leases', {
   index('el_worker_idx').on(t.workerId),
   index('el_job_idx').on(t.jobId),
   index('el_status_idx').on(t.status),
+  index('el_workflow_idx').on(t.workflowRunId),
   index('el_expires_idx').on(t.expiresAt),
 ])
 
@@ -2255,6 +2262,9 @@ export const imageGenerations = pgTable('image_generations', {
   createdBy:         text('created_by'),
   createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
   completedAt:       bigint('completed_at', { mode: 'number' }),
+  // Attribution (nullable; callers populate for per-workflow/per-trace cost rollups)
+  traceId:           text('trace_id'),
+  workflowRunId:     text('workflow_run_id'),
 }, (t) => [
   index('ig_workspace_idx').on(t.workspaceId),
   index('ig_status_idx').on(t.status),
@@ -2262,6 +2272,8 @@ export const imageGenerations = pgTable('image_generations', {
   index('ig_created_idx').on(t.createdAt),
   index('ig_favorite_idx').on(t.isFavorite),
   index('ig_batch_idx').on(t.batchId),
+  index('ig_trace_idx').on(t.traceId),
+  index('ig_workflow_idx').on(t.workflowRunId),
 ])
 
 /** Reusable prompt templates. */

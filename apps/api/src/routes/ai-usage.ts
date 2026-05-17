@@ -25,6 +25,8 @@ const RecordBody = z.object({
   latencyMs:    z.number().int().min(0),
   cached:       z.boolean().optional().default(false),
   taskType:     z.string().min(1),
+  traceId:        z.string().optional(),
+  workflowRunId:  z.string().optional(),
 })
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -49,6 +51,8 @@ export const aiUsageRoutes: FastifyPluginAsync = async (app) => {
       cached:       body.cached,
       taskType:     body.taskType,
       timestamp:    Date.now(),
+      traceId:        body.traceId       ?? null,
+      workflowRunId:  body.workflowRunId ?? null,
     })
 
     return reply.code(201).send({ success: true, data: { id } })

@@ -35,6 +35,7 @@ import { runCompression }                      from './knowledge-compression.js'
 import { extractPatterns }                     from './pattern-extractor.js'
 import { scanDrift }                           from './drift-detector.js'
 import { applyCorrections }                    from './reality-correction.js'
+import { evaluateEconomicOutcomes, generateEconomicRecommendations } from './economic-intelligence.js'
 import { sweepStale }                          from './assumption-tracker.js'
 import { stabilitySnapshot, emitGovernance, autoEngageThrottle, pauseUnstableAgents, autoDisengageThrottleIfStable } from './governance-core.js'
 import { crossDivisionBlockers, type CrossDivisionBlocker } from './divisions.js'
@@ -184,6 +185,22 @@ async function runRealityVerification() {
       await emit('cron.reality_verification', { newWarnings: totalWarnings, correctionsApplied: totalCorrections })
     }
   } catch (e) { await emit('cron.error', { task: 'reality_verification', error: (e as Error).message }) }
+}
+
+async function runEconomicLearning() {
+  try {
+    const ids = await listWorkspaceIds()
+    let totalEvaluated = 0, totalMatched = 0, totalRecs = 0
+    for (const ws of ids) {
+      const evald = await evaluateEconomicOutcomes(ws).catch(() => null)
+      if (evald) { totalEvaluated += evald.evaluated; totalMatched += evald.matched }
+      const rec   = await generateEconomicRecommendations(ws).catch(() => null)
+      if (rec)   totalRecs += rec.chainsRecorded
+    }
+    if (totalEvaluated + totalRecs > 0) {
+      await emit('cron.economic_learning', { evaluated: totalEvaluated, matched: totalMatched, recsRecorded: totalRecs })
+    }
+  } catch (e) { await emit('cron.error', { task: 'economic_learning', error: (e as Error).message }) }
 }
 
 async function runDailyCompressionAndPatterns() {
@@ -337,6 +354,7 @@ const INTERVALS = {
   execSixHourly:    6  * 60 * 60_000, // 6 hours — executive ops optimization review
   dailyCompression: 24 * 60 * 60_000, // 24 hours — knowledge compression + pattern extraction
   realityVerify:    60 * 60_000,      // 1 hour — drift scan + safe corrections + assumption staleness
+  economicLearning: 6  * 60 * 60_000, // 6 hours — evaluate past predictions + regenerate recommendations
 }
 
 export function startLearningCron(): void {
@@ -361,6 +379,7 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runExecutiveSixHourly(),       INTERVALS.execSixHourly))
   handles.push(setInterval(() => void runDailyCompressionAndPatterns(), INTERVALS.dailyCompression))
   handles.push(setInterval(() => void runRealityVerification(),         INTERVALS.realityVerify))
+  handles.push(setInterval(() => void runEconomicLearning(),            INTERVALS.economicLearning))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

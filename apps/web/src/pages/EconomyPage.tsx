@@ -50,6 +50,11 @@ interface WarRoom {
     likelihood: 'low' | 'medium' | 'high' | 'insufficient_data'
     evidence: string; confidence: number
   }
+  multiSourceForecast: {
+    ai:        { source: string; likelihood: string; projectedNextWeekUsd: number | null; evidence: string }
+    imageGen:  { source: string; likelihood: string; projectedNextWeekUsd: number | null; evidence: string }
+    agentExec: { source: string; likelihood: string; projectedNextWeekUsd: number | null; evidence: string }
+  }
   wasteAlerts: Array<{ provider: string; spendUsd: number; failureRate: number; wastedUsdEstimate: Estimate }>
 }
 
@@ -187,6 +192,23 @@ export default function EconomyPage() {
               series: [{w.forecast.dailySpendSeries.map(v => v.toFixed(3)).join(', ')}]
             </div>
           )}
+          <div className="px-5 pb-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            {(['ai', 'imageGen', 'agentExec'] as const).map(k => {
+              const f = w.multiSourceForecast[k]
+              return (
+                <div key={k} className="rounded border border-[var(--border)] p-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[var(--text-muted)]">{f.source}</span>
+                    <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] border ${LIKE[f.likelihood] ?? LIKE.insufficient_data}`}>{f.likelihood}</span>
+                  </div>
+                  <div className="mt-1 font-mono">
+                    {f.projectedNextWeekUsd !== null ? `~$${f.projectedNextWeekUsd.toFixed(2)}/wk` : '—'}
+                  </div>
+                  <div className="text-[10px] text-[var(--text-muted)] mt-0.5 truncate" title={f.evidence}>{f.evidence}</div>
+                </div>
+              )
+            })}
+          </div>
         </Section>
       )}
 

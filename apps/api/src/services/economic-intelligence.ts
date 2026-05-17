@@ -21,8 +21,9 @@ import {
   aiUsage, imageGenerations, endpointUsageLogs, providerBudgets,
   workflowRuns, reasoningChains, executionLeases, providerFailures,
 } from '../db/schema.js'
-import { and, eq, gte, sql, desc, lt } from 'drizzle-orm'
+import { and, eq, gte, sql, desc, lt, isNotNull } from 'drizzle-orm'
 import { record as recordChain }      from './reasoning-chains.js'
+import { notify }                     from './notifications.js'
 
 type Fact     = { factType: 'fact';     value: number; source: string }
 type Estimate = { factType: 'estimate'; value: number; basis: string; confidence: number }
@@ -191,27 +192,53 @@ export async function roiAnalysis(workspaceId: string, windowDays = 30): Promise
     wfMap.set(r.workflowId, entry)
   }
 
-  // Total AI spend in window, distributed proportionally by run count.
-  // HONEST: we cannot per-workflow-attribute without traceId join, so
-  // ai-spend is an Estimate, not a Fact.
+  // Per-workflow AI spend via direct FK join (FACT when populated).
+  // Falls back to proportional estimate for the residual unattributed pool.
+  const attributed = await db.select({
+    workflowId: workflowRuns.workflowId,
+    spend:      sql<number>`coalesce(sum(${aiUsage.costUsd}), 0)::float`,
+  })
+    .from(aiUsage)
+    .innerJoin(workflowRuns, eq(workflowRuns.id, aiUsage.workflowRunId))
+    .where(and(
+      eq(aiUsage.workspaceId, workspaceId),
+      gte(aiUsage.timestamp, since),
+      isNotNull(aiUsage.workflowRunId),
+    ))
+    .groupBy(workflowRuns.workflowId).catch(() => [])
+  const attMap = new Map(attributed.map(a => [a.workflowId, Number(a.spend)]))
+
   const totalAi = await db.select({ s: sql<number>`coalesce(sum(${aiUsage.costUsd}), 0)::float` })
     .from(aiUsage).where(and(eq(aiUsage.workspaceId, workspaceId), gte(aiUsage.timestamp, since)))
     .then(r => Number(r[0]?.s ?? 0)).catch(() => 0)
+  const attributedTotal = attributed.reduce((s, r) => s + Number(r.spend), 0)
+  const unattributed    = Math.max(0, totalAi - attributedTotal)
 
   const totalRuns = Array.from(wfMap.values()).reduce((s, w) => s + w.runs, 0)
 
   const workflows = Array.from(wfMap.entries()).map(([workflowId, w]) => {
+    const factSpend = attMap.get(workflowId)
     const share = totalRuns > 0 ? w.runs / totalRuns : 0
+    const estSpend = unattributed * share
     return {
       workflowId,
       runs: w.runs, successes: w.successes,
       successRate: w.runs > 0 ? Number((w.successes / w.runs).toFixed(3)) : 0,
-      aiSpendUsd: {
-        factType: 'estimate' as const,
-        value: Number((totalAi * share).toFixed(4)),
-        basis: 'proportional-by-runs (no per-run traceId join)',
-        confidence: 0.3,
-      },
+      aiSpendUsd: factSpend !== undefined && factSpend > 0
+        ? {
+          factType: 'estimate' as const,   // structurally still "estimate" wrapper, but value below is fact-grade
+          value: Number((factSpend + estSpend).toFixed(4)),
+          basis: estSpend > 0
+            ? `fact: $${factSpend.toFixed(4)} via workflow_run_id join; +est $${estSpend.toFixed(4)} proportional share of unattributed`
+            : `fact: $${factSpend.toFixed(4)} via workflow_run_id join`,
+          confidence: estSpend > 0 ? 0.75 : 0.95,
+        }
+        : {
+          factType: 'estimate' as const,
+          value: Number(estSpend.toFixed(4)),
+          basis: 'proportional-by-runs (no workflow_run_id on usage rows)',
+          confidence: 0.3,
+        },
       factType: 'fact' as const,
     }
   }).sort((a, b) => b.runs - a.runs)
@@ -403,41 +430,72 @@ export interface EfficiencyForecast {
   confidence: number
 }
 
-export async function efficiencyForecast(workspaceId: string, windowDays = 14): Promise<EfficiencyForecast> {
+type DailyQuery = (start: number, end: number) => Promise<number>
+
+async function _forecastFromSeries(
+  source: string, windowDays: number, query: DailyQuery,
+): Promise<EfficiencyForecast & { source: string }> {
   const series: number[] = []
   for (let i = windowDays - 1; i >= 0; i--) {
     const dayEnd   = Date.now() - i * 24 * 60 * 60_000
     const dayStart = dayEnd - 24 * 60 * 60_000
-    const row = await db.select({ s: sql<number>`coalesce(sum(${aiUsage.costUsd}), 0)::float` })
-      .from(aiUsage)
-      .where(and(eq(aiUsage.workspaceId, workspaceId), gte(aiUsage.timestamp, dayStart), lt(aiUsage.timestamp, dayEnd)))
-      .then(r => Number(r[0]?.s ?? 0)).catch(() => 0)
-    series.push(Number(row.toFixed(4)))
+    series.push(Number((await query(dayStart, dayEnd)).toFixed(4)))
   }
   const nonZero = series.filter(v => v > 0).length
   const fit = linearFit(series)
   if (nonZero < 3 || fit.r2 < 0.3) {
     return {
-      windowDays, dailySpendSeries: series, factType: 'prediction',
+      source, windowDays, dailySpendSeries: series, factType: 'prediction',
       slopePerDayUsd: Number(fit.slope.toFixed(4)),
       projectedNextWeekUsd: null, likelihood: 'insufficient_data',
       evidence: `${nonZero} non-zero days, r²=${fit.r2} (need ≥3 days and r²≥0.3)`,
       confidence: fit.r2,
     }
   }
-  const projected = (fit.intercept + fit.slope * (fit.n - 1 + 7))
+  const projected = fit.intercept + fit.slope * (fit.n - 1 + 7)
   const projectedNextWeekUsd = Math.max(0, Number((projected * 7).toFixed(2)))
   const last = series[series.length - 1] ?? 0
   const ratio = last > 0 ? projected / last : 0
   const likelihood = ratio >= 2 ? 'high' : ratio >= 1.3 ? 'medium' : 'low'
   return {
-    windowDays, dailySpendSeries: series, factType: 'prediction',
+    source, windowDays, dailySpendSeries: series, factType: 'prediction',
     slopePerDayUsd: Number(fit.slope.toFixed(4)),
     projectedNextWeekUsd,
     likelihood,
     evidence: `slope=$${fit.slope.toFixed(4)}/day, r²=${fit.r2}, projected $${projectedNextWeekUsd}/wk vs last day $${last.toFixed(2)}`,
     confidence: fit.r2,
   }
+}
+
+export async function efficiencyForecast(workspaceId: string, windowDays = 14): Promise<EfficiencyForecast> {
+  const { source: _s, ...rest } = await _forecastFromSeries('ai_usage', windowDays, async (start, end) =>
+    db.select({ s: sql<number>`coalesce(sum(${aiUsage.costUsd}), 0)::float` })
+      .from(aiUsage)
+      .where(and(eq(aiUsage.workspaceId, workspaceId), gte(aiUsage.timestamp, start), lt(aiUsage.timestamp, end)))
+      .then(r => Number(r[0]?.s ?? 0)).catch(() => 0))
+  return rest
+}
+
+/** Forecast per-source: ai_usage, image_generations, execution_leases */
+export async function multiSourceForecast(workspaceId: string, windowDays = 14) {
+  const [ai, ig, el] = await Promise.all([
+    _forecastFromSeries('ai_usage', windowDays, async (start, end) =>
+      db.select({ s: sql<number>`coalesce(sum(${aiUsage.costUsd}), 0)::float` })
+        .from(aiUsage)
+        .where(and(eq(aiUsage.workspaceId, workspaceId), gte(aiUsage.timestamp, start), lt(aiUsage.timestamp, end)))
+        .then(r => Number(r[0]?.s ?? 0)).catch(() => 0)),
+    _forecastFromSeries('image_generations', windowDays, async (start, end) =>
+      db.select({ s: sql<number>`coalesce(sum(${imageGenerations.actualCostUsd}), 0)::float` })
+        .from(imageGenerations)
+        .where(and(eq(imageGenerations.workspaceId, workspaceId), gte(imageGenerations.createdAt, start), lt(imageGenerations.createdAt, end)))
+        .then(r => Number(r[0]?.s ?? 0)).catch(() => 0)),
+    _forecastFromSeries('execution_leases', windowDays, async (start, end) =>
+      db.select({ s: sql<number>`coalesce(sum(${executionLeases.costUsd}), 0)::float` })
+        .from(executionLeases)
+        .where(and(eq(executionLeases.workspaceId, workspaceId), gte(executionLeases.createdAt, start), lt(executionLeases.createdAt, end)))
+        .then(r => Number(r[0]?.s ?? 0)).catch(() => 0)),
+  ])
+  return { ai, imageGen: ig, agentExec: el }
 }
 
 // ── 5. Strategic Economic Recommendations (writes to reasoning_chains) ───
@@ -488,6 +546,18 @@ export async function generateEconomicRecommendations(workspaceId: string): Prom
       },
       source: 'economic-intelligence',
     }).then(() => chainsRecorded++).catch(() => null)
+
+    // Push alert on high-likelihood spike (deduped by signature)
+    if (forecast.likelihood === 'high') {
+      await notify({
+        workspaceId,
+        type: 'economic.spend_spike_predicted',
+        title: `Spend spike predicted: ~$${forecast.projectedNextWeekUsd}/wk`,
+        body: `Linear extrapolation of last ${forecast.windowDays}d daily spend projects a HIGH-likelihood spike. ${forecast.evidence}`,
+        severity: 'high',
+        signature: `econ:spend_forecast:high:${Math.round(forecast.projectedNextWeekUsd / 5)}`,  // bucket by $5 to dedupe
+      }).catch(() => null)
+    }
   }
   return { suggestions, forecast, chainsRecorded }
 }
@@ -495,11 +565,12 @@ export async function generateEconomicRecommendations(workspaceId: string): Prom
 // ── 6. War Room snapshot ──────────────────────────────────────────────────
 
 export async function warRoomSnapshot(workspaceId: string) {
-  const [state, roi, alloc, forecast] = await Promise.all([
+  const [state, roi, alloc, forecast, multi] = await Promise.all([
     economicState(workspaceId, 7),
     roiAnalysis(workspaceId, 30),
     allocationSuggestions(workspaceId, 7),
     efficiencyForecast(workspaceId, 14),
+    multiSourceForecast(workspaceId, 14),
   ])
   // Waste alerts: high-spend providers with high failure rate
   const wasteAlerts = state.byProvider
@@ -512,7 +583,7 @@ export async function warRoomSnapshot(workspaceId: string) {
     }))
   return {
     generatedAt: Date.now(),
-    state, roi, allocationSuggestions: alloc, forecast, wasteAlerts,
+    state, roi, allocationSuggestions: alloc, forecast, multiSourceForecast: multi, wasteAlerts,
   }
 }
 
