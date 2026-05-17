@@ -36,11 +36,28 @@ export interface Explanation {
     pastPatchHistory:    Array<{ type: string; count: number; latestAt: number | null }>
     researchReferences:  Array<{ summary: string; sourceUrl: string; confidence: number }>
   }
-  confidence:          number
+  /**
+   * Composite score 0..1 = impact × confidence. Note: the confidence
+   * input comes from the recommendation source (often model-reported,
+   * not independently verified). See `confidenceProvenance` for source.
+   */
+  score:               number
+  confidenceProvenance: 'model_reported' | 'heuristic' | 'verified'
   estimatedImpact:     'low' | 'medium' | 'high' | 'critical'
   risks:               string[]
-  rollbackAvailable:   boolean
+  /**
+   * True only if a rollback has actually been performed before on this
+   * workspace (proves the path works end-to-end). The rollback engine
+   * itself is always available — see `rollbackEngineAvailable`.
+   */
+  rollbackProven:      boolean
+  rollbackEngineAvailable: boolean
+  /**
+   * Heuristic per-kind template, NOT a model prediction. Operators
+   * should treat as a decision aid, not a forecast.
+   */
   whatHappensIfIgnored: string
+  interpretationType:  'template' | 'model'
 }
 
 const WEEK = 7 * 24 * 60 * 60_000
@@ -138,8 +155,11 @@ async function assembleExplanation(workspaceId: string, rec: Recommendation): Pr
   if (rec.kind === 'growth_opportunity')   risks.push('competitive / market window may close')
   if (rec.decision.score < 0.5)       risks.push('low confidence — verify evidence before acting')
 
-  // Rollback availability — true if there is any patch.rolled_back event in history (proves rollback path works)
-  const rollbackAvailable = patchHist.some(p => p.type === 'patch.rolled_back' || p.type === 'patch.applied')
+  // rollbackProven = rollback path has actually been exercised before
+  // (we look for rolled_back events specifically). The engine itself is
+  // always available; we surface that separately.
+  const rollbackProven = patchHist.some(p => p.type === 'patch.rolled_back')
+  const rollbackEngineAvailable = true  // patch-executor.rollbackPatches always exists
 
   // If-ignored prediction (heuristic, evidence-based)
   let ifIgnored: string
@@ -191,11 +211,16 @@ async function assembleExplanation(workspaceId: string, rec: Recommendation): Pr
         confidence: Number(r.confidence ?? 0),
       })),
     },
-    confidence:          rec.decision.score,
-    estimatedImpact:     rec.estimatedImpact,
+    score:                rec.decision.score,
+    // Research findings come from Groq's self-reported confidence;
+    // approvals/incidents are heuristic; nothing is verified yet.
+    confidenceProvenance: rec.kind === 'growth_opportunity' ? 'model_reported' : 'heuristic',
+    estimatedImpact:      rec.estimatedImpact,
     risks,
-    rollbackAvailable,
+    rollbackProven,
+    rollbackEngineAvailable,
     whatHappensIfIgnored: ifIgnored,
+    interpretationType:   'template',
   }
 }
 
@@ -233,12 +258,42 @@ export async function confidenceSurfaces(workspaceId: string) {
   ])
   // Approval-rate confidence: higher when more approved vs rejected
   const decided = Number(approvals.approved) + Number(approvals.rejected)
-  const approvalConfidence = decided > 0 ? Number(approvals.approved) / decided : null
+  const approvalRate = decided > 0 ? Number(approvals.approved) / decided : null
 
+  // Structured as three explicit groups with their own scales — operators
+  // should NOT compare numbers across groups (research is 0..1, roadmap
+  // priority is roughly 0..100, fixes are raw counts).
   return {
-    research:  { avgConfidence: Number(Number(research.avg ?? 0).toFixed(2)), sampleSize: Number(research.n) },
-    approvals: { pending: Number(approvals.pending), approved: Number(approvals.approved), rejected: Number(approvals.rejected), approvalConfidence },
-    roadmap:   { avgPriorityScore: Number(Number(roadmap.avgScore ?? 0).toFixed(1)), sampleSize: Number(roadmap.n) },
-    fixes:     { totalApplied: Number(fixes.total), distinctPatterns: Number(fixes.patterns) },
+    confidence_0_to_1: {
+      label: 'Numbers on a 0..1 confidence scale (NOT comparable to priority/count groups below)',
+      research: {
+        avgConfidence: Number(Number(research.avg ?? 0).toFixed(2)),
+        sampleSize:    Number(research.n),
+        provenance:    'model_reported_by_groq',
+        caveat:        'Groq scores its own output — treat as model-reported confidence, not verified ground truth.',
+      },
+      approvals: {
+        approvalRate, // 0..1, null if no decisions yet
+        pending:  Number(approvals.pending),
+        approved: Number(approvals.approved),
+        rejected: Number(approvals.rejected),
+        provenance: 'human_decisions',
+      },
+    },
+    priority_scores: {
+      label: 'Roadmap priority scores — internal heuristic, roughly 0..100',
+      roadmap: {
+        avgPriorityScore: Number(Number(roadmap.avgScore ?? 0).toFixed(1)),
+        sampleSize:       Number(roadmap.n),
+        scale:            '0..100',
+      },
+    },
+    counts: {
+      label: 'Raw integer counts',
+      fixes: {
+        totalApplied:     Number(fixes.total),
+        distinctPatterns: Number(fixes.patterns),
+      },
+    },
   }
 }

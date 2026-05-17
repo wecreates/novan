@@ -12,9 +12,10 @@ import { readFile, writeFile }    from 'node:fs/promises'
 import { resolve }               from 'node:path'
 import { inArray }               from 'drizzle-orm'
 import { db }                           from '../db/client.js'
-import { patchRecords }                 from '../db/schema.js'
+import { patchRecords, events }         from '../db/schema.js'
 import { v7 as uuidv7 }                 from 'uuid'
 import { recordFailure }                from './failure-memory.js'
+import { gate, isProtectedPath, invalidateDailyCounter } from './governance-core.js'
 
 // Files that must never be patched autonomously
 const PROTECTED_PATTERNS = [
@@ -87,6 +88,29 @@ export async function applyPatches(opts: {
     throw new Error(`Patch exceeds MAX_FILES limit (${patches.length} > ${MAX_FILES})`)
   }
 
+  // ── Governance boundary: classify the whole patch by its file list.
+  // Hard-blocked or approval-required intents abort before any write.
+  const filePaths = patches.map(p => p.filePath)
+  const govDecision = await gate({
+    workspaceId, intent: 'apply_patch', context: { filePaths, jobId, runId },
+  })
+  if (govDecision.decision !== 'auto_apply_ok') {
+    await db.insert(events).values({
+      id: uuidv7(), type: 'patch.blocked_by_governance', workspaceId,
+      payload: { jobId, runId, decision: govDecision.decision, reason: govDecision.reason, filePaths },
+      traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
+      source: 'patch-executor', version: 1, createdAt: Date.now(),
+    }).catch(() => null)
+    return {
+      results: patches.map(p => ({
+        recordId: '', filePath: p.filePath, linesAdded: 0, linesRemoved: 0,
+        status: 'skipped' as const,
+        error: `governance ${govDecision.decision}: ${govDecision.reason}`,
+      })),
+      anyFailed: false, rollbackNeeded: false,
+    }
+  }
+
   const results: PatchApplyResult[] = []
   const applied: Array<{ filePath: string; originalContent: string; recordId: string }> = []
 
@@ -98,7 +122,7 @@ export async function applyPatches(opts: {
       results.push({ recordId: '', filePath: spec.filePath, linesAdded: 0, linesRemoved: 0, status: 'error', error: 'Path outside repo root' })
       continue
     }
-    if (isProtected(spec.filePath)) {
+    if (isProtected(spec.filePath) || isProtectedPath(spec.filePath).protected) {
       results.push({ recordId: '', filePath: spec.filePath, linesAdded: 0, linesRemoved: 0, status: 'skipped', error: 'Protected file — skipped' })
       continue
     }
@@ -143,7 +167,18 @@ export async function applyPatches(opts: {
 
     applied.push({ filePath: abs, originalContent, recordId })
     results.push({ recordId, filePath: spec.filePath, linesAdded: added, linesRemoved: removed, status: 'applied' })
+
+    // Emit event so daily counters + history can see this patch.
+    await db.insert(events).values({
+      id: uuidv7(), type: 'patch.applied', workspaceId,
+      payload: { recordId, jobId, runId, filePath: spec.filePath, linesAdded: added, linesRemoved: removed },
+      traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
+      source: 'patch-executor', version: 1, createdAt: Date.now(),
+    }).catch(() => null)
   }
+
+  // Invalidate cached patch counter so governor sees the new count next check
+  if (applied.length > 0) invalidateDailyCounter(workspaceId, 'patches')
 
   const anyFailed = results.some((r) => r.status === 'error')
   return { results, anyFailed, rollbackNeeded: anyFailed && applied.length > 0 }
@@ -174,6 +209,15 @@ export async function rollbackPatches(opts: {
       await db.update(patchRecords)
         .set({ status: 'rolled_back', rolledBackAt: now, rollbackReason: reason })
         .where(inArray(patchRecords.id, ids))
+    }
+    // Emit per-rollback event so explainability + daily counters see it.
+    for (const p of patches) {
+      await db.insert(events).values({
+        id: uuidv7(), type: 'patch.rolled_back', workspaceId: opts.workspaceId,
+        payload: { recordId: p.recordId, jobId: opts.jobId, runId: opts.runId, filePath: p.filePath, reason },
+        traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
+        source: 'patch-executor', version: 1, createdAt: now,
+      }).catch(() => null)
     }
   }
 

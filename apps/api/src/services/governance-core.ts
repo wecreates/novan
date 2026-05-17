@@ -16,8 +16,8 @@
  * All decisions emit `governance.*` events. No hidden throttling.
  */
 import { db }                          from '../db/client.js'
-import { events, failureMemory, providerBudgets, incidents } from '../db/schema.js'
-import { and, eq, gte, sql }           from 'drizzle-orm'
+import { events, failureMemory, providerBudgets, incidents, killSwitches, agents } from '../db/schema.js'
+import { and, desc, eq, gte, sql }     from 'drizzle-orm'
 import { v7 as uuidv7 }                from 'uuid'
 
 // ─── Protected paths ─────────────────────────────────────────────────────────
@@ -246,26 +246,126 @@ export async function stabilitySnapshot(workspaceId: string): Promise<StabilityS
 // ─── Daily counters: autonomous patches + deployments ────────────────────────
 // Lightweight in-process — read-only counts are derived from events table on demand.
 
+// 60s TTL cache for daily counters — avoids re-querying events on every gate.
+// Test env bypasses cache so mocks remain authoritative.
+const DAILY_COUNTER_TTL_MS = 60_000
+const DAILY_COUNTER_CACHE = new Map<string, { value: number; expiresAt: number }>()
+
+function getCached(key: string): number | null {
+  if (process.env['NODE_ENV'] === 'test') return null
+  const c = DAILY_COUNTER_CACHE.get(key)
+  if (!c || c.expiresAt < Date.now()) return null
+  return c.value
+}
+function setCached(key: string, value: number): void {
+  if (process.env['NODE_ENV'] === 'test') return
+  DAILY_COUNTER_CACHE.set(key, { value, expiresAt: Date.now() + DAILY_COUNTER_TTL_MS })
+}
+/** Invalidate counters for a workspace — call from patch/deployment emitters. */
+export function invalidateDailyCounter(workspaceId: string, kind: 'patches' | 'deployments'): void {
+  DAILY_COUNTER_CACHE.delete(`${kind}:${workspaceId}`)
+}
+
 export async function autonomousPatchesToday(workspaceId: string): Promise<number> {
+  const key = `patches:${workspaceId}`
+  const cached = getCached(key)
+  if (cached !== null) return cached
   const dayAgo = Date.now() - DAY
-  return db.select({ c: sql<number>`count(*)::int` }).from(events)
+  const v = await db.select({ c: sql<number>`count(*)::int` }).from(events)
     .where(and(
       eq(events.workspaceId, workspaceId),
       sql`${events.type} in ('patch.applied','patch.auto_applied')`,
       gte(events.createdAt, dayAgo),
     ))
     .then(r => Number(r[0]?.c ?? 0)).catch(() => 0)
+  setCached(key, v)
+  return v
 }
 
 export async function deploymentsToday(workspaceId: string): Promise<number> {
+  const key = `deployments:${workspaceId}`
+  const cached = getCached(key)
+  if (cached !== null) return cached
   const dayAgo = Date.now() - DAY
-  return db.select({ c: sql<number>`count(*)::int` }).from(events)
+  const v = await db.select({ c: sql<number>`count(*)::int` }).from(events)
     .where(and(
       eq(events.workspaceId, workspaceId),
       sql`${events.type} in ('deployment.started','deployment.completed')`,
       gte(events.createdAt, dayAgo),
     ))
     .then(r => Number(r[0]?.c ?? 0)).catch(() => 0)
+  setCached(key, v)
+  return v
+}
+
+// ─── Auto-enforce: throttle + pause unstable agents ──────────────────────────
+
+/**
+ * When stability snapshot says recommendedThrottle, auto-engage kill switches
+ * for research + image. Operator can manually disable via /kill-switches
+ * routes. Emits 'governance.auto_throttle_engaged'.
+ */
+export async function autoEngageThrottle(workspaceId: string, reason: string): Promise<{ engaged: string[] }> {
+  const engaged: string[] = []
+  const now = Date.now()
+  for (const switchType of ['research', 'image'] as const) {
+    const existing = await db.select().from(killSwitches)
+      .where(and(eq(killSwitches.workspaceId, workspaceId), eq(killSwitches.switchType, switchType)))
+      .limit(1).then(r => r[0]).catch(() => null)
+    if (existing?.enabled) continue
+    if (existing) {
+      await db.update(killSwitches).set({
+        enabled: true, reason, enabledBy: 'governance-core', enabledAt: now, updatedAt: now,
+      }).where(eq(killSwitches.id, existing.id)).catch(() => null)
+    } else {
+      await db.insert(killSwitches).values({
+        id: uuidv7(), workspaceId, switchType, enabled: true,
+        reason, enabledBy: 'governance-core', enabledAt: now,
+        createdAt: now, updatedAt: now,
+      }).onConflictDoNothing().catch(() => null)
+    }
+    engaged.push(switchType)
+  }
+  if (engaged.length > 0) {
+    await emitGovernance(workspaceId, 'auto_throttle_engaged', { engaged, reason })
+  }
+  return { engaged }
+}
+
+/**
+ * Pause agents that have failed repeatedly. An agent is "unstable" if it
+ * has emitted >=5 'agent.failed' or 'agent.error' events in the last hour.
+ * Sets agents.status='paused' so the orchestrator skips them.
+ */
+export async function pauseUnstableAgents(workspaceId: string): Promise<{ paused: string[] }> {
+  const hourAgo = Date.now() - 60 * 60_000
+  // Find agents whose IDs appear in recent failure-style events
+  const failingAgentRows = await db.select({
+    agentId: sql<string>`${events.payload}->>'agentId'`,
+    failures: sql<number>`count(*)::int`,
+  }).from(events)
+    .where(and(
+      eq(events.workspaceId, workspaceId),
+      sql`${events.type} in ('agent.failed','agent.error')`,
+      gte(events.createdAt, hourAgo),
+    ))
+    .groupBy(sql`${events.payload}->>'agentId'`)
+    .having(sql`count(*) >= 5`)
+    .catch(() => [] as Array<{ agentId: string | null; failures: number }>)
+
+  const paused: string[] = []
+  for (const row of failingAgentRows) {
+    if (!row.agentId) continue
+    const updated = await db.update(agents)
+      .set({ status: 'paused', updatedAt: Date.now() })
+      .where(and(eq(agents.id, row.agentId), eq(agents.workspaceId, workspaceId)))
+      .returning({ id: agents.id }).catch(() => [])
+    if (updated.length > 0) {
+      paused.push(row.agentId)
+      await emitGovernance(workspaceId, 'agent_auto_paused', { agentId: row.agentId, failures: row.failures })
+    }
+  }
+  return { paused }
 }
 
 export const GOVERNANCE_DAILY_LIMITS = {

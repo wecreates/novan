@@ -26,7 +26,7 @@ import { purgeExpired as purgeStretchCache } from './token-stretcher.js'
 import { runDueTopics, seedResearchAgents } from './research-engine.js'
 import { runDailyReview }                    from './daily-review.js'
 import { convertFindings }                   from './research-to-action.js'
-import { stabilitySnapshot, emitGovernance } from './governance-core.js'
+import { stabilitySnapshot, emitGovernance, autoEngageThrottle, pauseUnstableAgents } from './governance-core.js'
 
 const handles: NodeJS.Timeout[] = []
 
@@ -116,11 +116,19 @@ async function runStabilityScan() {
       const snap = await stabilitySnapshot(ws).catch(() => null)
       if (!snap) continue
       if (snap.overall === 'unstable' || snap.recommendedThrottle) {
+        const unstableIndicators = snap.indicators.filter(i => i.unstable)
         await emitGovernance(ws, 'stability_alert', {
           overall: snap.overall,
           recommendedThrottle: snap.recommendedThrottle,
-          unstableIndicators: snap.indicators.filter(i => i.unstable),
+          unstableIndicators,
         })
+
+        // Enforce when severe — engage kill switches + pause unstable agents.
+        if (snap.recommendedThrottle) {
+          const reason = `auto-throttle: ${unstableIndicators.map(i => i.name).join(', ')}`
+          await autoEngageThrottle(ws, reason).catch(() => null)
+        }
+        await pauseUnstableAgents(ws).catch(() => null)
       }
     }
   } catch (e) { await emit('cron.error', { task: 'stability_scan', error: (e as Error).message }) }

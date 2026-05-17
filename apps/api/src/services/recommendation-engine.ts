@@ -38,7 +38,28 @@ export interface Recommendation {
 
 const DAY = 24 * 60 * 60_000
 
-export async function generateRecommendations(workspaceId: string): Promise<Recommendation[]> {
+// 30s response cache — explainRecommendation otherwise re-runs the full
+// query graph on every call. Bypassed in test env so mocks stay authoritative.
+const REC_CACHE = new Map<string, { value: Recommendation[]; expiresAt: number }>()
+const REC_CACHE_TTL_MS = 30_000
+
+export function invalidateRecommendationCache(workspaceId?: string): void {
+  if (workspaceId) REC_CACHE.delete(workspaceId)
+  else REC_CACHE.clear()
+}
+
+export async function generateRecommendations(workspaceId: string, opts?: { forceRefresh?: boolean }): Promise<Recommendation[]> {
+  const useCache = process.env['NODE_ENV'] !== 'test' && !opts?.forceRefresh
+  if (useCache) {
+    const cached = REC_CACHE.get(workspaceId)
+    if (cached && cached.expiresAt > Date.now()) return cached.value
+  }
+  const result = await generateRecommendationsImpl(workspaceId)
+  if (useCache) REC_CACHE.set(workspaceId, { value: result, expiresAt: Date.now() + REC_CACHE_TTL_MS })
+  return result
+}
+
+async function generateRecommendationsImpl(workspaceId: string): Promise<Recommendation[]> {
   const since = Date.now() - 7 * DAY
   const recs: Recommendation[] = []
 
