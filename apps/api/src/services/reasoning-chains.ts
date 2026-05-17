@@ -13,7 +13,7 @@ import { reasoningChains, events }     from '../db/schema.js'
 import { and, desc, eq, gte, sql }     from 'drizzle-orm'
 import { v7 as uuidv7 }                from 'uuid'
 
-export type ChainKind = 'recommendation' | 'forecast' | 'tradeoff' | 'decision'
+export type ChainKind = 'recommendation' | 'forecast' | 'tradeoff' | 'decision' | 'economic'
 
 export interface RecordChainInput {
   workspaceId:  string
