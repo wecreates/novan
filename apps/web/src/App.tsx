@@ -13,6 +13,7 @@ import ExecutiveWarRoomPage     from './pages/ExecutiveWarRoomPage.js'
 import CompanyOperationsPage    from './pages/CompanyOperationsPage.js'
 import ImageStudioPage          from './pages/ImageStudioPage.js'
 import CapabilityGapPage        from './pages/CapabilityGapPage.js'
+import CognitionPage            from './pages/CognitionPage.js'
 import Timeline                 from './pages/Timeline.js'
 import Settings                 from './pages/Settings.js'
 import GoalsPage                from './pages/GoalsPage.js'
@@ -68,6 +69,7 @@ const NAV_ITEMS = [
   { to: '/company-operations',   icon: Building2,  label: 'Company Operations' },
   { to: '/image-studio',         icon: Lightbulb,  label: 'Image Studio' },
   { to: '/capability-gap',       icon: ScanSearch, label: 'Capability Gaps' },
+  { to: '/cognition',            icon: Brain,      label: 'Cognition' },
   { to: '/war-room',    icon: Activity,        label: 'War Room' },
   { to: '/timeline',    icon: Clock,           label: 'Timeline' },
   { to: '/goals',       icon: Target,          label: 'Goals' },
@@ -148,6 +150,7 @@ export default function App() {
           <Route path="/company-operations"   element={<CompanyOperationsPage />} />
           <Route path="/image-studio"         element={<ImageStudioPage />} />
           <Route path="/capability-gap"       element={<CapabilityGapPage />} />
+          <Route path="/cognition"            element={<CognitionPage />} />
           <Route path="/war-room"    element={<WarRoom />} />
           <Route path="/timeline"    element={<Timeline />} />
           <Route path="/goals"       element={<GoalsPage />} />

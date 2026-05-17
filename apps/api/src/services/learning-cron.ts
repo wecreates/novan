@@ -28,6 +28,8 @@ import { runDueTopics, seedResearchAgents } from './research-engine.js'
 import { runDailyReview }                    from './daily-review.js'
 import { convertFindings }                   from './research-to-action.js'
 import { weeklyOperationalReport }            from './executive-briefings.js'
+import { runHourlyHealthReview, runSixHourlyOperationalReview } from './executive-loop.js'
+import { reconcileRecommendationOutcomes }    from './reasoning-chains.js'
 import { stabilitySnapshot, emitGovernance, autoEngageThrottle, pauseUnstableAgents, autoDisengageThrottleIfStable } from './governance-core.js'
 import { crossDivisionBlockers, type CrossDivisionBlocker } from './divisions.js'
 import { notify }                            from './notifications.js'
@@ -111,6 +113,29 @@ async function runBillingSweep() {
     const expired = await expireTrials().catch(() => 0)
     if (expired > 0) await emit('cron.trials_expired', { count: expired })
   } catch (e) { await emit('cron.error', { task: 'billing', error: (e as Error).message }) }
+}
+
+async function runExecutiveHourly() {
+  try {
+    const ids = await listWorkspaceIds()
+    for (const ws of ids) {
+      await runHourlyHealthReview(ws).catch(() => null)
+    }
+  } catch (e) { await emit('cron.error', { task: 'executive_hourly', error: (e as Error).message }) }
+}
+
+async function runExecutiveSixHourly() {
+  try {
+    const ids = await listWorkspaceIds()
+    let totalActions = 0
+    for (const ws of ids) {
+      const r = await runSixHourlyOperationalReview(ws).catch(() => null)
+      if (r) totalActions += r.actionsRecommended.length
+      // Also reconcile recommendation outcomes while we're at it
+      await reconcileRecommendationOutcomes(ws).catch(() => null)
+    }
+    if (totalActions > 0) await emit('cron.executive_six_hourly_completed', { totalActions })
+  } catch (e) { await emit('cron.error', { task: 'executive_six_hourly', error: (e as Error).message }) }
 }
 
 async function runCrossDivisionScan() {
@@ -267,6 +292,8 @@ const INTERVALS = {
   stabilityScan:    5  * 60_000, // 5 min — emit governance.stability_alert when unstable
   weeklyBriefing:   60 * 60_000, // 1 hour tick — actually emits once per 6 days via idempotency
   crossDivision:    10 * 60_000, // 10 min — scan cross-division blockers and notify on critical
+  execHourly:       60 * 60_000, // 1 hour — executive hourly health review
+  execSixHourly:    6  * 60 * 60_000, // 6 hours — executive ops optimization review
 }
 
 export function startLearningCron(): void {
@@ -287,6 +314,8 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runStabilityScan(),    INTERVALS.stabilityScan))
   handles.push(setInterval(() => void runWeeklyExecutiveBriefings(), INTERVALS.weeklyBriefing))
   handles.push(setInterval(() => void runCrossDivisionScan(),        INTERVALS.crossDivision))
+  handles.push(setInterval(() => void runExecutiveHourly(),          INTERVALS.execHourly))
+  handles.push(setInterval(() => void runExecutiveSixHourly(),       INTERVALS.execSixHourly))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

@@ -2284,6 +2284,113 @@ export const promptTemplates = pgTable('prompt_templates', {
   index('promptt_category_idx').on(t.category),
 ])
 
+// ─── Cognitive Architecture ───────────────────────────────────────────────────
+
+/**
+ * Persistent reasoning chains — every recommendation, forecast, or
+ * decision that the platform wants to be able to replay/audit later.
+ * Outcomes are linked back when known.
+ */
+export const reasoningChains = pgTable('reasoning_chains', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  kind:              text('kind').notNull(),            // recommendation | forecast | tradeoff | decision
+  subjectId:         text('subject_id'),                // e.g. recommendation.id, forecast.type
+  decision:          text('decision').notNull(),        // human-readable summary of what was decided
+  evidence:          jsonb('evidence').notNull().default([]),     // [{type,id,extract}]
+  tradeoffs:         jsonb('tradeoffs').notNull().default([]),
+  confidence:        real('confidence'),                // 0..1
+  prediction:        jsonb('prediction'),               // structured forecast
+  // Outcome linkage (filled in when window passes)
+  outcomeKnown:      boolean('outcome_known').notNull().default(false),
+  outcomeMatched:    boolean('outcome_matched'),        // true = prediction confirmed
+  outcomeEvidence:   jsonb('outcome_evidence'),
+  outcomeAt:         bigint('outcome_at', { mode: 'number' }),
+  source:            text('source').notNull(),          // 'recommendation-engine' | 'forecasting' | etc
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rc_workspace_idx').on(t.workspaceId),
+  index('rc_kind_idx').on(t.kind),
+  index('rc_subject_idx').on(t.subjectId),
+  index('rc_outcome_idx').on(t.outcomeKnown),
+])
+
+/**
+ * Persistent executive state — single row per workspace, updated each
+ * executive review cycle. JSON blob; structure managed by service.
+ */
+export const executiveState = pgTable('executive_state', {
+  workspaceId:       text('workspace_id').primaryKey(),
+  topPriorities:     jsonb('top_priorities').notNull().default([]),
+  activeRisks:       jsonb('active_risks').notNull().default([]),
+  strategicObjectives: jsonb('strategic_objectives').notNull().default([]),
+  blockedInitiatives: jsonb('blocked_initiatives').notNull().default([]),
+  costPosture:       jsonb('cost_posture'),
+  reliabilityPosture: jsonb('reliability_posture'),
+  securityPosture:   jsonb('security_posture'),
+  focusAreas:        text('focus_areas').array().notNull().default([]),
+  lastReviewAt:      bigint('last_review_at', { mode: 'number' }),
+  reviewCount:       integer('review_count').notNull().default(0),
+  updatedAt:         bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
+/**
+ * Executive review log — audit trail of every review cycle.
+ */
+export const executiveReviewLog = pgTable('executive_review_log', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  cycle:             text('cycle').notNull(),           // hourly | six_hourly | daily | weekly
+  triggeredBy:       text('triggered_by').notNull(),    // 'cron' | 'manual'
+  signalsAnalyzed:   jsonb('signals_analyzed').notNull().default({}),
+  prioritiesBefore:  jsonb('priorities_before').notNull().default([]),
+  prioritiesAfter:   jsonb('priorities_after').notNull().default([]),
+  actionsRecommended: jsonb('actions_recommended').notNull().default([]),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('erl_workspace_idx').on(t.workspaceId),
+  index('erl_cycle_idx').on(t.cycle),
+  index('erl_created_idx').on(t.createdAt),
+])
+
+/**
+ * Skill registry — reusable, versioned, verified workflow definitions.
+ * Skills are operator-facing executable units that wrap existing services.
+ */
+export const skills = pgTable('skills', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  name:              text('name').notNull(),
+  slug:              text('slug').notNull(),            // url-safe
+  purpose:           text('purpose').notNull(),
+  category:          text('category').notNull(),        // research | image | deployment | security | patch | debug | report | analysis | ui | incident
+  version:           integer('version').notNull().default(1),
+  ownerAgentType:    text('owner_agent_type'),
+  riskLevel:         text('risk_level').notNull().default('low'),  // low | medium | high
+  requiresApproval:  boolean('requires_approval').notNull().default(false),
+  // Definition (operator-readable)
+  inputs:            jsonb('inputs').notNull().default([]),     // [{name,type,required}]
+  outputs:           jsonb('outputs').notNull().default([]),
+  steps:             jsonb('steps').notNull().default([]),      // ordered [{action, params}]
+  safetyRules:       text('safety_rules').array().notNull().default([]),
+  rollbackBehavior:  text('rollback_behavior'),
+  verificationRequirements: jsonb('verification_requirements').notNull().default([]),
+  // Performance
+  successCount:      integer('success_count').notNull().default(0),
+  failureCount:      integer('failure_count').notNull().default(0),
+  lastUsedAt:        bigint('last_used_at', { mode: 'number' }),
+  avgDurationMs:     integer('avg_duration_ms'),
+  // Lifecycle
+  status:            text('status').notNull().default('draft'),  // draft | verified | production | deprecated
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:         bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('skill_workspace_idx').on(t.workspaceId),
+  index('skill_status_idx').on(t.status),
+  index('skill_category_idx').on(t.category),
+  uniqueIndex('skill_slug_idx').on(t.workspaceId, t.slug),
+])
+
 // ─── Persistent Stability Streak (governance auto-disengage) ────────────────
 
 /** One row per workspace — survives container restart for accurate streak tracking. */
