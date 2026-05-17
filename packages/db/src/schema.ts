@@ -2072,6 +2072,38 @@ export const roadmapTasks = pgTable('roadmap_tasks', {
   index('rt_priority_idx').on(t.priorityScore),
 ])
 
+// ─── External Knowledge — internet learning ──────────────────────────────────
+
+/**
+ * Every URL Novan fetches from the public internet lands here.
+ * Content is redacted (no leaked secrets), size-capped (~200kb), and
+ * timestamped. The improvement-engine + ai-router can reference these rows
+ * to ground future decisions in real external context.
+ */
+export const externalKnowledge = pgTable('external_knowledge', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  url:               text('url').notNull(),
+  source:            text('source').notNull().default('manual'),  // manual|cron-rss|llm-research
+  fetchedAt:         bigint('fetched_at', { mode: 'number' }).notNull(),
+  status:            integer('status').notNull(),       // HTTP status
+  contentType:       text('content_type'),
+  contentRedacted:   text('content_redacted').notNull(),// post-redaction body
+  contentBytes:      integer('content_bytes').notNull().default(0),
+  secretsRedacted:   integer('secrets_redacted').notNull().default(0),
+  title:             text('title'),
+  tags:              text('tags').array().notNull().default([]),
+  expiresAt:         bigint('expires_at', { mode: 'number' }),   // TTL — re-fetch after
+  fetchedBy:         text('fetched_by'),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ek_workspace_idx').on(t.workspaceId),
+  index('ek_url_idx').on(t.url),
+  index('ek_source_idx').on(t.source),
+  index('ek_fetched_idx').on(t.fetchedAt),
+  index('ek_expires_idx').on(t.expiresAt),
+])
+
 // ─── Multi-Tenant Billing + Subscriptions ─────────────────────────────────────
 
 /** Plan definitions — feature gates + numeric limits */
