@@ -22,6 +22,7 @@ import { recoverStaleLocks }        from './lock-manager.js'
 import { expireTrials }             from './billing.js'
 import { runSecurityScan }          from './security-team.js'
 import { pollDueFeeds }             from './feed-ingester.js'
+import { purgeExpired as purgeStretchCache } from './token-stretcher.js'
 
 const handles: NodeJS.Timeout[] = []
 
@@ -104,6 +105,13 @@ async function runBillingSweep() {
   } catch (e) { await emit('cron.error', { task: 'billing', error: (e as Error).message }) }
 }
 
+async function runStretchCachePurge() {
+  try {
+    const purged = await purgeStretchCache()
+    if (purged > 0) await emit('cron.stretch_cache_purged', { purged })
+  } catch (e) { await emit('cron.error', { task: 'stretch_purge', error: (e as Error).message }) }
+}
+
 async function runFeedIngestion() {
   try {
     const ids = await listWorkspaceIds()
@@ -127,6 +135,7 @@ const INTERVALS = {
   securityTeam: 10 * 60_000,   // 10 min — full security team sweep
   billing:      60 * 60_000,   // 1 hour
   feeds:        10 * 60_000,   // 10 min — RSS/Atom ingestion (per-feed intervals enforced inside)
+  stretchPurge: 60 * 60_000,   // 1 hour — expire stale AI cache rows
 }
 
 export function startLearningCron(): void {
@@ -140,6 +149,7 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runSecurityTeamScans(),INTERVALS.securityTeam))
   handles.push(setInterval(() => void runBillingSweep(),     INTERVALS.billing))
   handles.push(setInterval(() => void runFeedIngestion(),    INTERVALS.feeds))
+  handles.push(setInterval(() => void runStretchCachePurge(),INTERVALS.stretchPurge))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

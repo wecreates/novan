@@ -2132,6 +2132,41 @@ export const externalFeeds = pgTable('external_feeds', {
   index('ef_polled_idx').on(t.lastPolledAt),
 ])
 
+// ─── AI Response Cache + Token Stretching Metrics ─────────────────────────────
+
+/**
+ * Cache for AI responses keyed by (model, messages, task_type) hash.
+ * Token-stretcher checks this before hitting any provider.
+ */
+export const aiResponseCache = pgTable('ai_response_cache', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  cacheKey:          text('cache_key').notNull(),
+  model:             text('model').notNull(),
+  taskType:          text('task_type'),
+  promptTokens:      integer('prompt_tokens').notNull().default(0),
+  responseTokens:    integer('response_tokens').notNull().default(0),
+  response:          text('response').notNull(),
+  hitCount:          integer('hit_count').notNull().default(0),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+  lastHitAt:         bigint('last_hit_at', { mode: 'number' }),
+  expiresAt:         bigint('expires_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('arc_key_idx').on(t.workspaceId, t.cacheKey),
+  index('arc_expires_idx').on(t.expiresAt),
+])
+
+/** Aggregated stretching metrics — one row per workspace. */
+export const tokenStretchMetrics = pgTable('token_stretch_metrics', {
+  workspaceId:           text('workspace_id').primaryKey(),
+  totalCalls:            bigint('total_calls', { mode: 'number' }).notNull().default(0),
+  cacheHits:             bigint('cache_hits', { mode: 'number' }).notNull().default(0),
+  baselineTokensTotal:   bigint('baseline_tokens_total', { mode: 'number' }).notNull().default(0),
+  stretchedTokensTotal:  bigint('stretched_tokens_total', { mode: 'number' }).notNull().default(0),
+  savedTokensTotal:      bigint('saved_tokens_total', { mode: 'number' }).notNull().default(0),
+  lastCallAt:            bigint('last_call_at', { mode: 'number' }),
+})
+
 // ─── Multi-Tenant Billing + Subscriptions ─────────────────────────────────────
 
 /** Plan definitions — feature gates + numeric limits */

@@ -76,6 +76,7 @@ import securityTeamRoutes       from './routes/security-team.js'
 import launchTonightRoutes      from './routes/launch-tonight.js'
 import researchRoutes           from './routes/research.js'
 import feedRoutes               from './routes/feeds.js'
+import tokenStretcherRoutes     from './routes/token-stretcher.js'
 import { validateEnvOrThrow }   from './services/secrets-vault.js'
 import { startLearningCron }    from './services/learning-cron.js'
 import { registerAutonomousWorker } from './services/autonomous-orchestrator.js'
@@ -224,6 +225,7 @@ await app.register(securityTeamRoutes,     { prefix: '/api/v1/security-team' })
 await app.register(launchTonightRoutes,    { prefix: '/api/v1/launch-tonight' })
 await app.register(researchRoutes,         { prefix: '/api/v1/research' })
 await app.register(feedRoutes,             { prefix: '/api/v1/research' })
+await app.register(tokenStretcherRoutes,   { prefix: '/api/v1/token-stretcher' })
 
 // Environment validation — fails fast in production if VAULT_MASTER_KEY missing/invalid
 validateEnvOrThrow()

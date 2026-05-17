@@ -97,43 +97,37 @@ console.log(`  • prompt size: ${prompt.length} chars\n`)
 let plan = null
 let planError = null
 
-// Call Groq directly — free-tier router routes everything to 70B which
-// exceeds 12k TPM. Going direct lets us pick 8B-instant (much higher TPM).
-const GROQ_KEY = process.env.GROQ_API_KEY
-if (!GROQ_KEY) {
-  planError = 'GROQ_API_KEY not set in environment.'
-} else {
-  try {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method:  'POST',
-      headers: {
-        'content-type':  'application/json',
-        'authorization': `Bearer ${GROQ_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.2,
-        max_tokens: 2048,
-      }),
-      signal: AbortSignal.timeout(60_000),
-    })
-
-    const body = await res.json().catch(() => ({}))
-    const bodyStr = JSON.stringify(body)
-
-    if (res.status === 429) {
-      planError = `Groq rate limited: ${bodyStr.slice(0, 300)}`
-    } else if (!res.ok) {
-      planError = `Groq returned ${res.status}: ${bodyStr.slice(0, 400)}`
-    } else {
-      const content = body?.choices?.[0]?.message?.content || ''
-      const m = content.match(/\{[\s\S]*"patches"[\s\S]*\}/)
-      plan = m ? JSON.parse(m[0]) : { raw: content }
-    }
-  } catch (e) {
-    planError = `Could not reach Groq: ${e.message}`
+// Route through the token-stretcher endpoint — cache + compression + metrics
+let stretchInfo = null
+try {
+  const res = await fetch(`${API_URL}/api/v1/token-stretcher/chat`, {
+    method:  'POST',
+    headers: { 'content-type': 'application/json' },
+    body:    JSON.stringify({
+      workspace_id: WORKSPACE,
+      model:        'llama-3.1-8b-instant',
+      task_type:    'brain-plan',
+      messages:     [{ role: 'user', content: prompt }],
+      temperature:  0.2,
+      max_tokens:   2048,
+      cache_ttl_ms: 6 * 60 * 60_000,  // 6h — plans can be reused while state is similar
+    }),
+    signal: AbortSignal.timeout(60_000),
+  })
+  const body = await res.json().catch(() => ({}))
+  const bodyStr = JSON.stringify(body)
+  if (res.status === 429) {
+    planError = `Rate limited: ${bodyStr.slice(0, 300)}`
+  } else if (!res.ok) {
+    planError = `Stretcher returned ${res.status}: ${bodyStr.slice(0, 400)}`
+  } else {
+    stretchInfo = body?.data
+    const content = body?.data?.content || ''
+    const m = content.match(/\{[\s\S]*"patches"[\s\S]*\}/)
+    plan = m ? JSON.parse(m[0]) : { raw: content }
   }
+} catch (e) {
+  planError = `Could not reach stretcher at ${API_URL}: ${e.message}`
 }
 
 // ─── Persist + display ───────────────────────────────────────────────────────
@@ -156,7 +150,10 @@ if (planError) {
 } else {
   console.log('📋  Proposed patches:\n')
   console.log(JSON.stringify(plan, null, 2))
-  console.log(`\n✓  Plan stored in events (id=${eventId})`)
+  if (stretchInfo) {
+    console.log(`\n🪶  Stretch: ${stretchInfo.cacheHit ? 'CACHE HIT' : 'fresh call'}  •  baseline=${stretchInfo.baselineTokens}t  stretched=${stretchInfo.stretchedTokens}t  saved=${stretchInfo.savedTokens}t  techniques=[${stretchInfo.techniques.join(',')}]`)
+  }
+  console.log(`✓  Plan stored in events (id=${eventId})`)
 }
 
 await sql.end()
