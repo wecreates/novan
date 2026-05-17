@@ -30,6 +30,7 @@ import { convertFindings }                   from './research-to-action.js'
 import { weeklyOperationalReport }            from './executive-briefings.js'
 import { runHourlyHealthReview, runSixHourlyOperationalReview } from './executive-loop.js'
 import { reconcileRecommendationOutcomes }    from './reasoning-chains.js'
+import { evaluateOutcomes }                    from './outcome-evaluator.js'
 import { stabilitySnapshot, emitGovernance, autoEngageThrottle, pauseUnstableAgents, autoDisengageThrottleIfStable } from './governance-core.js'
 import { crossDivisionBlockers, type CrossDivisionBlocker } from './divisions.js'
 import { notify }                            from './notifications.js'
@@ -133,6 +134,8 @@ async function runExecutiveSixHourly() {
       if (r) totalActions += r.actionsRecommended.length
       // Also reconcile recommendation outcomes while we're at it
       await reconcileRecommendationOutcomes(ws).catch(() => null)
+      // Multi-source outcome evaluator (incident resolution, forecast horizons, rollbacks)
+      await evaluateOutcomes(ws).catch(() => null)
     }
     if (totalActions > 0) await emit('cron.executive_six_hourly_completed', { totalActions })
   } catch (e) { await emit('cron.error', { task: 'executive_six_hourly', error: (e as Error).message }) }

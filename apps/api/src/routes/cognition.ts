@@ -18,8 +18,12 @@ import {
 } from '../services/executive-loop.js'
 import {
   seedBuiltinSkills, listSkills, executeSkill, detectSkillGaps,
-  type SkillCategory,
+  detectSkillGapsBySession, promoteSkill,
+  type SkillCategory, type SkillStatus,
 } from '../services/skills.js'
+import { generateSchedule, addPredecessor } from '../services/long-horizon-planner.js'
+import { checkAlignment, emitAlignmentDecision } from '../services/strategic-alignment.js'
+import { evaluateOutcomes }              from '../services/outcome-evaluator.js'
 
 export const cognitionRoutes: FastifyPluginAsync = async (fastify) => {
 
@@ -74,6 +78,39 @@ export const cognitionRoutes: FastifyPluginAsync = async (fastify) => {
     const ws = req.query.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     return { success: true, data: await highConfidenceMisses(ws, req.query.limit ? Number(req.query.limit) : 10) }
+  })
+
+  // ── Long-horizon planner (gap #2) ─────────────────────────────────────────
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/schedule', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await generateSchedule(ws) }
+  })
+
+  fastify.post<{ Body: { workspace_id?: string; task_id?: string; predecessor_recommendation_id?: string } }>('/schedule/predecessor', async (req, reply) => {
+    const { workspace_id, task_id, predecessor_recommendation_id } = req.body
+    if (!workspace_id || !task_id || !predecessor_recommendation_id) {
+      return reply.code(400).send({ success: false, error: 'workspace_id, task_id, predecessor_recommendation_id required' })
+    }
+    return { success: true, data: await addPredecessor(workspace_id, task_id, predecessor_recommendation_id) }
+  })
+
+  // ── Strategic alignment gate (gap #3) ─────────────────────────────────────
+  fastify.post<{ Body: { workspace_id?: string; intent?: string; tags?: string[] } }>('/alignment/check', async (req, reply) => {
+    const { workspace_id, intent, tags } = req.body
+    if (!workspace_id || !intent || !Array.isArray(tags)) {
+      return reply.code(400).send({ success: false, error: 'workspace_id, intent, tags[] required' })
+    }
+    const decision = await checkAlignment(workspace_id, tags)
+    await emitAlignmentDecision(workspace_id, intent, decision)
+    return { success: true, data: decision }
+  })
+
+  // ── Outcome evaluator (gap #4) ────────────────────────────────────────────
+  fastify.post<{ Body: { workspace_id?: string } }>('/outcomes/evaluate', async (req, reply) => {
+    const ws = req.body.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await evaluateOutcomes(ws) }
   })
 }
 
@@ -133,5 +170,19 @@ export const skillsRoutes: FastifyPluginAsync = async (fastify) => {
     const ws = req.query.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     return { success: true, data: await detectSkillGaps(ws) }
+  })
+
+  // Session-correlated gap detector (gap #9)
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/gaps-by-session', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await detectSkillGapsBySession(ws) }
+  })
+
+  // Promotion (gap #8)
+  fastify.post<{ Params: { slug: string }; Body: { workspace_id?: string; target?: string } }>('/:slug/promote', async (req, reply) => {
+    const { workspace_id, target } = req.body
+    if (!workspace_id || !target) return reply.code(400).send({ success: false, error: 'workspace_id, target required' })
+    return { success: true, data: await promoteSkill(workspace_id, req.params.slug, target as SkillStatus) }
   })
 }

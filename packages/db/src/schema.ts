@@ -2063,6 +2063,8 @@ export const roadmapTasks = pgTable('roadmap_tasks', {
   assignedAgent:   text('assigned_agent'),
   requiresApproval: boolean('requires_approval').notNull().default(false),
   status:          text('status').notNull().default('pending'), // pending|approved|in_progress|complete|blocked|skipped
+  predecessors:    text('predecessors').array().notNull().default([]),  // recommendationIds that must complete first
+  missionAlignment: text('mission_alignment').array().notNull().default([]),  // mission tags this task aligns to
   createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
   updatedAt:       bigint('updated_at', { mode: 'number' }).notNull(),
 }, (t) => [

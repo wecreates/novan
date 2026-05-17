@@ -19,6 +19,7 @@ import { and, desc, eq, gte, sql }     from 'drizzle-orm'
 import { prioritize, type PriorityInput, type PriorityDecision } from './agent-coordinator.js'
 import { findPastFix }                from './continuity-engine.js'
 import { dominantCategories }          from './strategic-priorities.js'
+import { record as recordChain }       from './reasoning-chains.js'
 
 export type RecKind =
   | 'critical_runtime_fix'
@@ -316,6 +317,27 @@ async function generateRecommendationsImpl(workspaceId: string): Promise<Recomme
 
   // Sort by score desc (post-context-boost)
   recs.sort((a, b) => b.decision.score - a.decision.score)
+
+  // Persist a reasoning chain for each rec, idempotent via subjectId.
+  // Doing this fire-and-forget so the rec response is not delayed.
+  void (async () => {
+    for (const r of recs) {
+      await recordChain({
+        workspaceId,
+        kind: 'recommendation',
+        subjectId: r.id,
+        decision: `${r.kind}: ${r.title}`.slice(0, 500),
+        evidence: Object.entries(r.evidence).slice(0, 6).map(([k, v]) => ({
+          type: k, id: typeof v === 'string' ? v : String(v).slice(0, 40),
+          extract: JSON.stringify(v).slice(0, 120),
+        })),
+        confidence: r.decision.score,
+        prediction: { bucket: r.decision.bucket, estimatedImpact: r.estimatedImpact, autoApplyOk: r.decision.autoApplyOk },
+        source: 'recommendation-engine',
+      }).catch(() => null)
+    }
+  })()
+
   return recs
 }
 

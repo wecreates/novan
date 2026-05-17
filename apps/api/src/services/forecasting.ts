@@ -15,6 +15,7 @@
  * conservative non-forecast.
  */
 import { allTrends, type TrendSeries } from './trend-analysis.js'
+import { record as recordChain }       from './reasoning-chains.js'
 
 export type ForecastType =
   | 'provider_failure_likely'
@@ -196,6 +197,33 @@ export async function generateForecasts(workspaceId: string): Promise<AllForecas
     low:      forecasts.filter(f => f.likelihood === 'low').length,
     insufficientData: forecasts.filter(f => f.likelihood === 'insufficient_data').length,
   }
+
+  // Persist each forecast as a reasoning chain (fire-and-forget). Outcome
+  // evaluator (cron task) compares projected vs observed when horizon passes.
+  void (async () => {
+    for (const f of forecasts) {
+      if (f.likelihood === 'insufficient_data') continue
+      await recordChain({
+        workspaceId,
+        kind: 'forecast',
+        subjectId: f.type,
+        decision: `Forecast ${f.type}: likelihood=${f.likelihood}, projecting ${f.basis.projectedValue} in ${f.horizonWeeks}w`,
+        evidence: [
+          { type: 'trend', id: f.type, extract: f.evidence },
+          { type: 'slope', id: 'per_week', extract: String(f.basis.slopePerWeek) },
+        ],
+        confidence: f.confidence,
+        prediction: {
+          horizonWeeks:   f.horizonWeeks,
+          projectedValue: f.basis.projectedValue,
+          slopePerWeek:   f.basis.slopePerWeek,
+          likelihood:     f.likelihood,
+          historicalEndsAt: Date.now(),  // when the forecast was made
+        },
+        source: 'forecasting',
+      }).catch(() => null)
+    }
+  })()
 
   return { forecasts, generatedAt: Date.now(), summary }
 }

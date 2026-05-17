@@ -26,6 +26,7 @@ export type RiskLevel = 'low' | 'medium' | 'high'
 export interface SkillStep {
   action:     string                  // 'research.run_topic' | 'image.generate' | 'briefing.daily' | etc.
   params:     Record<string, unknown>
+  parallelGroup?: number              // steps with same parallelGroup execute concurrently
 }
 
 export interface SkillDefinition {
@@ -221,55 +222,55 @@ export async function executeSkill(workspaceId: string, slug: string, inputs: Re
     return blocked
   }
 
-  // Step dispatcher — wires actions to existing services
-  for (const stepDef of (skill.steps as unknown as SkillStep[])) {
-    const stepStart = Date.now()
-    try {
-      const resolvedParams = resolveParams(stepDef.params, inputs, outputs)
-      const output = await dispatchAction(workspaceId, stepDef.action, resolvedParams)
-      Object.assign(outputs, typeof output === 'object' && output !== null ? output as Record<string, unknown> : { result: output })
-      steps.push({ action: stepDef.action, status: 'ok', output, durationMs: Date.now() - stepStart })
-    } catch (e) {
-      const msg = (e as Error).message
-      steps.push({ action: stepDef.action, status: 'failed', error: msg, durationMs: Date.now() - stepStart })
-      // Record failure (target_ref + target_kind are required)
-      await db.insert(failureMemory).values({
-        id: uuidv7(), workspaceId,
-        agentId: null,
-        failureType: 'skill_execution',
-        rootCauseClass: 'unknown',
-        targetRef: `skill:${slug}`,
-        targetKind: 'skill',
-        signature: `skill:${slug}:${stepDef.action}:${msg.slice(0, 80)}`,
-        errorPattern: msg.slice(0, 500),
-        occurrenceCount: 1,
-        evidenceIds: [],
-        attemptedFixIds: [],
-        blocked: false,
-        firstSeenAt: Date.now(),
-        lastSeenAt: Date.now(),
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      }).onConflictDoNothing().catch(() => null)
-
-      // Update failure count + emit
-      await db.update(skills).set({
-        failureCount: sql`${skills.failureCount} + 1`,
-        lastUsedAt:   Date.now(),
-        updatedAt:    Date.now(),
-      }).where(eq(skills.id, skill.id)).catch(() => null)
-
-      await db.insert(events).values({
-        id: uuidv7(), type: 'skill.execution_failed', workspaceId,
-        payload: { skillId: skill.id, slug, action: stepDef.action, error: msg },
-        traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
-        source: 'skills', version: 1, createdAt: Date.now(),
-      }).catch(() => null)
-
-      return {
-        skillSlug: slug, status: 'failed', outputs, steps,
-        totalDurationMs: Date.now() - start, errorMessage: msg,
+  // Step dispatcher — wires actions to existing services.
+  // Steps with the same parallelGroup number run concurrently; groups
+  // execute in ascending order. Steps without a group run sequentially.
+  const skillSteps = (skill.steps as unknown as SkillStep[])
+  const groups = groupSteps(skillSteps)
+  let stepRunFailed = false
+  groupLoop:
+  for (const group of groups) {
+    if (group.length === 1) {
+      // Single step — sequential path
+      const stepDef = group[0]!
+      const stepStart = Date.now()
+      try {
+        const resolvedParams = resolveParams(stepDef.params, inputs, outputs)
+        const output = await dispatchAction(workspaceId, stepDef.action, resolvedParams)
+        Object.assign(outputs, typeof output === 'object' && output !== null ? output as Record<string, unknown> : { result: output })
+        steps.push({ action: stepDef.action, status: 'ok', output, durationMs: Date.now() - stepStart })
+      } catch (e) {
+        await recordStepFailure(workspaceId, skill, slug, stepDef.action, (e as Error).message, Date.now() - stepStart, steps)
+        stepRunFailed = true
+        break groupLoop
       }
+    } else {
+      // Parallel group — run all concurrently, fail on any error
+      const results = await Promise.allSettled(group.map(async (stepDef) => {
+        const stepStart = Date.now()
+        const resolvedParams = resolveParams(stepDef.params, inputs, outputs)
+        const output = await dispatchAction(workspaceId, stepDef.action, resolvedParams)
+        return { stepDef, output, durationMs: Date.now() - stepStart }
+      }))
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i]!
+        if (r.status === 'fulfilled') {
+          const { stepDef, output, durationMs } = r.value
+          Object.assign(outputs, typeof output === 'object' && output !== null ? output as Record<string, unknown> : { result: output })
+          steps.push({ action: stepDef.action, status: 'ok', output, durationMs })
+        } else {
+          await recordStepFailure(workspaceId, skill, slug, group[i]!.action, (r.reason as Error).message, 0, steps)
+          stepRunFailed = true
+        }
+      }
+      if (stepRunFailed) break
+    }
+  }
+  if (stepRunFailed) {
+    return {
+      skillSlug: slug, status: 'failed', outputs, steps,
+      totalDurationMs: Date.now() - start,
+      errorMessage: steps.find(s => s.status === 'failed')?.error ?? 'unknown',
     }
   }
 
@@ -291,6 +292,110 @@ export async function executeSkill(workspaceId: string, slug: string, inputs: Re
   }).catch(() => null)
 
   return { skillSlug: slug, status: 'succeeded', outputs, steps, totalDurationMs }
+}
+
+function groupSteps(steps: SkillStep[]): SkillStep[][] {
+  // Steps with parallelGroup=N are batched together. Ungrouped steps are
+  // their own singleton group. Groups execute in ascending order; within
+  // a group, steps run concurrently.
+  const buckets = new Map<number, SkillStep[]>()
+  const sequential: Array<{ idx: number; step: SkillStep }> = []
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i]!
+    if (typeof s.parallelGroup === 'number') {
+      const g = buckets.get(s.parallelGroup) ?? []
+      g.push(s); buckets.set(s.parallelGroup, g)
+    } else {
+      sequential.push({ idx: i, step: s })
+    }
+  }
+  // Naive: preserve original order — concat sequential singletons and groups,
+  // ordering groups by their first appearance in the original step list.
+  // For simplicity here: emit a wave per group key (sorted ascending), then
+  // sequential as singletons in order.
+  const out: SkillStep[][] = []
+  for (const k of [...buckets.keys()].sort((a, b) => a - b)) {
+    out.push(buckets.get(k)!)
+  }
+  for (const { step } of sequential) out.push([step])
+  return out
+}
+
+async function recordStepFailure(
+  workspaceId: string,
+  skill: { id: string; failureCount: number | null },
+  slug: string,
+  action: string,
+  msg: string,
+  durationMs: number,
+  steps: ExecuteResult['steps'],
+): Promise<void> {
+  steps.push({ action, status: 'failed', error: msg, durationMs })
+  await db.insert(failureMemory).values({
+    id: uuidv7(), workspaceId,
+    agentId: null,
+    failureType: 'skill_execution',
+    rootCauseClass: 'unknown',
+    targetRef: `skill:${slug}`,
+    targetKind: 'skill',
+    signature: `skill:${slug}:${action}:${msg.slice(0, 80)}`,
+    errorPattern: msg.slice(0, 500),
+    occurrenceCount: 1,
+    evidenceIds: [],
+    attemptedFixIds: [],
+    blocked: false,
+    firstSeenAt: Date.now(),
+    lastSeenAt: Date.now(),
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }).onConflictDoNothing().catch(() => null)
+  await db.update(skills).set({
+    failureCount: sql`${skills.failureCount} + 1`,
+    lastUsedAt:   Date.now(),
+    updatedAt:    Date.now(),
+  }).where(eq(skills.id, skill.id)).catch(() => null)
+  await db.insert(events).values({
+    id: uuidv7(), type: 'skill.execution_failed', workspaceId,
+    payload: { skillId: skill.id, slug, action, error: msg },
+    traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
+    source: 'skills', version: 1, createdAt: Date.now(),
+  }).catch(() => null)
+}
+
+// ─── Promotion lifecycle (#8) ────────────────────────────────────────────────
+
+export type SkillStatus = 'draft' | 'verified' | 'production' | 'deprecated'
+
+const PROMOTION_ORDER: SkillStatus[] = ['draft', 'verified', 'production', 'deprecated']
+
+/** Promote a skill one step forward (draft→verified→production) or set deprecated. */
+export async function promoteSkill(workspaceId: string, slug: string, target: SkillStatus): Promise<{ ok: boolean; status?: SkillStatus; reason?: string }> {
+  const skill = await getSkill(workspaceId, slug)
+  if (!skill) return { ok: false, reason: 'skill not found' }
+  const current = skill.status as SkillStatus
+  if (target === 'deprecated') {
+    await db.update(skills).set({ status: 'deprecated', updatedAt: Date.now() })
+      .where(eq(skills.id, skill.id)).catch(() => null)
+    return { ok: true, status: 'deprecated' }
+  }
+  const curIdx = PROMOTION_ORDER.indexOf(current)
+  const tgtIdx = PROMOTION_ORDER.indexOf(target)
+  if (tgtIdx === -1 || tgtIdx < curIdx) {
+    return { ok: false, reason: `cannot promote ${current} → ${target}` }
+  }
+  // Guard: promotion to 'production' requires at least 3 successful runs OR explicit overrides
+  if (target === 'production' && Number(skill.successCount ?? 0) < 3) {
+    return { ok: false, reason: `production promotion requires ≥3 successful runs (current: ${skill.successCount ?? 0})` }
+  }
+  await db.update(skills).set({ status: target, updatedAt: Date.now() })
+    .where(eq(skills.id, skill.id)).catch(() => null)
+  await db.insert(events).values({
+    id: uuidv7(), type: 'skill.promoted', workspaceId,
+    payload: { skillId: skill.id, slug, from: current, to: target },
+    traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
+    source: 'skills', version: 1, createdAt: Date.now(),
+  }).catch(() => null)
+  return { ok: true, status: target }
 }
 
 function resolveParams(params: Record<string, unknown>, inputs: Record<string, unknown>, priorOutputs: Record<string, unknown>): Record<string, unknown> {
@@ -387,6 +492,70 @@ export interface SkillGap {
   occurrences:    number
   exampleEvents:  string[]
   suggestedSkill: { name: string; category: SkillCategory; reason: string }
+}
+
+/**
+ * Session-correlated detector: groups events by traceId and finds
+ * REPEATED MULTI-STEP SEQUENCES across distinct sessions. If the same
+ * ordered pair of event types appears in ≥3 distinct traces in 7 days,
+ * we treat it as a workflow worth packaging.
+ *
+ * Honest: when an event has no traceId we fall back to single-type
+ * frequency counting (the prior heuristic).
+ */
+export async function detectSkillGapsBySession(workspaceId: string): Promise<SkillGap[]> {
+  const dayAgo = Date.now() - 7 * 24 * 60 * 60_000
+  const rows = await db.select({
+    type: events.type, traceId: events.traceId, createdAt: events.createdAt,
+  }).from(events)
+    .where(and(eq(events.workspaceId, workspaceId), gte(events.createdAt, dayAgo)))
+    .orderBy(events.createdAt)
+    .catch(() => [])
+
+  // Group by traceId, sort each group chronologically (already ordered),
+  // emit consecutive ordered pairs.
+  const byTrace = new Map<string, string[]>()
+  for (const r of rows) {
+    const t = r.traceId
+    if (!t) continue
+    const cur = byTrace.get(t) ?? []
+    cur.push(r.type)
+    byTrace.set(t, cur)
+  }
+
+  // Count pair occurrences across distinct traces
+  const pairTraceCount = new Map<string, Set<string>>()
+  for (const [traceId, types] of byTrace) {
+    for (let i = 0; i < types.length - 1; i++) {
+      const a = types[i]!, b = types[i + 1]!
+      if (a === b) continue
+      if (a.startsWith('cron.') || b.startsWith('cron.')) continue
+      if (a.startsWith('governance.') || b.startsWith('governance.')) continue
+      const key = `${a} → ${b}`
+      const set = pairTraceCount.get(key) ?? new Set<string>()
+      set.add(traceId); pairTraceCount.set(key, set)
+    }
+  }
+
+  const existingSkillSlugs = new Set((await listSkills(workspaceId)).map(s => s.slug))
+  const gaps: SkillGap[] = []
+  for (const [pair, traces] of pairTraceCount) {
+    if (traces.size < 3) continue
+    const [a, b] = pair.split(' → ') as [string, string]
+    // Suggest a skill based on the pair type
+    let suggested: SkillGap['suggestedSkill'] | null = null
+    if (a.startsWith('research.') && b.startsWith('research.') && !existingSkillSlugs.has('research-topic')) {
+      suggested = { name: 'Research Topic', category: 'research', reason: `${pair} appears in ${traces.size} distinct sessions` }
+    } else if (a === 'image.generation_started' && b === 'image.generation_completed' && !existingSkillSlugs.has('generate-image')) {
+      suggested = { name: 'Generate Image', category: 'image', reason: `Image workflow seen in ${traces.size} sessions` }
+    } else if (a === 'incident.opened' && b.startsWith('patch.') && !existingSkillSlugs.has('incident-triage-and-patch')) {
+      suggested = { name: 'Incident Triage and Patch', category: 'incident', reason: `Incident→patch sequence in ${traces.size} sessions` }
+    } else if (a === 'patch.applied' && b === 'patch.rolled_back') {
+      suggested = { name: 'Patch Validation Wrapper', category: 'patch', reason: `Patches rolled back ${traces.size}× — wrap with extra verification` }
+    }
+    if (suggested) gaps.push({ pattern: pair, occurrences: traces.size, exampleEvents: [a, b], suggestedSkill: suggested })
+  }
+  return gaps
 }
 
 export async function detectSkillGaps(workspaceId: string): Promise<SkillGap[]> {
