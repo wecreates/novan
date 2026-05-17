@@ -2223,6 +2223,7 @@ export const imageGenerations = pgTable('image_generations', {
   id:                text('id').primaryKey(),
   workspaceId:       text('workspace_id').notNull(),
   prompt:            text('prompt').notNull(),
+  enhancedPrompt:    text('enhanced_prompt'),                       // from prompt-rewriter
   negativePrompt:    text('negative_prompt'),
   provider:          text('provider').notNull(),     // openai | stability | replicate | fal
   model:             text('model'),
@@ -2230,6 +2231,10 @@ export const imageGenerations = pgTable('image_generations', {
   aspectRatio:       text('aspect_ratio'),
   width:             integer('width'),
   height:            integer('height'),
+  seed:              integer('seed'),                               // reproducibility
+  batchId:           text('batch_id'),                              // groups multi-image generations
+  sourceImageRef:    text('source_image_ref'),                      // image-to-image input
+  brandCategory:     text('brand_category'),                        // icon|logo|hero|mockup|ad|social|thumbnail|ui_concept|landing|other
   costEstimateUsd:   real('cost_estimate_usd').notNull().default(0),
   actualCostUsd:     real('actual_cost_usd'),
   status:            text('status').notNull().default('pending'),  // pending | succeeded | failed | blocked
@@ -2238,6 +2243,13 @@ export const imageGenerations = pgTable('image_generations', {
   imagePath:         text('image_path'),
   providerResponse:  jsonb('provider_response'),
   errorMessage:      text('error_message'),
+  // Quality + favorites
+  userRating:        integer('user_rating'),                        // 1..5 stars (operator-set)
+  isFavorite:        boolean('is_favorite').notNull().default(false),
+  qualityScore:      real('quality_score'),                         // computed from rating + provider perf
+  // Provenance
+  routerProvenance:  text('router_provenance'),                     // 'auto' | 'user_pinned'
+  latencyMs:         integer('latency_ms'),
   createdBy:         text('created_by'),
   createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
   completedAt:       bigint('completed_at', { mode: 'number' }),
@@ -2246,6 +2258,30 @@ export const imageGenerations = pgTable('image_generations', {
   index('ig_status_idx').on(t.status),
   index('ig_provider_idx').on(t.provider),
   index('ig_created_idx').on(t.createdAt),
+  index('ig_favorite_idx').on(t.isFavorite),
+  index('ig_batch_idx').on(t.batchId),
+])
+
+/** Reusable prompt templates. */
+export const promptTemplates = pgTable('prompt_templates', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  name:              text('name').notNull(),
+  category:          text('category').notNull().default('image'),  // image|research|general
+  brandCategory:     text('brand_category'),                        // for image templates
+  prompt:            text('prompt').notNull(),
+  negativePrompt:    text('negative_prompt'),
+  defaultProvider:   text('default_provider'),
+  defaultModel:      text('default_model'),
+  defaultAspectRatio: text('default_aspect_ratio'),
+  tags:              text('tags').array().notNull().default([]),
+  useCount:          integer('use_count').notNull().default(0),
+  createdBy:         text('created_by'),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:         bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('promptt_workspace_idx').on(t.workspaceId),
+  index('promptt_category_idx').on(t.category),
 ])
 
 // ─── Persistent Stability Streak (governance auto-disengage) ────────────────

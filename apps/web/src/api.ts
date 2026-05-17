@@ -970,6 +970,89 @@ export const enhancementsApi = {
     `${(import.meta as { env?: Record<string, string> }).env?.['VITE_API_URL'] ?? 'http://localhost:3001'}/api/v1/x/export/divisions.csv?workspace_id=${encodeURIComponent(workspaceId)}`,
 }
 
+// ─── Image Studio client ────────────────────────────────────────────────────
+
+export interface ImageGenRecord {
+  id: string; workspaceId: string
+  prompt: string; enhancedPrompt: string | null
+  negativePrompt: string | null
+  provider: string; model: string | null
+  aspectRatio: string | null; width: number | null; height: number | null
+  seed: number | null; batchId: string | null
+  brandCategory: string | null
+  costEstimateUsd: number; actualCostUsd: number | null
+  status: 'pending' | 'succeeded' | 'failed' | 'blocked'
+  blockedReason: string | null
+  imageUrl: string | null
+  errorMessage: string | null
+  userRating: number | null
+  isFavorite: boolean
+  qualityScore: number | null
+  routerProvenance: string | null
+  latencyMs: number | null
+  createdAt: number; completedAt: number | null
+}
+
+export interface PromptTemplate {
+  id: string; workspaceId: string
+  name: string; category: string
+  brandCategory: string | null
+  prompt: string; negativePrompt: string | null
+  defaultProvider: string | null; defaultModel: string | null
+  defaultAspectRatio: string | null
+  tags: string[]; useCount: number
+  createdAt: number; updatedAt: number
+}
+
+export interface StudioStats {
+  today:    { count: number; spendUsd: number }
+  week:     { count: number; spendUsd: number }
+  failed24h: number; favorites: number
+  byProvider: Array<{ provider: string; count: number; spendUsd: number; avgRating: number }>
+}
+
+export interface RouterScore {
+  provider: string; configured: boolean
+  successRate: number; avgLatency: number
+  estimate: number; qualityAvg: number; reasons: string[]
+}
+
+export const studioApi = {
+  generate: (body: {
+    workspace_id: string; prompt: string
+    negative_prompt?: string; provider?: string; model?: string
+    aspect_ratio?: string; width?: number; height?: number; seed?: number
+    source_image_url?: string; brand_category?: string
+    style_preset?: string; budget_cap_usd?: number; enhance_prompt?: boolean
+  }) =>
+    api.post<{ success: boolean; data: ImageGenRecord & { router: { provenance: string; reasons: string[]; estimateUsd: number } } }>(`/api/v1/studio/generate`, body),
+  batch: (body: { workspace_id: string; prompt: string; count: number; provider?: string; aspect_ratio?: string; base_seed?: number; brand_category?: string; enhance_prompt?: boolean }) =>
+    api.post<{ success: true; data: { batchId: string; results: ImageGenRecord[] } }>(`/api/v1/studio/batch`, body),
+  rate: (workspaceId: string, id: string, rating: number) =>
+    api.post<{ success: true }>(`/api/v1/studio/rate`, { workspace_id: workspaceId, id, rating }),
+  favorite: (workspaceId: string, id: string, favorite: boolean) =>
+    api.post<{ success: true }>(`/api/v1/studio/favorite`, { workspace_id: workspaceId, id, favorite }),
+  history: (workspaceId: string, opts?: { favorites?: boolean; brandCategory?: string; limit?: number }) => {
+    const q = new URLSearchParams({ workspace_id: workspaceId })
+    if (opts?.favorites)       q.set('favorites', 'true')
+    if (opts?.brandCategory)   q.set('brand_category', opts.brandCategory)
+    if (opts?.limit !== undefined) q.set('limit', String(opts.limit))
+    return api.get<{ success: true; data: ImageGenRecord[] }>(`/api/v1/studio/history?${q.toString()}`)
+  },
+  routerScores: (workspaceId: string) =>
+    api.get<{ success: true; data: { available: string[]; scores: RouterScore[] } }>(`/api/v1/studio/router/scores?workspace_id=${encodeURIComponent(workspaceId)}`),
+  templates: (workspaceId: string) =>
+    api.get<{ success: true; data: PromptTemplate[] }>(`/api/v1/studio/templates?workspace_id=${encodeURIComponent(workspaceId)}`),
+  createTemplate: (body: { workspace_id: string; name: string; prompt: string; brand_category?: string; default_provider?: string; default_aspect_ratio?: string }) =>
+    api.post<{ success: true; data: { id: string } }>(`/api/v1/studio/templates`, body),
+  useTemplate: (workspaceId: string, id: string) =>
+    api.post<{ success: true; data: PromptTemplate }>(`/api/v1/studio/templates/${encodeURIComponent(id)}/use`, { workspace_id: workspaceId }),
+  deleteTemplate: (workspaceId: string, id: string) =>
+    api.delete<{ success: true }>(`/api/v1/studio/templates/${encodeURIComponent(id)}?workspace_id=${encodeURIComponent(workspaceId)}`),
+  stats: (workspaceId: string) =>
+    api.get<{ success: true; data: StudioStats }>(`/api/v1/studio/stats?workspace_id=${encodeURIComponent(workspaceId)}`),
+}
+
 export interface DivisionSnapshotDTO {
   division:   string
   capturedAt: number

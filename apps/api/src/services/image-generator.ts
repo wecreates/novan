@@ -28,6 +28,7 @@ export type ImageProvider = 'openai' | 'stability' | 'replicate' | 'fal'
 export interface GenerateInput {
   workspaceId:    string
   prompt:         string
+  enhancedPrompt?: string         // optional: from prompt-rewriter
   negativePrompt?: string
   provider:       ImageProvider
   model?:         string
@@ -35,6 +36,11 @@ export interface GenerateInput {
   aspectRatio?:   string         // '1:1' | '16:9' | '9:16' | '4:3' | '3:4'
   width?:         number
   height?:        number
+  seed?:          number          // reproducibility
+  batchId?:       string          // groups multi-image generations
+  sourceImageUrl?: string         // image-to-image input (http(s) URL or data:)
+  brandCategory?: string          // icon|logo|hero|...
+  routerProvenance?: 'auto' | 'user_pinned'
   budgetCapUsd?:  number         // reject if estimate > cap
   createdBy?:     string
 }
@@ -151,9 +157,14 @@ async function genReplicate(input: GenerateInput): Promise<{ imageUrl: string; r
     },
     body: JSON.stringify({
       input: {
-        prompt:        input.prompt,
+        prompt:        input.enhancedPrompt ?? input.prompt,
         aspect_ratio:  input.aspectRatio ?? '1:1',
         output_format: 'png',
+        ...(input.seed !== undefined ? { seed: input.seed } : {}),
+        // Image-to-image: most Replicate models accept `image` as the
+        // conditioning input. flux-schnell is text-only, but flux-dev
+        // and SDXL variants accept this.
+        ...(input.sourceImageUrl ? { image: input.sourceImageUrl } : {}),
       },
     }),
     signal: AbortSignal.timeout(120_000),
@@ -211,6 +222,7 @@ export async function generateImage(input: GenerateInput): Promise<GenerateResul
   await db.insert(imageGenerations).values({
     id, workspaceId: input.workspaceId,
     prompt:          redactedPrompt,
+    enhancedPrompt:  input.enhancedPrompt ?? null,
     negativePrompt:  input.negativePrompt ?? null,
     provider:        input.provider,
     model:           input.model        ?? null,
@@ -218,6 +230,11 @@ export async function generateImage(input: GenerateInput): Promise<GenerateResul
     aspectRatio:     input.aspectRatio  ?? null,
     width:           input.width        ?? null,
     height:          input.height       ?? null,
+    seed:            input.seed         ?? null,
+    batchId:         input.batchId      ?? null,
+    sourceImageRef:  input.sourceImageUrl ?? null,
+    brandCategory:   input.brandCategory ?? null,
+    routerProvenance: input.routerProvenance ?? null,
     costEstimateUsd: estimateCostUsd(input.provider, input),
     status:          'pending',
     createdBy:       input.createdBy    ?? null,
@@ -281,17 +298,20 @@ export async function generateImage(input: GenerateInput): Promise<GenerateResul
 
   // 4. Real generation
   await emit(input.workspaceId, 'image.generation_started', { id, provider: input.provider, estimate })
+  const startedAt = Date.now()
   try {
     const out = await DRIVERS[input.provider]({ ...input, prompt: redactedPrompt })
     const completedAt = Date.now()
+    const latencyMs = completedAt - startedAt
     await db.update(imageGenerations).set({
       status:           'succeeded',
       imageUrl:         out.imageUrl,
       actualCostUsd:    estimate,
       providerResponse: out.raw as Record<string, unknown>,
+      latencyMs,
       completedAt,
     }).where(eq(imageGenerations.id, id))
-    await emit(input.workspaceId, 'image.generation_completed', { id, provider: input.provider, costUsd: estimate })
+    await emit(input.workspaceId, 'image.generation_completed', { id, provider: input.provider, costUsd: estimate, latencyMs })
     return { id, status: 'succeeded', imageUrl: out.imageUrl, costEstimateUsd: estimate, actualCostUsd: estimate, provider: input.provider }
   } catch (e) {
     const msg = (e as Error).message
@@ -320,6 +340,49 @@ export function quoteCost(provider: ImageProvider, opts: { width?: number; heigh
 }
 
 /** Provider availability — which providers have keys configured. */
+// ─── Batch + smart-router public API ─────────────────────────────────────────
+
+export async function generateBatch(
+  input: Omit<GenerateInput, 'batchId' | 'seed'> & { count: number; baseSeed?: number },
+): Promise<{ batchId: string; results: GenerateResult[] }> {
+  const { v7: uuidv7 } = await import('uuid')
+  const batchId = uuidv7()
+  const count = Math.max(1, Math.min(8, input.count))   // hard cap 8/batch
+  const results: GenerateResult[] = []
+  for (let i = 0; i < count; i++) {
+    const seed = input.baseSeed !== undefined ? input.baseSeed + i : Math.floor(Math.random() * 2147483647)
+    const r = await generateImage({ ...input, batchId, seed })
+    results.push(r)
+    if (r.status === 'failed' || r.status === 'blocked') break  // fail-fast on first error
+  }
+  return { batchId, results }
+}
+
+/**
+ * Rate an image (1..5). Updates qualityScore = 0.7*rating + 0.3*priorScore.
+ * Operator feedback loop into the router.
+ */
+export async function rateImage(workspaceId: string, id: string, rating: number): Promise<{ ok: boolean }> {
+  const clamped = Math.max(1, Math.min(5, Math.round(rating)))
+  const row = await db.select().from(imageGenerations)
+    .where(and(eq(imageGenerations.workspaceId, workspaceId), eq(imageGenerations.id, id)))
+    .limit(1).then(r => r[0]).catch(() => null)
+  if (!row) return { ok: false }
+  const prior = row.qualityScore ?? 0
+  const updated = prior > 0 ? 0.7 * clamped + 0.3 * prior : clamped
+  await db.update(imageGenerations).set({
+    userRating: clamped, qualityScore: Number(updated.toFixed(2)),
+  }).where(eq(imageGenerations.id, id)).catch(() => null)
+  return { ok: true }
+}
+
+export async function setFavorite(workspaceId: string, id: string, isFavorite: boolean): Promise<{ ok: boolean }> {
+  await db.update(imageGenerations).set({ isFavorite })
+    .where(and(eq(imageGenerations.workspaceId, workspaceId), eq(imageGenerations.id, id)))
+    .catch(() => null)
+  return { ok: true }
+}
+
 export function listAvailableProviders(): ImageProvider[] {
   const out: ImageProvider[] = []
   if (process.env['OPENAI_API_KEY'])      out.push('openai')
