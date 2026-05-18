@@ -71,12 +71,12 @@ export default function RunawayJobsPage() {
         <div className="flex items-center gap-3">
           <Flame className="w-5 h-5 text-orange-400" />
           <div>
-            <h1 className="text-lg font-semibold text-[var(--text-primary)]">Runaway Jobs</h1>
-            <p className="text-xs text-[var(--text-muted)]">Jobs detected exceeding cost, duration, or retry limits</p>
+            <h1 className="text-lg font-semibold text-primary">Runaway Jobs</h1>
+            <p className="text-xs text-muted">Jobs detected exceeding cost, duration, or retry limits</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)] cursor-pointer">
+          <label className="flex items-center gap-1.5 text-xs text-secondary cursor-pointer">
             <input
               type="checkbox"
               checked={showStopped}
@@ -85,7 +85,7 @@ export default function RunawayJobsPage() {
             />
             Show stopped
           </label>
-          <button onClick={load} className="p-1.5 rounded hover:bg-[var(--bg-elevated)] text-[var(--text-muted)]">
+          <button onClick={load} className="p-1.5 rounded hover:bg-elevated text-muted">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
@@ -99,21 +99,21 @@ export default function RunawayJobsPage() {
           </p>
           <div className="space-y-2">
             {active.map((job) => {
-              const r = REASON_LABELS[job.reason] ?? { label: job.reason, color: 'text-[var(--text-muted)]' }
+              const r = REASON_LABELS[job.reason] ?? { label: job.reason, color: 'text-muted' }
               return (
                 <div key={job.id} className="bg-[var(--bg-surface)] border border-orange-500/20 rounded-lg p-4 flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-mono text-[var(--text-muted)]">{job.jobId.slice(0, 12)}…</span>
+                      <span className="text-xs font-mono text-muted">{job.jobId.slice(0, 12)}…</span>
                       <span className={`px-1.5 py-0.5 rounded text-xs border font-medium ${r.color}`}>{r.label}</span>
-                      <span className="text-xs text-[var(--text-muted)] bg-[var(--bg-elevated)] px-1.5 py-0.5 rounded">{job.jobType}</span>
+                      <span className="text-xs text-muted bg-elevated px-1.5 py-0.5 rounded">{job.jobType}</span>
                     </div>
-                    <div className="flex items-center gap-4 mt-2 text-xs text-[var(--text-muted)]">
+                    <div className="flex items-center gap-4 mt-2 text-xs text-muted">
                       <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" />${job.costUsd.toFixed(5)}</span>
                       <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{fmtDuration(job.durationMs)}</span>
                       <span>Detected {fmtTs(job.detectedAt)}</span>
                     </div>
-                    {job.endpointId && <p className="text-xs text-[var(--text-muted)] mt-1">Endpoint: {job.endpointId}</p>}
+                    {job.endpointId && <p className="text-xs text-muted mt-1">Endpoint: {job.endpointId}</p>}
                   </div>
                   <button
                     onClick={() => void stopJob(job.id)}
@@ -132,7 +132,7 @@ export default function RunawayJobsPage() {
 
       {/* Empty active state */}
       {!loading && active.length === 0 && (
-        <div className="flex items-center gap-2 text-sm text-[var(--text-muted)] bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg p-6 justify-center">
+        <div className="flex items-center gap-2 text-sm text-muted bg-[var(--bg-surface)] border border-border rounded-lg p-6 justify-center">
           <CheckCircle className="w-4 h-4 text-green-400" />
           No active runaway jobs detected
         </div>
@@ -141,18 +141,18 @@ export default function RunawayJobsPage() {
       {/* Stopped/historical jobs */}
       {showStopped && stopped.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">History</p>
+          <p className="text-xs font-medium text-muted uppercase tracking-wider">History</p>
           {stopped.map((job) => {
-            const r = REASON_LABELS[job.reason] ?? { label: job.reason, color: 'text-[var(--text-muted)]' }
+            const r = REASON_LABELS[job.reason] ?? { label: job.reason, color: 'text-muted' }
             return (
-              <div key={job.id} className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg p-4 flex items-center justify-between gap-4 opacity-70">
+              <div key={job.id} className="bg-[var(--bg-surface)] border border-border rounded-lg p-4 flex items-center justify-between gap-4 opacity-70">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-mono text-[var(--text-muted)]">{job.jobId.slice(0, 12)}…</span>
+                    <span className="text-xs font-mono text-muted">{job.jobId.slice(0, 12)}…</span>
                     <span className={`px-1.5 py-0.5 rounded text-xs border ${r.color}`}>{r.label}</span>
-                    <span className="text-xs text-[var(--text-muted)] bg-[var(--bg-elevated)] px-1.5 py-0.5 rounded">{job.jobType}</span>
+                    <span className="text-xs text-muted bg-elevated px-1.5 py-0.5 rounded">{job.jobType}</span>
                   </div>
-                  <div className="flex items-center gap-4 mt-1 text-xs text-[var(--text-muted)]">
+                  <div className="flex items-center gap-4 mt-1 text-xs text-muted">
                     <span>${job.costUsd.toFixed(5)}</span>
                     <span>{fmtDuration(job.durationMs)}</span>
                     {job.stoppedAt && <span>Stopped {fmtTs(job.stoppedAt)}</span>}
@@ -167,7 +167,7 @@ export default function RunawayJobsPage() {
 
       {loading && (
         <div className="space-y-2">
-          {[0,1,2].map((i) => <div key={i} className="h-16 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg animate-pulse" />)}
+          {[0,1,2].map((i) => <div key={i} className="h-16 bg-[var(--bg-surface)] border border-border rounded-lg animate-pulse" />)}
         </div>
       )}
     </div>

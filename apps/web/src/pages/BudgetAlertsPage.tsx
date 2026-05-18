@@ -56,8 +56,8 @@ export default function BudgetAlertsPage() {
         <div className="flex items-center gap-3">
           <Bell className="w-5 h-5 text-yellow-400" />
           <div>
-            <h1 className="text-lg font-semibold text-[var(--text-primary)]">Budget Alerts</h1>
-            <p className="text-xs text-[var(--text-muted)]">Fired when spend crosses threshold bands</p>
+            <h1 className="text-lg font-semibold text-primary">Budget Alerts</h1>
+            <p className="text-xs text-muted">Fired when spend crosses threshold bands</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -66,7 +66,7 @@ export default function BudgetAlertsPage() {
               {active.length} ACTIVE
             </span>
           )}
-          <label className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)] cursor-pointer">
+          <label className="flex items-center gap-1.5 text-xs text-secondary cursor-pointer">
             <input
               type="checkbox"
               checked={showDismissed}
@@ -75,14 +75,14 @@ export default function BudgetAlertsPage() {
             />
             Show dismissed
           </label>
-          <button onClick={load} className="p-1.5 rounded hover:bg-[var(--bg-elevated)] text-[var(--text-muted)]">
+          <button onClick={load} className="p-1.5 rounded hover:bg-elevated text-muted">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
       {!loading && active.length === 0 && !showDismissed && (
-        <div className="flex items-center gap-2 text-sm text-[var(--text-muted)] bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg p-6 justify-center">
+        <div className="flex items-center gap-2 text-sm text-muted bg-[var(--bg-surface)] border border-border rounded-lg p-6 justify-center">
           <CheckCircle className="w-4 h-4 text-green-400" />
           No active budget alerts
         </div>
@@ -90,7 +90,7 @@ export default function BudgetAlertsPage() {
 
       {loading ? (
         <div className="space-y-2">
-          {[0,1,2].map((i) => <div key={i} className="h-20 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg animate-pulse" />)}
+          {[0,1,2].map((i) => <div key={i} className="h-20 bg-[var(--bg-surface)] border border-border rounded-lg animate-pulse" />)}
         </div>
       ) : (
         <div className="space-y-3">
@@ -98,26 +98,26 @@ export default function BudgetAlertsPage() {
             <div
               key={alert.id}
               className={`bg-[var(--bg-surface)] border rounded-lg p-4 flex items-start justify-between gap-4 ${
-                alert.dismissed ? 'border-[var(--border)] opacity-50' : 'border-yellow-500/20 bg-yellow-500/5'
+                alert.dismissed ? 'border-border opacity-50' : 'border-yellow-500/20 bg-yellow-500/5'
               }`}
             >
               <div className="flex items-start gap-3">
-                <AlertTriangle className={`w-4 h-4 mt-0.5 shrink-0 ${alert.dismissed ? 'text-[var(--text-muted)]' : 'text-yellow-400'}`} />
+                <AlertTriangle className={`w-4 h-4 mt-0.5 shrink-0 ${alert.dismissed ? 'text-muted' : 'text-yellow-400'}`} />
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`px-1.5 py-0.5 rounded text-xs border font-medium ${TYPE_COLORS[alert.alertType] ?? 'text-[var(--text-muted)]'}`}>
+                    <span className={`px-1.5 py-0.5 rounded text-xs border font-medium ${TYPE_COLORS[alert.alertType] ?? 'text-muted'}`}>
                       {alert.alertType.toUpperCase()}
                     </span>
-                    <span className="text-xs text-[var(--text-muted)]">
+                    <span className="text-xs text-muted">
                       {Math.round(alert.thresholdPct * 100)}% of ${alert.limitUsd.toFixed(2)} limit
                     </span>
                   </div>
-                  <p className="text-sm text-[var(--text-primary)] mt-1">
+                  <p className="text-sm text-primary mt-1">
                     Spend reached <span className="font-mono">${alert.currentUsd.toFixed(4)}</span>
                     {' '}/ <span className="font-mono">${alert.limitUsd.toFixed(2)}</span>
                     {' '}(<span className="text-yellow-400">{Math.round(alert.thresholdPct * 100)}%</span>)
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-1">
+                  <p className="text-xs text-muted mt-1">
                     {new Date(alert.firedAt).toLocaleString()}
                     {alert.dismissed && alert.dismissedAt && ` · Dismissed ${new Date(alert.dismissedAt).toLocaleString()}`}
                   </p>
@@ -127,7 +127,7 @@ export default function BudgetAlertsPage() {
                 <button
                   onClick={() => void dismiss(alert.id)}
                   disabled={dismissing[alert.id]}
-                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border)] hover:border-[var(--text-muted)] transition-colors"
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-elevated text-secondary border border-border hover:border-[var(--text-muted)] transition-colors"
                 >
                   <BellOff className="w-3.5 h-3.5" />
                   Dismiss

@@ -106,9 +106,9 @@ export default function OperatorInputPage() {
               <ul className="divide-y divide-[var(--border)]">
                 {cronFails.data.data.recent.slice(0, 6).map((r, i) => (
                   <li key={i} className="px-5 py-1.5 text-xs flex items-center gap-3">
-                    <span className="font-mono text-[var(--text-muted)] w-32">{new Date(r.at).toLocaleString().replace(',', '')}</span>
+                    <span className="font-mono text-muted w-32">{new Date(r.at).toLocaleString().replace(',', '')}</span>
                     <span className="font-mono text-amber-300 w-32">{r.task}</span>
-                    <span className="text-[var(--text-muted)] truncate flex-1" title={r.error}>{r.error}</span>
+                    <span className="text-muted truncate flex-1" title={r.error}>{r.error}</span>
                   </li>
                 ))}
               </ul>
@@ -159,8 +159,8 @@ export default function OperatorInputPage() {
             {prefs.data!.data.map(p => (
               <li key={p.taskType} className="px-5 py-2 flex items-center gap-3 text-sm">
                 <span className="font-mono">{p.taskType}</span>
-                <span className="text-[var(--text-muted)]">→ {p.preferredProvider}</span>
-                <span className="text-[10px] text-[var(--text-muted)] italic flex-1" title={p.reason ?? ''}>{p.reason ?? ''}</span>
+                <span className="text-muted">→ {p.preferredProvider}</span>
+                <span className="text-[10px] text-muted italic flex-1" title={p.reason ?? ''}>{p.reason ?? ''}</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${p.status === 'active' ? 'text-emerald-300 bg-emerald-500/10' : p.status === 'rejected' ? 'text-red-300 bg-red-500/10' : 'text-amber-300 bg-amber-500/10'}`}>{p.status}</span>
                 {p.status === 'pending' && (
                   <>
@@ -188,13 +188,13 @@ export default function OperatorInputPage() {
           <button onClick={() => setWorker.mutate()} className="self-end px-3 py-1.5 text-xs rounded border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300">Set</button>
         </div>
         {(workers.data?.data ?? []).length > 0 && (
-          <ul className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+          <ul className="divide-y divide-[var(--border)] border-t border-border">
             {workers.data!.data.map(w => (
               <li key={w.queueName} className="px-5 py-2 text-sm flex items-center gap-3">
                 <span className="font-mono">{w.queueName}</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${w.factor < 1 ? 'text-amber-300 bg-amber-500/10' : w.factor > 1 ? 'text-sky-300 bg-sky-500/10' : 'text-slate-300 bg-slate-500/10'}`}>×{w.factor}</span>
-                <span className="text-[var(--text-muted)] text-xs flex-1" title={w.reason ?? ''}>{w.reason ?? ''}</span>
-                <span className="text-[10px] text-[var(--text-muted)] font-mono">{w.setBy}</span>
+                <span className="text-muted text-xs flex-1" title={w.reason ?? ''}>{w.reason ?? ''}</span>
+                <span className="text-[10px] text-muted font-mono">{w.setBy}</span>
               </li>
             ))}
           </ul>
@@ -203,13 +203,13 @@ export default function OperatorInputPage() {
 
       {/* Webhook setup */}
       <Section title="Inbound webhook setup" icon={<Webhook className="w-4 h-4 text-sky-400" />}>
-        <div className="p-4 text-xs space-y-2 text-[var(--text-muted)]">
+        <div className="p-4 text-xs space-y-2 text-muted">
           <p>Send inbound messages (Slack, Discord, email-to-webhook gateways, custom integrations) to:</p>
-          <pre className="bg-[var(--bg)] border border-[var(--border)] rounded p-2 font-mono text-emerald-300 select-all">
+          <pre className="bg-[var(--bg)] border border-border rounded p-2 font-mono text-emerald-300 select-all">
             POST {origin}/api/v1/autonomy/inbound
           </pre>
           <p>Body:</p>
-          <pre className="bg-[var(--bg)] border border-[var(--border)] rounded p-2 font-mono text-[var(--text)] text-[10px] overflow-x-auto">
+          <pre className="bg-[var(--bg)] border border-border rounded p-2 font-mono text-primary text-[10px] overflow-x-auto">
 {`{
   "workspace_id": "${workspaceId}",
   "channel": "slack" | "email" | "discord" | "webhook",
@@ -229,27 +229,27 @@ export default function OperatorInputPage() {
 
 function Section({ title, icon, children }: { title: string; icon?: JSX.Element; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
       </div>
       {children}
     </div>
   )
 }
 
-const inputCls = 'w-full bg-[var(--bg)] border border-[var(--border)] rounded px-2 py-1 text-sm'
+const inputCls = 'w-full bg-[var(--bg)] border border-border rounded px-2 py-1 text-sm'
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mb-0.5">{label}</div>
+      <div className="text-[10px] uppercase tracking-wider text-muted mb-0.5">{label}</div>
       {children}
     </label>
   )
 }
 
 function Empty({ msg }: { msg: string }) {
-  return <div className="px-5 py-3 text-xs text-[var(--text-muted)] italic">{msg}</div>
+  return <div className="px-5 py-3 text-xs text-muted italic">{msg}</div>
 }

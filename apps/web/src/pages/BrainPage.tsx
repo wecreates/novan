@@ -9,7 +9,7 @@ import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber'
-import { OrbitControls, Html, AdaptiveDpr, AdaptiveEvents } from '@react-three/drei'
+import { OrbitControls, Html, AdaptiveDpr, AdaptiveEvents, Stats } from '@react-three/drei'
 import {
   Brain, Filter, Eye, Sparkles, Activity, X, Loader2,
   ChevronDown, Search, Pause, Play, ShieldCheck, Network, AlertOctagon,
@@ -19,6 +19,7 @@ import * as THREE from 'three'
 import { api } from '../api.js'
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
 import { COLOR, STATUS_COLOR as STATUS_COLOR_TOKEN } from '../design/tokens.js'
+import { tone } from '../design/audio.js'
 
 // ─── Types from API ──────────────────────────────────────────────────────
 
@@ -242,9 +243,11 @@ export default function BrainPage() {
   const [confirmText, setConfirmText] = useState('')
   const [historicalSearch, setHistoricalSearch] = useState(false)
   const [windowMinutes, setWindowMinutes] = useState(5)
+  const [showFps, setShowFps] = useState(false)
 
   // URL params for deep-linking from War Room (Incidents/Proposals/Audit)
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
+  const screenshotMode = searchParams.get('screenshot') === '1'
   useEffect(() => {
     const at = searchParams.get('replay_at')
     const node = searchParams.get('node')
@@ -427,6 +430,7 @@ export default function BrainPage() {
   const onNodeClick = (n: BrainNode) => {
     setSelectedId(n.id)
     if (n.position) setFocusOn(n.position)
+    tone('select')
     // Update recent (most-recent first, dedup, cap 8)
     setRecentNodes(prev => {
       const next = [n.id, ...prev.filter(id => id !== n.id)].slice(0, 8)
@@ -490,8 +494,8 @@ export default function BrainPage() {
 
   return (
     <div className="fixed inset-0 bg-bg text-primary flex flex-col">
-      {/* Top command bar */}
-      <div className="glass border-b border-border px-4 py-2 flex items-center gap-3 text-xs z-overlay relative">
+      {/* Top command bar — hidden in screenshot mode */}
+      <div className={`glass border-b border-border px-4 py-2 flex items-center gap-3 text-xs z-overlay relative ${screenshotMode ? 'hidden' : ''}`}>
         <Brain className="w-4 h-4 text-healthy" />
         <span className="font-medium text-primary tracking-tight">Novan Brain</span>
 
@@ -568,8 +572,16 @@ export default function BrainPage() {
         </div>
 
         <button onClick={() => setPaletteOpen(true)}
-          className="ml-2 px-2 py-1 rounded text-[10px] border border-white/10 hover:bg-white/5 flex items-center gap-1.5">
+          className="ml-2 px-2 py-1 rounded text-[10px] border border-border hover:bg-[var(--surface-hover)] flex items-center gap-1.5 transition-colors duration-fast ease-out">
           <Command className="w-3 h-3" /> ⌘K
+        </button>
+
+        <button onClick={() => setShowFps(f => !f)}
+          title="Toggle FPS stats"
+          className={`px-2 py-1 rounded text-[10px] border transition-colors duration-fast ease-out ${
+            showFps ? 'border-[rgba(103,232,249,0.30)] text-active bg-[rgba(103,232,249,0.05)]' : 'border-border text-muted hover:bg-[var(--surface-hover)]'
+          }`}>
+          fps
         </button>
 
         <button onClick={saveView} title="Save current view"
@@ -618,13 +630,14 @@ export default function BrainPage() {
                   onNodeHover={(n) => setHoveredId(n?.id ?? null)}
                   focusOn={focusOn}
                 />
+                {showFps && <Stats className="!left-auto !right-2 !top-auto !bottom-2" />}
               </Suspense>
             </Canvas>
           </ErrorBoundary>
         )}
 
-        {/* Event ticker (bottom-left) */}
-        {eventTicker.length > 0 && (
+        {/* All overlay chrome below hides in ?screenshot=1 mode */}
+        {!screenshotMode && eventTicker.length > 0 && (
           <div className="absolute bottom-3 left-3 max-w-md text-2xs mono space-y-0.5 pointer-events-none z-overlay">
             {eventTicker.slice(0, 5).map((e, i) => (
               <div key={`${e.at}-${i}`} className="text-muted truncate fade-in">
@@ -636,7 +649,7 @@ export default function BrainPage() {
         )}
 
         {/* Systems strip (top-right) — quick template summary */}
-        {g && (
+        {g && !screenshotMode && (
           <div className="absolute top-3 right-3 glass rounded-lg p-2 space-y-0.5 text-2xs z-overlay">
             {g.systems.map(s => (
               <button key={s.id} onClick={() => {
@@ -710,7 +723,7 @@ export default function BrainPage() {
         )}
 
         {/* Saved views strip */}
-        {savedViews.length > 0 && !paletteOpen && (
+        {savedViews.length > 0 && !paletteOpen && !screenshotMode && (
           <div className="absolute top-3 left-3 glass rounded-lg p-2 max-w-[200px] fade-in z-overlay">
             <div className="label mb-1 flex items-center gap-1">
               <Bookmark className="w-3 h-3" /> Saved views
@@ -729,7 +742,7 @@ export default function BrainPage() {
         )}
 
         {/* Mini-map */}
-        {filteredGraph && !fallback2D && (
+        {filteredGraph && !fallback2D && !screenshotMode && (
           <MiniMap graph={filteredGraph} selectedId={selectedId} />
         )}
 

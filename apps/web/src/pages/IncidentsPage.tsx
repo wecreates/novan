@@ -179,19 +179,19 @@ function IncidentTimeline({ id }: { id: string }) {
     queryFn:  () => fetchTimeline(id),
   })
 
-  if (isLoading) return <p className="text-xs text-[var(--text-muted)] py-2">Loading timeline…</p>
-  if (events.length === 0) return <p className="text-xs text-[var(--text-muted)] py-2">No timeline entries</p>
+  if (isLoading) return <p className="text-xs text-muted py-2">Loading timeline…</p>
+  if (events.length === 0) return <p className="text-xs text-muted py-2">No timeline entries</p>
 
   return (
     <div className="space-y-1.5 max-h-48 overflow-y-auto">
       {events.map((e) => (
         <div key={e.id} className="flex items-start gap-2 text-xs">
-          <span className="text-[var(--text-muted)] font-mono shrink-0">{fmtTime(e.createdAt)}</span>
-          <span className={`shrink-0 font-medium ${ACTION_COLORS[e.actionType] ?? 'text-[var(--text-secondary)]'}`}>
+          <span className="text-muted font-mono shrink-0">{fmtTime(e.createdAt)}</span>
+          <span className={`shrink-0 font-medium ${ACTION_COLORS[e.actionType] ?? 'text-secondary'}`}>
             {e.actionType.replace(/_/g, ' ')}
           </span>
-          <span className="text-[var(--text-muted)]">by {e.actor}</span>
-          {e.note && <span className="text-[var(--text-secondary)] truncate">— {e.note}</span>}
+          <span className="text-muted">by {e.actor}</span>
+          {e.note && <span className="text-secondary truncate">— {e.note}</span>}
         </div>
       ))}
     </div>
@@ -236,7 +236,7 @@ function IncidentCard({ incident }: { incident: Incident }) {
         ? 'border-red-600/40'
         : incident.severity === 'critical'
         ? 'border-red-500/30'
-        : 'border-[var(--border)]'
+        : 'border-border'
     }`}>
       {/* Header */}
       <div className="px-4 py-3 flex items-start gap-3">
@@ -247,17 +247,17 @@ function IncidentCard({ incident }: { incident: Incident }) {
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className="text-sm font-medium text-[var(--text-primary)] truncate">{incident.title}</p>
+            <p className="text-sm font-medium text-primary truncate">{incident.title}</p>
             {incident.requiresApproval && (
               <Shield className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
             )}
           </div>
           <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-xs text-[var(--text-muted)]">{TYPE_LABELS[incident.type] ?? incident.type}</span>
-            <span className="text-xs text-[var(--text-muted)]">·</span>
-            <span className="text-xs text-[var(--text-muted)]">{incident.signalCount} signal(s)</span>
-            <span className="text-xs text-[var(--text-muted)]">·</span>
-            <span className="text-xs text-[var(--text-muted)]">{fmtAgo(incident.detectedAt)}</span>
+            <span className="text-xs text-muted">{TYPE_LABELS[incident.type] ?? incident.type}</span>
+            <span className="text-xs text-muted">·</span>
+            <span className="text-xs text-muted">{incident.signalCount} signal(s)</span>
+            <span className="text-xs text-muted">·</span>
+            <span className="text-xs text-muted">{fmtAgo(incident.detectedAt)}</span>
           </div>
         </div>
 
@@ -267,7 +267,7 @@ function IncidentCard({ incident }: { incident: Incident }) {
           </span>
           <button
             onClick={() => setExpanded((p) => !p)}
-            className="text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+            className="text-muted hover:text-secondary transition-colors"
           >
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
@@ -278,7 +278,7 @@ function IncidentCard({ incident }: { incident: Incident }) {
       {sysList.length > 0 && (
         <div className="px-4 pb-2 flex flex-wrap gap-1">
           {sysList.map(([k, v]) => (
-            <span key={k} className="px-1.5 py-0.5 rounded text-xs bg-[var(--bg-elevated)] text-[var(--text-muted)] font-mono">
+            <span key={k} className="px-1.5 py-0.5 rounded text-xs bg-elevated text-muted font-mono">
               {k}: {String(v).slice(0, 30)}
             </span>
           ))}
@@ -287,16 +287,16 @@ function IncidentCard({ incident }: { incident: Incident }) {
 
       {/* Expanded */}
       {expanded && (
-        <div className="border-t border-[var(--border)] px-4 py-3 space-y-3">
+        <div className="border-t border-border px-4 py-3 space-y-3">
           <div>
-            <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Summary</p>
-            <p className="text-sm text-[var(--text-secondary)]">{incident.summary}</p>
+            <p className="text-xs text-muted uppercase tracking-wide mb-1">Summary</p>
+            <p className="text-sm text-secondary">{incident.summary}</p>
           </div>
 
           {incident.rootCauseHypothesis && (
             <div>
-              <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Root Cause Hypothesis</p>
-              <p className="text-sm text-[var(--text-secondary)]">{incident.rootCauseHypothesis}</p>
+              <p className="text-xs text-muted uppercase tracking-wide mb-1">Root Cause Hypothesis</p>
+              <p className="text-sm text-secondary">{incident.rootCauseHypothesis}</p>
             </div>
           )}
 
@@ -305,9 +305,9 @@ function IncidentCard({ incident }: { incident: Incident }) {
               <Wrench className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-purple-400 font-medium">Recommended Action</p>
-                <p className="text-sm text-[var(--text-secondary)] mt-0.5">{incident.recommendedAction}</p>
+                <p className="text-sm text-secondary mt-0.5">{incident.recommendedAction}</p>
                 {incident.assignedAgent && (
-                  <p className="text-xs text-[var(--text-muted)] mt-1">
+                  <p className="text-xs text-muted mt-1">
                     Assigned: <span className="font-mono">{incident.assignedAgent}</span>
                   </p>
                 )}
@@ -317,8 +317,8 @@ function IncidentCard({ incident }: { incident: Incident }) {
 
           {incident.resolutionNote && (
             <div>
-              <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Resolution Note</p>
-              <p className="text-sm text-[var(--text-secondary)] italic">{incident.resolutionNote}</p>
+              <p className="text-xs text-muted uppercase tracking-wide mb-1">Resolution Note</p>
+              <p className="text-sm text-secondary italic">{incident.resolutionNote}</p>
             </div>
           )}
 
@@ -359,7 +359,7 @@ function IncidentCard({ incident }: { incident: Incident }) {
                 </div>
               ) : (
                 <div className="space-y-2 pt-1">
-                  <p className="text-xs text-[var(--text-secondary)]">
+                  <p className="text-xs text-secondary">
                     {action === 'ack' ? 'Add optional note:'
                       : action === 'resolve' ? 'Resolution note (required):'
                       : 'Escalation reason (required):'}
@@ -369,7 +369,7 @@ function IncidentCard({ incident }: { incident: Incident }) {
                     onChange={(e) => setNote(e.target.value)}
                     rows={2}
                     placeholder={action === 'ack' ? 'Optional…' : 'Required…'}
-                    className="w-full text-xs rounded border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] px-2 py-1.5 resize-none outline-none focus:border-blue-500/50"
+                    className="w-full text-xs rounded border border-border bg-bg text-primary px-2 py-1.5 resize-none outline-none focus:border-blue-500/50"
                   />
                   {error && <p className="text-xs text-red-400">{error}</p>}
                   <div className="flex gap-2">
@@ -385,7 +385,7 @@ function IncidentCard({ incident }: { incident: Incident }) {
                     </button>
                     <button
                       onClick={() => { setAction(null); setNote(''); setError(null) }}
-                      className="px-3 py-1.5 rounded text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+                      className="px-3 py-1.5 rounded text-xs text-muted hover:text-secondary transition-colors"
                     >
                       Cancel
                     </button>
@@ -397,7 +397,7 @@ function IncidentCard({ incident }: { incident: Incident }) {
 
           {/* Timeline */}
           <div>
-            <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-2">Timeline</p>
+            <p className="text-xs text-muted uppercase tracking-wide mb-2">Timeline</p>
             <IncidentTimeline id={incident.id} />
           </div>
         </div>
@@ -410,12 +410,12 @@ function IncidentCard({ incident }: { incident: Incident }) {
 
 function StatCard({ label, value, color, icon }: { label: string; value: number; color?: string; icon?: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3">
+    <div className="rounded-lg border border-border bg-[var(--bg-surface)] px-4 py-3">
       <div className="flex items-center gap-1.5">
         {icon}
-        <p className="text-xs text-[var(--text-muted)]">{label}</p>
+        <p className="text-xs text-muted">{label}</p>
       </div>
-      <p className={`text-2xl font-semibold mt-1 ${color ?? 'text-[var(--text-primary)]'}`}>{value}</p>
+      <p className={`text-2xl font-semibold mt-1 ${color ?? 'text-primary'}`}>{value}</p>
     </div>
   )
 }
@@ -461,11 +461,11 @@ export default function IncidentsPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-[var(--border)]">
+      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-border">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-[var(--text-primary)]">Incident Response</h1>
-            <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            <h1 className="text-lg font-semibold text-primary">Incident Response</h1>
+            <p className="text-xs text-muted mt-0.5">
               Auto-triage queue · backed by real runtime signals
             </p>
           </div>
@@ -483,7 +483,7 @@ export default function IncidentsPage() {
                 qc.invalidateQueries({ queryKey: ['incidents'] })
                 qc.invalidateQueries({ queryKey: ['incident-stats'] })
               }}
-              className="text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+              className="text-muted hover:text-secondary transition-colors"
               title="Refresh"
             >
               <RefreshCcw className="w-4 h-4" />
@@ -517,7 +517,7 @@ export default function IncidentsPage() {
               className={`px-3 py-1 rounded text-xs transition-colors ${
                 filter === t.value
                   ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                  : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]'
+                  : 'text-muted hover:text-secondary hover:bg-elevated'
               }`}
             >
               {t.label}
@@ -529,11 +529,11 @@ export default function IncidentsPage() {
       {/* List */}
       <div className="flex-1 overflow-y-auto px-6 py-4">
         {isLoading && (
-          <div className="flex items-center justify-center h-32 text-[var(--text-muted)] text-sm">Loading incidents…</div>
+          <div className="flex items-center justify-center h-32 text-muted text-sm">Loading incidents…</div>
         )}
 
         {!isLoading && incidents.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-48 text-[var(--text-muted)]">
+          <div className="flex flex-col items-center justify-center h-48 text-muted">
             <CheckCircle2 className="w-8 h-8 mb-2 opacity-40" />
             <p className="text-sm">No incidents</p>
             <p className="text-xs mt-1 opacity-60">

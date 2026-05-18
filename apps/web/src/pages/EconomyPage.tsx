@@ -104,14 +104,14 @@ export default function EconomyPage() {
       <div className="flex items-center gap-3">
         <Coins className="w-5 h-5 text-amber-400" />
         <h1 className="text-xl font-semibold">Economic War Room</h1>
-        <span className="text-xs text-[var(--text-muted)] ml-1">facts vs estimates — separated</span>
+        <span className="text-xs text-muted ml-1">facts vs estimates — separated</span>
         <div className="ml-auto flex items-center gap-2">
           <button onClick={() => recommend.mutate()} disabled={recommend.isPending}
-            className="px-3 py-1.5 text-xs rounded border border-[var(--border)] hover:bg-[var(--surface-hover)] flex items-center gap-1.5">
+            className="px-3 py-1.5 text-xs rounded border border-border hover:bg-[var(--surface-hover)] flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5" /> {recommend.isPending ? 'Generating…' : 'Generate recommendations'}
           </button>
           <button onClick={() => evalLoop.mutate()} disabled={evalLoop.isPending}
-            className="px-3 py-1.5 text-xs rounded border border-[var(--border)] hover:bg-[var(--surface-hover)] flex items-center gap-1.5">
+            className="px-3 py-1.5 text-xs rounded border border-border hover:bg-[var(--surface-hover)] flex items-center gap-1.5">
             <RefreshCw className={`w-3.5 h-3.5 ${evalLoop.isPending ? 'animate-spin' : ''}`} /> Evaluate outcomes
           </button>
         </div>
@@ -128,7 +128,7 @@ export default function EconomyPage() {
             <SpendStat label="TOTAL" v={w.state.spend.total.value} bold />
           </div>
           {w.state.budget ? (
-            <div className="px-5 pb-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm border-t border-[var(--border)] pt-3">
+            <div className="px-5 pb-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm border-t border-border pt-3">
               <Kv k="Daily limit" v={`$${w.state.budget.dailyLimitUsd.toFixed(2)}`} />
               <Kv k="Daily spend" v={`$${w.state.budget.dailySpendUsd.toFixed(2)} (${(w.state.budget.dailyUtilization * 100).toFixed(0)}%)`} />
               <Kv k="Monthly limit" v={`$${w.state.budget.monthlyLimitUsd.toFixed(2)}`} />
@@ -148,7 +148,7 @@ export default function EconomyPage() {
                   <li key={p.provider} className="px-5 py-2 flex items-center gap-3 text-sm">
                     <span className="font-mono">{p.provider}</span>
                     <span className="ml-auto font-mono text-emerald-300">${p.spendUsd.toFixed(4)}</span>
-                    <span className="text-[var(--text-muted)] text-xs">{p.calls} calls</span>
+                    <span className="text-muted text-xs">{p.calls} calls</span>
                     {p.failureRate > 0.05 && (
                       <span className="text-amber-400 text-xs">fail {(p.failureRate * 100).toFixed(0)}%</span>
                     )}
@@ -164,7 +164,7 @@ export default function EconomyPage() {
                   <li key={t.taskType} className="px-5 py-2 flex items-center gap-3 text-sm">
                     <span className="font-mono">{t.taskType}</span>
                     <span className="ml-auto font-mono text-emerald-300">${t.spendUsd.toFixed(4)}</span>
-                    <span className="text-[var(--text-muted)] text-xs">{t.calls} calls @ ${t.avgCostUsd.toFixed(5)}/call</span>
+                    <span className="text-muted text-xs">{t.calls} calls @ ${t.avgCostUsd.toFixed(5)}/call</span>
                   </li>
                 ))}
               </ul>
@@ -185,10 +185,10 @@ export default function EconomyPage() {
                 ? `next 7d projected: $${w.forecast.projectedNextWeekUsd.toFixed(2)}`
                 : 'insufficient data'}
             </span>
-            <span className="text-[var(--text-muted)] text-xs ml-auto">{w.forecast.evidence}</span>
+            <span className="text-muted text-xs ml-auto">{w.forecast.evidence}</span>
           </div>
           {w.forecast.dailySpendSeries.length > 0 && (
-            <div className="px-5 pb-3 text-xs text-[var(--text-muted)] font-mono">
+            <div className="px-5 pb-3 text-xs text-muted font-mono">
               series: [{w.forecast.dailySpendSeries.map(v => v.toFixed(3)).join(', ')}]
             </div>
           )}
@@ -196,15 +196,15 @@ export default function EconomyPage() {
             {(['ai', 'imageGen', 'agentExec'] as const).map(k => {
               const f = w.multiSourceForecast[k]
               return (
-                <div key={k} className="rounded border border-[var(--border)] p-2">
+                <div key={k} className="rounded border border-border p-2">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-[var(--text-muted)]">{f.source}</span>
+                    <span className="font-mono text-muted">{f.source}</span>
                     <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] border ${LIKE[f.likelihood] ?? LIKE.insufficient_data}`}>{f.likelihood}</span>
                   </div>
                   <div className="mt-1 font-mono">
                     {f.projectedNextWeekUsd !== null ? `~$${f.projectedNextWeekUsd.toFixed(2)}/wk` : '—'}
                   </div>
-                  <div className="text-[10px] text-[var(--text-muted)] mt-0.5 truncate" title={f.evidence}>{f.evidence}</div>
+                  <div className="text-[10px] text-muted mt-0.5 truncate" title={f.evidence}>{f.evidence}</div>
                 </div>
               )
             })}
@@ -219,7 +219,7 @@ export default function EconomyPage() {
             {w.wasteAlerts.map(a => (
               <li key={a.provider} className="px-5 py-2.5 text-sm flex items-center gap-3">
                 <span className="font-mono">{a.provider}</span>
-                <span className="text-[var(--text-muted)] text-xs">fail {(a.failureRate * 100).toFixed(0)}% × spend ${a.spendUsd.toFixed(2)}</span>
+                <span className="text-muted text-xs">fail {(a.failureRate * 100).toFixed(0)}% × spend ${a.spendUsd.toFixed(2)}</span>
                 <span className="ml-auto font-mono text-amber-300">~${a.wastedUsdEstimate.value.toFixed(4)} wasted (estimate)</span>
               </li>
             ))}
@@ -241,8 +241,8 @@ export default function EconomyPage() {
                       <span className="ml-auto font-mono text-emerald-300 text-xs">~${s.estimatedSavingsUsd.toFixed(2)} est. savings</span>
                     )}
                   </div>
-                  <p className="text-xs text-[var(--text-muted)] mt-1">{s.rationale}</p>
-                  <p className="text-[10px] text-[var(--text-muted)] mt-1">confidence {s.confidence.toFixed(2)} · {s.evidence.map(e => e.source).join(', ')}</p>
+                  <p className="text-xs text-muted mt-1">{s.rationale}</p>
+                  <p className="text-[10px] text-muted mt-1">confidence {s.confidence.toFixed(2)} · {s.evidence.map(e => e.source).join(', ')}</p>
                 </li>
               ))}
             </ul>
@@ -265,7 +265,7 @@ export default function EconomyPage() {
                         {(wf.successRate * 100).toFixed(0)}%
                       </span>
                     </div>
-                    <p className="text-[10px] text-[var(--text-muted)]">est. AI spend: ${wf.aiSpendUsd.value.toFixed(4)} (estimate, conf {wf.aiSpendUsd.confidence.toFixed(2)})</p>
+                    <p className="text-[10px] text-muted">est. AI spend: ${wf.aiSpendUsd.value.toFixed(4)} (estimate, conf {wf.aiSpendUsd.confidence.toFixed(2)})</p>
                   </li>
                 ))}
               </ul>
@@ -280,7 +280,7 @@ export default function EconomyPage() {
                       <span className="font-mono">{p.provider}</span>
                       <span className="ml-auto font-mono text-emerald-300">${p.costPerSuccessUsd.value.toFixed(6)}/success</span>
                     </div>
-                    <p className="text-[10px] text-[var(--text-muted)]">{p.successfulCalls} successes · spend ${p.spendUsd.toFixed(4)} · conf {p.costPerSuccessUsd.confidence.toFixed(2)}</p>
+                    <p className="text-[10px] text-muted">{p.successfulCalls} successes · spend ${p.spendUsd.toFixed(4)} · conf {p.costPerSuccessUsd.confidence.toFixed(2)}</p>
                   </li>
                 ))}
               </ul>
@@ -299,16 +299,16 @@ export default function EconomyPage() {
             <Kv k="Match rate" v={w.roi.recommendationOutcome.matchRate === null ? '— (need ≥5)' : `${(w.roi.recommendationOutcome.matchRate * 100).toFixed(0)}%`} />
           </div>
           {w.roi.notes.length > 0 && (
-            <ul className="px-5 pb-3 text-xs text-[var(--text-muted)] space-y-0.5">
+            <ul className="px-5 pb-3 text-xs text-muted space-y-0.5">
               {w.roi.notes.map((n, i) => <li key={i}>• {n}</li>)}
             </ul>
           )}
           {cs.length > 0 && (
-            <ul className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+            <ul className="divide-y divide-[var(--border)] border-t border-border">
               {cs.slice(0, 8).map(c => (
                 <li key={c.id} className="px-5 py-2 text-xs">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-[var(--text-muted)]">{new Date(c.createdAt).toLocaleDateString()}</span>
+                    <span className="font-mono text-muted">{new Date(c.createdAt).toLocaleDateString()}</span>
                     <span>{c.decision}</span>
                     <span className="ml-auto">
                       {c.outcomeKnown
@@ -328,10 +328,10 @@ export default function EconomyPage() {
 
 function Section({ title, icon, children }: { title: string; icon?: JSX.Element; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
       </div>
       {children}
     </div>
@@ -340,8 +340,8 @@ function Section({ title, icon, children }: { title: string; icon?: JSX.Element;
 
 function SpendStat({ label, v, bold }: { label: string; v: number; bold?: boolean }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
+    <div className="rounded-lg border border-border bg-surface px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wider text-muted">{label}</div>
       <div className={`font-mono mt-0.5 ${bold ? 'text-xl text-emerald-300' : 'text-lg'}`}>${v.toFixed(4)}</div>
     </div>
   )
@@ -350,12 +350,12 @@ function SpendStat({ label, v, bold }: { label: string; v: number; bold?: boolea
 function Kv({ k, v }: { k: string; v: string }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{k}</div>
+      <div className="text-[10px] uppercase tracking-wider text-muted">{k}</div>
       <div className="font-mono text-sm">{v}</div>
     </div>
   )
 }
 
 function Empty({ msg }: { msg: string }) {
-  return <div className="px-5 py-4 text-xs text-[var(--text-muted)] italic">{msg}</div>
+  return <div className="px-5 py-4 text-xs text-muted italic">{msg}</div>
 }

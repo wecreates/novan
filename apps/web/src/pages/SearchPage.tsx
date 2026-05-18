@@ -31,9 +31,9 @@ export default function SearchPage() {
       <div className="flex items-center gap-3">
         <SearchIcon className="w-5 h-5 text-sky-400" />
         <h1 className="text-xl font-semibold">Search reasoning chains</h1>
-        <span className="text-xs text-[var(--text-muted)] ml-1">hash-bag · 256 dim · zero LLM cost</span>
+        <span className="text-xs text-muted ml-1">hash-bag · 256 dim · zero LLM cost</span>
         <button onClick={() => backfill.mutate()} disabled={backfill.isPending}
-          className="ml-auto px-2 py-1 text-xs rounded border border-[var(--border)] hover:bg-[var(--surface-hover)]">
+          className="ml-auto px-2 py-1 text-xs rounded border border-border hover:bg-[var(--surface-hover)]">
           {backfill.isPending ? 'Indexing…' : 'Backfill 90d'}
         </button>
       </div>
@@ -44,7 +44,7 @@ export default function SearchPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="e.g. provider migration, drift on forecasts, capability gaps"
-          className="flex-1 bg-[var(--surface)] border border-[var(--border)] rounded px-3 py-2 text-sm"
+          className="flex-1 bg-surface border border-border rounded px-3 py-2 text-sm"
         />
         <button type="submit" disabled={search.isPending || !q.trim()}
           className="px-4 py-2 text-sm rounded bg-sky-500/20 border border-sky-500/40 hover:bg-sky-500/30 disabled:opacity-50">
@@ -52,9 +52,9 @@ export default function SearchPage() {
         </button>
       </form>
 
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+      <div className="rounded-lg border border-border bg-surface">
         {results.length === 0 ? (
-          <div className="px-5 py-6 text-sm text-[var(--text-muted)] text-center">
+          <div className="px-5 py-6 text-sm text-muted text-center">
             {search.isSuccess ? 'No matches. Try broader terms or run backfill if chains are recent.' : 'Enter a query to search.'}
           </div>
         ) : (
@@ -62,15 +62,15 @@ export default function SearchPage() {
             {results.map(r => (
               <li key={r.chainId} className="px-4 py-2.5 text-sm">
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-[10px] text-[var(--text-muted)] w-12">{r.score.toFixed(3)}</span>
-                  <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] w-24">{r.kind}</span>
+                  <span className="font-mono text-[10px] text-muted w-12">{r.score.toFixed(3)}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-muted w-24">{r.kind}</span>
                   <span className="flex-1">{r.decision}</span>
                   {r.outcomeMatched !== null && (
                     <span className={`text-[10px] ${r.outcomeMatched ? 'text-emerald-400' : 'text-red-400'}`}>
                       {r.outcomeMatched ? 'matched' : 'unmatched'}
                     </span>
                   )}
-                  <span className="text-[10px] text-[var(--text-muted)] font-mono">{new Date(r.createdAt).toLocaleDateString()}</span>
+                  <span className="text-[10px] text-muted font-mono">{new Date(r.createdAt).toLocaleDateString()}</span>
                 </div>
               </li>
             ))}

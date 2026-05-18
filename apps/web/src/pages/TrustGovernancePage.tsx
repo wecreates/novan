@@ -78,7 +78,7 @@ export default function TrustGovernancePage() {
       <div className="flex items-center gap-3">
         <Shield className="w-5 h-5 text-emerald-400" />
         <h1 className="text-xl font-semibold">Trust & Governance</h1>
-        <span className="text-xs text-[var(--text-muted)] ml-1">reputation · ethics · alignment · operator sovereignty</span>
+        <span className="text-xs text-muted ml-1">reputation · ethics · alignment · operator sovereignty</span>
       </div>
 
       {/* Alignment + Sovereignty header */}
@@ -110,7 +110,7 @@ export default function TrustGovernancePage() {
                 <li key={idx} className="flex items-center gap-2">
                   <span className={i.pass ? 'text-emerald-400' : 'text-red-400'}>{i.pass ? '✓' : '✗'}</span>
                   <span className="font-mono">{i.name}</span>
-                  <span className="text-[var(--text-muted)] ml-auto text-[10px]">{i.detail}</span>
+                  <span className="text-muted ml-auto text-[10px]">{i.detail}</span>
                 </li>
               ))}
             </ul>
@@ -124,12 +124,12 @@ export default function TrustGovernancePage() {
           <ul className="divide-y divide-[var(--border)]">
             {trust.data!.data.slice(0, 20).map(t => (
               <li key={`${t.subjectType}/${t.subjectId}`} className="px-4 py-2 text-xs flex items-center gap-3">
-                <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] w-32">{t.subjectType}</span>
+                <span className="text-[10px] uppercase tracking-wider text-muted w-32">{t.subjectType}</span>
                 <span className="font-mono flex-1 truncate">{t.subjectId}</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${t.score < 0.4 ? 'text-red-300 bg-red-500/10' : t.score < 0.7 ? 'text-amber-300 bg-amber-500/10' : 'text-emerald-300 bg-emerald-500/10'}`}>
                   {(t.score * 100).toFixed(0)}%
                 </span>
-                <span className="text-[10px] text-[var(--text-muted)]">{t.signals.length} signals</span>
+                <span className="text-[10px] text-muted">{t.signals.length} signals</span>
               </li>
             ))}
           </ul>
@@ -144,7 +144,7 @@ export default function TrustGovernancePage() {
               {paused.data!.data.map(p => (
                 <li key={p.agentName} className="px-4 py-2 text-xs flex items-center gap-2">
                   <span className="font-mono flex-1">{p.agentName}</span>
-                  <span className="text-[10px] text-[var(--text-muted)]" title={p.reason ?? ''}>{p.reason?.slice(0, 30) ?? ''}</span>
+                  <span className="text-[10px] text-muted" title={p.reason ?? ''}>{p.reason?.slice(0, 30) ?? ''}</span>
                   <button onClick={() => setPaused.mutate({ agentName: p.agentName, paused: false })}
                     className="p-1 hover:bg-emerald-500/10 rounded" title="Resume">
                     <Play className="w-3.5 h-3.5 text-emerald-400" />
@@ -162,11 +162,11 @@ export default function TrustGovernancePage() {
               {overrides.data!.data.slice(0, 8).map(o => (
                 <li key={o.id} className="px-4 py-2 text-xs">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-[var(--text-muted)] w-24">{new Date(o.createdAt).toLocaleDateString()}</span>
+                    <span className="font-mono text-muted w-24">{new Date(o.createdAt).toLocaleDateString()}</span>
                     <span className="font-mono">{o.actionType}</span>
-                    <span className="text-[var(--text-muted)]">{o.originalStatus} → {o.overrideStatus}</span>
+                    <span className="text-muted">{o.originalStatus} → {o.overrideStatus}</span>
                   </div>
-                  {o.reason && <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{o.reason}</p>}
+                  {o.reason && <p className="text-[10px] text-muted mt-0.5">{o.reason}</p>}
                 </li>
               ))}
             </ul>
@@ -184,8 +184,8 @@ export default function TrustGovernancePage() {
               <li key={b.id} className="px-4 py-2 text-xs">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-500/10 text-red-300">{b.category}</span>
-                  <span className="font-mono text-[var(--text-muted)]">{b.source}</span>
-                  <span className="text-[10px] text-[var(--text-muted)] ml-auto">{new Date(b.blockedAt).toLocaleString().replace(',', '')}</span>
+                  <span className="font-mono text-muted">{b.source}</span>
+                  <span className="text-[10px] text-muted ml-auto">{new Date(b.blockedAt).toLocaleString().replace(',', '')}</span>
                 </div>
                 <p className="mt-0.5 truncate" title={b.intent}>{b.intent}</p>
                 <p className="text-[10px] text-amber-300 mt-0.5">{b.reason}</p>
@@ -200,10 +200,10 @@ export default function TrustGovernancePage() {
 
 function Section({ title, icon, children }: { title: string; icon?: JSX.Element; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
       </div>
       {children}
     </div>
@@ -211,5 +211,5 @@ function Section({ title, icon, children }: { title: string; icon?: JSX.Element;
 }
 
 function Empty({ msg }: { msg: string }) {
-  return <div className="px-4 py-3 text-xs text-[var(--text-muted)] italic">{msg}</div>
+  return <div className="px-4 py-3 text-xs text-muted italic">{msg}</div>
 }

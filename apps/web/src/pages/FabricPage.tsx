@@ -44,11 +44,11 @@ export default function FabricPage() {
       <div className="flex items-center gap-3">
         <Network className="w-5 h-5 text-sky-400" />
         <h1 className="text-xl font-semibold">Runtime Fabric</h1>
-        <span className="text-xs text-[var(--text-muted)] ml-1">
+        <span className="text-xs text-muted ml-1">
           {d ? `${d.totalNodes} nodes · ${Object.keys(d.byRegion).length} regions` : 'loading…'}
         </span>
         <button onClick={() => runScaling.mutate()} disabled={runScaling.isPending}
-          className="ml-auto px-3 py-1.5 text-xs rounded border border-[var(--border)] hover:bg-[var(--surface-hover)] flex items-center gap-1.5">
+          className="ml-auto px-3 py-1.5 text-xs rounded border border-border hover:bg-[var(--surface-hover)] flex items-center gap-1.5">
           <TrendingUp className="w-3.5 h-3.5" /> {runScaling.isPending ? 'Running…' : 'Run scaling cycle'}
         </button>
       </div>
@@ -79,11 +79,11 @@ export default function FabricPage() {
               return (
                 <li key={role} className="px-4 py-2 text-sm flex items-center gap-3">
                   <span className="font-mono w-20">{role}</span>
-                  <span className="text-[var(--text-muted)]">{s.healthy}/{s.total} healthy</span>
-                  <span className={`text-xs ${util > 0.75 ? 'text-amber-300' : util > 0.5 ? 'text-sky-300' : 'text-[var(--text-muted)]'}`}>
+                  <span className="text-muted">{s.healthy}/{s.total} healthy</span>
+                  <span className={`text-xs ${util > 0.75 ? 'text-amber-300' : util > 0.5 ? 'text-sky-300' : 'text-muted'}`}>
                     util {(util * 100).toFixed(0)}%
                   </span>
-                  <span className="ml-auto text-[var(--text-muted)] text-xs">queue {s.queueDepth}</span>
+                  <span className="ml-auto text-muted text-xs">queue {s.queueDepth}</span>
                 </li>
               )
             })}
@@ -101,11 +101,11 @@ export default function FabricPage() {
               <li key={n.id} className="px-4 py-2 text-xs flex items-center gap-3">
                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${STATUS[n.status] ?? STATUS.healthy}`}>{n.status}</span>
                 <span className="font-mono w-32 truncate">{n.id}</span>
-                <span className="text-[var(--text-muted)] w-16">{n.region}</span>
+                <span className="text-muted w-16">{n.region}</span>
                 <span className="font-mono w-16">{n.role}</span>
-                <span className="text-[var(--text-muted)]">load {n.activeLoad}/{n.capacity}</span>
-                <span className="text-[var(--text-muted)]">queue {n.queueDepth}</span>
-                <span className="ml-auto text-[10px] text-[var(--text-muted)]">{Math.floor((Date.now() - n.lastHeartbeatAt) / 1000)}s ago</span>
+                <span className="text-muted">load {n.activeLoad}/{n.capacity}</span>
+                <span className="text-muted">queue {n.queueDepth}</span>
+                <span className="ml-auto text-[10px] text-muted">{Math.floor((Date.now() - n.lastHeartbeatAt) / 1000)}s ago</span>
               </li>
             ))}
           </ul>
@@ -121,15 +121,15 @@ export default function FabricPage() {
             {d!.recentScalingEvents.slice(0, 10).map(e => (
               <li key={e.id} className="px-4 py-2 text-xs">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-[var(--text-muted)] w-20">{new Date(e.createdAt).toLocaleTimeString()}</span>
+                  <span className="font-mono text-muted w-20">{new Date(e.createdAt).toLocaleTimeString()}</span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded ${e.kind === 'scale_up' ? 'bg-sky-500/10 text-sky-300' : e.kind === 'scale_down' ? 'bg-slate-500/10 text-slate-300' : 'bg-amber-500/10 text-amber-300'}`}>{e.kind}</span>
                   <span className="font-mono">{e.target}</span>
                   {e.before !== null && e.after !== null && (
-                    <span className="text-[var(--text-muted)]">{e.before} → {e.after}</span>
+                    <span className="text-muted">{e.before} → {e.after}</span>
                   )}
-                  <span className="text-[10px] text-[var(--text-muted)] ml-auto">{e.approvedBy}</span>
+                  <span className="text-[10px] text-muted ml-auto">{e.approvedBy}</span>
                 </div>
-                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{e.reason}</p>
+                <p className="text-[10px] text-muted mt-0.5">{e.reason}</p>
               </li>
             ))}
           </ul>
@@ -141,10 +141,10 @@ export default function FabricPage() {
 
 function Section({ title, icon, children }: { title: string; icon?: JSX.Element; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
       </div>
       {children}
     </div>
@@ -152,5 +152,5 @@ function Section({ title, icon, children }: { title: string; icon?: JSX.Element;
 }
 
 function Empty({ msg }: { msg: string }) {
-  return <div className="px-4 py-3 text-xs text-[var(--text-muted)] italic">{msg}</div>
+  return <div className="px-4 py-3 text-xs text-muted italic">{msg}</div>
 }

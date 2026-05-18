@@ -138,11 +138,11 @@ function CreateWorkflowModal({ onClose, onCreated }: { onClose: () => void; onCr
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl w-full max-w-lg shadow-2xl">
+      <div className="bg-[var(--bg-surface)] border border-border rounded-2xl w-full max-w-lg shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
-          <h2 className="text-sm font-semibold text-[var(--text-primary)]">New Workflow</h2>
-          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h2 className="text-sm font-semibold text-primary">New Workflow</h2>
+          <button onClick={onClose} className="text-muted hover:text-secondary transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -154,9 +154,9 @@ function CreateWorkflowModal({ onClose, onCreated }: { onClose: () => void; onCr
           )}
 
           <div>
-            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">Name *</label>
+            <label className="block text-xs font-medium text-secondary mb-1.5">Name *</label>
             <input
-              className="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] transition-colors"
+              className="w-full bg-elevated border border-border rounded-lg px-3 py-2 text-sm text-primary placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] transition-colors"
               placeholder="e.g. Daily Report Generator"
               value={form.name}
               onChange={e => set('name', e.target.value)}
@@ -164,9 +164,9 @@ function CreateWorkflowModal({ onClose, onCreated }: { onClose: () => void; onCr
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">Description</label>
+            <label className="block text-xs font-medium text-secondary mb-1.5">Description</label>
             <input
-              className="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] transition-colors"
+              className="w-full bg-elevated border border-border rounded-lg px-3 py-2 text-sm text-primary placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] transition-colors"
               placeholder="Optional description"
               value={form.description}
               onChange={e => set('description', e.target.value)}
@@ -174,9 +174,9 @@ function CreateWorkflowModal({ onClose, onCreated }: { onClose: () => void; onCr
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">Trigger Type</label>
+            <label className="block text-xs font-medium text-secondary mb-1.5">Trigger Type</label>
             <select
-              className="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] transition-colors"
+              className="w-full bg-elevated border border-border rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-[var(--accent)] transition-colors"
               value={form.triggerType}
               onChange={e => set('triggerType', e.target.value as TriggerType)}
             >
@@ -188,12 +188,12 @@ function CreateWorkflowModal({ onClose, onCreated }: { onClose: () => void; onCr
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-              Steps <span className="text-[var(--text-muted)]">(JSON array)</span>
+            <label className="block text-xs font-medium text-secondary mb-1.5">
+              Steps <span className="text-muted">(JSON array)</span>
             </label>
             <textarea
               rows={5}
-              className="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs font-mono text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] transition-colors resize-none"
+              className="w-full bg-elevated border border-border rounded-lg px-3 py-2 text-xs font-mono text-primary placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] transition-colors resize-none"
               placeholder='[{"id":"step1","type":"action","label":"My Step"}]'
               value={form.steps}
               onChange={e => set('steps', e.target.value)}
@@ -207,15 +207,15 @@ function CreateWorkflowModal({ onClose, onCreated }: { onClose: () => void; onCr
               onChange={e => set('enabled', e.target.checked)}
               className="w-4 h-4 rounded accent-[var(--accent)]"
             />
-            <span className="text-sm text-[var(--text-secondary)]">Enabled</span>
+            <span className="text-sm text-secondary">Enabled</span>
           </label>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--border)]">
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium text-secondary hover:text-primary hover:bg-elevated transition-colors"
           >
             Cancel
           </button>
@@ -275,16 +275,16 @@ function DefinitionsTab() {
       {/* Toolbar */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)]" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted" />
           <input
-            className="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg pl-8 pr-3 py-1.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] transition-colors"
+            className="w-full bg-elevated border border-border rounded-lg pl-8 pr-3 py-1.5 text-sm text-primary placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] transition-colors"
             placeholder="Search workflows…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
         </div>
         <select
-          className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-xs text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)] transition-colors"
+          className="bg-elevated border border-border rounded-lg px-3 py-1.5 text-xs text-secondary focus:outline-none focus:border-[var(--accent)] transition-colors"
           value={trigFilter}
           onChange={e => setTrig(e.target.value as TriggerType | 'all')}
         >
@@ -307,7 +307,7 @@ function DefinitionsTab() {
 
       <SectionPanel title={`Definitions (${defs.length})`} loading={isLoading}>
         {defs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-[var(--text-muted)] text-sm gap-2">
+          <div className="flex flex-col items-center justify-center py-12 text-muted text-sm gap-2">
             <ChevronRight className="w-8 h-8 opacity-30" />
             {search || trigFilter !== 'all' ? 'No matching workflows' : 'No workflows yet — create one above'}
           </div>
@@ -347,20 +347,20 @@ function DefinitionRow({ def, onToggle, onTrigger, onDelete, loading }: {
   const stepCount = Array.isArray(def.steps) ? def.steps.length : 0
 
   return (
-    <li className="px-4 py-3 hover:bg-[var(--bg-elevated)] transition-colors">
+    <li className="px-4 py-3 hover:bg-elevated transition-colors">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm font-medium text-[var(--text-primary)] truncate">{def.name}</span>
+            <span className="text-sm font-medium text-primary truncate">{def.name}</span>
             <TriggerBadge type={def.triggerType} />
             {!def.enabled && (
-              <span className="text-xs text-[var(--text-muted)] bg-[var(--bg-elevated)] border border-[var(--border)] px-1.5 py-0.5 rounded-full">disabled</span>
+              <span className="text-xs text-muted bg-elevated border border-border px-1.5 py-0.5 rounded-full">disabled</span>
             )}
           </div>
           {def.description && (
-            <div className="text-xs text-[var(--text-secondary)] mb-1 truncate">{def.description}</div>
+            <div className="text-xs text-secondary mb-1 truncate">{def.description}</div>
           )}
-          <div className="text-xs text-[var(--text-muted)]">
+          <div className="text-xs text-muted">
             {stepCount} {stepCount === 1 ? 'step' : 'steps'} · Updated {ago(def.updatedAt)}
           </div>
         </div>
@@ -377,7 +377,7 @@ function DefinitionRow({ def, onToggle, onTrigger, onDelete, loading }: {
           <button
             title="Edit"
             disabled={loading}
-            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] disabled:opacity-40 transition-colors"
+            className="p-1.5 rounded-lg text-muted hover:text-secondary hover:bg-elevated disabled:opacity-40 transition-colors"
           >
             <Pencil className="w-3.5 h-3.5" />
           </button>
@@ -385,7 +385,7 @@ function DefinitionRow({ def, onToggle, onTrigger, onDelete, loading }: {
             title={def.enabled ? 'Disable' : 'Enable'}
             onClick={onToggle}
             disabled={loading}
-            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] disabled:opacity-40 transition-colors"
+            className="p-1.5 rounded-lg text-muted hover:text-secondary hover:bg-elevated disabled:opacity-40 transition-colors"
           >
             {def.enabled
               ? <ToggleRight className="w-4 h-4 text-emerald-400" />
@@ -396,7 +396,7 @@ function DefinitionRow({ def, onToggle, onTrigger, onDelete, loading }: {
             title="Delete"
             onClick={onDelete}
             disabled={loading}
-            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 disabled:opacity-40 transition-colors"
+            className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-red-500/10 disabled:opacity-40 transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -437,7 +437,7 @@ function RunsTab() {
       <div className="flex items-center gap-2">
         <button
           onClick={() => setStatus('all')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${statusFilter === 'all' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border)]'}`}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${statusFilter === 'all' ? 'bg-[var(--accent)] text-white' : 'bg-elevated text-secondary hover:text-primary border border-border'}`}
         >
           All
         </button>
@@ -445,7 +445,7 @@ function RunsTab() {
           <button
             key={s}
             onClick={() => setStatus(s)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors ${statusFilter === s ? 'bg-[var(--accent)] text-white' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border)]'}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors ${statusFilter === s ? 'bg-[var(--accent)] text-white' : 'bg-elevated text-secondary hover:text-primary border border-border'}`}
           >
             {s}
           </button>
@@ -454,7 +454,7 @@ function RunsTab() {
 
       <SectionPanel title={`Runs (${runs.length})`} loading={isLoading}>
         {runs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-[var(--text-muted)] text-sm gap-2">
+          <div className="flex flex-col items-center justify-center py-12 text-muted text-sm gap-2">
             <Clock className="w-8 h-8 opacity-30" />
             No runs found
           </div>
@@ -481,16 +481,16 @@ function RunRow({ run, onCancel, cancelling }: {
   cancelling: boolean
 }) {
   return (
-    <li className="px-4 py-3 hover:bg-[var(--bg-elevated)] transition-colors">
+    <li className="px-4 py-3 hover:bg-elevated transition-colors">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm font-medium text-[var(--text-primary)] truncate">
+            <span className="text-sm font-medium text-primary truncate">
               {run.workflowName ?? run.workflowId.slice(0, 8) + '…'}
             </span>
             <StatusBadge status={run.status} label={run.status} pulse={run.status === 'running'} />
           </div>
-          <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
+          <div className="flex items-center gap-3 text-xs text-muted">
             <span>By {run.triggeredBy}</span>
             <span>·</span>
             <span>{ago(run.triggeredAt)}</span>
@@ -504,7 +504,7 @@ function RunRow({ run, onCancel, cancelling }: {
               </>
             )}
           </div>
-          <div className="text-[10px] text-[var(--text-muted)] mt-0.5 font-mono">{run.id}</div>
+          <div className="text-[10px] text-muted mt-0.5 font-mono">{run.id}</div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {run.status === 'running' && (
@@ -519,7 +519,7 @@ function RunRow({ run, onCancel, cancelling }: {
           )}
           <button
             title="View steps"
-            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
+            className="p-1.5 rounded-lg text-muted hover:text-secondary hover:bg-elevated transition-colors"
           >
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
@@ -539,15 +539,15 @@ export default function WorkflowsPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Page header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] shrink-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
         <div>
-          <h1 className="text-lg font-semibold text-[var(--text-primary)]">Workflows</h1>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">Manage automation definitions and monitor execution runs</p>
+          <h1 className="text-lg font-semibold text-primary">Workflows</h1>
+          <p className="text-xs text-muted mt-0.5">Manage automation definitions and monitor execution runs</p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 px-6 pt-4 border-b border-[var(--border)] shrink-0">
+      <div className="flex items-center gap-1 px-6 pt-4 border-b border-border shrink-0">
         {(['definitions', 'runs'] as const).map(t => (
           <button
             key={t}
@@ -555,7 +555,7 @@ export default function WorkflowsPage() {
             className={`px-4 py-2 text-sm font-medium capitalize border-b-2 transition-colors -mb-px ${
               tab === t
                 ? 'border-[var(--accent)] text-[var(--accent)]'
-                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                : 'border-transparent text-muted hover:text-secondary'
             }`}
           >
             {t}

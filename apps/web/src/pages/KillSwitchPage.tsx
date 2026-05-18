@@ -70,8 +70,8 @@ export default function KillSwitchPage() {
         <div className="flex items-center gap-3">
           <Power className="w-5 h-5 text-red-400" />
           <div>
-            <h1 className="text-lg font-semibold text-[var(--text-primary)]">Kill Switch Controls</h1>
-            <p className="text-xs text-[var(--text-muted)]">Emergency stops for remote compute, providers, and browser jobs</p>
+            <h1 className="text-lg font-semibold text-primary">Kill Switch Controls</h1>
+            <p className="text-xs text-muted">Emergency stops for remote compute, providers, and browser jobs</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -80,7 +80,7 @@ export default function KillSwitchPage() {
               {activeCount} ACTIVE
             </span>
           )}
-          <button onClick={load} className="p-1.5 rounded hover:bg-[var(--bg-elevated)] text-[var(--text-muted)]">
+          <button onClick={load} className="p-1.5 rounded hover:bg-elevated text-muted">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
@@ -106,7 +106,7 @@ export default function KillSwitchPage() {
             </span>
           </div>
           <input
-            className="w-full text-sm bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-3 py-1.5 text-[var(--text-primary)] placeholder-[var(--text-muted)]"
+            className="w-full text-sm bg-elevated border border-border rounded px-3 py-1.5 text-primary placeholder-[var(--text-muted)]"
             placeholder="Reason (required)"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
@@ -125,7 +125,7 @@ export default function KillSwitchPage() {
             </button>
             <button
               onClick={() => { setConfirmType(null); setReason('') }}
-              className="px-3 py-1.5 text-xs rounded bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-[var(--border)]"
+              className="px-3 py-1.5 text-xs rounded bg-elevated text-secondary hover:bg-[var(--border)]"
             >
               Cancel
             </button>
@@ -137,7 +137,7 @@ export default function KillSwitchPage() {
       <div className="grid grid-cols-1 gap-4">
         {loading ? (
           [0,1,2,3].map((i) => (
-            <div key={i} className="h-24 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg animate-pulse" />
+            <div key={i} className="h-24 bg-[var(--bg-surface)] border border-border rounded-lg animate-pulse" />
           ))
         ) : (
           switches.map((sw) => {
@@ -147,25 +147,25 @@ export default function KillSwitchPage() {
               <div
                 key={sw.switchType}
                 className={`bg-[var(--bg-surface)] border rounded-lg p-5 flex items-center justify-between transition-colors ${
-                  sw.enabled ? 'border-red-500/40 bg-red-500/5' : 'border-[var(--border)]'
+                  sw.enabled ? 'border-red-500/40 bg-red-500/5' : 'border-border'
                 }`}
               >
                 <div className="flex items-center gap-4">
                   <span className="text-2xl">{meta?.icon}</span>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-[var(--text-primary)]">{meta?.label}</span>
+                      <span className="text-sm font-medium text-primary">{meta?.label}</span>
                       {sw.enabled ? (
                         <span className="px-1.5 py-0.5 rounded text-xs bg-red-500/15 text-red-400 border border-red-500/20">ACTIVE</span>
                       ) : (
                         <span className="px-1.5 py-0.5 rounded text-xs bg-green-500/10 text-green-400 border border-green-500/20">STANDBY</span>
                       )}
                     </div>
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5">{meta?.desc}</p>
+                    <p className="text-xs text-muted mt-0.5">{meta?.desc}</p>
                     {sw.enabled && sw.reason && (
                       <p className="text-xs text-red-400 mt-1">Reason: {sw.reason}</p>
                     )}
-                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                    <p className="text-xs text-muted mt-1">
                       {sw.enabled ? `Active since ${formatTs(sw.enabledAt)}` : sw.disabledAt ? `Last disabled ${formatTs(sw.disabledAt)}` : 'Never activated'}
                     </p>
                   </div>
@@ -176,7 +176,7 @@ export default function KillSwitchPage() {
                   className={`flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-colors ${
                     sw.enabled
                       ? 'bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30'
-                      : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border)] hover:border-red-500/40 hover:text-red-400'
+                      : 'bg-elevated text-secondary border border-border hover:border-red-500/40 hover:text-red-400'
                   }`}
                 >
                   {isBusy ? (
@@ -194,7 +194,7 @@ export default function KillSwitchPage() {
         )}
       </div>
 
-      <p className="text-xs text-[var(--text-muted)]">
+      <p className="text-xs text-muted">
         Kill switches take effect immediately. Disable when the threat is resolved.
       </p>
     </div>

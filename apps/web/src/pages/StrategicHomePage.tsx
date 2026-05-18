@@ -114,7 +114,7 @@ export default function StrategicHomePage() {
   })
 
   if (home.isLoading) {
-    return <div className="p-8 text-[var(--text-muted)]">Loading…</div>
+    return <div className="p-8 text-muted">Loading…</div>
   }
   if (home.error || !home.data) {
     return <div className="p-8 text-red-400">Could not load strategic home: {(home.error as Error)?.message ?? 'no data'}</div>
@@ -139,7 +139,7 @@ export default function StrategicHomePage() {
         <button
           onClick={() => setTheme(currentTheme() === 'light' ? 'dark' : 'light')}
           title="Toggle theme (or press 't')"
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--bg-elevated)]"
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:bg-elevated"
         >
           {currentTheme() === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
         </button>
@@ -181,8 +181,8 @@ export default function StrategicHomePage() {
                       {r.decision.bucket}
                     </span>
                     <div className="flex-1">
-                      <div className="text-sm font-medium text-[var(--text)]">{r.title}</div>
-                      <div className="text-xs text-[var(--text-muted)] mt-1">
+                      <div className="text-sm font-medium text-primary">{r.title}</div>
+                      <div className="text-xs text-muted mt-1">
                         {r.kind.replace(/_/g, ' ')}  ·  impact: {r.estimatedImpact}  ·  score {r.decision.score.toFixed(2)}
                       </div>
                       {/* Operator action buttons — log a recommendation.acted_on event */}
@@ -220,22 +220,22 @@ export default function StrategicHomePage() {
                           <summary className="text-xs text-sky-400 cursor-pointer hover:text-sky-300">
                             why this matters →
                           </summary>
-                          <div className="mt-2 pl-3 border-l border-[var(--border)] text-xs space-y-1">
-                            <div className="text-[var(--text-muted)]">
-                              <strong className="text-[var(--text)]">If ignored:</strong> {e.whatHappensIfIgnored}
+                          <div className="mt-2 pl-3 border-l border-border text-xs space-y-1">
+                            <div className="text-muted">
+                              <strong className="text-primary">If ignored:</strong> {e.whatHappensIfIgnored}
                               <span className="ml-2 opacity-50">(heuristic template, not a model forecast)</span>
                             </div>
-                            <div className="text-[var(--text-muted)]">
-                              <strong className="text-[var(--text)]">Confidence:</strong> {(e.score * 100).toFixed(0)}%
+                            <div className="text-muted">
+                              <strong className="text-primary">Confidence:</strong> {(e.score * 100).toFixed(0)}%
                               <span className="ml-2 opacity-50">({e.confidenceProvenance.replace('_', '-')})</span>
                             </div>
-                            <div className="text-[var(--text-muted)]">
-                              <strong className="text-[var(--text)]">Rollback:</strong>{' '}
+                            <div className="text-muted">
+                              <strong className="text-primary">Rollback:</strong>{' '}
                               {e.rollbackProven ? 'proven (used before)' : 'engine available, never exercised on this workspace'}
                             </div>
                             {e.risks.length > 0 && (
-                              <div className="text-[var(--text-muted)]">
-                                <strong className="text-[var(--text)]">Risks:</strong> {e.risks.join('; ')}
+                              <div className="text-muted">
+                                <strong className="text-primary">Risks:</strong> {e.risks.join('; ')}
                               </div>
                             )}
                           </div>
@@ -271,8 +271,8 @@ export default function StrategicHomePage() {
             <ul className="divide-y divide-[var(--border)]">
               {d.accomplishments24h.map(a => (
                 <li key={a.kind} className="px-5 py-2 flex items-center justify-between text-sm">
-                  <span className="text-[var(--text)]">{a.kind.replace(/_/g, ' ')}</span>
-                  <span className="text-[var(--text-muted)] font-mono">
+                  <span className="text-primary">{a.kind.replace(/_/g, ' ')}</span>
+                  <span className="text-muted font-mono">
                     {a.count}  ·  {fmtTime(a.latestAt)}
                   </span>
                 </li>
@@ -286,39 +286,39 @@ export default function StrategicHomePage() {
           {g ? (
             <div className="px-5 py-3 space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-[var(--text-muted)]">Stability</span>
+                <span className="text-muted">Stability</span>
                 <span className={g.stability.overall === 'stable' ? 'text-emerald-400' :
                                  g.stability.overall === 'attention' ? 'text-amber-400' : 'text-red-400'}>
                   {g.stability.overall}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[var(--text-muted)]">Auto-throttle</span>
+                <span className="text-muted">Auto-throttle</span>
                 <span className={g.stability.recommendedThrottle ? 'text-red-400' : 'text-emerald-400'}>
                   {g.stability.recommendedThrottle ? 'engaged' : 'idle'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[var(--text-muted)]">Auto-patches today</span>
+                <span className="text-muted">Auto-patches today</span>
                 <span className="font-mono">
                   {g.runtimeGovernor.dailyCounters.autonomousPatchesToday} / {g.runtimeGovernor.dailyCounters.limits.maxAutonomousPatches}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[var(--text-muted)]">Deployments today</span>
+                <span className="text-muted">Deployments today</span>
                 <span className="font-mono">
                   {g.runtimeGovernor.dailyCounters.deploymentsToday} / {g.runtimeGovernor.dailyCounters.limits.maxDeployments}
                 </span>
               </div>
-              <div className="flex justify-between pt-2 border-t border-[var(--border)]">
-                <span className="text-[var(--text-muted)] flex items-center gap-1.5"><Bell className="w-3 h-3" />Notification drivers</span>
+              <div className="flex justify-between pt-2 border-t border-border">
+                <span className="text-muted flex items-center gap-1.5"><Bell className="w-3 h-3" />Notification drivers</span>
                 <span className="font-mono text-xs">
                   {configuredDrivers.length === 0 ? <span className="text-amber-400">none configured</span> : configuredDrivers.join(', ')}
                 </span>
               </div>
             </div>
           ) : (
-            <div className="px-5 py-4 text-[var(--text-muted)] text-sm">Loading…</div>
+            <div className="px-5 py-4 text-muted text-sm">Loading…</div>
           )}
         </Section>
       </div>
@@ -328,11 +328,11 @@ export default function StrategicHomePage() {
 
 function Section({ title, subtitle, icon, children }: { title: string; subtitle?: string; icon?: JSX.Element; children: JSX.Element | JSX.Element[] }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-5 py-3 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-5 py-3 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
-        {subtitle && <span className="text-xs text-[var(--text-muted)] ml-2">{subtitle}</span>}
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
+        {subtitle && <span className="text-xs text-muted ml-2">{subtitle}</span>}
       </div>
       {children}
     </div>
@@ -368,9 +368,9 @@ function MissionsList({ missions }: { missions: { active: Array<{ id: string; ti
           }`}>
             {m.horizon}
           </span>
-          <span className="flex-1 text-sm text-[var(--text)] truncate">{m.title}</span>
+          <span className="flex-1 text-sm text-primary truncate">{m.title}</span>
           {m.status === 'active' && (
-            <span className="text-xs text-[var(--text-muted)] font-mono">
+            <span className="text-xs text-muted font-mono">
               {Math.round((m.progress ?? 0) * 100)}%
             </span>
           )}
@@ -393,17 +393,17 @@ function SinceLastVisit({ data, lastVisit }: { data: { newIncidents: number; res
   return (
     <div className="px-5 py-2 space-y-1.5 text-sm">
       {!lastVisit && (
-        <div className="text-xs text-[var(--text-muted)] mb-2">First visit detected — showing last 24h.</div>
+        <div className="text-xs text-muted mb-2">First visit detected — showing last 24h.</div>
       )}
       {rows.map(([label, value, cls]) => (
         <div key={label} className="flex justify-between">
-          <span className="text-[var(--text-muted)]">{label}</span>
-          <span className={`font-mono ${cls ?? 'text-[var(--text)]'}`}>{value}</span>
+          <span className="text-muted">{label}</span>
+          <span className={`font-mono ${cls ?? 'text-primary'}`}>{value}</span>
         </div>
       ))}
       {data.failureRateDelta !== null && (
-        <div className="flex justify-between pt-1 border-t border-[var(--border)] mt-2">
-          <span className="text-[var(--text-muted)]">Failure rate trend</span>
+        <div className="flex justify-between pt-1 border-t border-border mt-2">
+          <span className="text-muted">Failure rate trend</span>
           <span className={`font-mono ${data.failureRateDelta > 0 ? 'text-amber-400' : data.failureRateDelta < 0 ? 'text-emerald-400' : ''}`}>
             {data.failureRateDelta > 0 ? '+' : ''}{(data.failureRateDelta * 100).toFixed(1)}%
           </span>
@@ -414,5 +414,5 @@ function SinceLastVisit({ data, lastVisit }: { data: { newIncidents: number; res
 }
 
 function EmptyRow({ text }: { text: string }) {
-  return <div className="px-5 py-6 text-[var(--text-muted)] text-sm">{text}</div>
+  return <div className="px-5 py-6 text-muted text-sm">{text}</div>
 }

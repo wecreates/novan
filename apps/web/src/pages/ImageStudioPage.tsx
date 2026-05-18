@@ -122,8 +122,8 @@ export default function ImageStudioPage() {
       <div className="flex items-center gap-3">
         <ImageIcon className="w-6 h-6 text-sky-400" />
         <div className="flex-1">
-          <h1 className="text-xl font-medium text-[var(--text)]">Image Studio</h1>
-          <p className="text-xs text-[var(--text-muted)]">
+          <h1 className="text-xl font-medium text-primary">Image Studio</h1>
+          <p className="text-xs text-muted">
             {available.length === 0
               ? 'No image providers configured — set REPLICATE_API_TOKEN / OPENAI_API_KEY / STABILITY_API_KEY / FAL_KEY'
               : `${available.length} provider${available.length === 1 ? '' : 's'} available · router selects automatically`}
@@ -149,9 +149,9 @@ export default function ImageStudioPage() {
                 onChange={e => setPrompt(e.target.value)}
                 placeholder="Describe the image. Be specific about subject, style, composition, colors, lighting."
                 rows={5}
-                className="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-3 py-2 text-sm font-mono focus:outline-none focus:border-sky-500"
+                className="w-full bg-elevated border border-border rounded px-3 py-2 text-sm font-mono focus:outline-none focus:border-sky-500"
               />
-              <label className="mt-3 flex items-center gap-2 text-xs text-[var(--text-muted)] cursor-pointer">
+              <label className="mt-3 flex items-center gap-2 text-xs text-muted cursor-pointer">
                 <input type="checkbox" checked={enhancePrompt} onChange={e => setEnhancePrompt(e.target.checked)} />
                 <Wand2 className="w-3 h-3" />
                 Auto-enhance prompt (Groq prompt-rewriter; ~$0 via cache)
@@ -161,35 +161,35 @@ export default function ImageStudioPage() {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <FormField label="Provider">
-              <select value={provider} onChange={e => setProvider(e.target.value)} className="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2 py-1.5 text-xs">
+              <select value={provider} onChange={e => setProvider(e.target.value)} className="w-full bg-elevated border border-border rounded px-2 py-1.5 text-xs">
                 <option value="">auto-select</option>
                 {available.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </FormField>
             <FormField label="Aspect ratio">
-              <select value={aspectRatio} onChange={e => setAspectRatio(e.target.value)} className="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2 py-1.5 text-xs">
+              <select value={aspectRatio} onChange={e => setAspectRatio(e.target.value)} className="w-full bg-elevated border border-border rounded px-2 py-1.5 text-xs">
                 {ASPECT_RATIOS.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
             </FormField>
             <FormField label="Style preset">
-              <select value={stylePreset} onChange={e => setStylePreset(e.target.value)} className="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2 py-1.5 text-xs">
+              <select value={stylePreset} onChange={e => setStylePreset(e.target.value)} className="w-full bg-elevated border border-border rounded px-2 py-1.5 text-xs">
                 <option value="">none</option>
                 {STYLE_PRESETS.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </FormField>
             <FormField label="Brand category">
-              <select value={brandCategory} onChange={e => setBrandCategory(e.target.value)} className="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2 py-1.5 text-xs">
+              <select value={brandCategory} onChange={e => setBrandCategory(e.target.value)} className="w-full bg-elevated border border-border rounded px-2 py-1.5 text-xs">
                 <option value="">none</option>
                 {BRAND_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </FormField>
             <FormField label="Batch size">
               <input type="number" min={1} max={8} value={count} onChange={e => setCount(Math.max(1, Math.min(8, Number(e.target.value))))}
-                className="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2 py-1.5 text-xs" />
+                className="w-full bg-elevated border border-border rounded px-2 py-1.5 text-xs" />
             </FormField>
             <FormField label="Budget cap (USD)">
               <input type="number" step="0.001" min={0} value={budgetCapUsd} onChange={e => setBudgetCapUsd(Number(e.target.value))}
-                className="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2 py-1.5 text-xs" />
+                className="w-full bg-elevated border border-border rounded px-2 py-1.5 text-xs" />
             </FormField>
           </div>
 
@@ -202,7 +202,7 @@ export default function ImageStudioPage() {
               {generate.isPending ? 'Generating…' : count > 1 ? `Generate ${count} images` : 'Generate'}
             </button>
             {cheapestEstimate !== null && (
-              <span className="text-xs text-[var(--text-muted)] flex items-center gap-1">
+              <span className="text-xs text-muted flex items-center gap-1">
                 <DollarSign className="w-3 h-3" />
                 from ${cheapestEstimate.toFixed(4)}/image
               </span>
@@ -210,7 +210,7 @@ export default function ImageStudioPage() {
             <button
               onClick={() => saveAsTemplate.mutate()}
               disabled={!prompt.trim()}
-              className="text-xs px-3 py-1.5 rounded border border-[var(--border)] hover:bg-[var(--bg-elevated)] flex items-center gap-1"
+              className="text-xs px-3 py-1.5 rounded border border-border hover:bg-elevated flex items-center gap-1"
               title="Save as reusable template"
             >
               <BookmarkPlus className="w-3 h-3" /> Save template
@@ -224,8 +224,8 @@ export default function ImageStudioPage() {
           {latestSingle && latestSingle.imageUrl && (
             <Section title="Latest" icon={<ImageIcon className="w-4 h-4" />}>
               <div className="p-5">
-                <img src={latestSingle.imageUrl} alt="" className="rounded border border-[var(--border)] max-w-full max-h-96 mx-auto" />
-                <div className="mt-2 text-xs text-[var(--text-muted)] font-mono">
+                <img src={latestSingle.imageUrl} alt="" className="rounded border border-border max-w-full max-h-96 mx-auto" />
+                <div className="mt-2 text-xs text-muted font-mono">
                   {latestSingle.provider} · ${(latestSingle.actualCostUsd ?? latestSingle.costEstimateUsd).toFixed(4)}{latestSingle.latencyMs ? ` · ${latestSingle.latencyMs}ms` : ''}
                 </div>
               </div>
@@ -238,19 +238,19 @@ export default function ImageStudioPage() {
           <Section title="Router" icon={<Cpu className="w-4 h-4" />}>
             <div className="p-3 space-y-2 text-xs">
               {routerScores.length === 0 ? (
-                <div className="text-[var(--text-muted)]">No providers configured.</div>
+                <div className="text-muted">No providers configured.</div>
               ) : (
                 routerScores.map(s => (
-                  <div key={s.provider} className="flex items-center gap-2 py-1 border-b border-[var(--border)] last:border-0">
+                  <div key={s.provider} className="flex items-center gap-2 py-1 border-b border-border last:border-0">
                     <span className="font-mono w-20">{s.provider}</span>
-                    <span className="text-[var(--text-muted)]">${s.estimate.toFixed(4)}</span>
+                    <span className="text-muted">${s.estimate.toFixed(4)}</span>
                     {s.successRate >= 0 && (
                       <span className={s.successRate >= 0.9 ? 'text-emerald-400' : s.successRate >= 0.6 ? 'text-amber-400' : 'text-red-400'}>
                         {Math.round(s.successRate*100)}%
                       </span>
                     )}
                     {s.avgLatency > 0 && (
-                      <span className="text-[var(--text-muted)] ml-auto">{Math.round(s.avgLatency)}ms</span>
+                      <span className="text-muted ml-auto">{Math.round(s.avgLatency)}ms</span>
                     )}
                   </div>
                 ))
@@ -261,16 +261,16 @@ export default function ImageStudioPage() {
           <Section title="Templates" icon={<BookmarkPlus className="w-4 h-4" />}>
             <div className="p-3 space-y-2 text-xs">
               {(templates.data?.data ?? []).length === 0 ? (
-                <div className="text-[var(--text-muted)]">No templates yet. Save a prompt to start.</div>
+                <div className="text-muted">No templates yet. Save a prompt to start.</div>
               ) : (
                 (templates.data?.data ?? []).slice(0, 8).map(t => (
                   <div key={t.id} className="flex items-center gap-2">
                     <button onClick={() => useTemplate(t)} className="flex-1 text-left truncate hover:text-sky-400">
                       {t.name}
                     </button>
-                    <span className="text-[var(--text-muted)] font-mono">{t.useCount}×</span>
+                    <span className="text-muted font-mono">{t.useCount}×</span>
                     <button onClick={() => studioApi.deleteTemplate(workspaceId, t.id).then(() => qc.invalidateQueries({ queryKey: ['studio-templates', workspaceId] }))}
-                            className="text-[var(--text-muted)] hover:text-red-400">
+                            className="text-muted hover:text-red-400">
                       <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
@@ -287,14 +287,14 @@ export default function ImageStudioPage() {
         icon={<ImageIcon className="w-4 h-4" />}
         actions={
           <div className="flex gap-1 text-xs">
-            <button onClick={() => setFilter('all')}      className={filter === 'all'      ? 'px-2 py-1 rounded bg-sky-500/20 text-sky-300' : 'px-2 py-1 rounded text-[var(--text-muted)]'}>All</button>
-            <button onClick={() => setFilter('favorites')} className={filter === 'favorites' ? 'px-2 py-1 rounded bg-sky-500/20 text-sky-300' : 'px-2 py-1 rounded text-[var(--text-muted)]'}>Favorites</button>
+            <button onClick={() => setFilter('all')}      className={filter === 'all'      ? 'px-2 py-1 rounded bg-sky-500/20 text-sky-300' : 'px-2 py-1 rounded text-muted'}>All</button>
+            <button onClick={() => setFilter('favorites')} className={filter === 'favorites' ? 'px-2 py-1 rounded bg-sky-500/20 text-sky-300' : 'px-2 py-1 rounded text-muted'}>Favorites</button>
           </div>
         }
       >
         <div className="p-4">
           {(history.data?.data ?? []).filter(r => r.status === 'succeeded' && r.imageUrl).length === 0 ? (
-            <div className="text-[var(--text-muted)] text-sm py-8 text-center">No images yet. Generate one above.</div>
+            <div className="text-muted text-sm py-8 text-center">No images yet. Generate one above.</div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {(history.data?.data ?? [])
@@ -315,11 +315,11 @@ function HistoryTile({ r, onRate, onFavorite, onCopy }: {
   onCopy: () => void
 }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] overflow-hidden bg-[var(--surface)]">
+    <div className="rounded-lg border border-border overflow-hidden bg-surface">
       {r.imageUrl && <img src={r.imageUrl} alt="" className="w-full aspect-square object-cover" loading="lazy" />}
       <div className="p-2 text-xs space-y-1">
-        <div className="text-[var(--text)] truncate" title={r.prompt}>{r.prompt.slice(0, 60)}</div>
-        <div className="text-[var(--text-muted)] font-mono flex items-center gap-1.5">
+        <div className="text-primary truncate" title={r.prompt}>{r.prompt.slice(0, 60)}</div>
+        <div className="text-muted font-mono flex items-center gap-1.5">
           <span>{r.provider}</span>
           <span>·</span>
           <span>${(r.actualCostUsd ?? r.costEstimateUsd).toFixed(4)}</span>
@@ -329,20 +329,20 @@ function HistoryTile({ r, onRate, onFavorite, onCopy }: {
           <div className="flex gap-0.5">
             {[1,2,3,4,5].map(n => (
               <button key={n} onClick={() => onRate(n)} title={`Rate ${n}/5`}>
-                <Star className={`w-3 h-3 ${n <= (r.userRating ?? 0) ? 'fill-amber-400 text-amber-400' : 'text-[var(--text-muted)]'}`} />
+                <Star className={`w-3 h-3 ${n <= (r.userRating ?? 0) ? 'fill-amber-400 text-amber-400' : 'text-muted'}`} />
               </button>
             ))}
           </div>
           <div className="flex gap-1">
             <button onClick={() => onFavorite(!r.isFavorite)} title="Toggle favorite">
-              <Heart className={`w-3 h-3 ${r.isFavorite ? 'fill-red-400 text-red-400' : 'text-[var(--text-muted)]'}`} />
+              <Heart className={`w-3 h-3 ${r.isFavorite ? 'fill-red-400 text-red-400' : 'text-muted'}`} />
             </button>
             <button onClick={onCopy} title="Copy prompt to form">
-              <Copy className="w-3 h-3 text-[var(--text-muted)] hover:text-sky-400" />
+              <Copy className="w-3 h-3 text-muted hover:text-sky-400" />
             </button>
             {r.imageUrl && (
               <a href={r.imageUrl} target="_blank" rel="noopener noreferrer" download title="Open/download">
-                <Download className="w-3 h-3 text-[var(--text-muted)] hover:text-sky-400" />
+                <Download className="w-3 h-3 text-muted hover:text-sky-400" />
               </a>
             )}
           </div>
@@ -354,10 +354,10 @@ function HistoryTile({ r, onRate, onFavorite, onCopy }: {
 
 function Section({ title, icon, actions, children }: { title: string; icon?: JSX.Element; actions?: JSX.Element; children: JSX.Element | JSX.Element[] }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
         {actions && <div className="ml-auto">{actions}</div>}
       </div>
       {children}
@@ -368,7 +368,7 @@ function Section({ title, icon, actions, children }: { title: string; icon?: JSX
 function FormField({ label, children }: { label: string; children: JSX.Element }) {
   return (
     <label className="block">
-      <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{label}</span>
+      <span className="text-[10px] uppercase tracking-wider text-muted">{label}</span>
       <div className="mt-1">{children}</div>
     </label>
   )
@@ -377,8 +377,8 @@ function FormField({ label, children }: { label: string; children: JSX.Element }
 function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
-      <div className={`font-mono text-sm ${highlight ? 'text-amber-400' : 'text-[var(--text)]'}`}>{value}</div>
+      <div className="text-[10px] uppercase tracking-wider text-muted">{label}</div>
+      <div className={`font-mono text-sm ${highlight ? 'text-amber-400' : 'text-primary'}`}>{value}</div>
     </div>
   )
 }

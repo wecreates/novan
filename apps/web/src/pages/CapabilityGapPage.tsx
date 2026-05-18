@@ -66,8 +66,8 @@ export default function CapabilityGapPage() {
       <div className="flex items-center gap-3">
         <Boxes className="w-6 h-6 text-sky-400" />
         <div className="flex-1">
-          <h1 className="text-xl font-medium text-[var(--text)]">Capability Gap Builder</h1>
-          <p className="text-xs text-[var(--text-muted)]">
+          <h1 className="text-xl font-medium text-primary">Capability Gap Builder</h1>
+          <p className="text-xs text-muted">
             {all.length} capabilities tracked · {gapCount} gaps · build-vs-buy verdicts based on transparent matrix
           </p>
         </div>
@@ -89,7 +89,7 @@ export default function CapabilityGapPage() {
             const gaps = d.missing + d.scaffolded
             return (
               <div key={d.dimension} className={`rounded-lg border px-3 py-2 ${gaps > 0 ? 'border-amber-500/40 bg-amber-500/5' : 'border-emerald-500/40 bg-emerald-500/5'}`}>
-                <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{d.dimension.replace(/_/g, ' ')}</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted">{d.dimension.replace(/_/g, ' ')}</div>
                 <div className="text-lg font-mono">{d.total - gaps}/{d.total}</div>
                 {gaps > 0 && (
                   <div className="text-[10px] text-amber-400 mt-0.5">{gaps} gap{gaps > 1 ? 's' : ''}</div>
@@ -102,10 +102,10 @@ export default function CapabilityGapPage() {
 
       {/* Per-dimension capability lists */}
       {[...byDim.entries()].map(([dim, caps]) => (
-        <div key={dim} className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-          <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center gap-2">
-            <h3 className="text-sm font-medium text-[var(--text)] uppercase tracking-wider">{dim.replace(/_/g, ' ')}</h3>
-            <span className="text-xs text-[var(--text-muted)]">{caps.length}</span>
+        <div key={dim} className="rounded-lg border border-border bg-surface">
+          <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
+            <h3 className="text-sm font-medium text-primary uppercase tracking-wider">{dim.replace(/_/g, ' ')}</h3>
+            <span className="text-xs text-muted">{caps.length}</span>
           </div>
           <ul className="divide-y divide-[var(--border)]">
             {caps.map(c => {
@@ -118,19 +118,19 @@ export default function CapabilityGapPage() {
                       const next = new Set(expanded)
                       if (next.has(c.id)) next.delete(c.id); else next.add(c.id)
                       setExpanded(next)
-                    }} className="text-[var(--text-muted)]">
+                    }} className="text-muted">
                       {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                     </button>
                     <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${maturityColor(c.maturity)}`}>{c.maturity}</span>
                     <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${v.class} flex items-center gap-1`}>
                       {v.icon} {v.label}
                     </span>
-                    <span className="flex-1 text-sm text-[var(--text)]">{c.title}</span>
-                    <span className="text-xs text-[var(--text-muted)] font-mono">{c.buildVsBuy.score >= 0 ? '+' : ''}{c.buildVsBuy.score.toFixed(2)}</span>
+                    <span className="flex-1 text-sm text-primary">{c.title}</span>
+                    <span className="text-xs text-muted font-mono">{c.buildVsBuy.score >= 0 ? '+' : ''}{c.buildVsBuy.score.toFixed(2)}</span>
                     {(c.maturity === 'missing' || c.maturity === 'scaffolded') && c.buildVsBuy.verdict !== 'defer' && (
                       <button
                         onClick={() => fetchPlan.mutate(c.id)}
-                        className="text-xs px-2 py-0.5 rounded border border-[var(--border)] hover:bg-[var(--bg-elevated)]"
+                        className="text-xs px-2 py-0.5 rounded border border-border hover:bg-elevated"
                       >
                         Plan
                       </button>
@@ -138,11 +138,11 @@ export default function CapabilityGapPage() {
                   </div>
                   {isExpanded && (
                     <div className="mt-2 ml-7 text-xs space-y-1">
-                      <div className="text-[var(--text-muted)]">{c.description}</div>
-                      <div className="text-[var(--text-muted)]"><strong>Verdict:</strong> {c.buildVsBuy.rationale}</div>
-                      <div className="text-[var(--text-muted)]"><strong>Notes:</strong> {c.buildVsBuy.notes}</div>
+                      <div className="text-muted">{c.description}</div>
+                      <div className="text-muted"><strong>Verdict:</strong> {c.buildVsBuy.rationale}</div>
+                      <div className="text-muted"><strong>Notes:</strong> {c.buildVsBuy.notes}</div>
                       {c.evidence.length > 0 && (
-                        <div className="text-[var(--text-muted)]">
+                        <div className="text-muted">
                           <strong>Evidence:</strong> {c.evidence.join(' · ')}
                         </div>
                       )}
@@ -158,14 +158,14 @@ export default function CapabilityGapPage() {
       {/* Plan modal */}
       {selectedPlan && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setSelectedPlan(null)}>
-          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-lg max-w-3xl w-full max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
-            <div className="px-5 py-3 border-b border-[var(--border)] flex items-center gap-2">
+          <div className="bg-surface border border-border rounded-lg max-w-3xl w-full max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-3 border-b border-border flex items-center gap-2">
               <Hammer className="w-4 h-4 text-emerald-400" />
               <h3 className="text-sm font-medium">Build plan: {selectedPlan.capabilityTitle}</h3>
-              <button onClick={() => setSelectedPlan(null)} className="ml-auto text-[var(--text-muted)] hover:text-[var(--text)]">×</button>
+              <button onClick={() => setSelectedPlan(null)} className="ml-auto text-muted hover:text-primary">×</button>
             </div>
             <div className="p-5 space-y-4 text-sm">
-              <div className="text-[var(--text-muted)]">{selectedPlan.rationale}</div>
+              <div className="text-muted">{selectedPlan.rationale}</div>
 
               <Sub title="Architecture">
                 <Kv k="Services"      v={selectedPlan.architecture.services.join(', ') || '—'} />
@@ -178,15 +178,15 @@ export default function CapabilityGapPage() {
               <Sub title="Tasks">
                 <ol className="space-y-2 text-xs">
                   {selectedPlan.tasks.map((t, i) => (
-                    <li key={i} className="border border-[var(--border)] rounded p-2">
+                    <li key={i} className="border border-border rounded p-2">
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-300">{t.phase}</span>
                         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300">{t.category}</span>
                         {t.requiresApproval && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">approval</span>}
                         <span className="flex-1">{t.title}</span>
-                        <span className="text-[var(--text-muted)] font-mono">i:{t.impact} r:{t.risk}</span>
+                        <span className="text-muted font-mono">i:{t.impact} r:{t.risk}</span>
                       </div>
-                      <div className="text-[var(--text-muted)] mt-1">{t.description}</div>
+                      <div className="text-muted mt-1">{t.description}</div>
                     </li>
                   ))}
                 </ol>
@@ -207,7 +207,7 @@ export default function CapabilityGapPage() {
 
               <Sub title="Approvals required">
                 {selectedPlan.approvalsRequired.length === 0
-                  ? <div className="text-[var(--text-muted)] text-xs">None — low-risk autonomous build</div>
+                  ? <div className="text-muted text-xs">None — low-risk autonomous build</div>
                   : <ul className="text-xs list-disc list-inside text-amber-300">
                       {selectedPlan.approvalsRequired.map(a => <li key={a}>{a}</li>)}
                     </ul>}
@@ -233,7 +233,7 @@ export default function CapabilityGapPage() {
                 >
                   {persistPlan.isPending ? 'Persisting…' : 'Persist to roadmap_tasks'}
                 </button>
-                <button onClick={() => setSelectedPlan(null)} className="text-xs px-3 py-1.5 rounded border border-[var(--border)]">
+                <button onClick={() => setSelectedPlan(null)} className="text-xs px-3 py-1.5 rounded border border-border">
                   Close
                 </button>
               </div>
@@ -248,7 +248,7 @@ export default function CapabilityGapPage() {
 function Sub({ title, children }: { title: string; children: JSX.Element | JSX.Element[] }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mb-1">{title}</div>
+      <div className="text-[10px] uppercase tracking-wider text-muted mb-1">{title}</div>
       {children}
     </div>
   )
@@ -256,7 +256,7 @@ function Sub({ title, children }: { title: string; children: JSX.Element | JSX.E
 function Kv({ k, v }: { k: string; v: string }) {
   return (
     <div className="flex gap-2 text-xs">
-      <span className="text-[var(--text-muted)] w-20">{k}</span>
+      <span className="text-muted w-20">{k}</span>
       <span className="font-mono">{v}</span>
     </div>
   )

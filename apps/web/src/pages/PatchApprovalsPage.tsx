@@ -131,7 +131,7 @@ function ApprovalCard({ approval }: { approval: Approval }) {
     : <ShieldCheck className="w-4 h-4" />
 
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] overflow-hidden">
+    <div className="rounded-lg border border-border bg-[var(--bg-surface)] overflow-hidden">
       {/* Header */}
       <div className="px-4 py-3 flex items-start gap-3">
         <div className={`mt-0.5 flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${RISK_COLORS[approval.riskLevel] ?? ''}`}>
@@ -140,13 +140,13 @@ function ApprovalCard({ approval }: { approval: Approval }) {
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-[var(--text-primary)] truncate">{approval.taskTitle}</p>
+          <p className="text-sm font-medium text-primary truncate">{approval.taskTitle}</p>
           {approval.filePath && (
-            <p className="text-xs text-[var(--text-muted)] font-mono truncate mt-0.5">{approval.filePath}</p>
+            <p className="text-xs text-muted font-mono truncate mt-0.5">{approval.filePath}</p>
           )}
           <div className="flex flex-wrap gap-1 mt-1.5">
             {approval.riskCategories.map((c) => (
-              <span key={c} className="px-1.5 py-0.5 rounded text-xs bg-[var(--bg-elevated)] text-[var(--text-muted)]">
+              <span key={c} className="px-1.5 py-0.5 rounded text-xs bg-elevated text-muted">
                 {CATEGORY_LABELS[c] ?? c}
               </span>
             ))}
@@ -160,7 +160,7 @@ function ApprovalCard({ approval }: { approval: Approval }) {
           </span>
           <button
             onClick={() => setExpanded((p) => !p)}
-            className="text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+            className="text-muted hover:text-secondary transition-colors"
           >
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
@@ -169,21 +169,21 @@ function ApprovalCard({ approval }: { approval: Approval }) {
 
       {/* Expanded */}
       {expanded && (
-        <div className="border-t border-[var(--border)] px-4 py-3 space-y-3">
+        <div className="border-t border-border px-4 py-3 space-y-3">
           {/* Risk reason */}
           <div>
-            <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Risk Reason</p>
-            <p className="text-sm text-[var(--text-secondary)]">{approval.riskReason}</p>
+            <p className="text-xs text-muted uppercase tracking-wide mb-1">Risk Reason</p>
+            <p className="text-sm text-secondary">{approval.riskReason}</p>
           </div>
 
           {/* Affected files */}
           {approval.affectedFiles.length > 0 && (
             <div>
-              <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Affected Files</p>
+              <p className="text-xs text-muted uppercase tracking-wide mb-1">Affected Files</p>
               <div className="space-y-0.5">
                 {approval.affectedFiles.map((f) => (
-                  <div key={f} className="flex items-center gap-1.5 text-xs font-mono text-[var(--text-secondary)]">
-                    <FileCode2 className="w-3 h-3 text-[var(--text-muted)]" />
+                  <div key={f} className="flex items-center gap-1.5 text-xs font-mono text-secondary">
+                    <FileCode2 className="w-3 h-3 text-muted" />
                     <span className="truncate">{f}</span>
                   </div>
                 ))}
@@ -194,8 +194,8 @@ function ApprovalCard({ approval }: { approval: Approval }) {
           {/* Diff preview */}
           {approval.diffPreview && (
             <div>
-              <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Diff Preview</p>
-              <pre className="text-xs font-mono bg-[var(--bg-primary)] rounded p-2 overflow-x-auto max-h-40 text-[var(--text-secondary)] whitespace-pre-wrap">
+              <p className="text-xs text-muted uppercase tracking-wide mb-1">Diff Preview</p>
+              <pre className="text-xs font-mono bg-bg rounded p-2 overflow-x-auto max-h-40 text-secondary whitespace-pre-wrap">
                 {approval.diffPreview}
               </pre>
             </div>
@@ -204,8 +204,8 @@ function ApprovalCard({ approval }: { approval: Approval }) {
           {/* Reviewer note (if already reviewed) */}
           {approval.reviewerNote && !isPending && (
             <div>
-              <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Reviewer Note</p>
-              <p className="text-sm text-[var(--text-secondary)] italic">{approval.reviewerNote}</p>
+              <p className="text-xs text-muted uppercase tracking-wide mb-1">Reviewer Note</p>
+              <p className="text-sm text-secondary italic">{approval.reviewerNote}</p>
             </div>
           )}
 
@@ -235,7 +235,7 @@ function ApprovalCard({ approval }: { approval: Approval }) {
                 </div>
               ) : (
                 <div className="space-y-2 pt-1">
-                  <p className="text-xs text-[var(--text-secondary)]">
+                  <p className="text-xs text-secondary">
                     {action === 'approve'
                       ? 'Add an optional note for this approval:'
                       : 'Explain your decision (required):'}
@@ -245,7 +245,7 @@ function ApprovalCard({ approval }: { approval: Approval }) {
                     onChange={(e) => setNote(e.target.value)}
                     rows={2}
                     placeholder={action === 'approve' ? 'Optional note…' : 'Required note…'}
-                    className="w-full text-xs rounded border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] px-2 py-1.5 resize-none outline-none focus:border-blue-500/50"
+                    className="w-full text-xs rounded border border-border bg-bg text-primary px-2 py-1.5 resize-none outline-none focus:border-blue-500/50"
                   />
                   {error && <p className="text-xs text-red-400">{error}</p>}
                   <div className="flex gap-2">
@@ -263,7 +263,7 @@ function ApprovalCard({ approval }: { approval: Approval }) {
                     </button>
                     <button
                       onClick={() => { setAction(null); setNote(''); setError(null) }}
-                      className="px-3 py-1.5 rounded text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+                      className="px-3 py-1.5 rounded text-xs text-muted hover:text-secondary transition-colors"
                     >
                       Cancel
                     </button>
@@ -306,11 +306,11 @@ export default function PatchApprovalsPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-[var(--border)]">
+      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-border">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-[var(--text-primary)]">Patch Approvals</h1>
-            <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            <h1 className="text-lg font-semibold text-primary">Patch Approvals</h1>
+            <p className="text-xs text-muted mt-0.5">
               Human review queue for risky autonomous patch tasks
             </p>
           </div>
@@ -329,7 +329,7 @@ export default function PatchApprovalsPage() {
             )}
             <button
               onClick={() => qc.invalidateQueries({ queryKey: ['patch-approvals'] })}
-              className="text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+              className="text-muted hover:text-secondary transition-colors"
               title="Refresh"
             >
               <RefreshCcw className="w-4 h-4" />
@@ -346,7 +346,7 @@ export default function PatchApprovalsPage() {
               className={`px-3 py-1 rounded text-xs transition-colors ${
                 statusFilter === t.value
                   ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                  : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]'
+                  : 'text-muted hover:text-secondary hover:bg-elevated'
               }`}
             >
               {t.label}
@@ -358,7 +358,7 @@ export default function PatchApprovalsPage() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-6 py-4">
         {isLoading && (
-          <div className="flex items-center justify-center h-32 text-[var(--text-muted)] text-sm">
+          <div className="flex items-center justify-center h-32 text-muted text-sm">
             Loading approvals…
           </div>
         )}
@@ -371,7 +371,7 @@ export default function PatchApprovalsPage() {
         )}
 
         {!isLoading && !error && approvals.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-48 text-[var(--text-muted)]">
+          <div className="flex flex-col items-center justify-center h-48 text-muted">
             <ShieldCheck className="w-8 h-8 mb-2 opacity-40" />
             <p className="text-sm">No approvals found</p>
             <p className="text-xs mt-1 opacity-60">

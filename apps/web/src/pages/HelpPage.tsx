@@ -98,54 +98,54 @@ export default function HelpPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-[var(--border)]">
-        <h1 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
+      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-border">
+        <h1 className="text-lg font-semibold text-primary flex items-center gap-2">
           <BookOpen className="w-4 h-4 text-blue-400" /> Operator Help
         </h1>
-        <p className="text-xs text-[var(--text-muted)] mt-0.5">
+        <p className="text-xs text-muted mt-0.5">
           Quick reference for War Room pages, status meanings, and common operator tasks
         </p>
         <div className="mt-3 relative">
-          <Search className="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-3 top-2" />
+          <Search className="w-3.5 h-3.5 text-muted absolute left-3 top-2" />
           <input value={filter} onChange={(e) => setFilter(e.target.value)}
             placeholder="Search help topics…"
-            className="w-full pl-8 pr-3 py-1.5 text-xs rounded border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-primary)] outline-none focus:border-blue-500/50" />
+            className="w-full pl-8 pr-3 py-1.5 text-xs rounded border border-border bg-[var(--bg-surface)] text-primary outline-none focus:border-blue-500/50" />
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-4">
         <div className="max-w-4xl space-y-4">
           {filtered.map((s) => (
-            <section key={s.id} className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-4">
-              <h2 className="text-sm font-medium text-[var(--text-primary)] flex items-center gap-2 mb-3">
+            <section key={s.id} className="rounded-lg border border-border bg-[var(--bg-surface)] p-4">
+              <h2 className="text-sm font-medium text-primary flex items-center gap-2 mb-3">
                 <span className="text-blue-400">{s.icon}</span>
                 {s.title}
               </h2>
               <div className="space-y-1.5">
                 {s.body.map(([k, v]) => (
                   <div key={k} className="flex items-start gap-3 text-xs">
-                    <span className="font-mono text-[var(--text-muted)] shrink-0 min-w-[100px]">{k}</span>
-                    <span className="text-[var(--text-secondary)]">{v}</span>
+                    <span className="font-mono text-muted shrink-0 min-w-[100px]">{k}</span>
+                    <span className="text-secondary">{v}</span>
                   </div>
                 ))}
               </div>
             </section>
           ))}
 
-          <section className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-4">
-            <h2 className="text-sm font-medium text-[var(--text-primary)] flex items-center gap-2 mb-3">
+          <section className="rounded-lg border border-border bg-[var(--bg-surface)] p-4">
+            <h2 className="text-sm font-medium text-primary flex items-center gap-2 mb-3">
               <AlertTriangle className="w-4 h-4 text-orange-400" />
               Incident Runbooks
             </h2>
-            <p className="text-xs text-[var(--text-muted)] mb-3">
+            <p className="text-xs text-muted mb-3">
               Full runbooks at <span className="font-mono">docs/runbooks.md</span>. Each runbook lists
               detection → severity → immediate action → rollback → verification → escalation.
             </p>
             <ul className="space-y-1">
               {RUNBOOKS.map((r, i) => (
-                <li key={r} className="text-xs text-[var(--text-secondary)] flex items-center gap-2">
-                  <ChevronRight className="w-3 h-3 text-[var(--text-muted)]" />
-                  <span className="font-mono text-[var(--text-muted)]">{String(i + 1).padStart(2, '0')}</span>
+                <li key={r} className="text-xs text-secondary flex items-center gap-2">
+                  <ChevronRight className="w-3 h-3 text-muted" />
+                  <span className="font-mono text-muted">{String(i + 1).padStart(2, '0')}</span>
                   {r}
                 </li>
               ))}
@@ -154,7 +154,7 @@ export default function HelpPage() {
 
           <section className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
             <h2 className="text-sm font-medium text-blue-400 mb-2">When in Doubt</h2>
-            <ol className="space-y-1 text-xs text-[var(--text-secondary)] list-decimal pl-4">
+            <ol className="space-y-1 text-xs text-secondary list-decimal pl-4">
               <li>Check the <span className="font-mono">events</span> table via Timeline — every state change emits an event</li>
               <li>Check the matching runbook in <span className="font-mono">docs/runbooks.md</span></li>
               <li>Escalate via Incident → Escalate action with a clear reason</li>
@@ -163,7 +163,7 @@ export default function HelpPage() {
 
           <section className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4">
             <h2 className="text-sm font-medium text-yellow-400 mb-2">Secret Safety</h2>
-            <p className="text-xs text-[var(--text-secondary)]">
+            <p className="text-xs text-secondary">
               Never paste raw API keys, passwords, or tokens into approval notes, resolution notes,
               override reasons, or any UI text field. The sandbox executor scrubs known patterns
               from persisted output, but operator inputs are NOT redacted at write time.

@@ -42,7 +42,18 @@ operational accents (healthy emerald, active cyan, warning amber,
 - `src/design/tokens.ts` — JS mirror for R3F / SVG / charts
 - `src/design/components.tsx` — GlassPanel · StatusPill · StatusDot ·
   Dropdown · Drawer · KV · SectionLabel · Empty · Skeleton · CommandBar
+- `src/design/audio.ts` — opt-in WebAudio tones (select / open / confirm /
+  reject / critical / success). Off by default; honors prefers-reduced-motion.
+- `src/design/ui-mode.tsx` — Focus / Executive / Security / Creative /
+  Runtime / Mission. Each shifts accent + emphasis without changing data.
 - `tailwind.config.ts` — Tailwind named classes mapped to tokens
+
+## URL conventions
+
+- `?screenshot=1` — hides app sidebar + top-controls + Brain overlays.
+  Use for marketing shots and design review at exact viewport sizes.
+- `?replay_at=TS&node=ID&template=X&focus=Y` — Brain deep-link from
+  any War Room surface (Audit Trail, Proposals, etc.).
 
 ## Adding a new page
 

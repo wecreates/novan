@@ -57,7 +57,7 @@ export default function IdentityPage() {
       <div className="flex items-center gap-3">
         <Wand2 className="w-5 h-5 text-purple-400" />
         <h1 className="text-xl font-semibold">Identity & Communication</h1>
-        <span className="text-xs text-[var(--text-muted)] ml-1">calm · elite · tactical · trustworthy · confidence-aware</span>
+        <span className="text-xs text-muted ml-1">calm · elite · tactical · trustworthy · confidence-aware</span>
       </div>
 
       {/* Traits */}
@@ -65,8 +65,8 @@ export default function IdentityPage() {
         <Section title={`Active traits (v${p.profile?.version ?? 1})`} icon={<Activity className="w-4 h-4 text-sky-400" />}>
           <div className="p-4 grid grid-cols-2 md:grid-cols-5 gap-3">
             {Object.entries(p.profile?.traits ?? p.defaults).map(([k, v]) => (
-              <div key={k} className="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5">
-                <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{k.replace(/_/g, ' ')}</div>
+              <div key={k} className="rounded border border-border bg-[var(--bg)] px-2 py-1.5">
+                <div className="text-[10px] uppercase tracking-wider text-muted">{k.replace(/_/g, ' ')}</div>
                 <div className="font-mono text-sm mt-0.5">{(Number(v) * 100).toFixed(0)}%</div>
               </div>
             ))}
@@ -86,12 +86,12 @@ export default function IdentityPage() {
           </div>
           {d.topSources.length > 0 && (
             <div className="px-5 pb-3 text-xs">
-              <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mb-1">Top offending sources</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted mb-1">Top offending sources</div>
               <ul className="space-y-0.5">
                 {d.topSources.map(s => (
                   <li key={s.source} className="flex gap-3">
                     <span className="font-mono">{s.source}</span>
-                    <span className="text-[var(--text-muted)]">{s.failed}/{s.total} failed</span>
+                    <span className="text-muted">{s.failed}/{s.total} failed</span>
                   </li>
                 ))}
               </ul>
@@ -105,17 +105,17 @@ export default function IdentityPage() {
         <div className="p-4 space-y-2">
           <div className="flex gap-2">
             <select value={auditType} onChange={(e) => setAuditType(e.target.value as typeof auditType)}
-              className="bg-[var(--bg)] border border-[var(--border)] rounded px-2 py-1 text-sm">
+              className="bg-[var(--bg)] border border-border rounded px-2 py-1 text-sm">
               {['incident', 'brief', 'research', 'patch', 'risk', 'rec', 'social', 'support'].map(t => <option key={t}>{t}</option>)}
             </select>
             <button onClick={() => audit.mutate()} disabled={!auditText || audit.isPending}
-              className="px-3 py-1 text-xs rounded border border-[var(--border)] hover:bg-[var(--surface-hover)]">
+              className="px-3 py-1 text-xs rounded border border-border hover:bg-[var(--surface-hover)]">
               {audit.isPending ? 'Auditing…' : 'Audit'}
             </button>
           </div>
           <textarea value={auditText} onChange={(e) => setAuditText(e.target.value)}
             placeholder="paste text to audit for hype, fake certainty, missing uncertainty, fact/estimate blur…"
-            className="w-full bg-[var(--bg)] border border-[var(--border)] rounded p-2 text-sm font-mono" rows={4} />
+            className="w-full bg-[var(--bg)] border border-border rounded p-2 text-sm font-mono" rows={4} />
           {auditResult && (
             <div className="text-xs space-y-1">
               <div className="flex items-center gap-2">
@@ -123,9 +123,9 @@ export default function IdentityPage() {
                   ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                   : <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />}
                 <span className="font-medium">{auditResult.passed ? 'PASSED' : 'FAILED'}</span>
-                <span className="text-[var(--text-muted)]">hype {auditResult.hypeScore.toFixed(2)}</span>
-                <span className="text-[var(--text-muted)]">uncertainty {auditResult.uncertaintyHandling}</span>
-                <span className="text-[var(--text-muted)]">fact/estimate {auditResult.factEstimateOk ? 'ok' : 'blurred'}</span>
+                <span className="text-muted">hype {auditResult.hypeScore.toFixed(2)}</span>
+                <span className="text-muted">uncertainty {auditResult.uncertaintyHandling}</span>
+                <span className="text-muted">fact/estimate {auditResult.factEstimateOk ? 'ok' : 'blurred'}</span>
               </div>
               {auditResult.violations.length > 0 && (
                 <ul className="text-amber-300 ml-5 space-y-0.5">
@@ -142,10 +142,10 @@ export default function IdentityPage() {
 
 function Section({ title, icon, children }: { title: string; icon?: JSX.Element; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
       </div>
       {children}
     </div>
@@ -156,7 +156,7 @@ function Stat({ label, v, color }: { label: string; v: string; color?: 'emerald'
   const c = color === 'amber' ? 'text-amber-300' : color === 'emerald' ? 'text-emerald-300' : ''
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
+      <div className="text-[10px] uppercase tracking-wider text-muted">{label}</div>
       <div className={`font-mono mt-0.5 ${c}`}>{v}</div>
     </div>
   )

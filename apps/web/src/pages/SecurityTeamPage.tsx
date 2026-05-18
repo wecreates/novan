@@ -88,12 +88,12 @@ const ROLE_ICONS: Record<string, React.ReactNode> = {
 
 function StatCard({ label, value, color, icon }: { label: string; value: number; color?: string; icon?: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3">
+    <div className="rounded-lg border border-border bg-[var(--bg-surface)] px-4 py-3">
       <div className="flex items-center gap-1.5">
         {icon}
-        <p className="text-xs text-[var(--text-muted)]">{label}</p>
+        <p className="text-xs text-muted">{label}</p>
       </div>
-      <p className={`text-2xl font-semibold mt-1 ${color ?? 'text-[var(--text-primary)]'}`}>{value}</p>
+      <p className={`text-2xl font-semibold mt-1 ${color ?? 'text-primary'}`}>{value}</p>
     </div>
   )
 }
@@ -121,7 +121,7 @@ function FindingCard({ f }: { f: Finding }) {
   const active = f.status === 'open' || f.status === 'acknowledged' || f.status === 'mitigating'
 
   return (
-    <div className={`rounded-lg border ${f.blocksLaunch && f.status === 'open' ? 'border-red-500/40' : 'border-[var(--border)]'} bg-[var(--bg-surface)]`}>
+    <div className={`rounded-lg border ${f.blocksLaunch && f.status === 'open' ? 'border-red-500/40' : 'border-border'} bg-[var(--bg-surface)]`}>
       <div className="px-4 py-3 flex items-start gap-3">
         <span className={`mt-0.5 flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${SEVERITY_COLORS[f.severity] ?? ''}`}>
           {SEVERITY_ICONS[f.severity]}
@@ -130,7 +130,7 @@ function FindingCard({ f }: { f: Finding }) {
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-sm font-medium text-[var(--text-primary)]">{f.title}</p>
+            <p className="text-sm font-medium text-primary">{f.title}</p>
             {f.blocksLaunch && (
               <span title="Blocks launch"><Lock className="w-3.5 h-3.5 text-red-400" /></span>
             )}
@@ -138,7 +138,7 @@ function FindingCard({ f }: { f: Finding }) {
               <span title="Requires approval"><Shield className="w-3.5 h-3.5 text-yellow-400" /></span>
             )}
           </div>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5 flex items-center gap-1">
+          <p className="text-xs text-muted mt-0.5 flex items-center gap-1">
             {ROLE_ICONS[f.agentRole]}
             <span className="font-mono">{f.agentRole}</span>
             <span>·</span>
@@ -153,26 +153,26 @@ function FindingCard({ f }: { f: Finding }) {
           {f.status.replace('_', ' ')}
         </span>
 
-        <button onClick={() => setOpen((p) => !p)} className="text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
+        <button onClick={() => setOpen((p) => !p)} className="text-muted hover:text-secondary">
           {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
       </div>
 
       {open && (
-        <div className="border-t border-[var(--border)] px-4 py-3 space-y-3">
-          <p className="text-sm text-[var(--text-secondary)]">{f.description}</p>
+        <div className="border-t border-border px-4 py-3 space-y-3">
+          <p className="text-sm text-secondary">{f.description}</p>
 
           <div className="rounded bg-purple-500/10 border border-purple-500/20 p-2">
             <p className="text-xs text-purple-400 font-medium">Recommended Action</p>
-            <p className="text-sm text-[var(--text-secondary)] mt-0.5">{f.recommendedAction}</p>
+            <p className="text-sm text-secondary mt-0.5">{f.recommendedAction}</p>
           </div>
 
           {f.evidenceRefs.length > 0 && (
             <div>
-              <p className="text-xs text-[var(--text-muted)] uppercase mb-1">Evidence ({f.evidenceRefs.length})</p>
+              <p className="text-xs text-muted uppercase mb-1">Evidence ({f.evidenceRefs.length})</p>
               <div className="space-y-0.5">
                 {f.evidenceRefs.slice(0, 5).map((e, i) => (
-                  <p key={i} className="text-xs font-mono text-[var(--text-muted)]">
+                  <p key={i} className="text-xs font-mono text-muted">
                     {e.table} → {e.id.slice(0, 16)}
                   </p>
                 ))}
@@ -182,8 +182,8 @@ function FindingCard({ f }: { f: Finding }) {
 
           {f.resolutionNote && (
             <div>
-              <p className="text-xs text-[var(--text-muted)] uppercase mb-1">Reviewer note</p>
-              <p className="text-sm text-[var(--text-secondary)] italic">{f.resolutionNote}</p>
+              <p className="text-xs text-muted uppercase mb-1">Reviewer note</p>
+              <p className="text-sm text-secondary italic">{f.resolutionNote}</p>
             </div>
           )}
 
@@ -210,7 +210,7 @@ function FindingCard({ f }: { f: Finding }) {
                 <div className="space-y-2">
                   <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2}
                     placeholder={action === 'ack' ? 'Optional note' : 'Note (required)'}
-                    className="w-full text-xs rounded border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] px-2 py-1.5 resize-none outline-none focus:border-blue-500/50" />
+                    className="w-full text-xs rounded border border-border bg-bg text-primary px-2 py-1.5 resize-none outline-none focus:border-blue-500/50" />
                   {err && <p className="text-xs text-red-400">{err}</p>}
                   <div className="flex gap-2">
                     <button onClick={() => {
@@ -221,7 +221,7 @@ function FindingCard({ f }: { f: Finding }) {
                       Confirm
                     </button>
                     <button onClick={() => { setAction(null); setNote(''); setErr(null) }}
-                      className="px-3 py-1.5 rounded text-xs text-[var(--text-muted)]">Cancel</button>
+                      className="px-3 py-1.5 rounded text-xs text-muted">Cancel</button>
                   </div>
                 </div>
               )}
@@ -250,13 +250,13 @@ export default function SecurityTeamPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-[var(--border)]">
+      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-border">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
+            <h1 className="text-lg font-semibold text-primary flex items-center gap-2">
               <Shield className="w-4 h-4 text-purple-400" /> Cyber Security Force Team
             </h1>
-            <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            <p className="text-xs text-muted mt-0.5">
               10 specialized agents · evidence-backed findings · launch-blocking on critical issues
             </p>
           </div>
@@ -265,7 +265,7 @@ export default function SecurityTeamPage() {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 border border-purple-500/30 disabled:opacity-50">
               <Zap className="w-3 h-3" /> {scanMut.isPending ? 'Scanning…' : 'Run Team Scan'}
             </button>
-            <button onClick={() => qc.invalidateQueries({ queryKey: ['st-stats'] })} className="text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
+            <button onClick={() => qc.invalidateQueries({ queryKey: ['st-stats'] })} className="text-muted hover:text-secondary">
               <RefreshCcw className="w-4 h-4" />
             </button>
           </div>
@@ -296,7 +296,7 @@ export default function SecurityTeamPage() {
             { v: 'agents',   l: 'Agents' },
           ].map((t) => (
             <button key={t.v} onClick={() => setTab(t.v as typeof tab)}
-              className={`px-3 py-1 rounded text-xs ${tab === t.v ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]'}`}>
+              className={`px-3 py-1 rounded text-xs ${tab === t.v ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'text-muted hover:text-secondary hover:bg-elevated'}`}>
               {t.l}
             </button>
           ))}
@@ -304,7 +304,7 @@ export default function SecurityTeamPage() {
             <div className="ml-auto flex gap-1">
               {[undefined, 'open', 'acknowledged', 'resolved', 'false_positive'].map((s) => (
                 <button key={s ?? 'all'} onClick={() => setFilter(s)}
-                  className={`px-2 py-1 rounded text-xs ${filter === s ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}>
+                  className={`px-2 py-1 rounded text-xs ${filter === s ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'text-muted hover:text-secondary'}`}>
                   {s ?? 'all'}
                 </button>
               ))}
@@ -325,7 +325,7 @@ export default function SecurityTeamPage() {
               </div>
             )}
             {findings.length === 0 && (
-              <div className="text-center py-12 text-[var(--text-muted)]">
+              <div className="text-center py-12 text-muted">
                 <ShieldCheck className="w-8 h-8 mx-auto mb-2 opacity-40 text-green-400" />
                 <p className="text-sm">No security findings</p>
                 <p className="text-xs mt-1 opacity-60">Run "Team Scan" to evaluate this workspace</p>
@@ -338,21 +338,21 @@ export default function SecurityTeamPage() {
         {tab === 'agents' && (
           <div className="grid grid-cols-2 gap-3 max-w-5xl">
             {agents.map((a) => (
-              <div key={a.id} className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+              <div key={a.id} className="rounded-lg border border-border bg-[var(--bg-surface)] p-4">
                 <div className="flex items-start gap-3">
                   <div className="shrink-0">{ROLE_ICONS[a.role]}</div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-[var(--text-primary)]">{a.name}</p>
-                      <span className="text-xs font-mono text-[var(--text-muted)]">{a.role}</span>
+                      <p className="text-sm font-medium text-primary">{a.name}</p>
+                      <span className="text-xs font-mono text-muted">{a.role}</span>
                     </div>
-                    <p className="text-xs text-[var(--text-muted)] mt-1">{a.description}</p>
+                    <p className="text-xs text-muted mt-1">{a.description}</p>
                     <div className="flex flex-wrap gap-1 mt-2">
                       {a.capabilities.map((c) => (
-                        <span key={c} className="px-1.5 py-0.5 rounded text-xs bg-[var(--bg-elevated)] text-[var(--text-muted)]">{c}</span>
+                        <span key={c} className="px-1.5 py-0.5 rounded text-xs bg-elevated text-muted">{c}</span>
                       ))}
                     </div>
-                    <p className="text-xs text-[var(--text-muted)] mt-2">
+                    <p className="text-xs text-muted mt-2">
                       {a.findingsProduced} finding(s) produced
                       {a.lastRunAt && <> · last run {new Date(a.lastRunAt).toLocaleTimeString()}</>}
                     </p>

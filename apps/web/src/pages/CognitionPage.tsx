@@ -129,8 +129,8 @@ export default function CognitionPage() {
       <div className="flex items-center gap-3">
         <Brain className="w-6 h-6 text-sky-400" />
         <div className="flex-1">
-          <h1 className="text-xl font-medium text-[var(--text)]">Cognition</h1>
-          <p className="text-xs text-[var(--text-muted)]">
+          <h1 className="text-xl font-medium text-primary">Cognition</h1>
+          <p className="text-xs text-muted">
             Cognitive state · world model · reasoning chains · executive loop · skills
           </p>
         </div>
@@ -154,7 +154,7 @@ export default function CognitionPage() {
         <Section title="System self-awareness — limitations" icon={<AlertTriangle className="w-4 h-4 text-amber-400" />}>
           <ul className="px-5 py-3 text-sm space-y-1">
             {s.state.systemLimitations.map((l, i) => (
-              <li key={i} className="text-[var(--text-muted)]">• {l}</li>
+              <li key={i} className="text-muted">• {l}</li>
             ))}
           </ul>
         </Section>
@@ -164,36 +164,36 @@ export default function CognitionPage() {
         {/* Executive state */}
         <Section title="Executive state" icon={<Target className="w-4 h-4" />} actions={
           <div className="flex gap-1 text-xs">
-            <button onClick={() => runReview.mutate('hourly')}     className="px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--bg-elevated)]">Run hourly</button>
-            <button onClick={() => runReview.mutate('six_hourly')} className="px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--bg-elevated)]">6h</button>
-            <button onClick={() => runReview.mutate('daily')}      className="px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--bg-elevated)]">Daily</button>
-            <button onClick={() => runReview.mutate('weekly')}     className="px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--bg-elevated)]">Weekly</button>
+            <button onClick={() => runReview.mutate('hourly')}     className="px-2 py-1 rounded border border-border hover:bg-elevated">Run hourly</button>
+            <button onClick={() => runReview.mutate('six_hourly')} className="px-2 py-1 rounded border border-border hover:bg-elevated">6h</button>
+            <button onClick={() => runReview.mutate('daily')}      className="px-2 py-1 rounded border border-border hover:bg-elevated">Daily</button>
+            <button onClick={() => runReview.mutate('weekly')}     className="px-2 py-1 rounded border border-border hover:bg-elevated">Weekly</button>
           </div>
         }>
           {!e ? (
-            <div className="px-5 py-4 text-[var(--text-muted)] text-sm">No executive state yet — click a review button.</div>
+            <div className="px-5 py-4 text-muted text-sm">No executive state yet — click a review button.</div>
           ) : (
             <div className="px-5 py-3 space-y-2 text-sm">
               <Kv k="Reviews run" v={String(e.reviewCount)} />
               <Kv k="Last review" v={e.lastReviewAt ? new Date(e.lastReviewAt).toLocaleString() : '—'} />
               <Kv k="Focus areas" v={(e.focusAreas ?? []).join(', ') || '—'} />
               {e.topPriorities.length > 0 && (
-                <div className="pt-2 border-t border-[var(--border)]">
-                  <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1">Top priorities</div>
+                <div className="pt-2 border-t border-border">
+                  <div className="text-xs uppercase tracking-wider text-muted mb-1">Top priorities</div>
                   {e.topPriorities.slice(0, 5).map((p, i) => (
                     <div key={i} className="text-xs flex items-center gap-2">
                       {p.bucket && <span className="text-[10px] font-mono px-1 rounded bg-sky-500/20 text-sky-300">{p.bucket}</span>}
                       <span className="flex-1 truncate">{p.title}</span>
-                      {typeof p.score === 'number' && <span className="font-mono text-[var(--text-muted)]">{p.score.toFixed(2)}</span>}
+                      {typeof p.score === 'number' && <span className="font-mono text-muted">{p.score.toFixed(2)}</span>}
                     </div>
                   ))}
                 </div>
               )}
               {e.activeRisks.length > 0 && (
-                <div className="pt-2 border-t border-[var(--border)]">
+                <div className="pt-2 border-t border-border">
                   <div className="text-xs uppercase tracking-wider text-amber-400 mb-1">Active risks</div>
                   {e.activeRisks.slice(0, 5).map((r, i) => (
-                    <div key={i} className="text-xs text-[var(--text-muted)]">• {r.name}: {r.value} (threshold {r.threshold})</div>
+                    <div key={i} className="text-xs text-muted">• {r.name}: {r.value} (threshold {r.threshold})</div>
                   ))}
                 </div>
               )}
@@ -204,7 +204,7 @@ export default function CognitionPage() {
         {/* Meta-reasoning accuracy */}
         <Section title="Meta-reasoning" icon={<History className="w-4 h-4" />}>
           {!a ? (
-            <div className="px-5 py-4 text-[var(--text-muted)] text-sm">Loading…</div>
+            <div className="px-5 py-4 text-muted text-sm">Loading…</div>
           ) : (
             <div className="px-5 py-3 space-y-2 text-sm">
               <Kv k="Reasoning chains"     v={String(a.totalChains)} />
@@ -214,7 +214,7 @@ export default function CognitionPage() {
               <Kv k="Avg conf matched"     v={a.avgConfidenceMatched === null ? '—' : a.avgConfidenceMatched.toFixed(2)} />
               <Kv k="Avg conf unmatched"   v={a.avgConfidenceUnmatched === null ? '—' : a.avgConfidenceUnmatched.toFixed(2)} />
               {a.totalChains === 0 && (
-                <div className="text-xs text-[var(--text-muted)] mt-2 pt-2 border-t border-[var(--border)]">
+                <div className="text-xs text-muted mt-2 pt-2 border-t border-border">
                   No reasoning chains persisted yet. Run an executive review or accept/dismiss a recommendation to start populating.
                 </div>
               )}
@@ -226,7 +226,7 @@ export default function CognitionPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* World model + memory hierarchy */}
         <Section title="World model" icon={<Cpu className="w-4 h-4" />}>
-          {!s ? <div className="px-5 py-4 text-[var(--text-muted)] text-sm">Loading…</div> : (
+          {!s ? <div className="px-5 py-4 text-muted text-sm">Loading…</div> : (
             <div className="px-5 py-3 space-y-1.5 text-sm">
               <Kv k="Cost / day"         v={`$${s.worldModel.costs.dailySpendUsd.toFixed(4)}`} />
               <Kv k="Cost / week"        v={`$${s.worldModel.costs.weeklySpendUsd.toFixed(4)}`} />
@@ -240,7 +240,7 @@ export default function CognitionPage() {
         </Section>
 
         <Section title="Memory hierarchy" icon={<Boxes className="w-4 h-4" />}>
-          {!s ? <div className="px-5 py-4 text-[var(--text-muted)] text-sm">Loading…</div> : (
+          {!s ? <div className="px-5 py-4 text-muted text-sm">Loading…</div> : (
             <div className="px-5 py-3 space-y-1.5 text-sm">
               <Kv k="Short-term (1h events)" v={String(s.memoryHierarchy.shortTerm.eventsLastHour)} />
               <Kv k="Working (24h telem.)"   v={String(s.memoryHierarchy.working.telemetryLast24h)} />
@@ -257,11 +257,11 @@ export default function CognitionPage() {
       <Section title="Skills" icon={<Sparkles className="w-4 h-4" />} actions={
         sk.length === 0
           ? (<button onClick={() => seedSkills.mutate()} disabled={seedSkills.isPending} className="text-xs px-3 py-1 rounded border border-sky-500/40 bg-sky-500/10 text-sky-300 flex items-center gap-1"><Plus className="w-3 h-3" />Seed 6 built-in skills</button>)
-          : (<span className="text-xs text-[var(--text-muted)]">{sk.length} registered · {sk.filter(x => x.status === 'verified').length} verified</span>)
+          : (<span className="text-xs text-muted">{sk.length} registered · {sk.filter(x => x.status === 'verified').length} verified</span>)
       }>
         <>
           {sk.length === 0 ? (
-            <div className="px-5 py-6 text-[var(--text-muted)] text-sm">No skills yet. Click "Seed 6 built-in skills" to register the verified built-ins.</div>
+            <div className="px-5 py-6 text-muted text-sm">No skills yet. Click "Seed 6 built-in skills" to register the verified built-ins.</div>
           ) : (
             <ul className="divide-y divide-[var(--border)]">
               {sk.map(skill => (
@@ -271,13 +271,13 @@ export default function CognitionPage() {
                   <span className="text-[10px] font-mono">{skill.riskLevel}</span>
                   <div className="flex-1">
                     <div className="text-sm">{skill.name}</div>
-                    <div className="text-xs text-[var(--text-muted)]">{skill.purpose}</div>
+                    <div className="text-xs text-muted">{skill.purpose}</div>
                   </div>
-                  <span className="text-xs font-mono text-[var(--text-muted)]" title="success/failure">{skill.successCount}/{skill.failureCount}</span>
+                  <span className="text-xs font-mono text-muted" title="success/failure">{skill.successCount}/{skill.failureCount}</span>
                   <button
                     onClick={() => runSkill.mutate(skill.slug)}
                     disabled={runningSkill === skill.slug}
-                    className="text-xs px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--bg-elevated)] flex items-center gap-1"
+                    className="text-xs px-2 py-1 rounded border border-border hover:bg-elevated flex items-center gap-1"
                   >
                     <Play className="w-3 h-3" />
                     {runningSkill === skill.slug ? 'Running…' : 'Run'}
@@ -287,7 +287,7 @@ export default function CognitionPage() {
             </ul>
           )}
           {runOutput !== null && runOutput !== '' && (
-            <div className="px-5 py-2 text-xs text-[var(--text-muted)] border-t border-[var(--border)] font-mono">{runOutput}</div>
+            <div className="px-5 py-2 text-xs text-muted border-t border-border font-mono">{runOutput}</div>
           )}
         </>
       </Section>
@@ -300,7 +300,7 @@ export default function CognitionPage() {
               <li key={g.pattern} className="px-4 py-2 flex items-center gap-3 text-sm">
                 <span className="font-mono text-xs">{g.pattern}</span>
                 <span className="text-amber-400 font-mono text-xs">{g.occurrences}×</span>
-                <span className="flex-1 text-[var(--text-muted)]">→ {g.suggestedSkill.reason}</span>
+                <span className="flex-1 text-muted">→ {g.suggestedSkill.reason}</span>
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">{g.suggestedSkill.name}</span>
               </li>
             ))}
@@ -311,13 +311,13 @@ export default function CognitionPage() {
       {/* Recent reviews */}
       <Section title="Recent executive reviews" icon={<Activity className="w-4 h-4" />}>
         {rv.length === 0 ? (
-          <div className="px-5 py-4 text-[var(--text-muted)] text-sm">No reviews yet. Click a button above to run one.</div>
+          <div className="px-5 py-4 text-muted text-sm">No reviews yet. Click a button above to run one.</div>
         ) : (
           <ul className="divide-y divide-[var(--border)]">
             {rv.map(r => (
               <li key={r.id} className="px-4 py-2 flex items-center gap-3 text-sm">
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300">{r.cycle}</span>
-                <span className="text-xs text-[var(--text-muted)]">{new Date(r.createdAt).toLocaleString()}</span>
+                <span className="text-xs text-muted">{new Date(r.createdAt).toLocaleString()}</span>
                 <span className="flex-1 truncate text-xs">{JSON.stringify(r.signalsAnalyzed).slice(0, 140)}</span>
               </li>
             ))}
@@ -330,10 +330,10 @@ export default function CognitionPage() {
 
 function Section({ title, icon, actions, children }: { title: string; icon?: JSX.Element; actions?: JSX.Element; children: JSX.Element | JSX.Element[] }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
         {actions && <div className="ml-auto">{actions}</div>}
       </div>
       {children}
@@ -343,9 +343,9 @@ function Section({ title, icon, actions, children }: { title: string; icon?: JSX
 
 function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
-      <div className={`font-mono text-sm ${highlight ? 'text-amber-400' : 'text-[var(--text)]'}`}>{value}</div>
+    <div className="rounded-lg border border-border bg-surface px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wider text-muted">{label}</div>
+      <div className={`font-mono text-sm ${highlight ? 'text-amber-400' : 'text-primary'}`}>{value}</div>
     </div>
   )
 }
@@ -353,7 +353,7 @@ function Stat({ label, value, highlight }: { label: string; value: string; highl
 function Kv({ k, v }: { k: string; v: string }) {
   return (
     <div className="flex justify-between">
-      <span className="text-[var(--text-muted)]">{k}</span>
+      <span className="text-muted">{k}</span>
       <span className="font-mono text-sm">{v}</span>
     </div>
   )

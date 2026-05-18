@@ -55,11 +55,11 @@ export default function CodeProposalsPage() {
       <div className="flex items-center gap-3">
         <Code2 className="w-5 h-5 text-sky-400" />
         <h1 className="text-xl font-semibold">Code Proposals</h1>
-        <span className="text-xs text-[var(--text-muted)] ml-1">{rows.length} {filter}</span>
+        <span className="text-xs text-muted ml-1">{rows.length} {filter}</span>
         <div className="ml-auto flex items-center gap-1">
           {(['proposed', 'approved', 'rejected', 'all'] as const).map(f => (
             <button key={f} onClick={() => setFilter(f)}
-              className={`px-2 py-1 text-xs rounded border ${filter === f ? 'border-sky-500/50 text-sky-300 bg-sky-500/10' : 'border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hover)]'}`}>
+              className={`px-2 py-1 text-xs rounded border ${filter === f ? 'border-sky-500/50 text-sky-300 bg-sky-500/10' : 'border-border text-muted hover:bg-[var(--surface-hover)]'}`}>
               {f}
             </button>
           ))}
@@ -67,7 +67,7 @@ export default function CodeProposalsPage() {
       </div>
 
       {rows.length === 0 ? (
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-5 py-8 text-center text-sm text-[var(--text-muted)]">
+        <div className="rounded-lg border border-border bg-surface px-5 py-8 text-center text-sm text-muted">
           No {filter} proposals. The autonomous mind generates these every 10min when it detects buildable capability gaps.
         </div>
       ) : (
@@ -75,14 +75,14 @@ export default function CodeProposalsPage() {
           {rows.map(p => {
             const isOpen = expanded === p.id
             return (
-              <li key={p.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+              <li key={p.id} className="rounded-lg border border-border bg-surface">
                 <div className="px-4 py-3 flex items-center gap-3">
                   <span className={`px-1.5 py-0.5 rounded text-[10px] border ${RISK[p.riskLevel] ?? RISK.medium}`}>{p.riskLevel}</span>
-                  <span className="text-xs text-[var(--text-muted)] font-mono">~{p.estimatedLoc} LOC</span>
+                  <span className="text-xs text-muted font-mono">~{p.estimatedLoc} LOC</span>
                   <button onClick={() => setExpanded(isOpen ? null : p.id)} className="flex-1 text-left text-sm hover:underline">
                     {p.title}
                   </button>
-                  <span className="text-xs text-[var(--text-muted)] font-mono">{p.status}</span>
+                  <span className="text-xs text-muted font-mono">{p.status}</span>
                   {p.status === 'proposed' && (
                     <>
                       <button onClick={() => setStatus.mutate({ id: p.id, status: 'approved' })}
@@ -108,15 +108,15 @@ export default function CodeProposalsPage() {
                   </NavLink>
                 </div>
                 {isOpen && (
-                  <div className="px-4 py-3 border-t border-[var(--border)] text-xs space-y-2">
-                    <p className="text-[var(--text-muted)]">{p.summary}</p>
-                    <ul className="text-[var(--text-muted)] space-y-0.5">
+                  <div className="px-4 py-3 border-t border-border text-xs space-y-2">
+                    <p className="text-muted">{p.summary}</p>
+                    <ul className="text-muted space-y-0.5">
                       {p.reasoning.map((r, i) => <li key={i}>• {r}</li>)}
                     </ul>
                     {p.filesToCreate.length > 0 && (
                       <div>
                         <div className="text-emerald-400 font-medium">Files to create:</div>
-                        <ul className="font-mono text-[10px] text-[var(--text-muted)]">
+                        <ul className="font-mono text-[10px] text-muted">
                           {p.filesToCreate.map((f, i) => <li key={i}>+ {f.path} <span className="opacity-60">(~{f.estLoc} LOC · {f.purpose})</span></li>)}
                         </ul>
                       </div>
@@ -124,7 +124,7 @@ export default function CodeProposalsPage() {
                     {p.filesToModify.length > 0 && (
                       <div>
                         <div className="text-amber-400 font-medium">Files to modify:</div>
-                        <ul className="font-mono text-[10px] text-[var(--text-muted)]">
+                        <ul className="font-mono text-[10px] text-muted">
                           {p.filesToModify.map((f, i) => <li key={i}>~ {f.path} <span className="opacity-60">(~{f.estLoc} LOC · {f.purpose})</span></li>)}
                         </ul>
                       </div>
@@ -132,7 +132,7 @@ export default function CodeProposalsPage() {
                     {p.testsRequired.length > 0 && (
                       <div>
                         <div className="text-sky-400 font-medium">Tests required:</div>
-                        <ul className="text-[var(--text-muted)]">
+                        <ul className="text-muted">
                           {p.testsRequired.map((t, i) => <li key={i}>• {t.description}</li>)}
                         </ul>
                       </div>

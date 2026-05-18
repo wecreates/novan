@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
     "@ops/shared-types": "workspace:*",
     "@react-three/drei": "^9.117.3",
     "@react-three/fiber": "^8.17.10",

@@ -63,9 +63,9 @@ const LOCK_COLORS: Record<string, string> = {
 
 function StatCard({ label, value, color }: { label: string; value: number; color?: string }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3">
-      <p className="text-xs text-[var(--text-muted)]">{label}</p>
-      <p className={`text-2xl font-semibold mt-1 ${color ?? 'text-[var(--text-primary)]'}`}>{value}</p>
+    <div className="rounded-lg border border-border bg-[var(--bg-surface)] px-4 py-3">
+      <p className="text-xs text-muted">{label}</p>
+      <p className={`text-2xl font-semibold mt-1 ${color ?? 'text-primary'}`}>{value}</p>
     </div>
   )
 }
@@ -92,15 +92,15 @@ export default function OrchestratorPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-[var(--border)]">
+      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-border">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
+            <h1 className="text-lg font-semibold text-primary flex items-center gap-2">
               <GitMerge className="w-4 h-4 text-blue-400" /> Multi-Agent Orchestrator
             </h1>
-            <p className="text-xs text-[var(--text-muted)] mt-0.5">Capability-matched assignments · file/workflow/queue locking · parallel execution</p>
+            <p className="text-xs text-muted mt-0.5">Capability-matched assignments · file/workflow/queue locking · parallel execution</p>
           </div>
-          <button onClick={() => qc.invalidateQueries({ queryKey: ['orch-agents'] })} className="text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
+          <button onClick={() => qc.invalidateQueries({ queryKey: ['orch-agents'] })} className="text-muted hover:text-secondary">
             <RefreshCcw className="w-4 h-4" />
           </button>
         </div>
@@ -123,7 +123,7 @@ export default function OrchestratorPage() {
               className={`px-3 py-1 rounded text-xs flex items-center gap-1.5 transition-colors ${
                 tab === t.v
                   ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                  : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]'
+                  : 'text-muted hover:text-secondary hover:bg-elevated'
               }`}>{t.i}{t.l}</button>
           ))}
         </div>
@@ -132,24 +132,24 @@ export default function OrchestratorPage() {
       <div className="flex-1 overflow-y-auto px-6 py-4">
         {tab === 'agents' && (
           <div className="space-y-2 max-w-4xl">
-            {agents.length === 0 && <p className="text-sm text-[var(--text-muted)]">No agents registered. POST to /agents/register to register one.</p>}
+            {agents.length === 0 && <p className="text-sm text-muted">No agents registered. POST to /agents/register to register one.</p>}
             {agents.map((a) => {
               const total = a.successCount + a.failureCount
               const successPct = total > 0 ? (a.successCount / total) * 100 : 0
               const staleMs = Date.now() - a.lastHeartbeat
               return (
-                <div key={a.id} className={`rounded-lg border ${a.status === 'down' ? 'border-red-500/40' : 'border-[var(--border)]'} bg-[var(--bg-surface)] px-4 py-3`}>
+                <div key={a.id} className={`rounded-lg border ${a.status === 'down' ? 'border-red-500/40' : 'border-border'} bg-[var(--bg-surface)] px-4 py-3`}>
                   <div className="flex items-start gap-3">
-                    <Bot className="w-4 h-4 text-[var(--text-muted)] mt-0.5 shrink-0" />
+                    <Bot className="w-4 h-4 text-muted mt-0.5 shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-[var(--text-primary)]">{a.agentName}</p>
+                        <p className="text-sm font-medium text-primary">{a.agentName}</p>
                         <span className={`px-2 py-0.5 rounded text-xs capitalize ${STATUS_COLORS[a.status] ?? ''}`}>{a.status}</span>
                       </div>
-                      <p className="text-xs font-mono text-[var(--text-muted)] mt-0.5">{a.id}</p>
+                      <p className="text-xs font-mono text-muted mt-0.5">{a.id}</p>
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {a.capabilities.map((c) => (
-                          <span key={c} className="px-1.5 py-0.5 rounded text-xs bg-[var(--bg-elevated)] text-[var(--text-muted)]">{c}</span>
+                          <span key={c} className="px-1.5 py-0.5 rounded text-xs bg-elevated text-muted">{c}</span>
                         ))}
                       </div>
                     </div>
@@ -157,9 +157,9 @@ export default function OrchestratorPage() {
                       <p className={`text-sm font-medium ${successPct >= 90 ? 'text-green-400' : successPct >= 70 ? 'text-yellow-400' : 'text-red-400'}`}>
                         {total > 0 ? `${successPct.toFixed(0)}%` : '—'}
                       </p>
-                      <p className="text-xs text-[var(--text-muted)]">{a.activeAssignments} active</p>
-                      <p className="text-xs text-[var(--text-muted)]">{a.successCount}✓ / {a.failureCount}✗ / {a.rollbackCount}↩</p>
-                      <p className="text-xs text-[var(--text-muted)] mt-1">heartbeat {Math.floor(staleMs / 1000)}s ago</p>
+                      <p className="text-xs text-muted">{a.activeAssignments} active</p>
+                      <p className="text-xs text-muted">{a.successCount}✓ / {a.failureCount}✗ / {a.rollbackCount}↩</p>
+                      <p className="text-xs text-muted mt-1">heartbeat {Math.floor(staleMs / 1000)}s ago</p>
                     </div>
                   </div>
                 </div>
@@ -170,9 +170,9 @@ export default function OrchestratorPage() {
 
         {tab === 'assignments' && (
           <div className="space-y-2 max-w-4xl">
-            {assignments.length === 0 && <p className="text-sm text-[var(--text-muted)]">No assignments yet.</p>}
+            {assignments.length === 0 && <p className="text-sm text-muted">No assignments yet.</p>}
             {assignments.map((a) => (
-              <div key={a.id} className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3">
+              <div key={a.id} className="rounded-lg border border-border bg-[var(--bg-surface)] px-4 py-3">
                 <div className="flex items-start gap-3">
                   <span className={`mt-0.5 px-2 py-0.5 rounded text-xs capitalize ${STATUS_COLORS[a.status] ?? ''}`}>
                     {a.status === 'blocked' && <Pause className="w-3 h-3 inline mr-0.5" />}
@@ -181,8 +181,8 @@ export default function OrchestratorPage() {
                     {a.status}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-[var(--text-primary)]">{a.taskKind}: <span className="font-mono text-xs">{a.taskRef}</span></p>
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                    <p className="text-sm text-primary">{a.taskKind}: <span className="font-mono text-xs">{a.taskRef}</span></p>
+                    <p className="text-xs text-muted mt-0.5">
                       Agent <span className="font-mono">{a.agentId}</span> · priority {a.priority}
                       {a.dependsOn.length > 0 && <> · depends on {a.dependsOn.length} task(s)</>}
                     </p>
@@ -197,7 +197,7 @@ export default function OrchestratorPage() {
         {tab === 'locks' && (
           <div className="space-y-2 max-w-4xl">
             <div className="flex justify-between items-center mb-2">
-              <p className="text-xs text-[var(--text-muted)]">{locks.length} active lock(s)</p>
+              <p className="text-xs text-muted">{locks.length} active lock(s)</p>
               <button onClick={() => recoverMut.mutate()} disabled={recoverMut.isPending}
                 className="flex items-center gap-1.5 px-3 py-1 rounded text-xs bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 border border-yellow-500/30 transition-colors disabled:opacity-50">
                 <Wrench className="w-3 h-3" /> {recoverMut.isPending ? 'Recovering…' : 'Sweep stale'}
@@ -206,22 +206,22 @@ export default function OrchestratorPage() {
             {recoverMut.data && (
               <div className="text-xs text-green-400 mb-2">Recovered {recoverMut.data.recovered} stale lock(s)</div>
             )}
-            {locks.length === 0 && <p className="text-sm text-[var(--text-muted)]">No active locks.</p>}
+            {locks.length === 0 && <p className="text-sm text-muted">No active locks.</p>}
             {locks.map((l) => {
               const remainingMs = l.expiresAt - Date.now()
               const stale = remainingMs <= 0
               return (
-                <div key={l.id} className={`rounded-lg border ${stale ? 'border-orange-500/30' : 'border-[var(--border)]'} bg-[var(--bg-surface)] px-4 py-3 flex items-center gap-3`}>
+                <div key={l.id} className={`rounded-lg border ${stale ? 'border-orange-500/30' : 'border-border'} bg-[var(--bg-surface)] px-4 py-3 flex items-center gap-3`}>
                   <Lock className={`w-4 h-4 ${LOCK_COLORS[l.lockKind] ?? ''} shrink-0`} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-mono text-[var(--text-primary)] truncate">{l.lockKind}: {l.resourceKey}</p>
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5">held by <span className="font-mono">{l.holderId}</span> ({l.holderKind})</p>
+                    <p className="text-sm font-mono text-primary truncate">{l.lockKind}: {l.resourceKey}</p>
+                    <p className="text-xs text-muted mt-0.5">held by <span className="font-mono">{l.holderId}</span> ({l.holderKind})</p>
                   </div>
                   <div className="text-right">
                     {stale ? (
                       <span className="text-xs text-orange-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />stale</span>
                     ) : (
-                      <span className="text-xs text-[var(--text-muted)]">expires in {Math.floor(remainingMs / 1000)}s</span>
+                      <span className="text-xs text-muted">expires in {Math.floor(remainingMs / 1000)}s</span>
                     )}
                   </div>
                 </div>
@@ -232,20 +232,20 @@ export default function OrchestratorPage() {
 
         {tab === 'graph' && (
           <div className="space-y-2 max-w-4xl">
-            {graph.length === 0 && <p className="text-sm text-[var(--text-muted)]">No recent assignments to visualize.</p>}
-            <p className="text-xs text-[var(--text-muted)] mb-2">
+            {graph.length === 0 && <p className="text-sm text-muted">No recent assignments to visualize.</p>}
+            <p className="text-xs text-muted mb-2">
               Showing {graph.length} assignment(s) from last 6h. Parallel = no shared dependencies.
             </p>
             {graph.map((n) => (
-              <div key={n.id} className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3">
+              <div key={n.id} className="rounded-lg border border-border bg-[var(--bg-surface)] px-4 py-3">
                 <div className="flex items-center gap-3">
                   <Zap className={`w-4 h-4 shrink-0 ${n.dependsOn.length === 0 ? 'text-green-400' : 'text-blue-400'}`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm text-[var(--text-primary)]">{n.taskKind}: <span className="font-mono text-xs">{n.taskRef.slice(0, 24)}</span></p>
+                      <p className="text-sm text-primary">{n.taskKind}: <span className="font-mono text-xs">{n.taskRef.slice(0, 24)}</span></p>
                       <span className={`px-1.5 py-0.5 rounded text-xs capitalize ${STATUS_COLORS[n.status] ?? ''}`}>{n.status}</span>
                     </div>
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                    <p className="text-xs text-muted mt-0.5">
                       {n.dependsOn.length === 0 ? <span className="text-green-400">runnable in parallel</span>
                         : <>depends on {n.dependsOn.length} task(s)</>}
                       {' · '}agent <span className="font-mono">{n.agentId}</span>

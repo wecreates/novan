@@ -26,10 +26,10 @@ function pctBar(v: number, limit: number) {
   const color = p >= 100 ? 'bg-red-500' : p >= 80 ? 'bg-yellow-500' : 'bg-blue-500'
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+      <div className="flex-1 h-1.5 bg-elevated rounded-full overflow-hidden">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${p}%` }} />
       </div>
-      <span className="text-xs text-[var(--text-muted)] w-10 text-right">{Math.round(p)}%</span>
+      <span className="text-xs text-muted w-10 text-right">{Math.round(p)}%</span>
     </div>
   )
 }
@@ -72,21 +72,21 @@ export default function RemoteUsagePage() {
         <div className="flex items-center gap-3">
           <Activity className="w-5 h-5 text-blue-400" />
           <div>
-            <h1 className="text-lg font-semibold text-[var(--text-primary)]">Remote Compute Usage</h1>
-            <p className="text-xs text-[var(--text-muted)]">Live spend across all remote endpoints and providers</p>
+            <h1 className="text-lg font-semibold text-primary">Remote Compute Usage</h1>
+            <p className="text-xs text-muted">Live spend across all remote endpoints and providers</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <select
             value={days}
             onChange={(e) => setDays(parseInt(e.target.value, 10))}
-            className="text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2 py-1 text-[var(--text-primary)]"
+            className="text-xs bg-elevated border border-border rounded px-2 py-1 text-primary"
           >
             <option value={1}>Today</option>
             <option value={7}>Last 7 days</option>
             <option value={30}>Last 30 days</option>
           </select>
-          <button onClick={load} className="p-1.5 rounded hover:bg-[var(--bg-elevated)] text-[var(--text-muted)]">
+          <button onClick={load} className="p-1.5 rounded hover:bg-elevated text-muted">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
@@ -101,39 +101,39 @@ export default function RemoteUsagePage() {
           { label: 'Daily Budget',   value: budget ? `${((budget.spend.dailySpendUsd / (budget.rules.dailyLimitUsd || 1)) * 100).toFixed(1)}%` : '—',
             icon: TrendingUp, color: budget?.throttle === 'throttled' ? 'text-yellow-400' : budget?.throttle === 'blocked' ? 'text-red-400' : 'text-green-400' },
         ].map((s) => (
-          <div key={s.label} className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg p-3">
+          <div key={s.label} className="bg-[var(--bg-surface)] border border-border rounded-lg p-3">
             <div className="flex items-center gap-1.5 mb-1">
               <s.icon className={`w-3.5 h-3.5 ${s.color}`} />
-              <span className="text-xs text-[var(--text-muted)]">{s.label}</span>
+              <span className="text-xs text-muted">{s.label}</span>
             </div>
-            <p className="text-lg font-semibold font-mono text-[var(--text-primary)]">{s.value}</p>
+            <p className="text-lg font-semibold font-mono text-primary">{s.value}</p>
           </div>
         ))}
       </div>
 
       {/* Budget bars */}
       {budget && (
-        <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg p-5 space-y-3">
+        <div className="bg-[var(--bg-surface)] border border-border rounded-lg p-5 space-y-3">
           <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-[var(--text-muted)]" />
-            <span className="text-sm font-medium text-[var(--text-primary)]">Budget Usage</span>
+            <Clock className="w-4 h-4 text-muted" />
+            <span className="text-sm font-medium text-primary">Budget Usage</span>
           </div>
           <div className="space-y-2">
             <div className="flex items-center gap-3">
-              <span className="text-xs text-[var(--text-muted)] w-14">Daily</span>
+              <span className="text-xs text-muted w-14">Daily</span>
               <div className="flex-1">
                 {pctBar(budget.spend.dailySpendUsd, budget.rules.dailyLimitUsd)}
               </div>
-              <span className="text-xs font-mono text-[var(--text-muted)] w-28 text-right">
+              <span className="text-xs font-mono text-muted w-28 text-right">
                 ${budget.spend.dailySpendUsd.toFixed(4)} / ${budget.rules.dailyLimitUsd.toFixed(2)}
               </span>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-xs text-[var(--text-muted)] w-14">Monthly</span>
+              <span className="text-xs text-muted w-14">Monthly</span>
               <div className="flex-1">
                 {pctBar(budget.spend.monthlySpendUsd, budget.rules.monthlyLimitUsd)}
               </div>
-              <span className="text-xs font-mono text-[var(--text-muted)] w-28 text-right">
+              <span className="text-xs font-mono text-muted w-28 text-right">
                 ${budget.spend.monthlySpendUsd.toFixed(4)} / ${budget.rules.monthlyLimitUsd.toFixed(2)}
               </span>
             </div>
@@ -144,23 +144,23 @@ export default function RemoteUsagePage() {
       {/* Side-by-side: endpoints + providers */}
       <div className="grid grid-cols-2 gap-4">
         {/* Endpoints */}
-        <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg overflow-hidden">
-          <div className="px-4 py-3 border-b border-[var(--border)] flex items-center gap-2">
+        <div className="bg-[var(--bg-surface)] border border-border rounded-lg overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center gap-2">
             <Activity className="w-3.5 h-3.5 text-green-400" />
-            <span className="text-sm font-medium text-[var(--text-primary)]">Remote Endpoints</span>
+            <span className="text-sm font-medium text-primary">Remote Endpoints</span>
           </div>
           <div className="divide-y divide-[var(--border)]">
             {loading ? (
-              [0,1,2].map((i) => <div key={i} className="px-4 py-3 h-12 animate-pulse bg-[var(--bg-elevated)]/30" />)
+              [0,1,2].map((i) => <div key={i} className="px-4 py-3 h-12 animate-pulse bg-elevated/30" />)
             ) : endpoints.length === 0 ? (
-              <p className="px-4 py-6 text-xs text-center text-[var(--text-muted)]">No endpoint data</p>
+              <p className="px-4 py-6 text-xs text-center text-muted">No endpoint data</p>
             ) : (
               endpoints.slice(0, 8).map((e) => (
-                <div key={e.endpointId} className="px-4 py-2.5 flex items-center justify-between hover:bg-[var(--bg-elevated)]/30">
-                  <span className="text-xs font-mono text-[var(--text-primary)] truncate w-32">{e.endpointId.slice(0, 14)}…</span>
-                  <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
+                <div key={e.endpointId} className="px-4 py-2.5 flex items-center justify-between hover:bg-elevated/30">
+                  <span className="text-xs font-mono text-primary truncate w-32">{e.endpointId.slice(0, 14)}…</span>
+                  <div className="flex items-center gap-3 text-xs text-muted">
                     <span>{e.requests} reqs</span>
-                    <span className="font-mono text-[var(--text-primary)]">${e.costUsd.toFixed(5)}</span>
+                    <span className="font-mono text-primary">${e.costUsd.toFixed(5)}</span>
                   </div>
                 </div>
               ))
@@ -169,23 +169,23 @@ export default function RemoteUsagePage() {
         </div>
 
         {/* Providers */}
-        <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg overflow-hidden">
-          <div className="px-4 py-3 border-b border-[var(--border)] flex items-center gap-2">
+        <div className="bg-[var(--bg-surface)] border border-border rounded-lg overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center gap-2">
             <Zap className="w-3.5 h-3.5 text-purple-400" />
-            <span className="text-sm font-medium text-[var(--text-primary)]">AI Providers</span>
+            <span className="text-sm font-medium text-primary">AI Providers</span>
           </div>
           <div className="divide-y divide-[var(--border)]">
             {loading ? (
-              [0,1,2].map((i) => <div key={i} className="px-4 py-3 h-12 animate-pulse bg-[var(--bg-elevated)]/30" />)
+              [0,1,2].map((i) => <div key={i} className="px-4 py-3 h-12 animate-pulse bg-elevated/30" />)
             ) : providers.length === 0 ? (
-              <p className="px-4 py-6 text-xs text-center text-[var(--text-muted)]">No provider data</p>
+              <p className="px-4 py-6 text-xs text-center text-muted">No provider data</p>
             ) : (
               providers.slice(0, 8).map((p) => (
-                <div key={p.providerId} className="px-4 py-2.5 flex items-center justify-between hover:bg-[var(--bg-elevated)]/30">
-                  <span className="text-xs font-mono text-[var(--text-primary)]">{p.providerId}</span>
-                  <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
+                <div key={p.providerId} className="px-4 py-2.5 flex items-center justify-between hover:bg-elevated/30">
+                  <span className="text-xs font-mono text-primary">{p.providerId}</span>
+                  <div className="flex items-center gap-3 text-xs text-muted">
                     <span>{p.requests} reqs</span>
-                    <span className="font-mono text-[var(--text-primary)]">${p.costUsd.toFixed(5)}</span>
+                    <span className="font-mono text-primary">${p.costUsd.toFixed(5)}</span>
                   </div>
                 </div>
               ))

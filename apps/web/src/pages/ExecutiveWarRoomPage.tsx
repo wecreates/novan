@@ -53,7 +53,7 @@ export default function ExecutiveWarRoomPage() {
   const cost        = useQuery({ queryKey: ['exec-cost',        workspaceId], queryFn: () => intelligenceApi.executiveCost(workspaceId),        refetchInterval: 5 * 60_000 })
   const mission     = useQuery({ queryKey: ['exec-mission',     workspaceId], queryFn: () => intelligenceApi.executiveMissionProgress(workspaceId), refetchInterval: 2 * 60_000 })
 
-  if (forecasts.isLoading) return <div className="p-8 text-[var(--text-muted)]">Loading…</div>
+  if (forecasts.isLoading) return <div className="p-8 text-muted">Loading…</div>
   const fs = forecasts.data?.data
   const to = tradeoffs.data?.data ?? []
   const r = reliability.data?.data
@@ -70,8 +70,8 @@ export default function ExecutiveWarRoomPage() {
       <div className="flex items-center gap-3">
         <Sparkles className="w-6 h-6 text-amber-400" />
         <div>
-          <h1 className="text-xl font-medium text-[var(--text)]">Executive War Room</h1>
-          <p className="text-xs text-[var(--text-muted)]">Forecasts + tradeoffs. Facts and predictions are clearly separated.</p>
+          <h1 className="text-xl font-medium text-primary">Executive War Room</h1>
+          <p className="text-xs text-muted">Forecasts + tradeoffs. Facts and predictions are clearly separated.</p>
         </div>
       </div>
 
@@ -214,11 +214,11 @@ function ForecastRow({ f }: { f: ForecastDTO }) {
         {f.likelihood}
       </span>
       <div className="flex-1">
-        <div className="text-sm font-medium text-[var(--text)]">{forecastLabel(f.type)}</div>
-        <div className="text-xs text-[var(--text-muted)] mt-0.5 font-mono">
+        <div className="text-sm font-medium text-primary">{forecastLabel(f.type)}</div>
+        <div className="text-xs text-muted mt-0.5 font-mono">
           confidence (r²): {f.confidence.toFixed(2)}  ·  horizon: {f.horizonWeeks}w
         </div>
-        <div className="text-xs text-[var(--text-muted)] mt-1">{f.evidence}</div>
+        <div className="text-xs text-muted mt-1">{f.evidence}</div>
       </div>
     </li>
   )
@@ -229,8 +229,8 @@ function TradeoffRow({ t }: { t: TradeoffDTO }) {
     <li className="px-5 py-4">
       <div className="flex items-start gap-3">
         <div className="flex-1">
-          <div className="text-sm font-medium text-[var(--text)]">{t.recommendation.title}</div>
-          <div className="text-xs text-[var(--text-muted)] mt-1">
+          <div className="text-sm font-medium text-primary">{t.recommendation.title}</div>
+          <div className="text-xs text-muted mt-1">
             {t.recommendation.kind.replace(/_/g, ' ')}  ·  bucket: {t.recommendation.decision.bucket}  ·  net: {t.netScore.toFixed(2)}
           </div>
         </div>
@@ -255,14 +255,14 @@ function TradeoffRow({ t }: { t: TradeoffDTO }) {
 
 function TradeoffMetric({ label, m, good }: { label: string; m: TradeoffDTO['expectedBenefit']; good?: boolean }) {
   return (
-    <div className="border border-[var(--border)] rounded px-2 py-1">
+    <div className="border border-border rounded px-2 py-1">
       <div className="flex items-center justify-between">
-        <span className="text-[var(--text-muted)] uppercase tracking-wider text-[10px]">{label}</span>
-        <span className={`font-mono text-sm ${good ? 'text-emerald-400' : 'text-[var(--text)]'}`}>
+        <span className="text-muted uppercase tracking-wider text-[10px]">{label}</span>
+        <span className={`font-mono text-sm ${good ? 'text-emerald-400' : 'text-primary'}`}>
           {m.value} {m.unit === 'usd' ? 'USD' : m.unit === 'hours' ? 'h' : ''}
         </span>
       </div>
-      <div className="text-[10px] text-[var(--text-muted)] mt-0.5 truncate" title={m.derivedFrom}>
+      <div className="text-[10px] text-muted mt-0.5 truncate" title={m.derivedFrom}>
         {m.provenance.replace(/_/g, ' ')}
       </div>
     </div>
@@ -272,10 +272,10 @@ function TradeoffMetric({ label, m, good }: { label: string; m: TradeoffDTO['exp
 function FactRow({ label, value, highlight }: { label: string; value: number | string; highlight?: '' | 'amber' | 'red' }) {
   const cls = highlight === 'red'   ? 'text-red-400' :
               highlight === 'amber' ? 'text-amber-400' :
-                                      'text-[var(--text)]'
+                                      'text-primary'
   return (
     <div className="flex justify-between">
-      <span className="text-[var(--text-muted)]">{label}</span>
+      <span className="text-muted">{label}</span>
       <span className={`font-mono text-sm ${cls}`}>{value}</span>
     </div>
   )
@@ -283,24 +283,24 @@ function FactRow({ label, value, highlight }: { label: string; value: number | s
 
 function PredictionFooter({ f }: { f: ForecastDTO }) {
   return (
-    <div className="mt-2 pt-2 border-t border-[var(--border)] text-xs">
+    <div className="mt-2 pt-2 border-t border-border text-xs">
       <div className="flex items-center gap-2">
         <span className="text-[10px] uppercase tracking-wider text-purple-400 font-mono">prediction</span>
         <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${likelihoodColor(f.likelihood)}`}>
           {f.likelihood}
         </span>
       </div>
-      <div className="text-[var(--text-muted)] mt-1">{f.evidence}</div>
+      <div className="text-muted mt-1">{f.evidence}</div>
     </div>
   )
 }
 
 function Section({ title, icon, children, predictionBadge }: { title: string; icon?: JSX.Element; children: JSX.Element | JSX.Element[]; predictionBadge?: boolean }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-5 py-3 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-5 py-3 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
         {predictionBadge && (
           <span className="ml-auto text-[10px] uppercase tracking-wider text-purple-400 font-mono">prediction</span>
         )}
@@ -312,10 +312,10 @@ function Section({ title, icon, children, predictionBadge }: { title: string; ic
 
 function BriefingPanel({ title, icon, children }: { title: string; icon: JSX.Element; children: JSX.Element | JSX.Element[] }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-5 py-3 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-5 py-3 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
         <span className="ml-auto text-[10px] uppercase tracking-wider text-emerald-400 font-mono">facts</span>
       </div>
       {children}
@@ -324,5 +324,5 @@ function BriefingPanel({ title, icon, children }: { title: string; icon: JSX.Ele
 }
 
 function EmptyRow({ text }: { text: string }) {
-  return <div className="px-5 py-6 text-[var(--text-muted)] text-sm">{text}</div>
+  return <div className="px-5 py-6 text-muted text-sm">{text}</div>
 }

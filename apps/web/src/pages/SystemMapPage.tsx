@@ -63,11 +63,11 @@ export default function SystemMapPage() {
       <div className="flex items-center gap-3">
         <MapIcon className="w-5 h-5 text-sky-400" />
         <h1 className="text-xl font-semibold">System Map</h1>
-        <span className="text-xs text-[var(--text-muted)] ml-1">
+        <span className="text-xs text-muted ml-1">
           {intro.data?.data ? `${intro.data.data.serviceCount} services · ${intro.data.data.routeCount} routes · ${intro.data.data.totalExports} exports` : 'loading…'}
         </span>
         <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="filter…"
-          className="ml-auto bg-[var(--surface)] border border-[var(--border)] rounded px-2 py-1 text-xs w-48" />
+          className="ml-auto bg-surface border border-border rounded px-2 py-1 text-xs w-48" />
         <button onClick={() => { intro.refetch(); disc.refetch(); snaps.refetch() }}
           className="p-1.5 rounded hover:bg-[var(--surface-hover)]">
           <RefreshCw className="w-3.5 h-3.5" />
@@ -80,10 +80,10 @@ export default function SystemMapPage() {
           <ul className="divide-y divide-[var(--border)]">
             {snaps.data!.data.slice(0, 6).map(s => (
               <li key={s.gitSha} className="px-4 py-2 text-xs flex items-center gap-3">
-                <span className="font-mono text-[var(--text-muted)] w-20">{s.gitSha.slice(0, 8)}</span>
-                <span className="text-[var(--text-muted)] w-32">{new Date(s.committedAt).toLocaleDateString()}</span>
+                <span className="font-mono text-muted w-20">{s.gitSha.slice(0, 8)}</span>
+                <span className="text-muted w-32">{new Date(s.committedAt).toLocaleDateString()}</span>
                 <span className="flex-1 truncate" title={s.commitMessage ?? ''}>{s.commitMessage}</span>
-                <span className="text-[10px] text-[var(--text-muted)]">{s.filesChanged} files</span>
+                <span className="text-[10px] text-muted">{s.filesChanged} files</span>
               </li>
             ))}
           </ul>
@@ -99,8 +99,8 @@ export default function SystemMapPage() {
               <li key={m.file} className="px-4 py-2 text-xs flex items-center gap-3">
                 <span className="font-mono w-60 truncate" title={m.file}>{m.file}</span>
                 <span className={`px-1.5 py-0.5 rounded text-[10px] ${MATURITY[mat] ?? MATURITY.basic}`}>{mat}</span>
-                <span className="text-[var(--text-muted)]">{m.exports.length} exports</span>
-                <span className="text-[10px] text-[var(--text-muted)] truncate flex-1" title={m.exports.join(', ')}>
+                <span className="text-muted">{m.exports.length} exports</span>
+                <span className="text-[10px] text-muted truncate flex-1" title={m.exports.join(', ')}>
                   {m.exports.slice(0, 5).join(', ')}{m.exports.length > 5 ? '…' : ''}
                 </span>
               </li>
@@ -115,8 +115,8 @@ export default function SystemMapPage() {
           {routes.map(m => (
             <li key={m.file} className="px-4 py-2 text-xs flex items-center gap-3">
               <span className="font-mono w-60 truncate" title={m.file}>{m.file}</span>
-              <span className="text-[var(--text-muted)]">{m.exports.length} exports</span>
-              <span className="text-[10px] text-[var(--text-muted)] truncate flex-1">{m.exports.join(', ')}</span>
+              <span className="text-muted">{m.exports.length} exports</span>
+              <span className="text-[10px] text-muted truncate flex-1">{m.exports.join(', ')}</span>
             </li>
           ))}
         </ul>
@@ -127,10 +127,10 @@ export default function SystemMapPage() {
 
 function Section({ title, icon, children }: { title: string; icon?: JSX.Element; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
       </div>
       {children}
     </div>
@@ -138,5 +138,5 @@ function Section({ title, icon, children }: { title: string; icon?: JSX.Element;
 }
 
 function Empty({ msg }: { msg: string }) {
-  return <div className="px-4 py-3 text-xs text-[var(--text-muted)] italic">{msg}</div>
+  return <div className="px-4 py-3 text-xs text-muted italic">{msg}</div>
 }

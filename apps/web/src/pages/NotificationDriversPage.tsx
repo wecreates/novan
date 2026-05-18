@@ -44,11 +44,11 @@ export default function NotificationDriversPage() {
       <div className="flex items-center gap-3">
         <Bell className="w-5 h-5 text-amber-400" />
         <h1 className="text-xl font-semibold">Notification Drivers</h1>
-        <span className="text-xs text-[var(--text-muted)] ml-1">{d ? `${d.configured.length} of ${d.available.length} configured` : 'loading…'}</span>
+        <span className="text-xs text-muted ml-1">{d ? `${d.configured.length} of ${d.available.length} configured` : 'loading…'}</span>
       </div>
 
       {d && (
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+        <div className="rounded-lg border border-border bg-surface">
           <ul className="divide-y divide-[var(--border)]">
             {d.available.map(name => {
               const env = d.envVars[name]
@@ -59,15 +59,15 @@ export default function NotificationDriversPage() {
                     ? <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                     : <XCircle className="w-4 h-4 text-slate-500" />}
                   <span className="font-mono w-20">{name}</span>
-                  <span className="text-xs text-[var(--text-muted)] flex-1">{env?.name ?? '?'}</span>
-                  <span className={`text-xs ${ok ? 'text-emerald-300' : 'text-[var(--text-muted)]'}`}>
+                  <span className="text-xs text-muted flex-1">{env?.name ?? '?'}</span>
+                  <span className={`text-xs ${ok ? 'text-emerald-300' : 'text-muted'}`}>
                     {ok ? 'configured' : 'not set'}
                   </span>
                 </li>
               )
             })}
           </ul>
-          <div className="px-5 py-3 border-t border-[var(--border)] bg-[var(--surface-hover)] text-xs text-[var(--text-muted)]">
+          <div className="px-5 py-3 border-t border-border bg-[var(--surface-hover)] text-xs text-muted">
             Configuration is via environment variables on the API container. After setting env vars, restart the container.
             High-severity events route to all configured channels; normal-severity only to webhook.
           </div>
@@ -75,23 +75,23 @@ export default function NotificationDriversPage() {
       )}
 
       {/* Test sender */}
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 space-y-2">
+      <div className="rounded-lg border border-border bg-surface p-4 space-y-2">
         <h3 className="text-sm font-medium flex items-center gap-2">
           <Send className="w-4 h-4 text-sky-400" /> Test notification
         </h3>
-        <p className="text-xs text-[var(--text-muted)]">
+        <p className="text-xs text-muted">
           Dispatches a notify_operator action at HIGH severity so all configured channels receive it.
         </p>
         <textarea
           value={testMessage}
           onChange={(e) => setTestMessage(e.target.value)}
-          className="w-full bg-[var(--bg)] border border-[var(--border)] rounded p-2 text-sm font-mono"
+          className="w-full bg-[var(--bg)] border border-border rounded p-2 text-sm font-mono"
           rows={3}
         />
         <button
           onClick={() => sendTest.mutate()}
           disabled={sendTest.isPending || !d || d.configured.length === 0}
-          className="px-3 py-1.5 text-xs rounded border border-[var(--border)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+          className="px-3 py-1.5 text-xs rounded border border-border hover:bg-[var(--surface-hover)] disabled:opacity-50"
         >
           {sendTest.isPending ? 'Sending…' : 'Send test notification'}
         </button>

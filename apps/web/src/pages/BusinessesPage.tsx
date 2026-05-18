@@ -80,29 +80,29 @@ function BizForm({
     setF((prev) => ({ ...prev, [k]: v }))
 
   return (
-    <div className="border border-[var(--border)] rounded-xl bg-[var(--bg-surface)] p-5 space-y-4">
-      <div className="text-sm font-semibold text-[var(--text-primary)]">
+    <div className="border border-border rounded-xl bg-[var(--bg-surface)] p-5 space-y-4">
+      <div className="text-sm font-semibold text-primary">
         {initial.name ? 'Edit Business' : 'New Business'}
       </div>
 
       {/* Row 1: name + industry */}
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Name *</label>
+          <label className="text-[10px] text-muted uppercase tracking-wide">Name *</label>
           <input
             value={f.name}
             onChange={(e) => set('name', e.target.value)}
             placeholder="Acme Corp"
-            className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-blue-500/50"
+            className="bg-elevated border border-border rounded-lg px-3 py-2 text-sm text-primary outline-none focus:border-blue-500/50"
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Industry</label>
+          <label className="text-[10px] text-muted uppercase tracking-wide">Industry</label>
           <input
             value={f.industry}
             onChange={(e) => set('industry', e.target.value)}
             placeholder="SaaS, FinTech…"
-            className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-blue-500/50"
+            className="bg-elevated border border-border rounded-lg px-3 py-2 text-sm text-primary outline-none focus:border-blue-500/50"
           />
         </div>
       </div>
@@ -110,20 +110,20 @@ function BizForm({
       {/* Row 2: domain + stage + health */}
       <div className="grid grid-cols-3 gap-3">
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Domain</label>
+          <label className="text-[10px] text-muted uppercase tracking-wide">Domain</label>
           <input
             value={f.domain}
             onChange={(e) => set('domain', e.target.value)}
             placeholder="acme.com"
-            className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-blue-500/50"
+            className="bg-elevated border border-border rounded-lg px-3 py-2 text-sm text-primary outline-none focus:border-blue-500/50"
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Stage</label>
+          <label className="text-[10px] text-muted uppercase tracking-wide">Stage</label>
           <select
             value={f.stage}
             onChange={(e) => set('stage', e.target.value)}
-            className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+            className="bg-elevated border border-border rounded-lg px-3 py-2 text-sm text-primary outline-none"
           >
             {['seed', 'early', 'growth', 'scale', 'mature'].map((s) => (
               <option key={s} value={s}>{s}</option>
@@ -131,11 +131,11 @@ function BizForm({
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Health</label>
+          <label className="text-[10px] text-muted uppercase tracking-wide">Health</label>
           <select
             value={f.health}
             onChange={(e) => set('health', e.target.value as Business['health'])}
-            className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+            className="bg-elevated border border-border rounded-lg px-3 py-2 text-sm text-primary outline-none"
           >
             {(['green', 'yellow', 'red'] as const).map((h) => (
               <option key={h} value={h}>{h}</option>
@@ -148,7 +148,7 @@ function BizForm({
       <div className="flex justify-end gap-2 pt-1">
         <button
           onClick={onCancel}
-          className="px-4 py-1.5 rounded-lg border border-[var(--border)] text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="px-4 py-1.5 rounded-lg border border-border text-xs text-secondary hover:bg-elevated transition-colors"
         >
           Cancel
         </button>
@@ -215,16 +215,16 @@ function MetricsModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="w-full max-w-md bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl shadow-2xl p-6 space-y-4">
+      <div className="w-full max-w-md bg-[var(--bg-surface)] border border-border rounded-2xl shadow-2xl p-6 space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-sm font-semibold text-[var(--text-primary)]">Add Metrics</div>
-            <div className="text-xs text-[var(--text-muted)] mt-0.5">{business.name}</div>
+            <div className="text-sm font-semibold text-primary">Add Metrics</div>
+            <div className="text-xs text-muted mt-0.5">{business.name}</div>
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--bg-elevated)] transition-colors"
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-muted hover:bg-elevated transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -232,12 +232,12 @@ function MetricsModal({
 
         {/* Existing metrics preview */}
         {Object.keys(business.metrics).length > 0 && (
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2">
-            <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Current Metrics</div>
+          <div className="rounded-lg border border-border bg-elevated px-3 py-2">
+            <div className="text-[10px] text-muted uppercase tracking-wide mb-1.5">Current Metrics</div>
             <div className="flex flex-wrap gap-2">
               {Object.entries(business.metrics).map(([k, v]) => (
-                <span key={k} className="text-[10px] px-2 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border)] text-[var(--text-secondary)]">
-                  {k}: <span className="text-[var(--text-primary)] font-mono">{fmtMetricVal(v)}</span>
+                <span key={k} className="text-[10px] px-2 py-0.5 rounded bg-[var(--bg-surface)] border border-border text-secondary">
+                  {k}: <span className="text-primary font-mono">{fmtMetricVal(v)}</span>
                 </span>
               ))}
             </div>
@@ -246,7 +246,7 @@ function MetricsModal({
 
         {/* Key-value editor */}
         <div className="space-y-2">
-          <div className="grid grid-cols-[1fr_1fr_auto] gap-2 text-[10px] text-[var(--text-muted)] uppercase tracking-wide px-1">
+          <div className="grid grid-cols-[1fr_1fr_auto] gap-2 text-[10px] text-muted uppercase tracking-wide px-1">
             <span>Key</span><span>Value</span><span />
           </div>
           {rows.map((r, i) => (
@@ -255,18 +255,18 @@ function MetricsModal({
                 value={r.key}
                 onChange={(e) => updateRow(i, 'key', e.target.value)}
                 placeholder="mrr"
-                className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-xs text-[var(--text-primary)] outline-none focus:border-blue-500/50"
+                className="bg-elevated border border-border rounded-lg px-3 py-1.5 text-xs text-primary outline-none focus:border-blue-500/50"
               />
               <input
                 value={r.val}
                 onChange={(e) => updateRow(i, 'val', e.target.value)}
                 placeholder="12000"
-                className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-xs text-[var(--text-primary)] outline-none focus:border-blue-500/50"
+                className="bg-elevated border border-border rounded-lg px-3 py-1.5 text-xs text-primary outline-none focus:border-blue-500/50"
               />
               <button
                 onClick={() => removeRow(i)}
                 disabled={rows.length === 1}
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 disabled:opacity-30 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-muted hover:text-red-400 hover:bg-red-500/10 disabled:opacity-30 transition-colors"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -274,7 +274,7 @@ function MetricsModal({
           ))}
           <button
             onClick={addRow}
-            className="flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-blue-400 transition-colors px-1"
+            className="flex items-center gap-1 text-xs text-muted hover:text-blue-400 transition-colors px-1"
           >
             <Plus className="w-3 h-3" />
             Add row
@@ -291,7 +291,7 @@ function MetricsModal({
         <div className="flex justify-end gap-2 pt-1">
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded-lg border border-[var(--border)] text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
+            className="px-4 py-1.5 rounded-lg border border-border text-xs text-secondary hover:bg-elevated transition-colors"
           >
             Cancel
           </button>
@@ -326,12 +326,12 @@ function BusinessCard({
     : null
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 hover:border-blue-500/30 transition-colors">
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-[var(--bg-surface)] p-4 hover:border-blue-500/30 transition-colors">
 
       {/* Top: name + badges */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-[var(--text-primary)] truncate">{business.name}</div>
+          <div className="text-sm font-semibold text-primary truncate">{business.name}</div>
           <div className="flex items-center gap-1.5 flex-wrap mt-1">
             {business.industry && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400">
@@ -354,7 +354,7 @@ function BusinessCard({
           href={domainUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-blue-400 transition-colors w-fit"
+          className="flex items-center gap-1 text-xs text-muted hover:text-blue-400 transition-colors w-fit"
         >
           <ExternalLink className="w-3 h-3" />
           {business.domain}
@@ -363,18 +363,18 @@ function BusinessCard({
 
       {/* Metrics */}
       {metricEntries.length > 0 && (
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2">
-          <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Metrics</div>
+        <div className="rounded-lg border border-border bg-elevated px-3 py-2">
+          <div className="text-[10px] text-muted uppercase tracking-wide mb-1.5">Metrics</div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1">
             {metricEntries.map(([k, v]) => (
               <div key={k} className="flex items-center justify-between gap-2">
-                <span className="text-[10px] text-[var(--text-muted)] truncate">{k}</span>
-                <span className="text-[10px] font-mono text-[var(--text-primary)] shrink-0">{fmtMetricVal(v)}</span>
+                <span className="text-[10px] text-muted truncate">{k}</span>
+                <span className="text-[10px] font-mono text-primary shrink-0">{fmtMetricVal(v)}</span>
               </div>
             ))}
           </div>
           {Object.keys(business.metrics).length > 6 && (
-            <div className="text-[10px] text-[var(--text-muted)] mt-1.5">
+            <div className="text-[10px] text-muted mt-1.5">
               +{Object.keys(business.metrics).length - 6} more
             </div>
           )}
@@ -385,17 +385,17 @@ function BusinessCard({
       <div className="flex-1" />
 
       {/* Actions */}
-      <div className="flex items-center gap-2 pt-1 border-t border-[var(--border)]">
+      <div className="flex items-center gap-2 pt-1 border-t border-border">
         <button
           onClick={onEdit}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] transition-colors"
+          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-secondary border border-border hover:bg-elevated hover:text-primary transition-colors"
         >
           <Pencil className="w-3 h-3" />
           Edit
         </button>
         <button
           onClick={onAddMetrics}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] hover:text-blue-400 transition-colors"
+          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-secondary border border-border hover:bg-elevated hover:text-blue-400 transition-colors"
         >
           <BarChart2 className="w-3 h-3" />
           Add Metrics
@@ -473,17 +473,17 @@ export default function BusinessesPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-[var(--bg-primary)]">
+    <div className="flex flex-col h-screen overflow-hidden bg-bg">
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <header className="shrink-0 flex items-center justify-between px-6 py-3 border-b border-[var(--border)] bg-[var(--bg-surface)]">
+      <header className="shrink-0 flex items-center justify-between px-6 py-3 border-b border-border bg-[var(--bg-surface)]">
         <div className="flex items-center gap-3">
           <div className="w-7 h-7 rounded-lg bg-blue-500/20 border border-blue-500/30 flex items-center justify-center">
             <Building2 className="w-3.5 h-3.5 text-blue-400" />
           </div>
           <div>
-            <div className="text-sm font-semibold text-[var(--text-primary)]">Business Directory</div>
-            <div className="text-xs text-[var(--text-secondary)]">
+            <div className="text-sm font-semibold text-primary">Business Directory</div>
+            <div className="text-xs text-secondary">
               {businesses.length} business{businesses.length !== 1 ? 'es' : ''}
             </div>
           </div>
@@ -492,17 +492,17 @@ export default function BusinessesPage() {
         <div className="flex items-center gap-3">
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)]" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search name, industry, domain…"
-              className="pl-8 pr-8 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none focus:border-blue-500/50 w-60 transition-colors"
+              className="pl-8 pr-8 py-1.5 rounded-lg border border-border bg-elevated text-sm text-primary placeholder-[var(--text-muted)] outline-none focus:border-blue-500/50 w-60 transition-colors"
             />
             {search && (
               <button
                 onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-secondary"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -543,7 +543,7 @@ export default function BusinessesPage() {
 
         {/* Loading */}
         {isLoading && (
-          <div className="flex items-center justify-center py-20 text-[var(--text-muted)] text-sm">
+          <div className="flex items-center justify-center py-20 text-muted text-sm">
             <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mr-3" />
             Loading businesses…
           </div>
@@ -552,12 +552,12 @@ export default function BusinessesPage() {
         {/* Empty state */}
         {!isLoading && businesses.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center">
-              <Building2 className="w-7 h-7 text-[var(--text-muted)]" />
+            <div className="w-14 h-14 rounded-2xl bg-elevated border border-border flex items-center justify-center">
+              <Building2 className="w-7 h-7 text-muted" />
             </div>
             <div>
-              <div className="text-sm font-medium text-[var(--text-primary)]">No businesses yet</div>
-              <div className="text-xs text-[var(--text-muted)] mt-1">Click "Add Business" to get started</div>
+              <div className="text-sm font-medium text-primary">No businesses yet</div>
+              <div className="text-xs text-muted mt-1">Click "Add Business" to get started</div>
             </div>
           </div>
         )}
@@ -565,9 +565,9 @@ export default function BusinessesPage() {
         {/* No search results */}
         {!isLoading && businesses.length > 0 && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-            <Search className="w-8 h-8 text-[var(--text-muted)]" />
+            <Search className="w-8 h-8 text-muted" />
             <div>
-              <div className="text-sm text-[var(--text-primary)]">No results for "{search}"</div>
+              <div className="text-sm text-primary">No results for "{search}"</div>
               <button
                 onClick={() => setSearch('')}
                 className="text-xs text-blue-400 hover:text-blue-300 mt-1 transition-colors"

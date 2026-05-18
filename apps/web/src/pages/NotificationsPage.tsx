@@ -76,7 +76,7 @@ function OpsNotifRow({ n, onMarkRead, onDismiss }: RowProps) {
 
   return (
     <div
-      className={`flex gap-4 px-5 py-4 border-b border-[var(--border)] last:border-0 transition-colors ${
+      className={`flex gap-4 px-5 py-4 border-b border-border last:border-0 transition-colors ${
         !n.read && !n.dismissed ? 'bg-blue-500/5' : ''
       }`}
     >
@@ -86,15 +86,15 @@ function OpsNotifRow({ n, onMarkRead, onDismiss }: RowProps) {
 
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-3">
-          <p className={`text-sm leading-snug ${!n.read && !n.dismissed ? 'font-semibold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>
+          <p className={`text-sm leading-snug ${!n.read && !n.dismissed ? 'font-semibold text-primary' : 'text-secondary'}`}>
             {n.title}
             {!n.read && !n.dismissed && (
               <span className="ml-2 inline-block w-2 h-2 rounded-full bg-blue-500 align-middle" />
             )}
           </p>
-          <span className="text-xs text-[var(--text-muted)] shrink-0 mt-0.5">{timeAgo(n.createdAt)}</span>
+          <span className="text-xs text-muted shrink-0 mt-0.5">{timeAgo(n.createdAt)}</span>
         </div>
-        <p className="text-xs text-[var(--text-muted)] mt-1 leading-relaxed">{n.body}</p>
+        <p className="text-xs text-muted mt-1 leading-relaxed">{n.body}</p>
 
         <div className="flex items-center gap-3 mt-2">
           {n.actionUrl && (
@@ -109,7 +109,7 @@ function OpsNotifRow({ n, onMarkRead, onDismiss }: RowProps) {
           {!n.read && !n.dismissed && (
             <button
               onClick={() => onMarkRead(n.id)}
-              className="flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+              className="flex items-center gap-1 text-xs text-muted hover:text-secondary transition-colors"
             >
               <Check size={11} />
               Mark read
@@ -122,7 +122,7 @@ function OpsNotifRow({ n, onMarkRead, onDismiss }: RowProps) {
         <button
           onClick={() => onDismiss(n.id)}
           title="Dismiss"
-          className="shrink-0 mt-0.5 p-1 rounded hover:bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+          className="shrink-0 mt-0.5 p-1 rounded hover:bg-elevated text-muted hover:text-secondary transition-colors"
         >
           <X size={14} />
         </button>
@@ -210,10 +210,10 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-[var(--bg-primary)] overflow-hidden">
+    <div className="flex flex-col h-full bg-bg overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] shrink-0">
-        <h1 className="text-lg font-semibold text-[var(--text-primary)]">OpsNotifs</h1>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+        <h1 className="text-lg font-semibold text-primary">OpsNotifs</h1>
         {unreadCount > 0 && (
           <button
             onClick={() => markAllRead.mutate()}
@@ -227,7 +227,7 @@ export default function NotificationsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 px-6 py-2 border-b border-[var(--border)] shrink-0">
+      <div className="flex gap-1 px-6 py-2 border-b border-border shrink-0">
         {TABS.map(({ id, label }) => (
           <button
             key={id}
@@ -235,7 +235,7 @@ export default function NotificationsPage() {
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               tab === id
                 ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                : 'text-[var(--text-muted)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-secondary)]'
+                : 'text-muted hover:bg-elevated hover:text-secondary'
             }`}
           >
             {label}
@@ -251,11 +251,11 @@ export default function NotificationsPage() {
       {/* List */}
       <div className="flex-1 overflow-y-auto">
         {loading && items.length === 0 ? (
-          <div className="flex items-center justify-center py-16 text-[var(--text-muted)] text-sm">
+          <div className="flex items-center justify-center py-16 text-muted text-sm">
             Loading…
           </div>
         ) : items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-20 text-[var(--text-muted)]">
+          <div className="flex flex-col items-center justify-center gap-3 py-20 text-muted">
             <CheckCircle size={36} className="opacity-30" />
             <span className="text-sm">{emptyMessages[tab]}</span>
           </div>
@@ -263,7 +263,7 @@ export default function NotificationsPage() {
           <div>
             {groups.map(([label, group]) => (
               <div key={label}>
-                <div className="px-5 py-2 text-xs font-medium text-[var(--text-muted)] bg-[var(--bg-surface)] border-b border-[var(--border)] sticky top-0">
+                <div className="px-5 py-2 text-xs font-medium text-muted bg-[var(--bg-surface)] border-b border-border sticky top-0">
                   {label}
                 </div>
                 {group.map((n) => (
@@ -282,7 +282,7 @@ export default function NotificationsPage() {
                 <button
                   onClick={() => setOffset((o) => o + PAGE_SIZE)}
                   disabled={loading}
-                  className="px-4 py-2 text-sm text-blue-400 hover:text-blue-300 disabled:opacity-50 transition-colors border border-[var(--border)] rounded-lg hover:bg-[var(--bg-elevated)]"
+                  className="px-4 py-2 text-sm text-blue-400 hover:text-blue-300 disabled:opacity-50 transition-colors border border-border rounded-lg hover:bg-elevated"
                 >
                   {loading ? 'Loading…' : 'Load more'}
                 </button>

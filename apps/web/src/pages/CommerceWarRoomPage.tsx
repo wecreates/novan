@@ -49,7 +49,7 @@ export default function CommerceWarRoomPage() {
       <div className="flex items-center gap-3">
         <ShoppingBag className="w-5 h-5 text-emerald-400" />
         <h1 className="text-xl font-semibold">Commerce War Room</h1>
-        <span className="text-xs text-[var(--text-muted)] ml-1">browser-permission · POD · social · NEVER purchases</span>
+        <span className="text-xs text-muted ml-1">browser-permission · POD · social · NEVER purchases</span>
       </div>
 
       {/* Blocks summary */}
@@ -61,7 +61,7 @@ export default function CommerceWarRoomPage() {
           </div>
           <div className="flex gap-4">
             {Object.entries(d.blocks24h).map(([k, v]) => (
-              <span key={k} className="font-mono"><span className="text-[var(--text-muted)]">{k}:</span> {v}</span>
+              <span key={k} className="font-mono"><span className="text-muted">{k}:</span> {v}</span>
             ))}
           </div>
         </div>
@@ -73,9 +73,9 @@ export default function CommerceWarRoomPage() {
           <ul className="divide-y divide-[var(--border)]">
             {d!.accounts.map(a => (
               <li key={`${a.platform}/${a.accountRef}`} className="px-4 py-2 text-sm flex items-center gap-3">
-                <span className="text-[10px] uppercase tracking-wider w-20 text-[var(--text-muted)]">{a.platform}</span>
+                <span className="text-[10px] uppercase tracking-wider w-20 text-muted">{a.platform}</span>
                 <span className="font-mono">{a.accountRef}</span>
-                <span className="text-[10px] text-[var(--text-muted)]">{a.grantedScopes.join(', ') || 'no scopes'}</span>
+                <span className="text-[10px] text-muted">{a.grantedScopes.join(', ') || 'no scopes'}</span>
                 {a.vaultSecretId && <span className="text-[10px] text-emerald-400">creds: redacted</span>}
                 <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded ${a.paused ? 'text-amber-300 bg-amber-500/10' : 'text-emerald-300 bg-emerald-500/10'}`}>
                   {a.paused ? 'PAUSED' : 'active'}
@@ -99,7 +99,7 @@ export default function CommerceWarRoomPage() {
                 <li key={s.id} className="px-4 py-2 text-xs flex items-center gap-3">
                   <span className="font-mono w-20">{s.platform}</span>
                   <span>{s.accountRef}</span>
-                  <span className="ml-auto text-[var(--text-muted)]">{s.eventsCount} events</span>
+                  <span className="ml-auto text-muted">{s.eventsCount} events</span>
                 </li>
               ))}
             </ul>
@@ -113,8 +113,8 @@ export default function CommerceWarRoomPage() {
               {d!.pendingPosts.slice(0, 6).map(p => (
                 <li key={p.id} className="px-4 py-2 text-xs">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{p.platform}</span>
-                    {p.spamScore !== null && <span className={`text-[10px] ${p.spamScore > 0.3 ? 'text-amber-400' : 'text-[var(--text-muted)]'}`}>slop {p.spamScore.toFixed(2)}</span>}
+                    <span className="text-[10px] uppercase tracking-wider text-muted">{p.platform}</span>
+                    {p.spamScore !== null && <span className={`text-[10px] ${p.spamScore > 0.3 ? 'text-amber-400' : 'text-muted'}`}>slop {p.spamScore.toFixed(2)}</span>}
                   </div>
                   <p className="mt-0.5 truncate">{p.body}</p>
                 </li>
@@ -131,13 +131,13 @@ export default function CommerceWarRoomPage() {
             {d!.drafts.map(c => (
               <li key={c.id} className="px-4 py-2 text-xs">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-[var(--text-muted)] w-24 truncate" title={c.brief}>{c.brief.slice(0, 28)}</span>
+                  <span className="font-mono text-muted w-24 truncate" title={c.brief}>{c.brief.slice(0, 28)}</span>
                   <span className="text-[10px] text-emerald-300">orig {(c.originalityScore ?? 0).toFixed(2)}</span>
-                  <span className={`text-[10px] ${(c.slopScore ?? 0) > 0.3 ? 'text-amber-400' : 'text-[var(--text-muted)]'}`}>slop {(c.slopScore ?? 0).toFixed(2)}</span>
+                  <span className={`text-[10px] ${(c.slopScore ?? 0) > 0.3 ? 'text-amber-400' : 'text-muted'}`}>slop {(c.slopScore ?? 0).toFixed(2)}</span>
                   <span className="text-[10px] text-sky-300">quality {(c.qualityScore ?? 0).toFixed(2)}</span>
-                  <span className="ml-auto text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{c.status}</span>
+                  <span className="ml-auto text-[10px] uppercase tracking-wider text-muted">{c.status}</span>
                 </div>
-                <p className="mt-0.5 text-[var(--text-muted)] truncate" title={c.prompt}>{c.prompt}</p>
+                <p className="mt-0.5 text-muted truncate" title={c.prompt}>{c.prompt}</p>
               </li>
             ))}
           </ul>
@@ -150,10 +150,10 @@ export default function CommerceWarRoomPage() {
           <ul className="divide-y divide-[var(--border)]">
             {d!.listings.map(l => (
               <li key={l.id} className="px-4 py-2 text-xs flex items-center gap-3">
-                <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] w-16">{l.platform}</span>
+                <span className="text-[10px] uppercase tracking-wider text-muted w-16">{l.platform}</span>
                 <span className="flex-1 truncate">{l.title}</span>
                 <span className="text-[10px] text-sky-300">quality {(l.qualityScore ?? 0).toFixed(2)}</span>
-                <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{l.status}</span>
+                <span className="text-[10px] uppercase tracking-wider text-muted">{l.status}</span>
               </li>
             ))}
           </ul>
@@ -167,14 +167,14 @@ export default function CommerceWarRoomPage() {
             {d!.recentTrends.map(t => (
               <li key={t.id} className="px-4 py-2 text-xs">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] w-20">{t.source}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-muted w-20">{t.source}</span>
                   <span className="font-medium">{t.niche}</span>
                   <span className="text-[10px] text-emerald-300">score {t.score.toFixed(2)}</span>
-                  <span className="text-[10px] text-[var(--text-muted)]">conf {t.confidence.toFixed(2)}</span>
+                  <span className="text-[10px] text-muted">conf {t.confidence.toFixed(2)}</span>
                 </div>
-                <p className="mt-0.5 text-[var(--text-muted)]">{t.signal}</p>
+                <p className="mt-0.5 text-muted">{t.signal}</p>
                 {t.citations.length > 0 && (
-                  <div className="mt-0.5 text-[10px] text-[var(--text-muted)]">
+                  <div className="mt-0.5 text-[10px] text-muted">
                     cited: {t.citations.slice(0, 2).map(c => c.title).join(' · ')}
                   </div>
                 )}
@@ -189,10 +189,10 @@ export default function CommerceWarRoomPage() {
 
 function Section({ title, icon, children }: { title: string; icon?: JSX.Element; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
       </div>
       {children}
     </div>
@@ -200,5 +200,5 @@ function Section({ title, icon, children }: { title: string; icon?: JSX.Element;
 }
 
 function Empty({ msg }: { msg: string }) {
-  return <div className="px-4 py-3 text-xs text-[var(--text-muted)] italic">{msg}</div>
+  return <div className="px-4 py-3 text-xs text-muted italic">{msg}</div>
 }

@@ -32,16 +32,16 @@ function GaugeBar({ label, current, limit }: { label: string; current: number; l
   const color = p >= 100 ? 'bg-red-500' : p >= 80 ? 'bg-yellow-500' : 'bg-blue-500'
   return (
     <div className="space-y-1">
-      <div className="flex justify-between text-xs text-[var(--text-secondary)]">
+      <div className="flex justify-between text-xs text-secondary">
         <span>{label}</span>
         <span>{limit > 0 ? `${fmtUsd(current)} / ${fmtUsd(limit)}` : 'No limit'}</span>
       </div>
       {limit > 0 ? (
-        <div className="h-2 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+        <div className="h-2 bg-elevated rounded-full overflow-hidden">
           <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${p}%` }} />
         </div>
       ) : (
-        <div className="h-2 bg-[var(--bg-elevated)] rounded-full">
+        <div className="h-2 bg-elevated rounded-full">
           <div className="h-full w-1 bg-[var(--text-muted)] rounded-full" />
         </div>
       )}
@@ -78,14 +78,14 @@ function RuleRow({
   }
 
   return (
-    <div className="flex items-center justify-between py-2 border-b border-[var(--border)] last:border-0">
-      <span className="text-sm text-[var(--text-secondary)]">{label}</span>
+    <div className="flex items-center justify-between py-2 border-b border-border last:border-0">
+      <span className="text-sm text-secondary">{label}</span>
       <div className="flex items-center gap-2">
         {editing ? (
           <>
             {typeof value === 'boolean' ? (
               <select
-                className="text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2 py-0.5 text-[var(--text-primary)]"
+                className="text-xs bg-elevated border border-border rounded px-2 py-0.5 text-primary"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
               >
@@ -94,7 +94,7 @@ function RuleRow({
               </select>
             ) : (
               <input
-                className="w-24 text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2 py-0.5 text-[var(--text-primary)]"
+                className="w-24 text-xs bg-elevated border border-border rounded px-2 py-0.5 text-primary"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false) }}
@@ -102,14 +102,14 @@ function RuleRow({
               />
             )}
             <button onClick={commit} className="text-green-400 hover:text-green-300"><Save className="w-3 h-3" /></button>
-            <button onClick={() => setEditing(false)} className="text-[var(--text-muted)] hover:text-[var(--text-secondary)]"><X className="w-3 h-3" /></button>
+            <button onClick={() => setEditing(false)} className="text-muted hover:text-secondary"><X className="w-3 h-3" /></button>
           </>
         ) : (
           <>
-            <span className="text-sm font-mono text-[var(--text-primary)]">
+            <span className="text-sm font-mono text-primary">
               {typeof value === 'boolean' ? (value ? 'Yes' : 'No') : `${value === 0 ? '∞' : value}${unit ?? ''}`}
             </span>
-            <button onClick={() => { setDraft(String(value)); setEditing(true) }} className="text-[var(--text-muted)] hover:text-blue-400">
+            <button onClick={() => { setDraft(String(value)); setEditing(true) }} className="text-muted hover:text-blue-400">
               <Edit2 className="w-3 h-3" />
             </button>
           </>
@@ -160,27 +160,27 @@ export default function BudgetDashboardPage() {
         <div className="flex items-center gap-3">
           <Shield className="w-5 h-5 text-blue-400" />
           <div>
-            <h1 className="text-lg font-semibold text-[var(--text-primary)]">Budget Dashboard</h1>
-            <p className="text-xs text-[var(--text-muted)]">Cost limits, spend tracking, safety rules</p>
+            <h1 className="text-lg font-semibold text-primary">Budget Dashboard</h1>
+            <p className="text-xs text-muted">Cost limits, spend tracking, safety rules</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {data && <ThrottleBadge level={data.throttle} />}
-          <button onClick={load} className="p-1.5 rounded hover:bg-[var(--bg-elevated)] text-[var(--text-muted)]">
+          <button onClick={load} className="p-1.5 rounded hover:bg-elevated text-muted">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
       {/* Spend gauges */}
-      <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg p-5 space-y-4">
+      <div className="bg-[var(--bg-surface)] border border-border rounded-lg p-5 space-y-4">
         <div className="flex items-center gap-2 mb-2">
           <TrendingUp className="w-4 h-4 text-blue-400" />
-          <span className="text-sm font-medium text-[var(--text-primary)]">Current Spend</span>
+          <span className="text-sm font-medium text-primary">Current Spend</span>
         </div>
         {loading ? (
           <div className="space-y-3">
-            {[0,1,2].map((i) => <div key={i} className="h-5 bg-[var(--bg-elevated)] rounded animate-pulse" />)}
+            {[0,1,2].map((i) => <div key={i} className="h-5 bg-elevated rounded animate-pulse" />)}
           </div>
         ) : (
           <div className="space-y-4">
@@ -203,15 +203,15 @@ export default function BudgetDashboardPage() {
       )}
 
       {/* Budget rules */}
-      <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg p-5">
+      <div className="bg-[var(--bg-surface)] border border-border rounded-lg p-5">
         <div className="flex items-center gap-2 mb-4">
           <DollarSign className="w-4 h-4 text-green-400" />
-          <span className="text-sm font-medium text-[var(--text-primary)]">Budget Rules</span>
-          <span className="text-xs text-[var(--text-muted)] ml-1">click pencil to edit</span>
+          <span className="text-sm font-medium text-primary">Budget Rules</span>
+          <span className="text-xs text-muted ml-1">click pencil to edit</span>
         </div>
         {loading || !rules ? (
           <div className="space-y-2">
-            {[0,1,2,3,4,5,6,7,8,9].map((i) => <div key={i} className="h-8 bg-[var(--bg-elevated)] rounded animate-pulse" />)}
+            {[0,1,2,3,4,5,6,7,8,9].map((i) => <div key={i} className="h-8 bg-elevated rounded animate-pulse" />)}
           </div>
         ) : (
           <>
@@ -238,15 +238,15 @@ export default function BudgetDashboardPage() {
           { label: 'Provider Spend',  href: '/governor/providers',     icon: '📊' },
         ].map((l) => (
           <a key={l.href} href={l.href}
-            className="flex items-center gap-3 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg px-4 py-3 hover:border-blue-500/40 hover:bg-blue-500/5 transition-colors">
+            className="flex items-center gap-3 bg-[var(--bg-surface)] border border-border rounded-lg px-4 py-3 hover:border-blue-500/40 hover:bg-blue-500/5 transition-colors">
             <span className="text-lg">{l.icon}</span>
-            <span className="text-sm font-medium text-[var(--text-secondary)]">{l.label}</span>
+            <span className="text-sm font-medium text-secondary">{l.label}</span>
           </a>
         ))}
       </div>
 
       {data?.activeSwitches.length === 0 && (
-        <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+        <div className="flex items-center gap-2 text-xs text-muted">
           <CheckCircle className="w-3 h-3 text-green-400" />
           <span>All kill switches inactive — compute running normally</span>
         </div>

@@ -129,13 +129,13 @@ export default function TruthPage() {
       <div className="flex items-center gap-3">
         <ShieldCheck className="w-6 h-6 text-emerald-400" />
         <div className="flex-1">
-          <h1 className="text-xl font-medium text-[var(--text)]">Truth</h1>
-          <p className="text-xs text-[var(--text-muted)]">Reality anchoring · assumptions · drift · ground-truth pass-rate</p>
+          <h1 className="text-xl font-medium text-primary">Truth</h1>
+          <p className="text-xs text-muted">Reality anchoring · assumptions · drift · ground-truth pass-rate</p>
         </div>
         <button
           onClick={() => scanDrift.mutate()}
           disabled={scanDrift.isPending}
-          className="text-xs px-3 py-1.5 rounded border border-[var(--border)] hover:bg-[var(--bg-elevated)] flex items-center gap-1.5"
+          className="text-xs px-3 py-1.5 rounded border border-border hover:bg-elevated flex items-center gap-1.5"
         >
           <Search className="w-3 h-3" />{scanDrift.isPending ? 'Scanning…' : 'Scan drift'}
         </button>
@@ -170,7 +170,7 @@ export default function TruthPage() {
           </div>
           {acc.withKnownOutcome < 10
             ? (
-              <div className="px-5 pb-3 text-xs text-[var(--text-muted)]">
+              <div className="px-5 pb-3 text-xs text-muted">
                 Honest signal: pass-rate not meaningful until ≥10 known outcomes (currently {acc.withKnownOutcome}).
               </div>
             )
@@ -181,7 +181,7 @@ export default function TruthPage() {
       {/* Drift warnings */}
       <Section title={`Drift warnings (${w.length} open)`} icon={<AlertOctagon className="w-4 h-4 text-amber-400" />}>
         {w.length === 0 ? (
-          <div className="px-5 py-6 text-[var(--text-muted)] text-sm">
+          <div className="px-5 py-6 text-muted text-sm">
             No open drift warnings. Reality and platform belief are aligned (or there's not enough data yet to detect drift).
           </div>
         ) : (
@@ -191,11 +191,11 @@ export default function TruthPage() {
                 <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${SEVERITY_COLOR[warn.severity] ?? 'bg-slate-500/20 text-slate-300'}`}>
                   {warn.severity}
                 </span>
-                <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">{warn.kind}</span>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-muted">{warn.kind}</span>
                 {warn.subjectId
                   ? <span className="text-xs font-mono text-sky-400 truncate max-w-[200px]">{warn.subjectId}</span>
                   : null}
-                <span className="flex-1 text-xs text-[var(--text)]">{warn.recommendedAction}</span>
+                <span className="flex-1 text-xs text-primary">{warn.recommendedAction}</span>
                 {warn.appliedAction
                   ? <span className="text-[10px] text-emerald-400">applied: {warn.appliedAction.slice(0, 50)}</span>
                   : null}
@@ -208,7 +208,7 @@ export default function TruthPage() {
       {/* Recent recommendations classified */}
       <Section title="Epistemic classification of recent recommendations" icon={<Lightbulb className="w-4 h-4" />}>
         {chains.length === 0 ? (
-          <div className="px-5 py-6 text-[var(--text-muted)] text-sm">No recommendation chains yet.</div>
+          <div className="px-5 py-6 text-muted text-sm">No recommendation chains yet.</div>
         ) : (
           <ul className="divide-y divide-[var(--border)]">
             {chains.map(c => {
@@ -217,11 +217,11 @@ export default function TruthPage() {
                 <li key={c.id} className="px-5 py-2 flex items-center gap-3 text-sm">
                   <span className={`text-[10px] font-mono uppercase tracking-wider ${ep.color}`}>{ep.label}</span>
                   <span className="flex-1 truncate">{c.decision}</span>
-                  <span className="text-xs text-[var(--text-muted)] font-mono">conf {(c.confidence ?? 0).toFixed(2)}</span>
+                  <span className="text-xs text-muted font-mono">conf {(c.confidence ?? 0).toFixed(2)}</span>
                   {c.outcomeKnown && (
                     c.outcomeMatched ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <XCircle className="w-3 h-3 text-red-400" />
                   )}
-                  {!c.outcomeKnown && <HelpCircle className="w-3 h-3 text-[var(--text-muted)]" />}
+                  {!c.outcomeKnown && <HelpCircle className="w-3 h-3 text-muted" />}
                 </li>
               )
             })}
@@ -234,14 +234,14 @@ export default function TruthPage() {
         <div className="flex gap-1 text-xs">
           {(['all', 'verified', 'unverified', 'stale', 'invalidated'] as const).map(f => (
             <button key={f} onClick={() => setStatusFilter(f)}
-                    className={`px-2 py-1 rounded ${statusFilter === f ? 'bg-sky-500/20 text-sky-300' : 'text-[var(--text-muted)] hover:bg-[var(--bg-elevated)]'}`}>
+                    className={`px-2 py-1 rounded ${statusFilter === f ? 'bg-sky-500/20 text-sky-300' : 'text-muted hover:bg-elevated'}`}>
               {f}
             </button>
           ))}
         </div>
       }>
         {a.length === 0 ? (
-          <div className="px-5 py-6 text-[var(--text-muted)] text-sm">
+          <div className="px-5 py-6 text-muted text-sm">
             No assumptions tracked at this filter. Recommendation-engine and forecasting now declare their own; check back after triggering them.
           </div>
         ) : (
@@ -257,14 +257,14 @@ export default function TruthPage() {
                     <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${STATUS_COLOR[asm.status] ?? STATUS_COLOR['unverified']!}`}>
                       {asm.status}
                     </span>
-                    <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{asm.category}</span>
-                    <span className="flex-1 truncate text-[var(--text)]">{asm.statement}</span>
-                    <span className="text-xs text-[var(--text-muted)] font-mono">conf {asm.confidence.toFixed(2)}</span>
+                    <span className="text-[10px] uppercase tracking-wider text-muted">{asm.category}</span>
+                    <span className="flex-1 truncate text-primary">{asm.statement}</span>
+                    <span className="text-xs text-muted font-mono">conf {asm.confidence.toFixed(2)}</span>
                   </div>
                   {expanded && (
                     <div className="mt-2 ml-7 text-xs space-y-1">
-                      <div className="text-[var(--text-muted)]">Source: <span className="font-mono">{asm.source}</span></div>
-                      <div className="text-[var(--text-muted)]">Verified {asm.verificationCount}× · invalidated {asm.invalidationCount}×</div>
+                      <div className="text-muted">Source: <span className="font-mono">{asm.source}</span></div>
+                      <div className="text-muted">Verified {asm.verificationCount}× · invalidated {asm.invalidationCount}×</div>
                       <div className="flex gap-2 mt-2">
                         <button onClick={() => setAssumptionStatus.mutate({ id: asm.id, status: 'verified' })}
                                 className="text-[10px] px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300">Mark verified</button>
@@ -287,10 +287,10 @@ export default function TruthPage() {
 
 function Section({ title, icon, actions, children }: { title: string; icon?: JSX.Element; actions?: JSX.Element; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
         {actions && <div className="ml-auto">{actions}</div>}
       </div>
       {children}
@@ -319,7 +319,7 @@ function Stat({ label, value, color, hint }: { label: string; value: string; col
 function Kv({ k, v }: { k: string; v: string }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{k}</div>
+      <div className="text-[10px] uppercase tracking-wider text-muted">{k}</div>
       <div className="font-mono text-sm">{v}</div>
     </div>
   )

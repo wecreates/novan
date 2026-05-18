@@ -154,16 +154,16 @@ export default function LaunchLockPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-[var(--border)]">
+      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-border">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
+            <h1 className="text-lg font-semibold text-primary flex items-center gap-2">
               {lock?.locked
                 ? <Lock className="w-4 h-4 text-red-400" />
                 : <Unlock className="w-4 h-4 text-green-400" />}
               Launch Lock
             </h1>
-            <p className="text-xs text-[var(--text-muted)] mt-0.5">Production readiness audit · evidence-backed · blocking</p>
+            <p className="text-xs text-muted mt-0.5">Production readiness audit · evidence-backed · blocking</p>
           </div>
           <button onClick={() => auditMut.mutate()} disabled={auditMut.isPending}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/30 transition-colors disabled:opacity-50">
@@ -184,7 +184,7 @@ export default function LaunchLockPage() {
                 <p className={`text-base font-semibold ${lock?.locked ? 'text-red-400' : 'text-green-400'}`}>
                   {lock?.locked ? 'LAUNCH LOCKED' : 'LAUNCH UNLOCKED'}
                 </p>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                <p className="text-xs text-muted mt-0.5">
                   {lock?.locked
                     ? `${lock.blockingReasons.length} blocker(s) preventing launch`
                     : lock?.overrideActive
@@ -196,15 +196,15 @@ export default function LaunchLockPage() {
           </div>
 
           {/* Score card */}
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-6 py-4">
-            <p className="text-xs text-[var(--text-muted)]">Readiness Score</p>
+          <div className="rounded-lg border border-border bg-[var(--bg-surface)] px-6 py-4">
+            <p className="text-xs text-muted">Readiness Score</p>
             <p className={`text-3xl font-semibold mt-0.5 ${scoreColor}`}>{score}</p>
-            <p className="text-xs text-[var(--text-muted)]">/ 100</p>
+            <p className="text-xs text-muted">/ 100</p>
           </div>
 
           {/* Counts card */}
           {audit && (
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-6 py-4">
+            <div className="rounded-lg border border-border bg-[var(--bg-surface)] px-6 py-4">
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                 <div className="text-green-400">✓ {audit.passedCount} passed</div>
                 <div className="text-red-400">✗ {audit.failedCount} failed</div>
@@ -233,7 +233,7 @@ export default function LaunchLockPage() {
               </p>
               <ul className="space-y-1">
                 {lock.blockingReasons.map((reason, i) => (
-                  <li key={i} className="text-xs text-[var(--text-secondary)] flex items-start gap-1.5">
+                  <li key={i} className="text-xs text-secondary flex items-start gap-1.5">
                     <span className="text-red-400">•</span>
                     {reason}
                   </li>
@@ -250,10 +250,10 @@ export default function LaunchLockPage() {
                 )}
                 {showOverride && (
                   <div className="space-y-2">
-                    <p className="text-xs text-[var(--text-secondary)]">Override reason (required, min 5 chars):</p>
+                    <p className="text-xs text-secondary">Override reason (required, min 5 chars):</p>
                     <textarea value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)}
                       rows={2} placeholder="Why override the launch lock?"
-                      className="w-full text-xs rounded border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] px-2 py-1.5 resize-none outline-none focus:border-yellow-500/50" />
+                      className="w-full text-xs rounded border border-border bg-bg text-primary px-2 py-1.5 resize-none outline-none focus:border-yellow-500/50" />
                     <div className="flex gap-2">
                       <button onClick={() => overrideMut.mutate(overrideReason)}
                         disabled={overrideMut.isPending || overrideReason.trim().length < 5}
@@ -261,7 +261,7 @@ export default function LaunchLockPage() {
                         {overrideMut.isPending ? 'Applying…' : 'Confirm Override (1h)'}
                       </button>
                       <button onClick={() => { setShowOverride(false); setOverrideReason('') }}
-                        className="px-3 py-1.5 rounded text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors">
+                        className="px-3 py-1.5 rounded text-xs text-muted hover:text-secondary transition-colors">
                         Cancel
                       </button>
                     </div>
@@ -278,15 +278,15 @@ export default function LaunchLockPage() {
                 <ShieldOff className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-yellow-400">Override Active</p>
-                  <p className="text-xs text-[var(--text-secondary)] mt-1">
+                  <p className="text-xs text-secondary mt-1">
                     By <span className="font-mono">{lock.overrideBy}</span> at {lock.overrideAt && new Date(lock.overrideAt).toLocaleString()}
                   </p>
                   {lock.overrideExpiresAt && (
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                    <p className="text-xs text-muted mt-0.5">
                       Expires {new Date(lock.overrideExpiresAt).toLocaleString()}
                     </p>
                   )}
-                  <p className="text-xs text-[var(--text-secondary)] mt-1 italic">"{lock.overrideReason}"</p>
+                  <p className="text-xs text-secondary mt-1 italic">"{lock.overrideReason}"</p>
                 </div>
                 <button onClick={() => revokeMut.mutate()} disabled={revokeMut.isPending}
                   className="px-3 py-1.5 rounded text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 transition-colors disabled:opacity-50">
@@ -302,7 +302,7 @@ export default function LaunchLockPage() {
               <p className="text-sm font-medium text-orange-400 mb-2">Recommended Fixes</p>
               <ul className="space-y-1">
                 {audit.recommendedFixes.map((fix, i) => (
-                  <li key={i} className="text-xs text-[var(--text-secondary)] flex items-start gap-1.5">
+                  <li key={i} className="text-xs text-secondary flex items-start gap-1.5">
                     <span className="text-orange-400">→</span>{fix}
                   </li>
                 ))}
@@ -312,24 +312,24 @@ export default function LaunchLockPage() {
 
           {/* Check results */}
           <div>
-            <p className="text-sm font-medium text-[var(--text-primary)] mb-2">Final Launch Checklist</p>
+            <p className="text-sm font-medium text-primary mb-2">Final Launch Checklist</p>
             <div className="space-y-1.5">
               {checks.length === 0 && !audit && (
-                <p className="text-sm text-[var(--text-muted)]">No audit run yet. Click "Run Audit" to evaluate.</p>
+                <p className="text-sm text-muted">No audit run yet. Click "Run Audit" to evaluate.</p>
               )}
               {checks.map((c) => (
-                <div key={c.name} className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2.5 flex items-center gap-3">
+                <div key={c.name} className="rounded-lg border border-border bg-[var(--bg-surface)] px-4 py-2.5 flex items-center gap-3">
                   <span className={STATUS_COLORS[c.status]}>{STATUS_ICONS[c.status]}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-mono text-[var(--text-primary)]">{c.name}</p>
+                      <p className="text-sm font-mono text-primary">{c.name}</p>
                       <span className={`px-1.5 py-0.5 rounded text-xs ${SEVERITY_BADGE[c.severity] ?? ''}`}>
                         {c.severity}
                       </span>
                     </div>
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5">{c.reason}</p>
+                    <p className="text-xs text-muted mt-0.5">{c.reason}</p>
                     {c.evidence.length > 0 && (
-                      <p className="text-xs text-[var(--text-muted)] mt-0.5 font-mono">
+                      <p className="text-xs text-muted mt-0.5 font-mono">
                         Evidence: {c.evidence.length} row ID(s) → {c.evidence.slice(0, 2).map((e) => e.slice(0, 8)).join(', ')}
                       </p>
                     )}
@@ -341,12 +341,12 @@ export default function LaunchLockPage() {
           </div>
 
           {audit && (
-            <p className="text-xs text-[var(--text-muted)] mt-4">
+            <p className="text-xs text-muted mt-4">
               Last audit: {new Date(audit.createdAt).toLocaleString()} · audit ID <span className="font-mono">{audit.id.slice(0, 8)}</span>
             </p>
           )}
 
-          <div className="mt-2 flex items-center gap-1 text-xs text-[var(--text-muted)]">
+          <div className="mt-2 flex items-center gap-1 text-xs text-muted">
             <RefreshCcw className="w-3 h-3" /> Auto-refreshes every 30s
           </div>
         </div>

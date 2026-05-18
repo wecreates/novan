@@ -46,11 +46,11 @@ export default function CodePatchesPage() {
       <div className="flex items-center gap-3">
         <Hammer className="w-5 h-5 text-sky-400" />
         <h1 className="text-xl font-semibold">Code Patches</h1>
-        <span className="text-xs text-[var(--text-muted)] ml-1">{rows.length} · safety-gated · operator commits</span>
+        <span className="text-xs text-muted ml-1">{rows.length} · safety-gated · operator commits</span>
       </div>
 
       {rows.length === 0 ? (
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-5 py-8 text-center text-sm text-[var(--text-muted)]">
+        <div className="rounded-lg border border-border bg-surface px-5 py-8 text-center text-sm text-muted">
           No patches yet. Click the hammer icon on a proposal to generate one.
         </div>
       ) : (
@@ -58,18 +58,18 @@ export default function CodePatchesPage() {
           {rows.map(p => {
             const isOpen = expanded === p.id
             return (
-              <li key={p.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+              <li key={p.id} className="rounded-lg border border-border bg-surface">
                 <div className="px-4 py-3 flex items-center gap-3">
                   <span className={`px-1.5 py-0.5 rounded text-[10px] border ${STATUS[p.status] ?? STATUS.pending}`}>{p.status}</span>
-                  <span className="text-xs text-[var(--text-muted)] font-mono">{p.agent}</span>
+                  <span className="text-xs text-muted font-mono">{p.agent}</span>
                   <button onClick={() => setExpanded(isOpen ? null : p.id)} className="flex-1 text-left text-sm hover:underline">
                     {p.files.length} files · {p.tokensUsed > 0 ? `${p.tokensUsed} tokens · $${p.costUsdUsed.toFixed(4)}` : 'template mode'}
                   </button>
-                  <span className="text-xs text-[var(--text-muted)] font-mono">{new Date(p.createdAt).toLocaleString().replace(',', '')}</span>
+                  <span className="text-xs text-muted font-mono">{new Date(p.createdAt).toLocaleString().replace(',', '')}</span>
                 </div>
 
                 {isOpen && (
-                  <div className="px-4 py-3 border-t border-[var(--border)] text-xs space-y-3">
+                  <div className="px-4 py-3 border-t border-border text-xs space-y-3">
                     {/* Safety report */}
                     <div>
                       <div className="flex items-center gap-2 mb-1">
@@ -97,7 +97,7 @@ export default function CodePatchesPage() {
                         </ul>
                       )}
                       {p.sandboxReport.typecheck?.output && !p.sandboxReport.typecheck.passed && (
-                        <pre className="mt-1 ml-5 text-[10px] bg-[var(--bg)] border border-[var(--border)] rounded p-2 max-h-32 overflow-y-auto">{p.sandboxReport.typecheck.output.slice(0, 1000)}</pre>
+                        <pre className="mt-1 ml-5 text-[10px] bg-[var(--bg)] border border-border rounded p-2 max-h-32 overflow-y-auto">{p.sandboxReport.typecheck.output.slice(0, 1000)}</pre>
                       )}
                     </div>
 
@@ -110,13 +110,13 @@ export default function CodePatchesPage() {
                             <span className={f.op === 'create' ? 'text-emerald-400' : 'text-amber-400'}>{f.op === 'create' ? '+' : '~'}</span>
                             <button onClick={() => setShowFile(showFile?.patchId === p.id && showFile.idx === i ? null : { patchId: p.id, idx: i })}
                               className="hover:underline">
-                              {f.path} <span className="text-[var(--text-muted)]">({f.contents.length} chars)</span>
+                              {f.path} <span className="text-muted">({f.contents.length} chars)</span>
                             </button>
                           </li>
                         ))}
                       </ul>
                       {showFile?.patchId === p.id && p.files[showFile.idx] && (
-                        <pre className="mt-2 text-[10px] bg-[var(--bg)] border border-[var(--border)] rounded p-2 max-h-96 overflow-y-auto whitespace-pre-wrap">{p.files[showFile.idx]!.contents}</pre>
+                        <pre className="mt-2 text-[10px] bg-[var(--bg)] border border-border rounded p-2 max-h-96 overflow-y-auto whitespace-pre-wrap">{p.files[showFile.idx]!.contents}</pre>
                       )}
                     </div>
 

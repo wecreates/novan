@@ -1,10 +1,14 @@
-import { Routes, Route, Navigate, NavLink } from 'react-router-dom'
+import React, { Suspense } from 'react'
+import { Routes, Route, Navigate, NavLink, useSearchParams } from 'react-router-dom'
 import {
   Activity, Clock, Settings as SettingsIcon,
   Target, ShieldAlert, Bot, Building2, Brain,
   GitBranch, AlertOctagon, CheckSquare, BarChart3, Lightbulb, GraduationCap, Cpu,
   Shield, ScanSearch, ShieldCheck, Terminal, Siren, GitMerge, Lock, BookOpen, TrendingUp, Rocket, Coins, Heart, Home, Code2, Bell, Search, Plus, Map as MapIcon, Hammer, ShoppingBag, Network, Wand2, FlaskConical, Compass, MessageSquare,
+  Volume2, VolumeX, Eye as EyeIcon,
 } from 'lucide-react'
+import { UIModeProvider, useUIMode, UI_MODES } from './design/ui-mode.js'
+import { isAudioEnabled, setAudioEnabled, tone } from './design/audio.js'
 import WarRoom                  from './pages/WarRoom.js'
 import StrategicHomePage        from './pages/StrategicHomePage.js'
 import { useThemeAndShortcuts } from './hooks/useThemeAndShortcuts.js'
@@ -32,7 +36,8 @@ import IdentityPage             from './pages/IdentityPage.js'
 import SimulationPage           from './pages/SimulationPage.js'
 import MissionPage              from './pages/MissionPage.js'
 import TalkPage                 from './pages/TalkPage.js'
-import BrainPage                from './pages/BrainPage.js'
+// BrainPage is lazy-loaded — three.js + drei is ~1.7MB; only paid when /brain is opened
+const BrainPage = React.lazy(() => import('./pages/BrainPage.js'))
 import Timeline                 from './pages/Timeline.js'
 import Settings                 from './pages/Settings.js'
 import GoalsPage                from './pages/GoalsPage.js'
@@ -177,9 +182,115 @@ function Sidebar() {
 export default function App() {
   useThemeAndShortcuts()
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--bg-primary)]">
+    <UIModeProvider>
+      <AppShell />
+    </UIModeProvider>
+  )
+}
+
+function AppShell() {
+  const [searchParams] = useSearchParams()
+  const screenshotMode = searchParams.get('screenshot') === '1'
+
+  // Hide entire chrome in screenshot mode — just render the route
+  if (screenshotMode) {
+    return (
+      <div className="h-screen overflow-hidden bg-bg">
+        <Suspense fallback={<RouteFallback />}>
+          <AppRoutes />
+        </Suspense>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-bg">
       <Sidebar />
-      <div className="flex-1 min-w-0 overflow-hidden">
+      <div className="flex-1 min-w-0 overflow-hidden flex flex-col">
+        <TopControls />
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <Suspense fallback={<RouteFallback />}>
+            <AppRoutes />
+          </Suspense>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TopControls() {
+  const { mode, setMode } = useUIMode()
+  const [audioOn, setAudioOn] = React.useState(() => isAudioEnabled())
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    if (!open) return
+    const fn = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    window.addEventListener('mousedown', fn)
+    return () => window.removeEventListener('mousedown', fn)
+  }, [open])
+
+  const toggleAudio = () => {
+    const next = !audioOn
+    setAudioEnabled(next); setAudioOn(next)
+    if (next) tone('confirm')
+  }
+
+  const currentMode = UI_MODES.find(m => m.id === mode)
+
+  return (
+    <div className="glass border-b border-border px-3 py-1.5 flex items-center gap-2 text-2xs z-overlay">
+      <div ref={ref} className="relative">
+        <button onClick={() => setOpen(s => !s)}
+          className="flex items-center gap-1.5 px-2 py-1 rounded border border-border hover:bg-[var(--surface-hover)] transition-colors duration-fast ease-out">
+          <EyeIcon className="w-3 h-3" style={{ color: currentMode?.accent }} />
+          <span className="text-muted">Mode:</span>
+          <span className="text-primary font-mono">{currentMode?.label ?? 'Focus'}</span>
+        </button>
+        {open && (
+          <div className="absolute top-full mt-1 left-0 panel-elevated dropdown-in min-w-[160px] z-dropdown overflow-hidden">
+            {UI_MODES.map(m => (
+              <button key={m.id} onClick={() => { setMode(m.id); setOpen(false); tone('select') }}
+                className={`w-full text-left px-3 py-1.5 text-2xs flex items-center gap-2 hover:bg-[var(--surface-hover)] transition-colors duration-fast ${
+                  mode === m.id ? 'text-primary' : 'text-secondary'
+                }`}>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: m.accent }} />
+                <span className="font-mono flex-1">{m.label}</span>
+                {m.emphasis.length > 0 && <span className="text-faint">{m.emphasis.length} sys</span>}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <button onClick={toggleAudio}
+        title={audioOn ? 'Sound on' : 'Sound off'}
+        className="p-1 rounded border border-border hover:bg-[var(--surface-hover)] transition-colors duration-fast ease-out">
+        {audioOn
+          ? <Volume2 className="w-3 h-3 text-secondary" />
+          : <VolumeX className="w-3 h-3 text-faint" />}
+      </button>
+
+      <span className="text-muted ml-2 hidden md:inline">
+        ⌘K palette · ?screenshot=1 hides chrome
+      </span>
+    </div>
+  )
+}
+
+function RouteFallback() {
+  return (
+    <div className="h-full flex items-center justify-center">
+      <div className="shimmer rounded h-2 w-32" />
+    </div>
+  )
+}
+
+function AppRoutes() {
+  return (
         <Routes>
           <Route path="/"            element={<Navigate to="/strategic-home" replace />} />
           <Route path="/strategic-home" element={<StrategicHomePage />} />
@@ -257,7 +368,5 @@ export default function App() {
           <Route path="/settings"              element={<Settings />} />
           <Route path="*"          element={<Navigate to="/war-room" replace />} />
         </Routes>
-      </div>
-    </div>
   )
 }

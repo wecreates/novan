@@ -62,10 +62,10 @@ function ConfidenceBar({ value }: { value: number }) {
   const color = value >= 0.8 ? 'bg-emerald-400' : value >= 0.5 ? 'bg-amber-400' : 'bg-red-400'
   return (
     <div className="flex items-center gap-2 min-w-0">
-      <div className="flex-1 h-1.5 rounded-full bg-[var(--bg-elevated)] overflow-hidden">
+      <div className="flex-1 h-1.5 rounded-full bg-elevated overflow-hidden">
         <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-[10px] font-mono text-[var(--text-muted)] shrink-0">{value.toFixed(2)}</span>
+      <span className="text-[10px] font-mono text-muted shrink-0">{value.toFixed(2)}</span>
     </div>
   )
 }
@@ -73,10 +73,10 @@ function ConfidenceBar({ value }: { value: number }) {
 function EmptyState({ search, typeFilter }: { search: string; typeFilter: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
-      <Brain className="w-10 h-10 text-[var(--text-muted)] opacity-40" />
-      <p className="text-sm text-[var(--text-secondary)]">No memories found</p>
+      <Brain className="w-10 h-10 text-muted opacity-40" />
+      <p className="text-sm text-secondary">No memories found</p>
       {(search || typeFilter !== 'all') && (
-        <p className="text-xs text-[var(--text-muted)]">Try clearing your filters</p>
+        <p className="text-xs text-muted">Try clearing your filters</p>
       )}
     </div>
   )
@@ -111,29 +111,29 @@ function CreateForm({ onSuccess, onCancel }: CreateFormProps) {
   })
 
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-5 mb-4">
-      <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4">New Memory</h3>
+    <div className="rounded-xl border border-border bg-[var(--bg-surface)] p-5 mb-4">
+      <h3 className="text-sm font-semibold text-primary mb-4">New Memory</h3>
       <div className="grid gap-3">
         {/* Content */}
         <div>
-          <label className="block text-xs text-[var(--text-muted)] mb-1">Content <span className="text-red-400">*</span></label>
+          <label className="block text-xs text-muted mb-1">Content <span className="text-red-400">*</span></label>
           <textarea
             value={content}
             onChange={e => setContent(e.target.value)}
             rows={4}
             placeholder="Enter memory content…"
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] resize-none outline-none focus:border-blue-500/50 transition-colors"
+            className="w-full rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-primary placeholder:text-muted resize-none outline-none focus:border-blue-500/50 transition-colors"
           />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           {/* Type */}
           <div>
-            <label className="block text-xs text-[var(--text-muted)] mb-1">Type</label>
+            <label className="block text-xs text-muted mb-1">Type</label>
             <select
               value={type}
               onChange={e => setType(e.target.value as MemoryType)}
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-blue-500/50 transition-colors"
+              className="w-full rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-primary outline-none focus:border-blue-500/50 transition-colors"
             >
               {MEMORY_TYPES.map(t => (
                 <option key={t} value={t}>{t}</option>
@@ -143,13 +143,13 @@ function CreateForm({ onSuccess, onCancel }: CreateFormProps) {
 
           {/* Confidence */}
           <div>
-            <label className="block text-xs text-[var(--text-muted)] mb-1">Confidence (0–1)</label>
+            <label className="block text-xs text-muted mb-1">Confidence (0–1)</label>
             <input
               type="number"
               min={0} max={1} step={0.05}
               value={confidence}
               onChange={e => setConfidence(parseFloat(e.target.value) || 0)}
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-blue-500/50 transition-colors"
+              className="w-full rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-primary outline-none focus:border-blue-500/50 transition-colors"
             />
           </div>
         </div>
@@ -157,37 +157,37 @@ function CreateForm({ onSuccess, onCancel }: CreateFormProps) {
         <div className="grid grid-cols-2 gap-3">
           {/* Source */}
           <div>
-            <label className="block text-xs text-[var(--text-muted)] mb-1">Source</label>
+            <label className="block text-xs text-muted mb-1">Source</label>
             <input
               type="text"
               value={source}
               onChange={e => setSource(e.target.value)}
               placeholder="e.g. agent, user, api"
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-blue-500/50 transition-colors"
+              className="w-full rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-primary placeholder:text-muted outline-none focus:border-blue-500/50 transition-colors"
             />
           </div>
 
           {/* Tags */}
           <div>
-            <label className="block text-xs text-[var(--text-muted)] mb-1">Tags (comma-separated)</label>
+            <label className="block text-xs text-muted mb-1">Tags (comma-separated)</label>
             <input
               type="text"
               value={tags}
               onChange={e => setTags(e.target.value)}
               placeholder="tag1, tag2"
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-blue-500/50 transition-colors"
+              className="w-full rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-primary placeholder:text-muted outline-none focus:border-blue-500/50 transition-colors"
             />
           </div>
         </div>
 
         {/* Expires */}
         <div>
-          <label className="block text-xs text-[var(--text-muted)] mb-1">Expires At (optional)</label>
+          <label className="block text-xs text-muted mb-1">Expires At (optional)</label>
           <input
             type="datetime-local"
             value={expiresAt}
             onChange={e => setExpiresAt(e.target.value)}
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-blue-500/50 transition-colors"
+            className="w-full rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-primary outline-none focus:border-blue-500/50 transition-colors"
           />
         </div>
 
@@ -202,7 +202,7 @@ function CreateForm({ onSuccess, onCancel }: CreateFormProps) {
           <button
             type="button"
             onClick={onCancel}
-            className="px-3 py-1.5 rounded-lg text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
+            className="px-3 py-1.5 rounded-lg text-xs text-secondary hover:bg-elevated transition-colors"
           >
             Cancel
           </button>
@@ -244,7 +244,7 @@ function MemoryCard({ memory: m, expanded, onToggle, onMarkStale, staling }: Mem
       className={`rounded-xl border transition-colors ${
         m.isStale
           ? 'border-zinc-700/40 bg-[var(--bg-surface)] opacity-60'
-          : 'border-[var(--border)] bg-[var(--bg-surface)]'
+          : 'border-border bg-[var(--bg-surface)]'
       }`}
     >
       {/* Header row */}
@@ -253,7 +253,7 @@ function MemoryCard({ memory: m, expanded, onToggle, onMarkStale, staling }: Mem
         onClick={onToggle}
       >
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-[var(--text-primary)] leading-relaxed break-words whitespace-pre-wrap">
+          <p className="text-sm text-primary leading-relaxed break-words whitespace-pre-wrap">
             {displayContent}
           </p>
           {truncated && (
@@ -266,7 +266,7 @@ function MemoryCard({ memory: m, expanded, onToggle, onMarkStale, staling }: Mem
             </button>
           )}
         </div>
-        <div className="shrink-0 mt-0.5 text-[var(--text-muted)]">
+        <div className="shrink-0 mt-0.5 text-muted">
           {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </div>
       </div>
@@ -283,7 +283,7 @@ function MemoryCard({ memory: m, expanded, onToggle, onMarkStale, staling }: Mem
           <ConfidenceBar value={m.confidence} />
         </div>
         {m.source && (
-          <span className="text-[10px] text-[var(--text-muted)] font-mono">{m.source}</span>
+          <span className="text-[10px] text-muted font-mono">{m.source}</span>
         )}
       </div>
 
@@ -293,7 +293,7 @@ function MemoryCard({ memory: m, expanded, onToggle, onMarkStale, staling }: Mem
           {m.tags.map(tag => (
             <span
               key={tag}
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-[var(--bg-elevated)] text-[var(--text-muted)] border border-[var(--border)]"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-elevated text-muted border border-border"
             >
               <Tag className="w-2.5 h-2.5" />{tag}
             </span>
@@ -303,25 +303,25 @@ function MemoryCard({ memory: m, expanded, onToggle, onMarkStale, staling }: Mem
 
       {/* Expanded detail */}
       {expanded && (
-        <div className="px-4 pb-4 border-t border-[var(--border)] pt-3 grid gap-2">
+        <div className="px-4 pb-4 border-t border-border pt-3 grid gap-2">
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <span className="text-[var(--text-muted)]">Created</span>
-              <p className="text-[var(--text-secondary)] mt-0.5">{formatTs(m.createdAt)}</p>
-              <p className="text-[10px] text-[var(--text-muted)]">{relativeTs(m.createdAt)}</p>
+              <span className="text-muted">Created</span>
+              <p className="text-secondary mt-0.5">{formatTs(m.createdAt)}</p>
+              <p className="text-[10px] text-muted">{relativeTs(m.createdAt)}</p>
             </div>
             {m.expiresAt !== undefined && (
               <div>
-                <span className="text-[var(--text-muted)]">Expires</span>
-                <p className="text-[var(--text-secondary)] mt-0.5">{formatTs(m.expiresAt)}</p>
-                <p className="text-[10px] text-[var(--text-muted)]">{relativeTs(m.expiresAt)}</p>
+                <span className="text-muted">Expires</span>
+                <p className="text-secondary mt-0.5">{formatTs(m.expiresAt)}</p>
+                <p className="text-[10px] text-muted">{relativeTs(m.expiresAt)}</p>
               </div>
             )}
           </div>
           {m.summary && (
             <div>
-              <span className="text-xs text-[var(--text-muted)]">Summary</span>
-              <p className="text-xs text-[var(--text-secondary)] mt-0.5">{m.summary}</p>
+              <span className="text-xs text-muted">Summary</span>
+              <p className="text-xs text-secondary mt-0.5">{m.summary}</p>
             </div>
           )}
           <div className="flex items-center gap-2 pt-1">
@@ -423,14 +423,14 @@ export default function MemoryBrowserPage() {
   }, [])
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[var(--bg-primary)]">
+    <div className="flex flex-col h-full overflow-hidden bg-bg">
 
       {/* ── Top bar ── */}
-      <div className="shrink-0 border-b border-[var(--border)] bg-[var(--bg-surface)] px-6 py-4">
+      <div className="shrink-0 border-b border-border bg-[var(--bg-surface)] px-6 py-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-2.5">
             <Brain className="w-5 h-5 text-purple-400" />
-            <h1 className="text-base font-semibold text-[var(--text-primary)]">Memory Browser</h1>
+            <h1 className="text-base font-semibold text-primary">Memory Browser</h1>
           </div>
           <button
             type="button"
@@ -446,19 +446,19 @@ export default function MemoryBrowserPage() {
         <div className="mt-3 flex items-center gap-3 flex-wrap">
           {/* Search */}
           <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)] pointer-events-none" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
             <input
               type="text"
               value={search}
               onChange={e => handleSearchChange(e.target.value)}
               placeholder="Search memories…"
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-blue-500/50 transition-colors"
+              className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-border bg-elevated text-sm text-primary placeholder:text-muted outline-none focus:border-blue-500/50 transition-colors"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => { handleSearchChange(''); setDebouncedSearch('') }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-secondary"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -469,7 +469,7 @@ export default function MemoryBrowserPage() {
           <select
             value={typeFilter}
             onChange={e => { setTypeFilter(e.target.value); setPage(0) }}
-            className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-xs text-[var(--text-primary)] outline-none focus:border-blue-500/50 transition-colors"
+            className="rounded-lg border border-border bg-elevated px-3 py-1.5 text-xs text-primary outline-none focus:border-blue-500/50 transition-colors"
           >
             <option value="all">All types</option>
             {MEMORY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -477,7 +477,7 @@ export default function MemoryBrowserPage() {
 
           {/* Count badge */}
           {!isLoading && (
-            <span className="text-xs text-[var(--text-muted)]">
+            <span className="text-xs text-muted">
               {filtered.length} {filtered.length === 1 ? 'memory' : 'memories'}
             </span>
           )}
@@ -497,7 +497,7 @@ export default function MemoryBrowserPage() {
 
         {/* Loading */}
         {isLoading && (
-          <div className="flex items-center justify-center gap-2 py-20 text-[var(--text-muted)]">
+          <div className="flex items-center justify-center gap-2 py-20 text-muted">
             <Loader2 className="w-5 h-5 animate-spin" />
             <span className="text-sm">Loading memories…</span>
           </div>
@@ -539,18 +539,18 @@ export default function MemoryBrowserPage() {
               type="button"
               onClick={() => setPage(p => Math.max(0, p - 1))}
               disabled={page === 0}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[var(--border)] text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border text-xs text-secondary hover:bg-elevated disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeft className="w-3.5 h-3.5" /> Prev
             </button>
-            <span className="text-xs text-[var(--text-muted)]">
+            <span className="text-xs text-muted">
               Page {page + 1} of {totalPages}
             </span>
             <button
               type="button"
               onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
               disabled={page >= totalPages - 1}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[var(--border)] text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border text-xs text-secondary hover:bg-elevated disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Next <ChevronRight className="w-3.5 h-3.5" />
             </button>

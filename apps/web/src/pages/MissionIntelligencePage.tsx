@@ -18,8 +18,8 @@ import { useWorkspace } from '../contexts/WorkspaceContext.js'
 function trendIcon(d: TrendSeriesDTO['direction']) {
   if (d === 'improving') return <TrendingDown className="w-4 h-4 text-emerald-400" />
   if (d === 'degrading') return <TrendingUp className="w-4 h-4 text-red-400" />
-  if (d === 'flat')      return <Minus className="w-4 h-4 text-[var(--text-muted)]" />
-  return <Minus className="w-4 h-4 text-[var(--text-muted)] opacity-40" />
+  if (d === 'flat')      return <Minus className="w-4 h-4 text-muted" />
+  return <Minus className="w-4 h-4 text-muted opacity-40" />
 }
 
 function Sparkline({ values }: { values: number[] }) {
@@ -69,7 +69,7 @@ export default function MissionIntelligencePage() {
   })
 
   const isLoading = continuity.isLoading || trends.isLoading
-  if (isLoading) return <div className="p-8 text-[var(--text-muted)]">Loading…</div>
+  if (isLoading) return <div className="p-8 text-muted">Loading…</div>
   const c = continuity.data?.data
   const t = trends.data?.data
   const m = memory.data?.data ?? []
@@ -80,8 +80,8 @@ export default function MissionIntelligencePage() {
       <div className="flex items-center gap-3">
         <Brain className="w-6 h-6 text-sky-400" />
         <div>
-          <h1 className="text-xl font-medium text-[var(--text)]">Mission Intelligence</h1>
-          <p className="text-xs text-[var(--text-muted)]">Long-term continuity, trends, and lessons learned</p>
+          <h1 className="text-xl font-medium text-primary">Mission Intelligence</h1>
+          <p className="text-xs text-muted">Long-term continuity, trends, and lessons learned</p>
         </div>
       </div>
 
@@ -109,12 +109,12 @@ export default function MissionIntelligencePage() {
                 const isDominant = h.dominant.includes(cat)
                 if (!stat || stat.total === 0) return null
                 return (
-                  <div key={cat} className={`rounded border px-3 py-2 ${isDominant ? 'border-sky-500/40 bg-sky-500/5' : 'border-[var(--border)] bg-[var(--bg-elevated)]'}`}>
-                    <div className="text-xs uppercase tracking-wider text-[var(--text-muted)]">{cat.replace(/_/g, ' ')}</div>
+                  <div key={cat} className={`rounded border px-3 py-2 ${isDominant ? 'border-sky-500/40 bg-sky-500/5' : 'border-border bg-elevated'}`}>
+                    <div className="text-xs uppercase tracking-wider text-muted">{cat.replace(/_/g, ' ')}</div>
                     <div className="text-sm mt-1 font-mono">
                       {stat.active} active · {stat.completed} done
                     </div>
-                    <div className="text-xs text-[var(--text-muted)] mt-0.5">{Math.round(stat.avgProgress * 100)}% avg progress</div>
+                    <div className="text-xs text-muted mt-0.5">{Math.round(stat.avgProgress * 100)}% avg progress</div>
                   </div>
                 )
               })}
@@ -136,8 +136,8 @@ export default function MissionIntelligencePage() {
                       r.severity === 'high'     ? 'bg-amber-500/20 text-amber-300' :
                                                   'bg-slate-500/20 text-slate-300'
                     }`}>{r.severity}</span>
-                    <span className="flex-1 truncate text-[var(--text)]">{r.title}</span>
-                    <span className="text-xs text-[var(--text-muted)] font-mono">{fmtDays(r.ageDays)}</span>
+                    <span className="flex-1 truncate text-primary">{r.title}</span>
+                    <span className="text-xs text-muted font-mono">{fmtDays(r.ageDays)}</span>
                   </li>
                 ))}
               </ul>
@@ -152,8 +152,8 @@ export default function MissionIntelligencePage() {
                 {c.recurringBottlenecks.map((b, i) => (
                   <li key={i} className="px-5 py-2 flex items-center gap-3 text-sm">
                     <span className="text-xs font-mono text-amber-400">{b.occurrences}×</span>
-                    <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{b.type}</span>
-                    <span className="flex-1 truncate text-[var(--text)] font-mono text-xs">{b.signature}</span>
+                    <span className="text-[10px] uppercase tracking-wider text-muted">{b.type}</span>
+                    <span className="flex-1 truncate text-primary font-mono text-xs">{b.signature}</span>
                   </li>
                 ))}
               </ul>
@@ -172,8 +172,8 @@ export default function MissionIntelligencePage() {
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-mono text-emerald-400">{l.provenAppliedCount}× applied</span>
                     </div>
-                    <div className="text-[var(--text)] mt-1">{l.fix}</div>
-                    <div className="text-xs text-[var(--text-muted)] mt-1 font-mono truncate">pattern: {l.pattern}</div>
+                    <div className="text-primary mt-1">{l.fix}</div>
+                    <div className="text-xs text-muted mt-1 font-mono truncate">pattern: {l.pattern}</div>
                   </li>
                 ))}
               </ul>
@@ -191,10 +191,10 @@ export default function MissionIntelligencePage() {
                       <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
                         item.kind === 'successful_fix' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
                       }`}>{item.kind.replace('_', ' ')}</span>
-                      <span className="text-xs text-[var(--text-muted)] font-mono">score {item.relevanceScore.toFixed(2)}</span>
-                      <span className="text-xs text-[var(--text-muted)] ml-auto">decay {item.decayWeight.toFixed(2)} · {fmtDays(item.ageDays)}</span>
+                      <span className="text-xs text-muted font-mono">score {item.relevanceScore.toFixed(2)}</span>
+                      <span className="text-xs text-muted ml-auto">decay {item.decayWeight.toFixed(2)} · {fmtDays(item.ageDays)}</span>
                     </div>
-                    <div className="text-[var(--text)] mt-1 text-xs truncate">{item.text}</div>
+                    <div className="text-primary mt-1 text-xs truncate">{item.text}</div>
                   </li>
                 ))}
               </ul>
@@ -207,19 +207,19 @@ export default function MissionIntelligencePage() {
         <Section title="Operator Decision History" icon={<Clock className="w-4 h-4" />}>
           <div className="px-5 py-3 grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
             <div>
-              <div className="text-xs text-[var(--text-muted)]">Approvals approved</div>
+              <div className="text-xs text-muted">Approvals approved</div>
               <div className="text-lg font-mono text-emerald-400">{c.operatorDecisions.patchApprovals.approved}</div>
             </div>
             <div>
-              <div className="text-xs text-[var(--text-muted)]">Approvals rejected</div>
+              <div className="text-xs text-muted">Approvals rejected</div>
               <div className="text-lg font-mono text-amber-400">{c.operatorDecisions.patchApprovals.rejected}</div>
             </div>
             <div>
-              <div className="text-xs text-[var(--text-muted)]">Pending</div>
+              <div className="text-xs text-muted">Pending</div>
               <div className="text-lg font-mono">{c.operatorDecisions.patchApprovals.pending}</div>
             </div>
             <div>
-              <div className="text-xs text-[var(--text-muted)]">Approval rate</div>
+              <div className="text-xs text-muted">Approval rate</div>
               <div className="text-lg font-mono">
                 {c.operatorDecisions.patchApprovals.approvalRate === null
                   ? '—'
@@ -244,24 +244,24 @@ function TrendCard({ title, series, valueKey, badgeFormat, higherIsBetter }: { t
     : series.direction
     : series.direction
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+    <div className="rounded-lg border border-border bg-surface px-4 py-3">
       <div className="flex items-center gap-2">
-        <span className="text-xs uppercase tracking-wider text-[var(--text-muted)]">{title}</span>
+        <span className="text-xs uppercase tracking-wider text-muted">{title}</span>
         {trendIcon(visualDir)}
       </div>
-      <div className="text-lg font-mono mt-1 text-[var(--text)]">{format(last)}</div>
+      <div className="text-lg font-mono mt-1 text-primary">{format(last)}</div>
       <div className="mt-2"><Sparkline values={values} /></div>
-      <div className="text-[10px] text-[var(--text-muted)] mt-1 truncate">{series.note}</div>
+      <div className="text-[10px] text-muted mt-1 truncate">{series.note}</div>
     </div>
   )
 }
 
 function Section({ title, icon, children }: { title: string; icon?: JSX.Element; children: JSX.Element | JSX.Element[] }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-5 py-3 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-5 py-3 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
       </div>
       {children}
     </div>
@@ -269,5 +269,5 @@ function Section({ title, icon, children }: { title: string; icon?: JSX.Element;
 }
 
 function EmptyRow({ text }: { text: string }) {
-  return <div className="px-5 py-6 text-[var(--text-muted)] text-sm">{text}</div>
+  return <div className="px-5 py-6 text-muted text-sm">{text}</div>
 }

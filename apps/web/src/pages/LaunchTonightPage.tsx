@@ -86,8 +86,8 @@ const STATUS_DOT: Record<string, string> = {
 
 function Toggle({ on, danger, label, onChange, disabled }: { on: boolean; danger?: boolean; label: string; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
-    <label className={`flex items-center justify-between gap-3 px-3 py-2 rounded border ${on ? (danger ? 'border-red-500/30 bg-red-500/5' : 'border-green-500/30 bg-green-500/5') : 'border-[var(--border)] bg-[var(--bg-surface)]'} ${disabled ? 'opacity-50' : 'cursor-pointer'}`}>
-      <span className="text-sm text-[var(--text-primary)]">{label}</span>
+    <label className={`flex items-center justify-between gap-3 px-3 py-2 rounded border ${on ? (danger ? 'border-red-500/30 bg-red-500/5' : 'border-green-500/30 bg-green-500/5') : 'border-border bg-[var(--bg-surface)]'} ${disabled ? 'opacity-50' : 'cursor-pointer'}`}>
+      <span className="text-sm text-primary">{label}</span>
       <input type="checkbox" checked={on} disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
         className="w-4 h-4 rounded" />
@@ -116,18 +116,18 @@ export default function LaunchTonightPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-[var(--border)]">
+      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-border">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
+            <h1 className="text-lg font-semibold text-primary flex items-center gap-2">
               <Rocket className="w-4 h-4 text-purple-400" /> Launch Tonight
             </h1>
-            <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            <p className="text-xs text-muted mt-0.5">
               Safe-defaults console · Tonight Mode keeps dangerous autonomy disabled
             </p>
           </div>
           <button onClick={() => { qc.invalidateQueries({ queryKey: ['lt-flags'] }); qc.invalidateQueries({ queryKey: ['lt-checklist'] }); qc.invalidateQueries({ queryKey: ['lt-runtime'] }) }}
-            className="text-[var(--text-muted)] hover:text-[var(--text-secondary)]"><RefreshCcw className="w-4 h-4" /></button>
+            className="text-muted hover:text-secondary"><RefreshCcw className="w-4 h-4" /></button>
         </div>
 
         {/* Big indicator */}
@@ -140,7 +140,7 @@ export default function LaunchTonightPage() {
             <p className={`text-2xl font-bold ${ready ? 'text-green-400' : 'text-red-400'}`}>
               {ready ? 'READY TO LAUNCH' : 'NOT READY'}
             </p>
-            <p className="text-xs text-[var(--text-muted)] mt-1">
+            <p className="text-xs text-muted mt-1">
               {ready
                 ? 'All tonight-mode checks pass. Safe to expose to production traffic.'
                 : `${checklist?.launchBlockers.length ?? 0} blocker(s). Resolve before launch.`}
@@ -148,7 +148,7 @@ export default function LaunchTonightPage() {
           </div>
           {checklist?.productionReadinessAudit && (
             <div className="text-right">
-              <p className="text-xs text-[var(--text-muted)]">Readiness Score</p>
+              <p className="text-xs text-muted">Readiness Score</p>
               <p className={`text-3xl font-bold ${checklist.productionReadinessAudit.score >= 80 ? 'text-green-400' : checklist.productionReadinessAudit.score >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
                 {checklist.productionReadinessAudit.score}
               </p>
@@ -161,9 +161,9 @@ export default function LaunchTonightPage() {
         <div className="max-w-5xl grid grid-cols-2 gap-4">
 
           {/* Tonight Mode flags */}
-          <section className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+          <section className="rounded-lg border border-border bg-[var(--bg-surface)] p-4">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-medium text-[var(--text-primary)] flex items-center gap-2">
+              <h2 className="text-sm font-medium text-primary flex items-center gap-2">
                 <Lock className="w-4 h-4 text-blue-400" /> Tonight Mode
               </h2>
               <button onClick={() => enableMut.mutate()} disabled={enableMut.isPending || flags?.tonightModeActive}
@@ -173,7 +173,7 @@ export default function LaunchTonightPage() {
             </div>
             {flags && (
               <div className="space-y-1.5">
-                <p className="text-xs text-[var(--text-muted)] mb-1 uppercase">Dangerous — must be OFF tonight</p>
+                <p className="text-xs text-muted mb-1 uppercase">Dangerous — must be OFF tonight</p>
                 <Toggle on={flags.autonomousDeployAllowed} danger label="Autonomous deploy"
                   onChange={(v) => flagMut.mutate({ k: 'autonomousDeployAllowed', v })} />
                 <Toggle on={flags.selfEditLoopsAllowed} danger label="Self-edit loops"
@@ -184,7 +184,7 @@ export default function LaunchTonightPage() {
                   onChange={(v) => flagMut.mutate({ k: 'destructiveMigrationsAllowed', v })} />
                 <Toggle on={flags.internetLearningSwarmAllowed} danger label="Internet learning swarm"
                   onChange={(v) => flagMut.mutate({ k: 'internetLearningSwarmAllowed', v })} />
-                <p className="text-xs text-[var(--text-muted)] mt-3 mb-1 uppercase">Safe — should be ON</p>
+                <p className="text-xs text-muted mt-3 mb-1 uppercase">Safe — should be ON</p>
                 <Toggle on={flags.approvalGatedPatchesEnabled} label="Approval-gated patches"
                   onChange={(v) => flagMut.mutate({ k: 'approvalGatedPatchesEnabled', v })} />
                 <Toggle on={flags.failureLearningEnabled} label="Failure-memory learning"
@@ -200,35 +200,35 @@ export default function LaunchTonightPage() {
           </section>
 
           {/* Runtime + agents */}
-          <section className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-4 space-y-3">
-            <h2 className="text-sm font-medium text-[var(--text-primary)] flex items-center gap-2">
+          <section className="rounded-lg border border-border bg-[var(--bg-surface)] p-4 space-y-3">
+            <h2 className="text-sm font-medium text-primary flex items-center gap-2">
               <Activity className="w-4 h-4 text-blue-400" /> Runtime Status (1h)
             </h2>
             {runtime && (
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded bg-[var(--bg-primary)] px-3 py-2">
-                  <p className="text-[var(--text-muted)]">Events</p>
-                  <p className="text-lg font-semibold text-[var(--text-primary)]">{runtime.eventsLastHour}</p>
+                <div className="rounded bg-bg px-3 py-2">
+                  <p className="text-muted">Events</p>
+                  <p className="text-lg font-semibold text-primary">{runtime.eventsLastHour}</p>
                 </div>
-                <div className="rounded bg-[var(--bg-primary)] px-3 py-2">
-                  <p className="text-[var(--text-muted)]">Open incidents</p>
+                <div className="rounded bg-bg px-3 py-2">
+                  <p className="text-muted">Open incidents</p>
                   <p className={`text-lg font-semibold ${runtime.incidents.openCount === 0 ? 'text-green-400' : 'text-yellow-400'}`}>{runtime.incidents.openCount}</p>
                 </div>
-                <div className="rounded bg-[var(--bg-primary)] px-3 py-2">
-                  <p className="text-[var(--text-muted)]">Orchestration agents</p>
-                  <p className="text-lg font-semibold text-[var(--text-primary)]">
-                    {runtime.agents.orchestratorActive} <span className="text-xs text-[var(--text-muted)]">/ {runtime.agents.orchestratorTotal}</span>
+                <div className="rounded bg-bg px-3 py-2">
+                  <p className="text-muted">Orchestration agents</p>
+                  <p className="text-lg font-semibold text-primary">
+                    {runtime.agents.orchestratorActive} <span className="text-xs text-muted">/ {runtime.agents.orchestratorTotal}</span>
                   </p>
                 </div>
-                <div className="rounded bg-[var(--bg-primary)] px-3 py-2">
-                  <p className="text-[var(--text-muted)]">Security agents</p>
-                  <p className="text-lg font-semibold text-[var(--text-primary)]">{runtime.agents.securityTeamCount}</p>
+                <div className="rounded bg-bg px-3 py-2">
+                  <p className="text-muted">Security agents</p>
+                  <p className="text-lg font-semibold text-primary">{runtime.agents.securityTeamCount}</p>
                 </div>
-                <div className="rounded bg-[var(--bg-primary)] px-3 py-2 col-span-2 flex items-center gap-2">
+                <div className="rounded bg-bg px-3 py-2 col-span-2 flex items-center gap-2">
                   <Brain className="w-4 h-4 text-purple-400" />
                   <div className="flex-1">
-                    <p className="text-[var(--text-muted)]">Learning loop</p>
-                    <p className="text-sm text-[var(--text-secondary)]">
+                    <p className="text-muted">Learning loop</p>
+                    <p className="text-sm text-secondary">
                       {runtime.learningLoop.failuresLastHour} failure(s) · {runtime.learningLoop.blockedSignatures} blocked signature(s)
                     </p>
                   </div>
@@ -236,9 +236,9 @@ export default function LaunchTonightPage() {
                     {runtime.learningLoop.loopActive ? 'ACTIVE' : 'OFF'}
                   </span>
                 </div>
-                <div className="rounded bg-[var(--bg-primary)] px-3 py-2 col-span-2">
-                  <p className="text-[var(--text-muted)]">Sandbox</p>
-                  <p className="text-sm text-[var(--text-secondary)]">
+                <div className="rounded bg-bg px-3 py-2 col-span-2">
+                  <p className="text-muted">Sandbox</p>
+                  <p className="text-sm text-secondary">
                     {runtime.sandbox.completed} ok · {runtime.sandbox.failed} failed · {runtime.sandbox.totalLastHour} total
                   </p>
                 </div>
@@ -247,9 +247,9 @@ export default function LaunchTonightPage() {
           </section>
 
           {/* Providers */}
-          <section className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+          <section className="rounded-lg border border-border bg-[var(--bg-surface)] p-4">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-medium text-[var(--text-primary)] flex items-center gap-2">
+              <h2 className="text-sm font-medium text-primary flex items-center gap-2">
                 <Zap className="w-4 h-4 text-yellow-400" /> Provider Connections
               </h2>
               <button onClick={() => validateMut.mutate()} disabled={validating}
@@ -259,7 +259,7 @@ export default function LaunchTonightPage() {
             </div>
             {checklist?.providerSummary && (
               <div className="space-y-1.5">
-                <p className="text-xs text-[var(--text-muted)]">
+                <p className="text-xs text-muted">
                   {checklist.providerSummary.configured} configured · {checklist.providerSummary.reachable} reachable
                 </p>
                 {checklist.providerSummary.probes.map((p) => (
@@ -271,7 +271,7 @@ export default function LaunchTonightPage() {
                       : 'bg-gray-500'
                     }`} />
                     <span className="font-mono w-20">{p.provider}</span>
-                    <span className="text-[var(--text-muted)] flex-1">
+                    <span className="text-muted flex-1">
                       {p.status === 'unconfigured' ? 'not configured'
                         : p.reachable ? `reachable · ${p.latencyMs}ms`
                         : (p.errorMessage ?? 'unreachable')}
@@ -283,30 +283,30 @@ export default function LaunchTonightPage() {
           </section>
 
           {/* Agents ready */}
-          <section className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-4">
-            <h2 className="text-sm font-medium text-[var(--text-primary)] flex items-center gap-2 mb-3">
+          <section className="rounded-lg border border-border bg-[var(--bg-surface)] p-4">
+            <h2 className="text-sm font-medium text-primary flex items-center gap-2 mb-3">
               <CheckCircle2 className="w-4 h-4 text-green-400" /> Active Agents
             </h2>
             {agents && (
               <div className="space-y-2">
                 <div>
-                  <p className="text-xs text-[var(--text-muted)] uppercase mb-1">Orchestration ({agents.orchestrationAgents.length})</p>
-                  {agents.orchestrationAgents.length === 0 && <p className="text-xs text-[var(--text-muted)] italic">None registered yet</p>}
+                  <p className="text-xs text-muted uppercase mb-1">Orchestration ({agents.orchestrationAgents.length})</p>
+                  {agents.orchestrationAgents.length === 0 && <p className="text-xs text-muted italic">None registered yet</p>}
                   {agents.orchestrationAgents.slice(0, 5).map((a) => (
-                    <p key={a.id} className="text-xs text-[var(--text-secondary)] flex items-center gap-2">
+                    <p key={a.id} className="text-xs text-secondary flex items-center gap-2">
                       <span className={`w-1.5 h-1.5 rounded-full ${a.readyToAct ? 'bg-green-400' : 'bg-red-400'}`} />
                       <span className="font-mono">{a.name}</span>
-                      <span className="text-[var(--text-muted)] ml-auto">{a.status}</span>
+                      <span className="text-muted ml-auto">{a.status}</span>
                     </p>
                   ))}
                 </div>
                 <div>
-                  <p className="text-xs text-[var(--text-muted)] uppercase mb-1">Security Team ({agents.securityAgents.length}/10)</p>
+                  <p className="text-xs text-muted uppercase mb-1">Security Team ({agents.securityAgents.length}/10)</p>
                   {agents.securityAgents.map((a) => (
-                    <p key={a.id} className="text-xs text-[var(--text-secondary)] flex items-center gap-2">
+                    <p key={a.id} className="text-xs text-secondary flex items-center gap-2">
                       <span className={`w-1.5 h-1.5 rounded-full ${a.readyToScan ? 'bg-green-400' : 'bg-red-400'}`} />
                       <span className="font-mono">{a.role}</span>
-                      <span className="text-[var(--text-muted)] flex-1">{a.name}</span>
+                      <span className="text-muted flex-1">{a.name}</span>
                     </p>
                   ))}
                 </div>
@@ -316,8 +316,8 @@ export default function LaunchTonightPage() {
 
           {/* Checklist (spans both columns) */}
           {checklist && (
-            <section className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-4 col-span-2">
-              <h2 className="text-sm font-medium text-[var(--text-primary)] flex items-center gap-2 mb-3">
+            <section className="rounded-lg border border-border bg-[var(--bg-surface)] p-4 col-span-2">
+              <h2 className="text-sm font-medium text-primary flex items-center gap-2 mb-3">
                 <CheckCircle2 className="w-4 h-4 text-blue-400" /> Tonight Launch Checklist
               </h2>
               <div className="space-y-1.5">
@@ -325,7 +325,7 @@ export default function LaunchTonightPage() {
                   <div key={c.name} className="flex items-center gap-3 text-xs">
                     <span className={`w-2 h-2 rounded-full ${STATUS_DOT[c.status]}`} />
                     <span className="font-mono w-56">{c.name}</span>
-                    <span className="flex-1 text-[var(--text-secondary)]">{c.reason}</span>
+                    <span className="flex-1 text-secondary">{c.reason}</span>
                     <span className={`uppercase text-xs font-medium ${
                       c.status === 'pass' ? 'text-green-400' : c.status === 'fail' ? 'text-red-400' : 'text-yellow-400'
                     }`}>{c.status}</span>
@@ -339,7 +339,7 @@ export default function LaunchTonightPage() {
                   </p>
                   <ul className="space-y-1">
                     {checklist.launchBlockers.map((b, i) => (
-                      <li key={i} className="text-xs text-[var(--text-secondary)] flex items-start gap-1.5">
+                      <li key={i} className="text-xs text-secondary flex items-start gap-1.5">
                         <span className="text-red-400">•</span>{b}
                       </li>
                     ))}
@@ -351,17 +351,17 @@ export default function LaunchTonightPage() {
 
           {/* Audit summary */}
           {checklist?.productionReadinessAudit && (
-            <section className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-4 col-span-2">
-              <h2 className="text-sm font-medium text-[var(--text-primary)] flex items-center gap-2 mb-3">
+            <section className="rounded-lg border border-border bg-[var(--bg-surface)] p-4 col-span-2">
+              <h2 className="text-sm font-medium text-primary flex items-center gap-2 mb-3">
                 <AlertTriangle className="w-4 h-4 text-orange-400" /> Production Readiness Audit Summary
               </h2>
               <div className="grid grid-cols-4 gap-3 text-xs">
-                <div className="rounded bg-[var(--bg-primary)] px-3 py-2"><span className="text-[var(--text-muted)]">Passed</span><p className="text-lg text-green-400">{checklist.productionReadinessAudit.passedCount}</p></div>
-                <div className="rounded bg-[var(--bg-primary)] px-3 py-2"><span className="text-[var(--text-muted)]">Failed</span><p className="text-lg text-red-400">{checklist.productionReadinessAudit.failedCount}</p></div>
-                <div className="rounded bg-[var(--bg-primary)] px-3 py-2"><span className="text-[var(--text-muted)]">Unverified</span><p className="text-lg text-orange-400">{checklist.productionReadinessAudit.unverifiedCount}</p></div>
-                <div className="rounded bg-[var(--bg-primary)] px-3 py-2"><span className="text-[var(--text-muted)]">Critical blockers</span><p className="text-lg text-red-300">{checklist.productionReadinessAudit.criticalBlockers}</p></div>
+                <div className="rounded bg-bg px-3 py-2"><span className="text-muted">Passed</span><p className="text-lg text-green-400">{checklist.productionReadinessAudit.passedCount}</p></div>
+                <div className="rounded bg-bg px-3 py-2"><span className="text-muted">Failed</span><p className="text-lg text-red-400">{checklist.productionReadinessAudit.failedCount}</p></div>
+                <div className="rounded bg-bg px-3 py-2"><span className="text-muted">Unverified</span><p className="text-lg text-orange-400">{checklist.productionReadinessAudit.unverifiedCount}</p></div>
+                <div className="rounded bg-bg px-3 py-2"><span className="text-muted">Critical blockers</span><p className="text-lg text-red-300">{checklist.productionReadinessAudit.criticalBlockers}</p></div>
               </div>
-              <p className="text-xs text-[var(--text-muted)] mt-3 italic">
+              <p className="text-xs text-muted mt-3 italic">
                 Run a full audit anytime via War Room → Launch Lock → Run Audit.
               </p>
             </section>

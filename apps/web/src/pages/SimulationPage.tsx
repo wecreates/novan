@@ -46,7 +46,7 @@ export default function SimulationPage() {
       <div className="flex items-center gap-3">
         <FlaskConical className="w-5 h-5 text-amber-400" />
         <h1 className="text-xl font-semibold">Scenario Simulation</h1>
-        <span className="text-xs text-[var(--text-muted)] ml-1">forecasts use persisted evidence · all cases marked estimate</span>
+        <span className="text-xs text-muted ml-1">forecasts use persisted evidence · all cases marked estimate</span>
       </div>
 
       {/* Accuracy */}
@@ -54,15 +54,15 @@ export default function SimulationPage() {
         <Section title="Forecast accuracy" icon={<Activity className="w-4 h-4 text-sky-400" />}>
           <div className="p-4 flex items-center gap-6 text-sm">
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Total</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted">Total</div>
               <div className="font-mono">{d.accuracy.total}</div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Matched</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted">Matched</div>
               <div className="font-mono">{d.accuracy.matched}</div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Match rate</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted">Match rate</div>
               <div className="font-mono">{d.accuracy.matchRate === null ? '— (need ≥5)' : `${(d.accuracy.matchRate * 100).toFixed(0)}%`}</div>
             </div>
           </div>
@@ -75,12 +75,12 @@ export default function SimulationPage() {
           <div className="p-4 flex flex-wrap gap-2">
             {d.availableKinds.map(k => (
               <button key={k} onClick={() => build.mutate(k)} disabled={build.isPending}
-                className="px-3 py-1 text-xs rounded border border-[var(--border)] hover:bg-[var(--surface-hover)] font-mono">
+                className="px-3 py-1 text-xs rounded border border-border hover:bg-[var(--surface-hover)] font-mono">
                 {k}
               </button>
             ))}
           </div>
-          <div className="px-4 pb-3 text-[10px] text-[var(--text-muted)]">
+          <div className="px-4 pb-3 text-[10px] text-muted">
             Honest: kinds backed by persisted history. Others (deployment_failure, traffic_surge, etc.) require data sources not yet wired.
           </div>
         </Section>
@@ -97,7 +97,7 @@ export default function SimulationPage() {
               return (
                 <li key={s.id} className="px-4 py-2 text-xs">
                   <button onClick={() => setExpanded(isOpen ? null : s.id)} className="w-full text-left flex items-center gap-2 hover:underline">
-                    <span className="font-mono text-[10px] text-[var(--text-muted)]">{new Date(s.createdAt).toLocaleString().replace(',', '')}</span>
+                    <span className="font-mono text-[10px] text-muted">{new Date(s.createdAt).toLocaleString().replace(',', '')}</span>
                     <span className="font-mono">{s.kind}</span>
                     <span className="flex-1">{s.name}</span>
                     <span className="text-[10px] text-sky-300">conf {s.confidence.toFixed(2)}</span>
@@ -110,13 +110,13 @@ export default function SimulationPage() {
                       {s.mitigation.length > 0 && (
                         <div>
                           <div className="text-purple-300 font-medium">Mitigation:</div>
-                          <ul className="ml-2 text-[var(--text-muted)]">
+                          <ul className="ml-2 text-muted">
                             {s.mitigation.map((m, i) => <li key={i}>• {m}</li>)}
                           </ul>
                         </div>
                       )}
                       {s.evidenceRefs.length > 0 && (
-                        <div className="text-[var(--text-muted)]">
+                        <div className="text-muted">
                           Evidence: {s.evidenceRefs.map(e => e.extract).join(' · ')}
                         </div>
                       )}
@@ -137,17 +137,17 @@ function Case({ label, data, color }: { label: string; data: Record<string, unkn
   return (
     <div>
       <span className={`font-medium ${cls}`}>{label}:</span>{' '}
-      <span className="font-mono text-[var(--text-muted)]">{JSON.stringify(data)}</span>
+      <span className="font-mono text-muted">{JSON.stringify(data)}</span>
     </div>
   )
 }
 
 function Section({ title, icon, children }: { title: string; icon?: JSX.Element; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
       </div>
       {children}
     </div>
@@ -155,5 +155,5 @@ function Section({ title, icon, children }: { title: string; icon?: JSX.Element;
 }
 
 function Empty({ msg }: { msg: string }) {
-  return <div className="px-4 py-3 text-xs text-[var(--text-muted)] italic">{msg}</div>
+  return <div className="px-4 py-3 text-xs text-muted italic">{msg}</div>
 }

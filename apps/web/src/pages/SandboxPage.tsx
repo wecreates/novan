@@ -113,7 +113,7 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 const EVENT_COLORS: Record<string, string> = {
   started:             'text-blue-400',
   command_executed:    'text-green-400',
-  heartbeat:           'text-[var(--text-muted)]',
+  heartbeat:           'text-muted',
   timeout:             'text-orange-400',
   failed:              'text-red-400',
   completed:           'text-green-400',
@@ -147,10 +147,10 @@ function TimeoutCountdown({ remainingMs }: { remainingMs: number }) {
 
   return (
     <div className="flex items-center gap-2">
-      <div className="w-16 h-1 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+      <div className="w-16 h-1 bg-elevated rounded-full overflow-hidden">
         <div className={`h-full ${color} transition-all duration-1000`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs font-mono text-[var(--text-muted)]">{fmtMs(ms)}</span>
+      <span className="text-xs font-mono text-muted">{fmtMs(ms)}</span>
     </div>
   )
 }
@@ -164,15 +164,15 @@ function SessionEvents({ sessionId }: { sessionId: string }) {
     refetchInterval: 5000,
   })
 
-  if (isLoading) return <p className="text-xs text-[var(--text-muted)] py-2">Loading events…</p>
-  if (events.length === 0) return <p className="text-xs text-[var(--text-muted)] py-2">No events recorded</p>
+  if (isLoading) return <p className="text-xs text-muted py-2">Loading events…</p>
+  if (events.length === 0) return <p className="text-xs text-muted py-2">No events recorded</p>
 
   return (
     <div className="space-y-0.5 max-h-48 overflow-y-auto">
       {events.map((ev) => (
         <div key={ev.id} className="flex items-start gap-2 text-xs">
-          <span className="text-[var(--text-muted)] font-mono shrink-0">{fmtTime(ev.createdAt)}</span>
-          <span className={`shrink-0 font-medium ${EVENT_COLORS[ev.eventType] ?? 'text-[var(--text-secondary)]'}`}>
+          <span className="text-muted font-mono shrink-0">{fmtTime(ev.createdAt)}</span>
+          <span className={`shrink-0 font-medium ${EVENT_COLORS[ev.eventType] ?? 'text-secondary'}`}>
             {ev.eventType}
           </span>
           {ev.eventType === 'secret_redacted' && (
@@ -184,7 +184,7 @@ function SessionEvents({ sessionId }: { sessionId: string }) {
             <span className="text-red-300">{String(ev.payload['reason'] ?? '')}</span>
           )}
           {ev.eventType === 'command_executed' && (
-            <span className="text-[var(--text-muted)]">
+            <span className="text-muted">
               exit {String(ev.payload['exitCode'] ?? '?')} · {fmtMs((ev.payload['durationMs'] as number) ?? 0)}
             </span>
           )}
@@ -215,7 +215,7 @@ function SessionCard({ session }: { session: SandboxSession }) {
         ? 'border-red-500/40'
         : session.isLeaseExpired
         ? 'border-orange-500/30'
-        : 'border-[var(--border)]'
+        : 'border-border'
     }`}>
       {/* Header row */}
       <div className="px-4 py-3 flex items-center gap-3">
@@ -225,8 +225,8 @@ function SessionCard({ session }: { session: SandboxSession }) {
         </span>
 
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-mono text-[var(--text-primary)] truncate">{cmdDisplay}</p>
-          <p className="text-xs text-[var(--text-muted)] truncate mt-0.5">
+          <p className="text-xs font-mono text-primary truncate">{cmdDisplay}</p>
+          <p className="text-xs text-muted truncate mt-0.5">
             Worker: <span className="font-mono">{session.leaseOwner}</span>
             {session.jobId && <> · job <span className="font-mono">{session.jobId.slice(0, 8)}</span></>}
           </p>
@@ -243,7 +243,7 @@ function SessionCard({ session }: { session: SandboxSession }) {
             <TimeoutCountdown remainingMs={session.timeoutRemainingMs} />
           )}
           {session.durationMs !== null && session.status !== 'running' && (
-            <span className="text-xs font-mono text-[var(--text-muted)]">{fmtMs(session.durationMs)}</span>
+            <span className="text-xs font-mono text-muted">{fmtMs(session.durationMs)}</span>
           )}
           {session.status === 'running' && (
             <button
@@ -256,7 +256,7 @@ function SessionCard({ session }: { session: SandboxSession }) {
           )}
           <button
             onClick={() => setExpanded((p) => !p)}
-            className="text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+            className="text-muted hover:text-secondary transition-colors"
           >
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
@@ -281,18 +281,18 @@ function SessionCard({ session }: { session: SandboxSession }) {
 
       {/* Expanded */}
       {expanded && (
-        <div className="border-t border-[var(--border)] px-4 py-3 space-y-4">
+        <div className="border-t border-border px-4 py-3 space-y-4">
           {/* Working dir */}
           <div>
-            <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Working Directory</p>
-            <p className="text-xs font-mono text-[var(--text-secondary)]">{session.workingDir}</p>
+            <p className="text-xs text-muted uppercase tracking-wide mb-1">Working Directory</p>
+            <p className="text-xs font-mono text-secondary">{session.workingDir}</p>
           </div>
 
           {/* Logs */}
           {(session.stdoutRedacted || session.stderrRedacted) && (
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide">
+                <p className="text-xs text-muted uppercase tracking-wide">
                   Output (redacted)
                 </p>
                 {session.secretsRedacted > 0 && (
@@ -303,13 +303,13 @@ function SessionCard({ session }: { session: SandboxSession }) {
                 )}
                 <button
                   onClick={() => setShowLogs((p) => !p)}
-                  className="ml-auto text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+                  className="ml-auto text-muted hover:text-secondary transition-colors"
                 >
                   {showLogs ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
               </div>
               {showLogs && (
-                <pre className="text-xs font-mono bg-[var(--bg-primary)] rounded p-2 overflow-x-auto max-h-40 text-[var(--text-secondary)] whitespace-pre-wrap">
+                <pre className="text-xs font-mono bg-bg rounded p-2 overflow-x-auto max-h-40 text-secondary whitespace-pre-wrap">
                   {(session.stdoutRedacted || session.stderrRedacted || '(empty)').slice(0, 3000)}
                 </pre>
               )}
@@ -318,7 +318,7 @@ function SessionCard({ session }: { session: SandboxSession }) {
 
           {/* Events */}
           <div>
-            <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-2">Event Log</p>
+            <p className="text-xs text-muted uppercase tracking-wide mb-2">Event Log</p>
             <SessionEvents sessionId={session.id} />
           </div>
         </div>
@@ -331,9 +331,9 @@ function SessionCard({ session }: { session: SandboxSession }) {
 
 function StatCard({ label, value, color }: { label: string; value: number; color?: string }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3">
-      <p className="text-xs text-[var(--text-muted)]">{label}</p>
-      <p className={`text-2xl font-semibold mt-1 ${color ?? 'text-[var(--text-primary)]'}`}>{value}</p>
+    <div className="rounded-lg border border-border bg-[var(--bg-surface)] px-4 py-3">
+      <p className="text-xs text-muted">{label}</p>
+      <p className={`text-2xl font-semibold mt-1 ${color ?? 'text-primary'}`}>{value}</p>
     </div>
   )
 }
@@ -370,11 +370,11 @@ export default function SandboxPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-[var(--border)]">
+      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-border">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-[var(--text-primary)]">Execution Sandbox</h1>
-            <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            <h1 className="text-lg font-semibold text-primary">Execution Sandbox</h1>
+            <p className="text-xs text-muted mt-0.5">
               Isolated job execution · secret-safe · worker-leased
             </p>
           </div>
@@ -383,7 +383,7 @@ export default function SandboxPage() {
               qc.invalidateQueries({ queryKey: ['sandbox-sessions'] })
               qc.invalidateQueries({ queryKey: ['sandbox-stats'] })
             }}
-            className="text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+            className="text-muted hover:text-secondary transition-colors"
             title="Refresh"
           >
             <RefreshCcw className="w-4 h-4" />
@@ -411,7 +411,7 @@ export default function SandboxPage() {
               className={`px-3 py-1 rounded text-xs transition-colors ${
                 filter === t.value
                   ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                  : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]'
+                  : 'text-muted hover:text-secondary hover:bg-elevated'
               }`}
             >
               {t.label}
@@ -423,13 +423,13 @@ export default function SandboxPage() {
       {/* Session list */}
       <div className="flex-1 overflow-y-auto px-6 py-4">
         {isLoading && (
-          <div className="flex items-center justify-center h-32 text-[var(--text-muted)] text-sm">
+          <div className="flex items-center justify-center h-32 text-muted text-sm">
             Loading sessions…
           </div>
         )}
 
         {!isLoading && sessions.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-48 text-[var(--text-muted)]">
+          <div className="flex flex-col items-center justify-center h-48 text-muted">
             <Terminal className="w-8 h-8 mb-2 opacity-40" />
             <p className="text-sm">No sandbox sessions found</p>
             <p className="text-xs mt-1 opacity-60">

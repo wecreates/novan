@@ -4,6 +4,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import App                        from './App.js'
 import { WorkspaceProvider }      from './contexts/WorkspaceContext.js'
+// Self-hosted Inter — avoids FOUT, eliminates Google Fonts dependency
+import '@fontsource/inter/400.css'
+import '@fontsource/inter/500.css'
+import '@fontsource/inter/600.css'
 import './index.css'
 
 const queryClient = new QueryClient({

@@ -30,9 +30,9 @@ const RETENTION = [
 
 function InfoRow({ label, value, mono = false }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-2.5 border-b border-[var(--border)] last:border-0">
-      <span className="text-xs text-[var(--text-muted)]">{label}</span>
-      <span className={`text-xs text-[var(--text-primary)] ${mono ? 'font-mono' : ''}`}>{value}</span>
+    <div className="flex items-center justify-between gap-4 py-2.5 border-b border-border last:border-0">
+      <span className="text-xs text-muted">{label}</span>
+      <span className={`text-xs text-primary ${mono ? 'font-mono' : ''}`}>{value}</span>
     </div>
   )
 }
@@ -40,7 +40,7 @@ function InfoRow({ label, value, mono = false }: { label: string; value: React.R
 function ToggleDisplay({ enabled }: { enabled: boolean }) {
   return (
     <div className={`relative inline-flex h-5 w-9 items-center rounded-full border transition-colors ${
-      enabled ? 'bg-blue-500/30 border-blue-500/40' : 'bg-[var(--bg-elevated)] border-[var(--border)]'
+      enabled ? 'bg-blue-500/30 border-blue-500/40' : 'bg-elevated border-border'
     }`}>
       <span className={`inline-block h-3.5 w-3.5 rounded-full transition-transform ${
         enabled
@@ -97,7 +97,7 @@ function ApiTokensSection() {
     <SectionPanel
       title="API Tokens"
       loading={isLoading}
-      actions={<Key className="w-4 h-4 text-[var(--text-muted)]" />}
+      actions={<Key className="w-4 h-4 text-muted" />}
     >
       {/* New-token banner */}
       {newToken && (
@@ -107,19 +107,19 @@ function ApiTokensSection() {
             Token saved as active — it won't be shown again. Store it safely.
           </div>
           <div className="flex items-center gap-2">
-            <code className="flex-1 text-xs font-mono text-[var(--text-primary)] bg-[var(--bg-elevated)] rounded px-2 py-1.5 break-all">
+            <code className="flex-1 text-xs font-mono text-primary bg-elevated rounded px-2 py-1.5 break-all">
               {newToken.token}
             </code>
             <button
               onClick={() => handleCopy(newToken.token)}
-              className="shrink-0 p-1.5 rounded hover:bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+              className="shrink-0 p-1.5 rounded hover:bg-elevated text-muted hover:text-primary transition-colors"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
             </button>
           </div>
           <button
             onClick={() => setNewToken(null)}
-            className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+            className="text-[10px] text-muted hover:text-secondary transition-colors"
           >
             Dismiss
           </button>
@@ -132,8 +132,8 @@ function ApiTokensSection() {
           {(data ?? []).map((t: ApiToken) => (
             <li key={t.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
               <div className="min-w-0">
-                <div className="text-xs font-medium text-[var(--text-primary)] truncate">{t.name}</div>
-                <div className="text-[10px] text-[var(--text-muted)] mt-0.5 font-mono">
+                <div className="text-xs font-medium text-primary truncate">{t.name}</div>
+                <div className="text-[10px] text-muted mt-0.5 font-mono">
                   {t.prefix}… · {t.scopes.join(', ')}
                   {t.lastUsedAt !== null && t.lastUsedAt !== undefined ? ` · last used ${fmtDate(t.lastUsedAt)}` : ' · never used'}
                 </div>
@@ -141,7 +141,7 @@ function ApiTokensSection() {
               <button
                 onClick={() => revokeMut.mutate(t.id)}
                 disabled={revokeMut.isPending}
-                className="shrink-0 p-1.5 rounded hover:bg-red-500/10 text-[var(--text-muted)] hover:text-red-400 transition-colors disabled:opacity-40"
+                className="shrink-0 p-1.5 rounded hover:bg-red-500/10 text-muted hover:text-red-400 transition-colors disabled:opacity-40"
                 title="Revoke token"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -150,19 +150,19 @@ function ApiTokensSection() {
           ))}
         </ul>
       ) : !isLoading ? (
-        <div className="px-4 py-3 text-xs text-[var(--text-muted)]">No active tokens.</div>
+        <div className="px-4 py-3 text-xs text-muted">No active tokens.</div>
       ) : null}
 
       {/* Create form */}
       {creating ? (
-        <div className="flex items-center gap-2 px-4 py-3 border-t border-[var(--border)]">
+        <div className="flex items-center gap-2 px-4 py-3 border-t border-border">
           <input
             autoFocus
             value={name}
             onChange={e => setName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && name.trim()) createMut.mutate() }}
             placeholder="Token name…"
-            className="flex-1 text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-blue-500/50"
+            className="flex-1 text-xs bg-elevated border border-border rounded px-2.5 py-1.5 text-primary placeholder:text-muted focus:outline-none focus:border-blue-500/50"
           />
           <button
             onClick={() => createMut.mutate()}
@@ -173,16 +173,16 @@ function ApiTokensSection() {
           </button>
           <button
             onClick={() => { setCreating(false); setName('') }}
-            className="text-xs px-2 py-1.5 rounded text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+            className="text-xs px-2 py-1.5 rounded text-muted hover:text-secondary transition-colors"
           >
             Cancel
           </button>
         </div>
       ) : (
-        <div className="px-4 py-2.5 border-t border-[var(--border)]">
+        <div className="px-4 py-2.5 border-t border-border">
           <button
             onClick={() => setCreating(true)}
-            className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+            className="flex items-center gap-1.5 text-xs text-muted hover:text-secondary transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             Create token
@@ -209,8 +209,8 @@ function PasteExistingToken() {
     setTimeout(() => setDone(false), 2000)
   }
   return (
-    <div className="px-4 py-2.5 border-t border-[var(--border)] space-y-1.5">
-      <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
+    <div className="px-4 py-2.5 border-t border-border space-y-1.5">
+      <div className="text-[10px] uppercase tracking-wide text-muted">
         Paste an existing token (e.g. from the seed script output)
       </div>
       <div className="flex items-center gap-2">
@@ -221,7 +221,7 @@ function PasteExistingToken() {
           placeholder="ops_..."
           spellCheck={false}
           type="password"
-          className="flex-1 text-xs font-mono bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-blue-500/50"
+          className="flex-1 text-xs font-mono bg-elevated border border-border rounded px-2.5 py-1.5 text-primary placeholder:text-muted focus:outline-none focus:border-blue-500/50"
         />
         <button
           onClick={apply}
@@ -231,7 +231,7 @@ function PasteExistingToken() {
           {done ? 'Saved ✓' : 'Set active'}
         </button>
       </div>
-      <div className="text-[10px] text-[var(--text-muted)]">
+      <div className="text-[10px] text-muted">
         Token is stored in browser localStorage and sent as <code>Authorization: Bearer …</code> on every API call.
       </div>
     </div>
@@ -287,7 +287,7 @@ function WebhooksSection() {
   const BASE_API = (import.meta as unknown as { env: Record<string, string> }).env['VITE_API_URL'] ?? 'http://localhost:3001'
 
   return (
-    <SectionPanel title="Webhooks" loading={isLoading} actions={<WebhookIcon className="w-4 h-4 text-[var(--text-muted)]" />}>
+    <SectionPanel title="Webhooks" loading={isLoading} actions={<WebhookIcon className="w-4 h-4 text-muted" />}>
       {/* New secret banner */}
       {newSecret && (
         <div className="mx-4 mt-3 mb-1 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 space-y-2">
@@ -296,17 +296,17 @@ function WebhooksSection() {
             Copy this secret now — it won't be shown again.
           </div>
           <div className="flex items-center gap-2">
-            <code className="flex-1 text-xs font-mono text-[var(--text-primary)] bg-[var(--bg-elevated)] rounded px-2 py-1.5 break-all">
+            <code className="flex-1 text-xs font-mono text-primary bg-elevated rounded px-2 py-1.5 break-all">
               {newSecret.secret}
             </code>
             <button
               onClick={() => handleCopy(newSecret.secret, 'secret')}
-              className="shrink-0 p-1.5 rounded hover:bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+              className="shrink-0 p-1.5 rounded hover:bg-elevated text-muted hover:text-primary transition-colors"
             >
               {copiedId === 'secret' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
             </button>
           </div>
-          <button onClick={() => setNewSecret(null)} className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors">
+          <button onClick={() => setNewSecret(null)} className="text-[10px] text-muted hover:text-secondary transition-colors">
             Dismiss
           </button>
         </div>
@@ -319,8 +319,8 @@ function WebhooksSection() {
             <li key={wh.id} className="px-4 py-2.5 space-y-1">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-xs font-medium text-[var(--text-primary)] truncate">{wh.name}</div>
-                  <div className="text-[10px] text-[var(--text-muted)] mt-0.5 font-mono break-all">
+                  <div className="text-xs font-medium text-primary truncate">{wh.name}</div>
+                  <div className="text-[10px] text-muted mt-0.5 font-mono break-all">
                     {`${BASE_API}/api/v1/webhooks/${wh.id}/trigger`}
                   </div>
                 </div>
@@ -329,7 +329,7 @@ function WebhooksSection() {
                     onClick={() => rotateMut.mutate(wh.id)}
                     disabled={rotateMut.isPending}
                     title="Rotate secret"
-                    className="p-1.5 rounded hover:bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors disabled:opacity-40"
+                    className="p-1.5 rounded hover:bg-elevated text-muted hover:text-secondary transition-colors disabled:opacity-40"
                   >
                     <RefreshCw className="w-3 h-3" />
                   </button>
@@ -337,7 +337,7 @@ function WebhooksSection() {
                     onClick={() => deleteMut.mutate(wh.id)}
                     disabled={deleteMut.isPending}
                     title="Delete webhook"
-                    className="p-1.5 rounded hover:bg-red-500/10 text-[var(--text-muted)] hover:text-red-400 transition-colors disabled:opacity-40"
+                    className="p-1.5 rounded hover:bg-red-500/10 text-muted hover:text-red-400 transition-colors disabled:opacity-40"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -346,13 +346,13 @@ function WebhooksSection() {
               <div className="flex flex-wrap gap-1">
                 {wh.events.length > 0
                   ? wh.events.map((ev: string) => (
-                    <span key={ev} className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-muted)] font-mono">
+                    <span key={ev} className="text-[10px] px-1.5 py-0.5 rounded bg-elevated border border-border text-muted font-mono">
                       {ev}
                     </span>
                   ))
-                  : <span className="text-[10px] text-[var(--text-muted)] italic">all events</span>
+                  : <span className="text-[10px] text-muted italic">all events</span>
                 }
-                <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded border font-medium ${wh.active ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-[var(--bg-elevated)] border-[var(--border)] text-[var(--text-muted)]'}`}>
+                <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded border font-medium ${wh.active ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-elevated border-border text-muted'}`}>
                   {wh.active ? 'active' : 'inactive'}
                 </span>
               </div>
@@ -360,32 +360,32 @@ function WebhooksSection() {
           ))}
         </ul>
       ) : !isLoading ? (
-        <div className="px-4 py-3 text-xs text-[var(--text-muted)]">No webhooks configured.</div>
+        <div className="px-4 py-3 text-xs text-muted">No webhooks configured.</div>
       ) : null}
 
       {/* Create form */}
       {creating ? (
-        <div className="px-4 py-3 border-t border-[var(--border)] space-y-2">
+        <div className="px-4 py-3 border-t border-border space-y-2">
           <input
             autoFocus
             value={whName}
             onChange={e => setWhName(e.target.value)}
             placeholder="Name…"
-            className="w-full text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-blue-500/50"
+            className="w-full text-xs bg-elevated border border-border rounded px-2.5 py-1.5 text-primary placeholder:text-muted focus:outline-none focus:border-blue-500/50"
           />
           <input
             value={whEvents}
             onChange={e => setWhEvents(e.target.value)}
             placeholder="Events (comma-separated, e.g. workflow.completed,risk.created)"
-            className="w-full text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-blue-500/50"
+            className="w-full text-xs bg-elevated border border-border rounded px-2.5 py-1.5 text-primary placeholder:text-muted focus:outline-none focus:border-blue-500/50"
           />
           <input
             value={whWorkflowId}
             onChange={e => setWhWorkflowId(e.target.value)}
             placeholder="Workflow ID to trigger (optional)"
-            className="w-full text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-blue-500/50"
+            className="w-full text-xs bg-elevated border border-border rounded px-2.5 py-1.5 text-primary placeholder:text-muted focus:outline-none focus:border-blue-500/50"
           />
-          <div className="text-[10px] text-[var(--text-muted)]">HMAC secret will be auto-generated and shown once.</div>
+          <div className="text-[10px] text-muted">HMAC secret will be auto-generated and shown once.</div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => createMut.mutate()}
@@ -396,17 +396,17 @@ function WebhooksSection() {
             </button>
             <button
               onClick={() => { setCreating(false); setWhName(''); setWhEvents(''); setWhWorkflowId('') }}
-              className="text-xs px-2 py-1.5 rounded text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+              className="text-xs px-2 py-1.5 rounded text-muted hover:text-secondary transition-colors"
             >
               Cancel
             </button>
           </div>
         </div>
       ) : (
-        <div className="px-4 py-2.5 border-t border-[var(--border)]">
+        <div className="px-4 py-2.5 border-t border-border">
           <button
             onClick={() => setCreating(true)}
-            className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+            className="flex items-center gap-1.5 text-xs text-muted hover:text-secondary transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             Create Webhook
@@ -468,15 +468,15 @@ function SchedulerSection() {
   })
 
   function statusColor(status?: string | null) {
-    if (!status) return 'text-[var(--text-muted)]'
+    if (!status) return 'text-muted'
     if (status === 'completed') return 'text-emerald-400'
     if (status === 'failed')    return 'text-red-400'
     if (status === 'running')   return 'text-blue-400'
-    return 'text-[var(--text-muted)]'
+    return 'text-muted'
   }
 
   return (
-    <SectionPanel title="Scheduler" loading={isLoading} actions={<CalendarClock className="w-4 h-4 text-[var(--text-muted)]" />}>
+    <SectionPanel title="Scheduler" loading={isLoading} actions={<CalendarClock className="w-4 h-4 text-muted" />}>
       {/* Toast */}
       {toast && (
         <div className="mx-4 mt-3 mb-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-400">
@@ -491,8 +491,8 @@ function SchedulerSection() {
             <li key={t.id} className="px-4 py-2.5 space-y-1">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-xs font-medium text-[var(--text-primary)] truncate">{t.name}</div>
-                  <div className="text-[10px] text-[var(--text-muted)] mt-0.5 font-mono">
+                  <div className="text-xs font-medium text-primary truncate">{t.name}</div>
+                  <div className="text-[10px] text-muted mt-0.5 font-mono">
                     {t.cronExpression} · {t.timezone} · {t.runCount} runs
                   </div>
                 </div>
@@ -505,7 +505,7 @@ function SchedulerSection() {
                     className="p-0.5 disabled:opacity-40"
                   >
                     <div className={`relative inline-flex h-5 w-9 items-center rounded-full border transition-colors ${
-                      t.enabled ? 'bg-blue-500/30 border-blue-500/40' : 'bg-[var(--bg-elevated)] border-[var(--border)]'
+                      t.enabled ? 'bg-blue-500/30 border-blue-500/40' : 'bg-elevated border-border'
                     }`}>
                       <span className={`inline-block h-3.5 w-3.5 rounded-full transition-transform ${
                         t.enabled ? 'translate-x-4 bg-blue-400' : 'translate-x-0.5 bg-[var(--text-muted)]'
@@ -517,7 +517,7 @@ function SchedulerSection() {
                     onClick={() => triggerMut.mutate(t.id)}
                     disabled={triggerMut.isPending}
                     title="Run now"
-                    className="p-1.5 rounded hover:bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-blue-400 transition-colors disabled:opacity-40"
+                    className="p-1.5 rounded hover:bg-elevated text-muted hover:text-blue-400 transition-colors disabled:opacity-40"
                   >
                     <Play className="w-3 h-3" />
                   </button>
@@ -526,7 +526,7 @@ function SchedulerSection() {
                     onClick={() => deleteMut.mutate(t.id)}
                     disabled={deleteMut.isPending}
                     title="Delete trigger"
-                    className="p-1.5 rounded hover:bg-red-500/10 text-[var(--text-muted)] hover:text-red-400 transition-colors disabled:opacity-40"
+                    className="p-1.5 rounded hover:bg-red-500/10 text-muted hover:text-red-400 transition-colors disabled:opacity-40"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -542,37 +542,37 @@ function SchedulerSection() {
           ))}
         </ul>
       ) : !isLoading ? (
-        <div className="px-4 py-3 text-xs text-[var(--text-muted)]">No scheduled triggers.</div>
+        <div className="px-4 py-3 text-xs text-muted">No scheduled triggers.</div>
       ) : null}
 
       {/* Create form */}
       {creating ? (
-        <div className="px-4 py-3 border-t border-[var(--border)] space-y-2">
+        <div className="px-4 py-3 border-t border-border space-y-2">
           <input
             autoFocus
             value={scName}
             onChange={e => setScName(e.target.value)}
             placeholder="Name…"
-            className="w-full text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-blue-500/50"
+            className="w-full text-xs bg-elevated border border-border rounded px-2.5 py-1.5 text-primary placeholder:text-muted focus:outline-none focus:border-blue-500/50"
           />
           <input
             value={scWorkflowId}
             onChange={e => setScWorkflowId(e.target.value)}
             placeholder="Workflow ID…"
-            className="w-full text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-blue-500/50"
+            className="w-full text-xs bg-elevated border border-border rounded px-2.5 py-1.5 text-primary placeholder:text-muted focus:outline-none focus:border-blue-500/50"
           />
           <div className="flex gap-2">
             <input
               value={scCron}
               onChange={e => setScCron(e.target.value)}
               placeholder="Cron expression (e.g. 0 9 * * 1)"
-              className="flex-1 text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-blue-500/50"
+              className="flex-1 text-xs bg-elevated border border-border rounded px-2.5 py-1.5 text-primary placeholder:text-muted focus:outline-none focus:border-blue-500/50"
             />
             <input
               value={scTimezone}
               onChange={e => setScTimezone(e.target.value)}
               placeholder="Timezone"
-              className="w-28 text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-blue-500/50"
+              className="w-28 text-xs bg-elevated border border-border rounded px-2.5 py-1.5 text-primary placeholder:text-muted focus:outline-none focus:border-blue-500/50"
             />
           </div>
           <textarea
@@ -580,7 +580,7 @@ function SchedulerSection() {
             onChange={e => setScDesc(e.target.value)}
             placeholder="Description (optional)"
             rows={2}
-            className="w-full text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-blue-500/50 resize-none"
+            className="w-full text-xs bg-elevated border border-border rounded px-2.5 py-1.5 text-primary placeholder:text-muted focus:outline-none focus:border-blue-500/50 resize-none"
           />
           <div className="flex items-center gap-2">
             <button
@@ -592,17 +592,17 @@ function SchedulerSection() {
             </button>
             <button
               onClick={() => { setCreating(false); setScName(''); setScWorkflowId(''); setScCron(''); setScTimezone('UTC'); setScDesc('') }}
-              className="text-xs px-2 py-1.5 rounded text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+              className="text-xs px-2 py-1.5 rounded text-muted hover:text-secondary transition-colors"
             >
               Cancel
             </button>
           </div>
         </div>
       ) : (
-        <div className="px-4 py-2.5 border-t border-[var(--border)]">
+        <div className="px-4 py-2.5 border-t border-border">
           <button
             onClick={() => setCreating(true)}
-            className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+            className="flex items-center gap-1.5 text-xs text-muted hover:text-secondary transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             Add Trigger
@@ -617,7 +617,7 @@ function WorkspaceSection() {
   return (
     <SectionPanel
       title="Workspace"
-      actions={<SettingsIcon className="w-4 h-4 text-[var(--text-muted)]" />}
+      actions={<SettingsIcon className="w-4 h-4 text-muted" />}
     >
       <div className="px-4 py-1">
         <InfoRow label="Workspace ID"  value="default" mono />
@@ -648,7 +648,7 @@ function ApiConfigSection() {
   return (
     <SectionPanel
       title="API Configuration"
-      actions={<Globe className="w-4 h-4 text-[var(--text-muted)]" />}
+      actions={<Globe className="w-4 h-4 text-muted" />}
     >
       <div className="px-4 py-1">
         <InfoRow label="Base URL" value={baseUrl} mono />
@@ -700,19 +700,19 @@ function QueueHealthSection() {
     <SectionPanel
       title="Queue Health"
       loading={isLoading}
-      actions={<Activity className="w-4 h-4 text-[var(--text-muted)]" />}
+      actions={<Activity className="w-4 h-4 text-muted" />}
     >
       {entries.length === 0 ? (
-        <div className="px-4 py-4 text-xs text-[var(--text-muted)]">
+        <div className="px-4 py-4 text-xs text-muted">
           Prometheus metrics available at{' '}
-          <code className="font-mono text-[var(--text-secondary)]">/metrics</code>
+          <code className="font-mono text-secondary">/metrics</code>
           {' '}on the API server.
         </div>
       ) : (
         <div className="p-4 grid grid-cols-2 gap-3">
           {entries.map(([name, m]) => (
-            <div key={name} className="rounded-lg border border-[var(--border)] p-3 space-y-1">
-              <div className="text-xs font-medium text-[var(--text-primary)] capitalize">{name}</div>
+            <div key={name} className="rounded-lg border border-border p-3 space-y-1">
+              <div className="text-xs font-medium text-primary capitalize">{name}</div>
               <div className="flex gap-3 text-xs">
                 <span className="text-amber-400">{m.waiting} waiting</span>
                 <span className="text-blue-400">{m.active} active</span>
@@ -730,7 +730,7 @@ function DataRetentionSection() {
   return (
     <SectionPanel
       title="Data Retention"
-      actions={<Database className="w-4 h-4 text-[var(--text-muted)]" />}
+      actions={<Database className="w-4 h-4 text-muted" />}
     >
       <div className="p-4 grid grid-cols-2 gap-3">
         {RETENTION.map(({ label, days, icon: Icon, color, bg }) => (
@@ -738,7 +738,7 @@ function DataRetentionSection() {
             <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${color}`} />
             <div>
               <div className={`text-xs font-medium ${color}`}>{label}</div>
-              <div className="text-[10px] text-[var(--text-muted)] mt-0.5">
+              <div className="text-[10px] text-muted mt-0.5">
                 {days} {days === 1 ? 'day' : 'days'}
               </div>
             </div>
@@ -753,14 +753,14 @@ function FeatureFlagsSection() {
   return (
     <SectionPanel
       title="Feature Flags"
-      actions={<Shield className="w-4 h-4 text-[var(--text-muted)]" />}
+      actions={<Shield className="w-4 h-4 text-muted" />}
     >
       <ul className="divide-y divide-[var(--border)]">
         {FEATURE_FLAGS.map(({ label, enabled, desc }) => (
           <li key={label} className="flex items-center justify-between gap-4 px-4 py-3">
             <div>
-              <div className="text-xs font-medium text-[var(--text-primary)]">{label}</div>
-              <div className="text-[10px] text-[var(--text-muted)] mt-0.5">{desc}</div>
+              <div className="text-xs font-medium text-primary">{label}</div>
+              <div className="text-[10px] text-muted mt-0.5">{desc}</div>
             </div>
             <ToggleDisplay enabled={enabled} />
           </li>
@@ -774,16 +774,16 @@ function FeatureFlagsSection() {
 
 export default function Settings() {
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-[var(--bg-primary)]">
+    <div className="flex flex-col h-screen overflow-hidden bg-bg">
 
       {/* Header */}
-      <header className="shrink-0 flex items-center gap-3 px-6 py-3 border-b border-[var(--border)] bg-[var(--bg-surface)]">
+      <header className="shrink-0 flex items-center gap-3 px-6 py-3 border-b border-border bg-[var(--bg-surface)]">
         <div className="w-7 h-7 rounded-lg bg-zinc-500/15 border border-zinc-500/20 flex items-center justify-center">
           <SettingsIcon className="w-3.5 h-3.5 text-zinc-400" />
         </div>
         <div>
-          <div className="text-sm font-semibold text-[var(--text-primary)]">Settings</div>
-          <div className="text-xs text-[var(--text-secondary)]">Workspace overview &amp; configuration</div>
+          <div className="text-sm font-semibold text-primary">Settings</div>
+          <div className="text-xs text-secondary">Workspace overview &amp; configuration</div>
         </div>
       </header>
 

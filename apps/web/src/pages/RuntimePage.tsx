@@ -71,10 +71,10 @@ export default function RuntimePage() {
       <div className="flex items-center gap-3">
         <Heart className={`w-5 h-5 ${s?.liveness === 'live' ? 'text-emerald-400 animate-pulse' : 'text-slate-500'}`} />
         <h1 className="text-xl font-semibold">Runtime — 24/7</h1>
-        <span className="text-xs text-[var(--text-muted)] ml-1">{s ? `${s.liveness}` : 'loading…'}</span>
+        <span className="text-xs text-muted ml-1">{s ? `${s.liveness}` : 'loading…'}</span>
         <div className="ml-auto flex items-center gap-2">
           <button onClick={() => triggerMind.mutate()} disabled={triggerMind.isPending}
-            className="px-3 py-1.5 text-xs rounded border border-[var(--border)] hover:bg-[var(--surface-hover)] flex items-center gap-1.5">
+            className="px-3 py-1.5 text-xs rounded border border-border hover:bg-[var(--surface-hover)] flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5" /> {triggerMind.isPending ? 'Running…' : 'Run mind cycle now'}
           </button>
         </div>
@@ -101,10 +101,10 @@ export default function RuntimePage() {
             {(mind.data?.data ?? []).map(c => (
               <li key={c.id} className="px-5 py-2 text-xs">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-[var(--text-muted)] w-32 shrink-0">{new Date(c.createdAt).toLocaleString().replace(',', '')}</span>
-                  <span className="text-[var(--text)]">{c.decision}</span>
+                  <span className="font-mono text-muted w-32 shrink-0">{new Date(c.createdAt).toLocaleString().replace(',', '')}</span>
+                  <span className="text-primary">{c.decision}</span>
                   {c.confidence !== null && (
-                    <span className="ml-auto text-[10px] text-[var(--text-muted)]">conf {c.confidence.toFixed(2)}</span>
+                    <span className="ml-auto text-[10px] text-muted">conf {c.confidence.toFixed(2)}</span>
                   )}
                 </div>
               </li>
@@ -122,7 +122,7 @@ export default function RuntimePage() {
             {(cal.data?.data ?? []).map(c => (
               <li key={c.source} className="px-5 py-2 text-xs flex items-center gap-3">
                 <span className="font-mono">{c.source}</span>
-                <span className="text-[var(--text-muted)]">{c.matched}/{c.total} matched ({(c.matchRate * 100).toFixed(0)}%)</span>
+                <span className="text-muted">{c.matched}/{c.total} matched ({(c.matchRate * 100).toFixed(0)}%)</span>
                 <span className={`ml-auto px-1.5 py-0.5 rounded border text-[10px] ${
                   c.suggestion === 'in_band' ? 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10'
                   : c.suggestion === 'lower_confidence' ? 'text-amber-300 border-amber-500/30 bg-amber-500/10'
@@ -145,7 +145,7 @@ export default function RuntimePage() {
             {(budgets.data?.data ?? []).map(b => (
               <li key={b.cronName} className="px-5 py-2 text-xs flex items-center gap-3">
                 <span className="font-mono">{b.cronName}</span>
-                <span className="text-[var(--text-muted)]">
+                <span className="text-muted">
                   {b.callsUsed}/{b.maxCalls} calls · ${b.costUsdUsed.toFixed(3)}/${b.maxCostUsd.toFixed(2)}
                 </span>
                 {b.blocked && <span className="ml-auto text-red-400">BLOCKED</span>}
@@ -161,9 +161,9 @@ export default function RuntimePage() {
           <ul className="divide-y divide-[var(--border)]">
             {s.lastErrors.slice(-10).reverse().map((e, i) => (
               <li key={i} className="px-5 py-2 text-xs">
-                <span className="font-mono text-[var(--text-muted)]">{new Date(e.at).toLocaleString().replace(',', '')}</span>
+                <span className="font-mono text-muted">{new Date(e.at).toLocaleString().replace(',', '')}</span>
                 <span className="ml-2 text-amber-300">{e.task}</span>
-                <span className="ml-2 text-[var(--text-muted)]">{e.message}</span>
+                <span className="ml-2 text-muted">{e.message}</span>
               </li>
             ))}
           </ul>
@@ -175,10 +175,10 @@ export default function RuntimePage() {
 
 function Section({ title, icon, children }: { title: string; icon?: JSX.Element; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
       </div>
       {children}
     </div>
@@ -187,13 +187,13 @@ function Section({ title, icon, children }: { title: string; icon?: JSX.Element;
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
+    <div className="rounded-lg border border-border bg-surface px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wider text-muted">{label}</div>
       <div className="font-mono mt-0.5 text-lg">{value}</div>
     </div>
   )
 }
 
 function Empty({ msg }: { msg: string }) {
-  return <div className="px-5 py-4 text-xs text-[var(--text-muted)] italic">{msg}</div>
+  return <div className="px-5 py-4 text-xs text-muted italic">{msg}</div>
 }

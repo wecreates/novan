@@ -88,7 +88,7 @@ export default function CompanyOperationsPage() {
     enabled:  searchTag.length >= 2,
   })
 
-  if (divisions.isLoading) return <div className="p-8 text-[var(--text-muted)]">Loading…</div>
+  if (divisions.isLoading) return <div className="p-8 text-muted">Loading…</div>
   const data = divisions.data?.data
   if (!data) return <div className="p-8 text-red-400">Could not load divisions</div>
 
@@ -101,14 +101,14 @@ export default function CompanyOperationsPage() {
       <div className="flex items-center gap-3">
         <Building2 className="w-6 h-6 text-sky-400" />
         <div className="flex-1">
-          <h1 className="text-xl font-medium text-[var(--text)]">Company Operations</h1>
-          <p className="text-xs text-[var(--text-muted)]">8 operational divisions over real runtime data</p>
+          <h1 className="text-xl font-medium text-primary">Company Operations</h1>
+          <p className="text-xs text-muted">8 operational divisions over real runtime data</p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => seedAgents.mutate()}
             disabled={seedAgents.isPending}
-            className="text-xs px-3 py-1.5 rounded border border-[var(--border)] hover:bg-[var(--bg-elevated)] flex items-center gap-1.5"
+            className="text-xs px-3 py-1.5 rounded border border-border hover:bg-elevated flex items-center gap-1.5"
             title="Create engineering/ops/infrastructure/security agent rows that aren't yet seeded"
           >
             <Users className="w-3 h-3" />
@@ -117,7 +117,7 @@ export default function CompanyOperationsPage() {
           <button
             onClick={() => autoTag.mutate()}
             disabled={autoTag.isPending}
-            className="text-xs px-3 py-1.5 rounded border border-[var(--border)] hover:bg-[var(--bg-elevated)] flex items-center gap-1.5"
+            className="text-xs px-3 py-1.5 rounded border border-border hover:bg-elevated flex items-center gap-1.5"
             title="Infer division tags for missions that don't have any"
           >
             <Wand2 className="w-3 h-3" />
@@ -126,7 +126,7 @@ export default function CompanyOperationsPage() {
           <button
             onClick={() => generateBriefing.mutate()}
             disabled={generateBriefing.isPending}
-            className="text-xs px-3 py-1.5 rounded border border-[var(--border)] hover:bg-[var(--bg-elevated)] flex items-center gap-1.5"
+            className="text-xs px-3 py-1.5 rounded border border-border hover:bg-elevated flex items-center gap-1.5"
             title="Manually trigger a weekly executive briefing (normally fires on 6-day cron)"
           >
             <FileText className="w-3 h-3" />
@@ -135,7 +135,7 @@ export default function CompanyOperationsPage() {
           <a
             href={enhancementsApi.divisionsCsvUrl(workspaceId)}
             download
-            className="text-xs px-3 py-1.5 rounded border border-[var(--border)] hover:bg-[var(--bg-elevated)] flex items-center gap-1.5"
+            className="text-xs px-3 py-1.5 rounded border border-border hover:bg-elevated flex items-center gap-1.5"
             title="Download division snapshot as CSV"
           >
             <Download className="w-3 h-3" />
@@ -152,21 +152,21 @@ export default function CompanyOperationsPage() {
             placeholder="e.g. reliability_target, growth, frontend"
             value={searchTag}
             onChange={e => setSearchTag(e.target.value.trim().toLowerCase())}
-            className="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-sky-500"
+            className="w-full bg-elevated border border-border rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-sky-500"
           />
           {searchTag.length >= 2 && tagSearch.data && (
             <div className="mt-3 space-y-1.5 text-sm">
               {tagSearch.data.data.missions.length === 0 ? (
-                <div className="text-[var(--text-muted)] text-xs">No missions match tag <span className="font-mono">{searchTag}</span>.</div>
+                <div className="text-muted text-xs">No missions match tag <span className="font-mono">{searchTag}</span>.</div>
               ) : (
                 tagSearch.data.data.missions.map(m => (
-                  <div key={m.id} className="flex items-center gap-3 py-1.5 border-b border-[var(--border)] last:border-0">
+                  <div key={m.id} className="flex items-center gap-3 py-1.5 border-b border-border last:border-0">
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300">{m.horizon}</span>
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-300">{m.status}</span>
-                    <span className="flex-1 truncate text-[var(--text)]">{m.title}</span>
-                    <span className="text-xs text-[var(--text-muted)] font-mono">{Math.round(m.progress*100)}%</span>
+                    <span className="flex-1 truncate text-primary">{m.title}</span>
+                    <span className="text-xs text-muted font-mono">{Math.round(m.progress*100)}%</span>
                     {m.divisions.length > 0 && (
-                      <span className="text-[10px] font-mono text-[var(--text-muted)]">[{m.divisions.join(', ')}]</span>
+                      <span className="text-[10px] font-mono text-muted">[{m.divisions.join(', ')}]</span>
                     )}
                   </div>
                 ))
@@ -221,12 +221,12 @@ export default function CompanyOperationsPage() {
         ) : (
           <div className="px-5 py-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             {missionGroups.map((g, i) => (
-              <div key={i} className="rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2">
-                <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+              <div key={i} className="rounded border border-border bg-elevated px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wider text-muted">
                   {g.horizon} · {g.status}
                 </div>
                 <div className="text-lg font-mono mt-1">{g.count}</div>
-                <div className="text-xs text-[var(--text-muted)] mt-0.5">{Math.round(g.avgProgress * 100)}% avg</div>
+                <div className="text-xs text-muted mt-0.5">{Math.round(g.avgProgress * 100)}% avg</div>
               </div>
             ))}
           </div>
@@ -269,10 +269,10 @@ export default function CompanyOperationsPage() {
               <KV k="Feature-use events 7d" v={growth.data.data.facts.featureUseEvents7d} />
               <KV k="Distinct features 7d"  v={growth.data.data.facts.distinctFeaturesUsed7d} />
               {growth.data.data.facts.growthKeywordFindings.length > 0 && (
-                <div className="pt-2 border-t border-[var(--border)]">
-                  <div className="text-xs text-[var(--text-muted)] mb-1">Recent growth signals</div>
+                <div className="pt-2 border-t border-border">
+                  <div className="text-xs text-muted mb-1">Recent growth signals</div>
                   {growth.data.data.facts.growthKeywordFindings.slice(0, 3).map((f, i) => (
-                    <div key={i} className="text-xs text-[var(--text)] truncate" title={f.summary}>
+                    <div key={i} className="text-xs text-primary truncate" title={f.summary}>
                       • {f.summary.slice(0, 60)} (conf {f.confidence.toFixed(2)})
                     </div>
                   ))}
@@ -289,8 +289,8 @@ export default function CompanyOperationsPage() {
 function Metric({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
   return (
     <div>
-      <div className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider">{label}</div>
-      <div className={`font-mono ${highlight ? 'text-amber-400' : 'text-[var(--text)]'}`}>{value}</div>
+      <div className="text-muted text-[10px] uppercase tracking-wider">{label}</div>
+      <div className={`font-mono ${highlight ? 'text-amber-400' : 'text-primary'}`}>{value}</div>
     </div>
   )
 }
@@ -304,10 +304,10 @@ function CrossBlockerRow({ b }: { b: CrossDivisionBlockerDTO }) {
                                     'bg-slate-500/20 text-slate-300'
       }`}>{b.severity}</span>
       <span className="text-xs uppercase tracking-wider text-sky-400 font-mono">{b.from}</span>
-      <ArrowRight className="w-3 h-3 text-[var(--text-muted)]" />
-      <span className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-mono">{b.to.join(', ')}</span>
-      <span className="flex-1 text-[var(--text)] truncate">{b.title}</span>
-      <span className="text-xs text-[var(--text-muted)] font-mono">{fmtDays(b.ageDays)}</span>
+      <ArrowRight className="w-3 h-3 text-muted" />
+      <span className="text-xs uppercase tracking-wider text-muted font-mono">{b.to.join(', ')}</span>
+      <span className="flex-1 text-primary truncate">{b.title}</span>
+      <span className="text-xs text-muted font-mono">{fmtDays(b.ageDays)}</span>
     </li>
   )
 }
@@ -316,18 +316,18 @@ function KV({ k, v, highlight }: { k: string; v: number | string | null | undefi
   const display = v === null || v === undefined ? '—' : v
   return (
     <div className="flex justify-between">
-      <span className="text-[var(--text-muted)]">{k}</span>
-      <span className={`font-mono text-sm ${highlight ? 'text-amber-400' : 'text-[var(--text)]'}`}>{display}</span>
+      <span className="text-muted">{k}</span>
+      <span className={`font-mono text-sm ${highlight ? 'text-amber-400' : 'text-primary'}`}>{display}</span>
     </div>
   )
 }
 
 function Section({ title, icon, children }: { title: string; icon?: JSX.Element; children: JSX.Element | JSX.Element[] }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-5 py-3 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-5 py-3 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
       </div>
       {children}
     </div>
@@ -336,10 +336,10 @@ function Section({ title, icon, children }: { title: string; icon?: JSX.Element;
 
 function ReportPanel({ title, icon, children }: { title: string; icon: JSX.Element; children: JSX.Element | JSX.Element[] }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-      <div className="px-5 py-3 border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-surface">
+      <div className="px-5 py-3 border-b border-border flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <h3 className="text-sm font-medium text-primary">{title}</h3>
       </div>
       {children}
     </div>
@@ -347,5 +347,5 @@ function ReportPanel({ title, icon, children }: { title: string; icon: JSX.Eleme
 }
 
 function EmptyRow({ text }: { text: string }) {
-  return <div className="px-5 py-6 text-[var(--text-muted)] text-sm">{text}</div>
+  return <div className="px-5 py-6 text-muted text-sm">{text}</div>
 }

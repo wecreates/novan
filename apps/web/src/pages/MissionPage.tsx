@@ -45,7 +45,7 @@ export default function MissionPage() {
       <div className="flex items-center gap-3">
         <Compass className="w-5 h-5 text-emerald-400" />
         <h1 className="text-xl font-semibold">Mission Charter</h1>
-        <span className="text-xs text-[var(--text-muted)] ml-1">
+        <span className="text-xs text-muted ml-1">
           {c ? `${c.totalPrinciples} principles · ${c.hash}` : 'loading…'}
         </span>
         {a && (
@@ -53,7 +53,7 @@ export default function MissionPage() {
             adherence <span className={a.overall >= 0.9 ? 'text-emerald-300' : a.overall >= 0.7 ? 'text-sky-300' : 'text-amber-300'}>
               {(a.overall * 100).toFixed(0)}%
             </span>{' '}
-            <span className="text-[var(--text-muted)]">({a.satisfied}/{a.totalPrinciples})</span>
+            <span className="text-muted">({a.satisfied}/{a.totalPrinciples})</span>
           </span>
         )}
       </div>
@@ -61,7 +61,7 @@ export default function MissionPage() {
       {/* Mission statement banner */}
       <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-5 py-4 text-sm">
         <p className="text-emerald-300 font-medium mb-1">Core directive</p>
-        <p className="text-[var(--text)] leading-relaxed">
+        <p className="text-primary leading-relaxed">
           Continuously build, improve, secure, optimize, govern, and evolve Novan 24/7
           without losing stability, trust, safety, or operator alignment.
         </p>
@@ -74,27 +74,27 @@ export default function MissionPage() {
             const adh = a?.bySection[p.id]
             const ok = adh?.satisfied ?? null
             return (
-              <li key={p.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+              <li key={p.id} className="rounded-lg border border-border bg-surface">
                 <div className="px-4 py-3">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] font-mono text-[var(--text-muted)]">{p.id.toUpperCase()}</span>
-                    <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{p.section}</span>
+                    <span className="text-[10px] font-mono text-muted">{p.id.toUpperCase()}</span>
+                    <span className="text-[10px] uppercase tracking-wider text-muted">{p.section}</span>
                     {ok === true && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 ml-auto" />}
                     {ok === false && <AlertCircle className="w-3.5 h-3.5 text-amber-400 ml-auto" />}
                   </div>
-                  <p className="text-sm text-[var(--text)] mb-2">{p.statement}</p>
+                  <p className="text-sm text-primary mb-2">{p.statement}</p>
                   <div className="flex gap-4 text-[10px]">
                     <div className="flex-1">
-                      <div className="text-[var(--text-muted)] uppercase tracking-wider mb-0.5">requires</div>
+                      <div className="text-muted uppercase tracking-wider mb-0.5">requires</div>
                       <div className="font-mono text-sky-300/80">{p.requires.join(' · ')}</div>
                     </div>
                     <div className="flex-1">
-                      <div className="text-[var(--text-muted)] uppercase tracking-wider mb-0.5">invariants</div>
-                      <div className="font-mono text-[var(--text-muted)]">{p.invariants.join(' · ')}</div>
+                      <div className="text-muted uppercase tracking-wider mb-0.5">invariants</div>
+                      <div className="font-mono text-muted">{p.invariants.join(' · ')}</div>
                     </div>
                   </div>
                   {adh && adh.signals.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-[var(--border)] text-[10px] text-[var(--text-muted)] font-mono">
+                    <div className="mt-2 pt-2 border-t border-border text-[10px] text-muted font-mono">
                       live: {adh.signals.join(' · ')}
                     </div>
                   )}
@@ -105,8 +105,8 @@ export default function MissionPage() {
         </ul>
       )}
 
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-5 py-3 text-[11px] text-[var(--text-muted)]">
-        Charter hash <span className="font-mono text-[var(--text)]">{c?.hash ?? '…'}</span> is committed to source. Changes require a code review.
+      <div className="rounded-lg border border-border bg-surface px-5 py-3 text-[11px] text-muted">
+        Charter hash <span className="font-mono text-primary">{c?.hash ?? '…'}</span> is committed to source. Changes require a code review.
         Adherence signals come from live database state; principles never silently auto-pass.
       </div>
     </div>

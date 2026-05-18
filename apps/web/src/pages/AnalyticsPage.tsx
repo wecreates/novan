@@ -101,7 +101,7 @@ function CostByProvider({ byProvider }: { byProvider: AIUsageSummary['byProvider
     <SectionPanel title="Cost by Provider">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-[var(--border)] text-[var(--text-secondary)] text-xs uppercase tracking-wider">
+          <tr className="border-b border-border text-secondary text-xs uppercase tracking-wider">
             <th className="text-left px-4 py-2 font-medium">Provider</th>
             <th className="text-right px-4 py-2 font-medium">Requests</th>
             <th className="text-right px-4 py-2 font-medium">Tokens</th>
@@ -112,13 +112,13 @@ function CostByProvider({ byProvider }: { byProvider: AIUsageSummary['byProvider
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={5} className="text-center py-6 text-[var(--text-muted)]">No data</td>
+              <td colSpan={5} className="text-center py-6 text-muted">No data</td>
             </tr>
           ) : rows.map((r) => (
-            <tr key={r.provider} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]">
-              <td className="px-4 py-2 font-medium text-[var(--text-primary)]">{r.provider}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-[var(--text-secondary)]">{fmtNum(r.requests)}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-[var(--text-secondary)]">{fmtNum(r.promptTokens + r.outputTokens)}</td>
+            <tr key={r.provider} className="border-b border-border last:border-0 hover:bg-elevated">
+              <td className="px-4 py-2 font-medium text-primary">{r.provider}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-secondary">{fmtNum(r.requests)}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-secondary">{fmtNum(r.promptTokens + r.outputTokens)}</td>
               <td className="px-4 py-2 text-right tabular-nums text-amber-400">{fmtCost(r.costUsd)}</td>
               <td className="px-4 py-2">
                 <Bar value={r.costUsd} max={maxCost} color="var(--accent-yellow)" />
@@ -144,7 +144,7 @@ function CostByModel({ byModel }: { byModel: AIUsageSummary['byModel'] }) {
     <SectionPanel title="Cost by Model">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-[var(--border)] text-[var(--text-secondary)] text-xs uppercase tracking-wider">
+          <tr className="border-b border-border text-secondary text-xs uppercase tracking-wider">
             <th className="text-left px-4 py-2 font-medium">Model</th>
             <th className="text-right px-4 py-2 font-medium">Requests</th>
             <th className="text-right px-4 py-2 font-medium">Cost</th>
@@ -154,12 +154,12 @@ function CostByModel({ byModel }: { byModel: AIUsageSummary['byModel'] }) {
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={4} className="text-center py-6 text-[var(--text-muted)]">No data</td>
+              <td colSpan={4} className="text-center py-6 text-muted">No data</td>
             </tr>
           ) : rows.map((r) => (
-            <tr key={r.model} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]">
-              <td className="px-4 py-2 font-medium text-[var(--text-primary)] font-mono text-xs">{r.model}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-[var(--text-secondary)]">{fmtNum(r.requests)}</td>
+            <tr key={r.model} className="border-b border-border last:border-0 hover:bg-elevated">
+              <td className="px-4 py-2 font-medium text-primary font-mono text-xs">{r.model}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-secondary">{fmtNum(r.requests)}</td>
               <td className="px-4 py-2 text-right tabular-nums text-amber-400">{fmtCost(r.costUsd)}</td>
               <td className="px-4 py-2">
                 <Bar value={r.costUsd} max={maxCost} color="var(--accent-orange)" />
@@ -182,12 +182,12 @@ function UsageByTaskType({ byTaskType }: { byTaskType: AIUsageSummary['byTaskTyp
     <SectionPanel title="Usage by Task Type">
       <div className="px-4 py-2 flex flex-col gap-3">
         {rows.length === 0 ? (
-          <p className="text-[var(--text-muted)] text-sm py-4 text-center">No data</p>
+          <p className="text-muted text-sm py-4 text-center">No data</p>
         ) : rows.map(([type, count]) => (
           <div key={type} className="flex flex-col gap-1">
             <div className="flex justify-between text-xs">
-              <span className="text-[var(--text-secondary)]">{type}</span>
-              <span className="tabular-nums text-[var(--text-primary)]">{fmtNum(count)}</span>
+              <span className="text-secondary">{type}</span>
+              <span className="tabular-nums text-primary">{fmtNum(count)}</span>
             </div>
             <Bar value={count} max={maxCount} color="var(--accent-blue)" />
           </div>
@@ -208,7 +208,7 @@ function HistoryTable({ data }: { data: AIUsageDay[] }) {
     <SectionPanel title="7-Day Usage History">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-[var(--border)] text-[var(--text-secondary)] text-xs uppercase tracking-wider">
+          <tr className="border-b border-border text-secondary text-xs uppercase tracking-wider">
             <th className="text-left px-4 py-2 font-medium">Date</th>
             <th className="text-right px-4 py-2 font-medium">Requests</th>
             <th className="text-right px-4 py-2 font-medium">Tokens</th>
@@ -220,13 +220,13 @@ function HistoryTable({ data }: { data: AIUsageDay[] }) {
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={6} className="text-center py-6 text-[var(--text-muted)]">No data</td>
+              <td colSpan={6} className="text-center py-6 text-muted">No data</td>
             </tr>
           ) : rows.map((r) => (
-            <tr key={r.date} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]">
-              <td className="px-4 py-2 tabular-nums text-[var(--text-secondary)] font-mono text-xs">{r.date}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-[var(--text-primary)]">{fmtNum(r.requests)}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-[var(--text-secondary)]">{fmtNum(r.tokens)}</td>
+            <tr key={r.date} className="border-b border-border last:border-0 hover:bg-elevated">
+              <td className="px-4 py-2 tabular-nums text-secondary font-mono text-xs">{r.date}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-primary">{fmtNum(r.requests)}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-secondary">{fmtNum(r.tokens)}</td>
               <td className="px-4 py-2">
                 <Bar value={r.tokens} max={maxTokens} color="var(--accent-blue)" />
               </td>
@@ -284,16 +284,16 @@ function WorkflowRunStatus({ workflowRuns }: { workflowRuns: AnalyticsSummary['w
                   className="w-2 h-2 rounded-full shrink-0"
                   style={{ background: STATUS_COLORS[status] ?? 'var(--text-muted)' }}
                 />
-                <span className="text-[var(--text-secondary)] capitalize">{status}</span>
+                <span className="text-secondary capitalize">{status}</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="tabular-nums text-[var(--text-primary)]">{fmtNum(count)}</span>
-                <span className="text-[var(--text-muted)] w-10 text-right">{total > 0 ? fmtPct((count / total) * 100) : '—'}</span>
+                <span className="tabular-nums text-primary">{fmtNum(count)}</span>
+                <span className="text-muted w-10 text-right">{total > 0 ? fmtPct((count / total) * 100) : '—'}</span>
               </div>
             </div>
           ))}
           {rows.length === 0 && (
-            <p className="text-[var(--text-muted)] text-sm text-center py-2">No data</p>
+            <p className="text-muted text-sm text-center py-2">No data</p>
           )}
         </div>
       </div>
@@ -311,12 +311,12 @@ function RecentEventTypes({ recentEvents }: { recentEvents: AnalyticsSummary['re
     <SectionPanel title="Recent Event Types" subtitle="Top 10">
       <div className="px-4 py-2 flex flex-col gap-2.5">
         {top10.length === 0 ? (
-          <p className="text-[var(--text-muted)] text-sm py-4 text-center">No data</p>
+          <p className="text-muted text-sm py-4 text-center">No data</p>
         ) : top10.map((e) => (
           <div key={e.type} className="flex flex-col gap-1">
             <div className="flex justify-between text-xs">
-              <span className="text-[var(--text-secondary)] font-mono">{e.type}</span>
-              <span className="tabular-nums text-[var(--text-primary)]">{fmtNum(e.count)}</span>
+              <span className="text-secondary font-mono">{e.type}</span>
+              <span className="tabular-nums text-primary">{fmtNum(e.count)}</span>
             </div>
             <Bar value={e.count} max={maxCount} color="var(--accent-green)" />
           </div>
@@ -356,16 +356,16 @@ export default function AnalyticsPage() {
   const summary = summaryQ.data?.data
 
   return (
-    <div className="h-full overflow-auto bg-[var(--bg-primary)]">
+    <div className="h-full overflow-auto bg-bg">
       <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col gap-6">
 
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-[var(--text-primary)]">Analytics</h1>
-            <p className="text-xs text-[var(--text-secondary)] mt-0.5">AI usage, costs, and operational metrics</p>
+            <h1 className="text-xl font-semibold text-primary">Analytics</h1>
+            <p className="text-xs text-secondary mt-0.5">AI usage, costs, and operational metrics</p>
           </div>
-          <div className="flex items-center gap-1 bg-[var(--bg-elevated)] rounded-lg p-1 border border-[var(--border)]">
+          <div className="flex items-center gap-1 bg-elevated rounded-lg p-1 border border-border">
             {(['1d', '7d', '30d'] as const).map((w) => (
               <button
                 key={w}
@@ -373,7 +373,7 @@ export default function AnalyticsPage() {
                 className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
                   window === w
                     ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    : 'text-secondary hover:text-primary'
                 }`}
               >
                 {w}
@@ -386,13 +386,13 @@ export default function AnalyticsPage() {
         {aiUsageQ.isLoading ? (
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="h-24 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] animate-pulse" />
+              <div key={i} className="h-24 rounded-xl border border-border bg-[var(--bg-surface)] animate-pulse" />
             ))}
           </div>
         ) : usage ? (
           <UsageCards data={usage} />
         ) : (
-          <div className="text-[var(--text-muted)] text-sm text-center py-6">Failed to load usage data</div>
+          <div className="text-muted text-sm text-center py-6">Failed to load usage data</div>
         )}
 
         {/* Provider + Model tables */}
@@ -417,7 +417,7 @@ export default function AnalyticsPage() {
         {summaryQ.isLoading ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {[0, 1].map((i) => (
-              <div key={i} className="h-48 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] animate-pulse" />
+              <div key={i} className="h-48 rounded-xl border border-border bg-[var(--bg-surface)] animate-pulse" />
             ))}
           </div>
         ) : summary ? (

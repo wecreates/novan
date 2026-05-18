@@ -47,19 +47,19 @@ export default function AuditTrailPage() {
       <div className="flex items-center gap-3">
         <Clock className="w-5 h-5 text-sky-400" />
         <h1 className="text-xl font-semibold">Audit Trail</h1>
-        <span className="text-xs text-[var(--text-muted)] ml-1">read-only · last {limit} events</span>
+        <span className="text-xs text-muted ml-1">read-only · last {limit} events</span>
         <div className="ml-auto flex items-center gap-2">
           <div className="flex items-center gap-1 text-xs">
-            <Filter className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+            <Filter className="w-3.5 h-3.5 text-muted" />
             <input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               placeholder="filter type (substring)"
-              className="bg-[var(--surface)] border border-[var(--border)] rounded px-2 py-1 w-48"
+              className="bg-surface border border-border rounded px-2 py-1 w-48"
             />
           </div>
           <select value={limit} onChange={(e) => setLimit(Number(e.target.value))}
-            className="bg-[var(--surface)] border border-[var(--border)] rounded text-xs px-2 py-1">
+            className="bg-surface border border-border rounded text-xs px-2 py-1">
             {[50, 100, 250, 500].map(n => <option key={n} value={n}>{n}</option>)}
           </select>
           <button onClick={() => events.refetch()} className="p-1.5 rounded hover:bg-[var(--surface-hover)]">
@@ -68,19 +68,19 @@ export default function AuditTrailPage() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+      <div className="rounded-lg border border-border bg-surface">
         {rows.length === 0 ? (
-          <div className="px-5 py-6 text-sm text-[var(--text-muted)] text-center">No events match.</div>
+          <div className="px-5 py-6 text-sm text-muted text-center">No events match.</div>
         ) : (
           <ul className="divide-y divide-[var(--border)]">
             {rows.map(e => (
               <li key={e.id} className="px-4 py-2 text-xs flex items-start gap-3">
-                <span className="text-[var(--text-muted)] font-mono whitespace-nowrap w-28">
+                <span className="text-muted font-mono whitespace-nowrap w-28">
                   {new Date(e.createdAt).toLocaleString().replace(',', '')}
                 </span>
                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono whitespace-nowrap ${typeColor(e.type)}`}>{e.type}</span>
-                <span className="font-mono text-[var(--text-muted)] whitespace-nowrap">{e.source}</span>
-                <span className="text-[var(--text)] font-mono truncate flex-1" title={JSON.stringify(e.payload ?? {})}>
+                <span className="font-mono text-muted whitespace-nowrap">{e.source}</span>
+                <span className="text-primary font-mono truncate flex-1" title={JSON.stringify(e.payload ?? {})}>
                   {e.payload ? JSON.stringify(e.payload).slice(0, 280) : '—'}
                 </span>
                 <NavLink to={`/brain?replay_at=${e.createdAt}`}

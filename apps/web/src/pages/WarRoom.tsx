@@ -47,13 +47,13 @@ function ApprovalsConsole() {
       subtitle={`${pending.length} pending`}
       loading={isLoading}
       actions={
-        <span className={pending.length > 0 ? 'text-amber-400 text-xs font-medium' : 'text-[var(--text-muted)] text-xs'}>
+        <span className={pending.length > 0 ? 'text-amber-400 text-xs font-medium' : 'text-muted text-xs'}>
           {pending.length > 0 ? `${pending.length} awaiting` : 'All clear'}
         </span>
       }
     >
       {pending.length === 0 ? (
-        <div className="flex items-center gap-2 px-4 py-6 text-[var(--text-muted)] text-sm">
+        <div className="flex items-center gap-2 px-4 py-6 text-muted text-sm">
           <CheckCircle className="w-4 h-4 text-emerald-500" />
           No pending approvals
         </div>
@@ -83,14 +83,14 @@ function ApprovalRow({ approval: a, onApprove, onReject, loading }: {
   const expiresSoon = a.expiresAt - Date.now() < 60 * 60 * 1000  // < 1h
 
   return (
-    <li className="px-4 py-3 hover:bg-[var(--bg-elevated)] transition-colors">
+    <li className="px-4 py-3 hover:bg-elevated transition-colors">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-sm font-medium text-[var(--text-primary)] truncate">{a.operationLabel}</span>
+            <span className="text-sm font-medium text-primary truncate">{a.operationLabel}</span>
             <StatusBadge status={a.risk} label={a.risk} />
           </div>
-          <div className="text-xs text-[var(--text-secondary)]">
+          <div className="text-xs text-secondary">
             Run: {a.runId.slice(0, 8)}… · Step: {a.stepId.slice(0, 8)}…
           </div>
           {expiresSoon && (
@@ -150,13 +150,13 @@ function WorkflowMonitor() {
       }
     >
       {runs.length === 0 ? (
-        <div className="px-4 py-6 text-[var(--text-muted)] text-sm">No runs yet</div>
+        <div className="px-4 py-6 text-muted text-sm">No runs yet</div>
       ) : (
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-[var(--border)]">
+            <tr className="border-b border-border">
               {['Run ID', 'Workflow', 'Status', 'Started', 'Duration', ''].map((h, i) => (
-                <th key={i} className="px-4 py-2 text-left text-[var(--text-muted)] font-medium uppercase tracking-wider">{h}</th>
+                <th key={i} className="px-4 py-2 text-left text-muted font-medium uppercase tracking-wider">{h}</th>
               ))}
             </tr>
           </thead>
@@ -200,14 +200,14 @@ function WorkflowRunRow({ run: r, onRollback }: { run: WorkflowRun; onRollback: 
   }
 
   return (
-    <tr className="hover:bg-[var(--bg-elevated)] transition-colors">
-      <td className="px-4 py-2.5 font-mono text-[var(--text-secondary)]">{r.id.slice(0, 8)}…</td>
-      <td className="px-4 py-2.5 text-[var(--text-secondary)] truncate max-w-[8rem]">{r.workflowId.slice(0, 8)}…</td>
+    <tr className="hover:bg-elevated transition-colors">
+      <td className="px-4 py-2.5 font-mono text-secondary">{r.id.slice(0, 8)}…</td>
+      <td className="px-4 py-2.5 text-secondary truncate max-w-[8rem]">{r.workflowId.slice(0, 8)}…</td>
       <td className="px-4 py-2.5"><StatusBadge status={r.status} pulse={r.status === 'running'} /></td>
-      <td className="px-4 py-2.5 text-[var(--text-secondary)]">
+      <td className="px-4 py-2.5 text-secondary">
         {r.triggeredAt ? formatDistanceToNow(r.triggeredAt, { addSuffix: true }) : '—'}
       </td>
-      <td className="px-4 py-2.5 text-[var(--text-secondary)] tabular-nums">{duration}</td>
+      <td className="px-4 py-2.5 text-secondary tabular-nums">{duration}</td>
       <td className="px-4 py-2.5">
         {canRollback && (
           <button
@@ -259,12 +259,12 @@ function QueueHealth() {
   return (
     <SectionPanel title="Queue Depths" subtitle="Real-time" loading={isLoading}>
       {queues.length === 0 ? (
-        <div className="px-4 py-6 text-[var(--text-muted)] text-sm">No data</div>
+        <div className="px-4 py-6 text-muted text-sm">No data</div>
       ) : (
         <div className="p-4 grid grid-cols-2 gap-3">
           {queues.map(([name, m]) => (
-            <div key={name} className="flex flex-col gap-1 rounded-lg border border-[var(--border)] p-3">
-              <div className="text-xs font-medium text-[var(--text-primary)] capitalize">{name}</div>
+            <div key={name} className="flex flex-col gap-1 rounded-lg border border-border p-3">
+              <div className="text-xs font-medium text-primary capitalize">{name}</div>
               <div className="flex gap-3 text-xs">
                 <span className="text-amber-400">{m.waiting} waiting</span>
                 <span className="text-blue-400">{m.active} active</span>
@@ -297,11 +297,11 @@ function EventTimeline() {
       subtitle="Last 30 min"
       loading={isLoading}
       actions={
-        <span className="text-[var(--text-muted)] text-xs">{events.length} events</span>
+        <span className="text-muted text-xs">{events.length} events</span>
       }
     >
       {events.length === 0 ? (
-        <div className="flex items-center gap-2 px-4 py-6 text-[var(--text-muted)] text-sm">
+        <div className="flex items-center gap-2 px-4 py-6 text-muted text-sm">
           <Zap className="w-4 h-4" />
           No events yet
         </div>
@@ -321,17 +321,17 @@ function EventRow({ event: e }: { event: OpsEvent }) {
   const isSuccess = e.type.includes('completed') || e.type.includes('created')
 
   return (
-    <li className="px-4 py-2 hover:bg-[var(--bg-elevated)] transition-colors">
+    <li className="px-4 py-2 hover:bg-elevated transition-colors">
       <div className="flex items-center gap-3">
         <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
           isFailure ? 'bg-red-400' : isSuccess ? 'bg-emerald-400' : 'bg-blue-400'
         }`} />
-        <span className="font-mono text-xs text-[var(--text-secondary)] flex-1 truncate">{e.type}</span>
-        <span className="text-xs text-[var(--text-muted)] shrink-0 tabular-nums">
+        <span className="font-mono text-xs text-secondary flex-1 truncate">{e.type}</span>
+        <span className="text-xs text-muted shrink-0 tabular-nums">
           {formatDistanceToNow(e.createdAt, { addSuffix: true })}
         </span>
       </div>
-      <div className="ml-4.5 mt-0.5 text-xs text-[var(--text-muted)] font-mono truncate">
+      <div className="ml-4.5 mt-0.5 text-xs text-muted font-mono truncate">
         {e.source} · {e.traceId.slice(0, 8)}…
       </div>
     </li>
@@ -375,18 +375,18 @@ function BrowserPanel() {
       subtitle={`${sessions.length} sessions`}
       loading={isLoading}
       actions={
-        <Globe className="w-4 h-4 text-[var(--text-muted)]" />
+        <Globe className="w-4 h-4 text-muted" />
       }
     >
       {/* Input row */}
-      <div className="p-3 border-b border-[var(--border)] flex gap-2">
+      <div className="p-3 border-b border-border flex gap-2">
         <input
           type="url"
           value={url}
           onChange={(e) => { setUrl(e.target.value) }}
           onKeyDown={(e) => { if (e.key === 'Enter') { void handleCapture() } }}
           placeholder="https://example.com"
-          className="flex-1 bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-blue-500/40"
+          className="flex-1 bg-elevated border border-border rounded px-3 py-1.5 text-sm text-primary placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-blue-500/40"
         />
         <button
           onClick={() => { void handleCapture() }}
@@ -398,14 +398,14 @@ function BrowserPanel() {
       </div>
 
       {lastError && (
-        <div className="px-4 py-2 text-xs text-red-400 bg-red-500/5 border-b border-[var(--border)]">
+        <div className="px-4 py-2 text-xs text-red-400 bg-red-500/5 border-b border-border">
           {lastError}
         </div>
       )}
 
       {/* Session list */}
       {sessions.length === 0 ? (
-        <div className="flex items-center gap-2 px-4 py-6 text-[var(--text-muted)] text-sm">
+        <div className="flex items-center gap-2 px-4 py-6 text-muted text-sm">
           <Camera className="w-4 h-4" />
           No capture sessions yet
         </div>
@@ -429,22 +429,22 @@ function BrowserSessionRow({ session: s }: { session: BrowserSession }) {
   const age = formatDistanceToNow(s.startedAt, { addSuffix: true })
 
   return (
-    <li className="px-4 py-2.5 hover:bg-[var(--bg-elevated)] transition-colors">
+    <li className="px-4 py-2.5 hover:bg-elevated transition-colors">
       <div className="flex items-start gap-3">
         <div className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${statusColor}`} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-[var(--text-secondary)] truncate flex-1">
+            <span className="text-xs text-secondary truncate flex-1">
               {s.pageTitle ?? s.url}
             </span>
-            <span className="text-xs text-[var(--text-muted)] shrink-0 tabular-nums">{age}</span>
+            <span className="text-xs text-muted shrink-0 tabular-nums">{age}</span>
           </div>
-          <div className="text-xs text-[var(--text-muted)] truncate">{s.url}</div>
+          <div className="text-xs text-muted truncate">{s.url}</div>
           {s.status === 'failed' && s.errorMessage && (
             <div className="text-xs text-red-400 mt-0.5 truncate">{s.errorMessage}</div>
           )}
           {s.status === 'completed' && s.pageText && (
-            <div className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-1 italic">
+            <div className="text-xs text-muted mt-0.5 line-clamp-1 italic">
               {s.pageText.slice(0, 200)}
             </div>
           )}
@@ -520,17 +520,17 @@ function MemoryPanel() {
       title="Memory"
       subtitle={`${displayList.length} records`}
       loading={loading}
-      actions={<Brain className="w-4 h-4 text-[var(--text-muted)]" />}
+      actions={<Brain className="w-4 h-4 text-muted" />}
     >
       {/* Search bar */}
-      <div className="p-3 border-b border-[var(--border)] flex gap-2">
+      <div className="p-3 border-b border-border flex gap-2">
         <input
           type="text"
           value={searchQ}
           onChange={(e) => { setSearchQ(e.target.value); setSearched(false) }}
           onKeyDown={(e) => { if (e.key === 'Enter') handleSearch() }}
           placeholder="Search memories…"
-          className="flex-1 bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-blue-500/40"
+          className="flex-1 bg-elevated border border-border rounded px-3 py-1.5 text-sm text-primary placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-blue-500/40"
         />
         <button
           onClick={handleSearch}
@@ -543,7 +543,7 @@ function MemoryPanel() {
         {searched && (
           <button
             onClick={() => { setSearched(false); setSearchQ('') }}
-            className="px-2 py-1.5 rounded text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            className="px-2 py-1.5 rounded text-xs text-muted hover:text-primary transition-colors"
           >
             Clear
           </button>
@@ -551,12 +551,12 @@ function MemoryPanel() {
       </div>
 
       {/* Add form */}
-      <div className="p-3 border-b border-[var(--border)] flex flex-col gap-2">
+      <div className="p-3 border-b border-border flex flex-col gap-2">
         <div className="flex gap-2">
           <select
             value={type}
             onChange={(e) => setType(e.target.value)}
-            className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none"
+            className="bg-elevated border border-border rounded px-2 py-1.5 text-xs text-primary focus:outline-none"
           >
             {['observation','decision','lesson','goal','idea','fact','strategic','operational'].map((t) => (
               <option key={t} value={t}>{t}</option>
@@ -567,7 +567,7 @@ function MemoryPanel() {
             onChange={(e) => setContent(e.target.value)}
             placeholder="New memory content…"
             rows={2}
-            className="flex-1 bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-blue-500/40 resize-none"
+            className="flex-1 bg-elevated border border-border rounded px-3 py-1.5 text-sm text-primary placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-blue-500/40 resize-none"
           />
           <button
             onClick={() => { void handleAdd() }}
@@ -584,7 +584,7 @@ function MemoryPanel() {
 
       {/* Results */}
       {displayList.length === 0 ? (
-        <div className="flex items-center gap-2 px-4 py-6 text-[var(--text-muted)] text-sm">
+        <div className="flex items-center gap-2 px-4 py-6 text-muted text-sm">
           <Brain className="w-4 h-4" />
           No memories yet
         </div>
@@ -613,11 +613,11 @@ function MemoryRow({ memory: m, onMarkStale, stalePending }: {
   const lowConfidence = m.confidence < 0.7
 
   return (
-    <li className={`px-4 py-2.5 hover:bg-[var(--bg-elevated)] transition-colors ${m.isStale ? 'opacity-50' : ''}`}>
+    <li className={`px-4 py-2.5 hover:bg-elevated transition-colors ${m.isStale ? 'opacity-50' : ''}`}>
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-            <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-muted)]">
+            <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-elevated border border-border text-muted">
               {m.type}
             </span>
             <span className={`text-xs font-medium tabular-nums ${lowConfidence ? 'text-amber-400' : 'text-emerald-400'}`}>
@@ -627,16 +627,16 @@ function MemoryRow({ memory: m, onMarkStale, stalePending }: {
               <span className="text-xs text-blue-400 tabular-nums">{(score * 100).toFixed(0)}% match</span>
             )}
             {m.isStale && (
-              <span className="text-xs text-[var(--text-muted)] italic">(stale)</span>
+              <span className="text-xs text-muted italic">(stale)</span>
             )}
             {m.tags.length > 0 && m.tags.slice(0, 3).map((t) => (
               <span key={t} className="text-xs px-1 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">{t}</span>
             ))}
           </div>
-          <p className="text-sm text-[var(--text-primary)] line-clamp-2 leading-snug">
+          <p className="text-sm text-primary line-clamp-2 leading-snug">
             {m.content.slice(0, 150)}{m.content.length > 150 ? '…' : ''}
           </p>
-          <div className="flex items-center gap-2 mt-0.5 text-xs text-[var(--text-muted)]">
+          <div className="flex items-center gap-2 mt-0.5 text-xs text-muted">
             <span>{m.source}</span>
             {'sourceRef' in m && m.sourceRef && <span>· {String(m.sourceRef)}</span>}
             <span>· {formatDistanceToNow(m.createdAt, { addSuffix: true })}</span>
@@ -647,7 +647,7 @@ function MemoryRow({ memory: m, onMarkStale, stalePending }: {
             onClick={onMarkStale}
             disabled={stalePending}
             title="Mark stale"
-            className="shrink-0 px-2 py-1 rounded text-xs text-[var(--text-muted)] border border-[var(--border)] hover:text-amber-400 hover:border-amber-500/30 disabled:opacity-50 transition-colors"
+            className="shrink-0 px-2 py-1 rounded text-xs text-muted border border-border hover:text-amber-400 hover:border-amber-500/30 disabled:opacity-50 transition-colors"
           >
             Stale
           </button>
@@ -708,7 +708,7 @@ function ConfidenceBadge({ value, isLow }: { value: number; isLow: boolean }) {
   const pct = Math.round(value * 100)
   return (
     <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-mono ${
-      isLow ? 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/30' : 'bg-[var(--bg-elevated)] text-[var(--text-tertiary)]'
+      isLow ? 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/30' : 'bg-elevated text-[var(--text-tertiary)]'
     }`}>
       {isLow && <AlertTriangle className="w-2.5 h-2.5" />}
       {pct}%
@@ -727,9 +727,9 @@ function BriefingItemRow({
 }) {
   const [expanded, setExpanded] = useState(false)
   return (
-    <div className={`border border-[var(--border)] rounded-lg overflow-hidden ${item.isLowConfidence ? 'border-yellow-500/20' : ''}`}>
+    <div className={`border border-border rounded-lg overflow-hidden ${item.isLowConfidence ? 'border-yellow-500/20' : ''}`}>
       <div
-        className="flex items-start gap-3 px-3 py-2.5 hover:bg-[var(--bg-elevated)] cursor-pointer select-none"
+        className="flex items-start gap-3 px-3 py-2.5 hover:bg-elevated cursor-pointer select-none"
         onClick={() => setExpanded((v) => !v)}
       >
         <div className="mt-0.5 shrink-0 text-[var(--text-tertiary)]">
@@ -737,7 +737,7 @@ function BriefingItemRow({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-medium text-[var(--text-primary)] truncate">{item.title}</span>
+            <span className="text-xs font-medium text-primary truncate">{item.title}</span>
             <ConfidenceBadge value={item.confidence} isLow={item.isLowConfidence} />
             {item.converted && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/15 text-green-400 border border-green-500/30">
@@ -763,7 +763,7 @@ function BriefingItemRow({
         )}
       </div>
       {expanded && (
-        <div className="px-8 pb-3 text-xs text-[var(--text-secondary)] border-t border-[var(--border)] pt-2">
+        <div className="px-8 pb-3 text-xs text-secondary border-t border-border pt-2">
           {item.body}
           {item.isLowConfidence && (
             <div className="mt-1.5 flex items-center gap-1 text-yellow-400 text-[10px]">
@@ -799,7 +799,7 @@ function BriefingDetail({ briefingId }: { briefingId: string }) {
 
   if (briefing.status === 'generating') {
     return (
-      <div className="p-4 flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+      <div className="p-4 flex items-center gap-2 text-xs text-secondary">
         <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
         Generating briefing…
       </div>
@@ -822,7 +822,7 @@ function BriefingDetail({ briefingId }: { briefingId: string }) {
   return (
     <div className="p-3 space-y-4">
       {briefing.summary && (
-        <div className="text-[11px] text-[var(--text-secondary)] bg-[var(--bg-elevated)] rounded-lg px-3 py-2 border border-[var(--border)]">
+        <div className="text-[11px] text-secondary bg-elevated rounded-lg px-3 py-2 border border-border">
           {briefing.summary}
         </div>
       )}
@@ -830,7 +830,7 @@ function BriefingDetail({ briefingId }: { briefingId: string }) {
         .filter((s) => sections[s] && sections[s]!.length > 0)
         .map((section) => (
           <div key={section}>
-            <div className={`text-[11px] font-semibold mb-2 ${SECTION_COLORS[section] ?? 'text-[var(--text-secondary)]'}`}>
+            <div className={`text-[11px] font-semibold mb-2 ${SECTION_COLORS[section] ?? 'text-secondary'}`}>
               {SECTION_LABELS[section] ?? section}
             </div>
             <div className="space-y-1.5">
@@ -908,7 +908,7 @@ function BriefingPanel() {
               className={`w-full text-left px-2.5 py-2 rounded-lg transition-colors ${
                 selectedId === b.id
                   ? 'bg-blue-500/15 border border-blue-500/30'
-                  : 'hover:bg-[var(--bg-elevated)] border border-transparent'
+                  : 'hover:bg-elevated border border-transparent'
               }`}
             >
               <div className="flex items-center justify-between gap-2">
@@ -968,13 +968,13 @@ function ScoreBar({ score, breakdown }: { score?: number; breakdown?: Record<str
   const pct = Math.round(score * 100)
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+      <div className="flex-1 h-1.5 bg-elevated rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all ${pct >= 70 ? 'bg-green-400' : pct >= 40 ? 'bg-yellow-400' : 'bg-red-400'}`}
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-[10px] text-[var(--text-secondary)] font-mono shrink-0">{pct}%</span>
+      <span className="text-[10px] text-secondary font-mono shrink-0">{pct}%</span>
       {breakdown && (
         <span className="text-[9px] text-[var(--text-tertiary)] hidden xl:inline">
           ROI:{Math.round((breakdown['roi'] ?? 0)*100)}% · Eff:{Math.round((breakdown['effort'] ?? 0)*100)}% · Risk:{Math.round((breakdown['risk'] ?? 0)*100)}%
@@ -997,9 +997,9 @@ function OppRow({
   const isTerminal = ['rejected', 'lost', 'stale', 'deferred', 'completed', 'won'].includes(opp.status)
 
   return (
-    <div className="border border-[var(--border)] rounded-lg overflow-hidden">
+    <div className="border border-border rounded-lg overflow-hidden">
       <div
-        className="flex items-center gap-3 px-3 py-2.5 hover:bg-[var(--bg-elevated)] cursor-pointer select-none"
+        className="flex items-center gap-3 px-3 py-2.5 hover:bg-elevated cursor-pointer select-none"
         onClick={() => setExpanded((v) => !v)}
       >
         <div className="shrink-0 text-[var(--text-tertiary)]">
@@ -1007,11 +1007,11 @@ function OppRow({
         </div>
         <div className="flex-1 min-w-0 space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-medium text-[var(--text-primary)] truncate">{opp.title}</span>
+            <span className="text-xs font-medium text-primary truncate">{opp.title}</span>
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[opp.status] ?? 'bg-zinc-500/15 text-zinc-400'}`}>
               {opp.status}
             </span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-elevated)] text-[var(--text-tertiary)]">
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-elevated text-[var(--text-tertiary)]">
               {OPP_TYPE_LABELS[opp.type] ?? opp.type}
             </span>
             {opp.confidence < 0.6 && (
@@ -1052,25 +1052,25 @@ function OppRow({
         )}
       </div>
       {expanded && (
-        <div className="px-8 pb-3 border-t border-[var(--border)] pt-2 space-y-2">
+        <div className="px-8 pb-3 border-t border-border pt-2 space-y-2">
           {opp.description && (
-            <p className="text-xs text-[var(--text-secondary)]">{opp.description}</p>
+            <p className="text-xs text-secondary">{opp.description}</p>
           )}
           <div className="grid grid-cols-3 gap-3 text-[10px]">
             {opp.estimatedROI !== undefined && (
-              <div><span className="text-[var(--text-tertiary)]">Est. ROI </span><span className="text-[var(--text-primary)] font-mono">{opp.estimatedROI}x</span><span className="text-[var(--text-tertiary)]"> (estimated)</span></div>
+              <div><span className="text-[var(--text-tertiary)]">Est. ROI </span><span className="text-primary font-mono">{opp.estimatedROI}x</span><span className="text-[var(--text-tertiary)]"> (estimated)</span></div>
             )}
             {opp.estimatedEffort && (
-              <div><span className="text-[var(--text-tertiary)]">Effort </span><span className="text-[var(--text-primary)]">{opp.estimatedEffort}</span></div>
+              <div><span className="text-[var(--text-tertiary)]">Effort </span><span className="text-primary">{opp.estimatedEffort}</span></div>
             )}
             {opp.riskLevel && (
-              <div><span className="text-[var(--text-tertiary)]">Risk </span><span className="text-[var(--text-primary)]">{opp.riskLevel}</span></div>
+              <div><span className="text-[var(--text-tertiary)]">Risk </span><span className="text-primary">{opp.riskLevel}</span></div>
             )}
             {opp.strategicAlignment !== undefined && (
-              <div><span className="text-[var(--text-tertiary)]">Alignment </span><span className="text-[var(--text-primary)] font-mono">{Math.round(opp.strategicAlignment * 100)}%</span></div>
+              <div><span className="text-[var(--text-tertiary)]">Alignment </span><span className="text-primary font-mono">{Math.round(opp.strategicAlignment * 100)}%</span></div>
             )}
             {opp.convertedRunId && (
-              <div><span className="text-[var(--text-tertiary)]">Run </span><span className="text-[var(--text-primary)] font-mono truncate">{opp.convertedRunId.slice(0, 8)}…</span></div>
+              <div><span className="text-[var(--text-tertiary)]">Run </span><span className="text-primary font-mono truncate">{opp.convertedRunId.slice(0, 8)}…</span></div>
             )}
           </div>
           {!isTerminal && (
@@ -1080,7 +1080,7 @@ function OppRow({
                   key={s}
                   onClick={() => onStatusChange(s)}
                   disabled={statusPending}
-                  className="text-[10px] px-2 py-1 rounded border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors disabled:opacity-40"
+                  className="text-[10px] px-2 py-1 rounded border border-border text-secondary hover:bg-elevated transition-colors disabled:opacity-40"
                 >
                   Mark {s}
                 </button>
@@ -1125,41 +1125,41 @@ function CreateOpportunityForm({ onCreated }: { onCreated: () => void }) {
   )
 
   return (
-    <div className="absolute right-4 top-10 z-50 w-80 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl shadow-xl p-4 space-y-3">
-      <div className="text-xs font-semibold text-[var(--text-primary)]">New Opportunity</div>
+    <div className="absolute right-4 top-10 z-50 w-80 bg-[var(--bg-surface)] border border-border rounded-xl shadow-xl p-4 space-y-3">
+      <div className="text-xs font-semibold text-primary">New Opportunity</div>
       <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title *"
-        className="w-full text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] outline-none focus:border-blue-500/50" />
+        className="w-full text-xs bg-elevated border border-border rounded-lg px-3 py-2 text-primary outline-none focus:border-blue-500/50" />
       <textarea value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Description"
         rows={2}
-        className="w-full text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] outline-none focus:border-blue-500/50 resize-none" />
+        className="w-full text-xs bg-elevated border border-border rounded-lg px-3 py-2 text-primary outline-none focus:border-blue-500/50 resize-none" />
       <div className="grid grid-cols-2 gap-2">
         <select value={type} onChange={(e) => setType(e.target.value as OpportunityType)}
-          className="text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-2 py-1.5 text-[var(--text-primary)] outline-none">
+          className="text-xs bg-elevated border border-border rounded-lg px-2 py-1.5 text-primary outline-none">
           {['revenue','content','seo','automation','business','operational','strategic'].map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
         </select>
         <input value={roi} onChange={(e) => setRoi(e.target.value)} placeholder="Est. ROI (e.g. 3.5)"
           type="number" min="0" step="0.1"
-          className="text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-2 py-1.5 text-[var(--text-primary)] outline-none focus:border-blue-500/50" />
+          className="text-xs bg-elevated border border-border rounded-lg px-2 py-1.5 text-primary outline-none focus:border-blue-500/50" />
         <select value={effort} onChange={(e) => setEffort(e.target.value)}
-          className="text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-2 py-1.5 text-[var(--text-primary)] outline-none">
+          className="text-xs bg-elevated border border-border rounded-lg px-2 py-1.5 text-primary outline-none">
           {['low','medium','high','very_high'].map((v) => <option key={v} value={v}>{v}</option>)}
         </select>
         <select value={risk} onChange={(e) => setRisk(e.target.value)}
-          className="text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-2 py-1.5 text-[var(--text-primary)] outline-none">
+          className="text-xs bg-elevated border border-border rounded-lg px-2 py-1.5 text-primary outline-none">
           {['low','medium','high','critical'].map((v) => <option key={v} value={v}>{v}</option>)}
         </select>
         <input value={conf} onChange={(e) => setConf(e.target.value)} placeholder="Confidence 0-1"
           type="number" min="0" max="1" step="0.05"
-          className="text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-2 py-1.5 text-[var(--text-primary)] outline-none focus:border-blue-500/50" />
+          className="text-xs bg-elevated border border-border rounded-lg px-2 py-1.5 text-primary outline-none focus:border-blue-500/50" />
         <input value={align} onChange={(e) => setAlign(e.target.value)} placeholder="Alignment 0-1"
           type="number" min="0" max="1" step="0.05"
-          className="text-xs bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-2 py-1.5 text-[var(--text-primary)] outline-none focus:border-blue-500/50" />
+          className="text-xs bg-elevated border border-border rounded-lg px-2 py-1.5 text-primary outline-none focus:border-blue-500/50" />
       </div>
       <div className="flex justify-end gap-2 pt-1">
         <button onClick={() => setOpen(false)}
-          className="text-xs px-3 py-1.5 rounded-lg border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]">
+          className="text-xs px-3 py-1.5 rounded-lg border border-border text-secondary hover:bg-elevated">
           Cancel
         </button>
         <button onClick={() => createMut.mutate()} disabled={!title.trim() || createMut.isPending}
@@ -1210,7 +1210,7 @@ function OpportunityPanel() {
       loading={isLoading}
     >
       {/* Status filter tabs */}
-      <div className="flex items-center gap-1 px-3 py-2 border-b border-[var(--border)] overflow-x-auto">
+      <div className="flex items-center gap-1 px-3 py-2 border-b border-border overflow-x-auto">
         {activeStatuses.map((s) => (
           <button
             key={s}
@@ -1218,7 +1218,7 @@ function OpportunityPanel() {
             className={`text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap transition-colors ${
               statusFilter === s
                 ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-elevated)]'
+                : 'text-[var(--text-tertiary)] hover:bg-elevated'
             }`}
           >
             {s === 'all' ? 'All' : s}
@@ -1275,7 +1275,7 @@ function RiskPanel() {
         <div className="flex gap-1">
           {statuses.map((s) => (
             <button key={s} onClick={() => setFilter(s)}
-              className={`text-[10px] px-2 py-0.5 rounded capitalize transition-colors ${filter === s ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}>
+              className={`text-[10px] px-2 py-0.5 rounded capitalize transition-colors ${filter === s ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'text-muted hover:text-secondary'}`}>
               {s}
             </button>
           ))}
@@ -1283,25 +1283,25 @@ function RiskPanel() {
       }
     >
       {risks.length === 0 ? (
-        <div className="flex items-center gap-2 px-4 py-6 text-[var(--text-muted)] text-sm">
+        <div className="flex items-center gap-2 px-4 py-6 text-muted text-sm">
           <Shield className="w-4 h-4 text-emerald-500" /> No risks in this view
         </div>
       ) : (
         <ul className="divide-y divide-[var(--border)]">
           {risks.map((risk) => (
-            <li key={risk.id} className="px-4 py-3 flex items-start justify-between gap-3 hover:bg-[var(--bg-elevated)]">
+            <li key={risk.id} className="px-4 py-3 flex items-start justify-between gap-3 hover:bg-elevated">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className={`text-xs font-medium ${severityColor[risk.severity] ?? 'text-gray-400'}`}>{risk.severity.toUpperCase()}</span>
-                  <span className="text-xs text-[var(--text-secondary)] truncate">{risk.title}</span>
+                  <span className="text-xs text-secondary truncate">{risk.title}</span>
                 </div>
-                <div className="text-[10px] text-[var(--text-muted)] mt-0.5">
+                <div className="text-[10px] text-muted mt-0.5">
                   Score: {(risk.riskScore * 100).toFixed(0)}% · P:{(risk.probability * 100).toFixed(0)}% × I:{(risk.impact * 100).toFixed(0)}% · {risk.category}
                 </div>
               </div>
               {risk.status === 'open' && (
                 <button onClick={() => resolveMut.mutate(risk.id)} disabled={resolveMut.isPending}
-                  className="shrink-0 text-[10px] px-2 py-0.5 rounded border border-[var(--border)] text-[var(--text-muted)] hover:text-emerald-400 hover:border-emerald-500/40 transition-colors">
+                  className="shrink-0 text-[10px] px-2 py-0.5 rounded border border-border text-muted hover:text-emerald-400 hover:border-emerald-500/40 transition-colors">
                   Resolve
                 </button>
               )}
@@ -1341,7 +1341,7 @@ function GoalPanel() {
         <div className="flex gap-1">
           {statuses.map((s) => (
             <button key={s} onClick={() => setFilter(s)}
-              className={`text-[10px] px-2 py-0.5 rounded capitalize transition-colors ${filter === s ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}>
+              className={`text-[10px] px-2 py-0.5 rounded capitalize transition-colors ${filter === s ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'text-muted hover:text-secondary'}`}>
               {s}
             </button>
           ))}
@@ -1349,26 +1349,26 @@ function GoalPanel() {
       }
     >
       {goals.length === 0 ? (
-        <div className="flex items-center gap-2 px-4 py-6 text-[var(--text-muted)] text-sm">
+        <div className="flex items-center gap-2 px-4 py-6 text-muted text-sm">
           <Target className="w-4 h-4" /> No goals in this view
         </div>
       ) : (
         <ul className="divide-y divide-[var(--border)]">
           {goals.map((goal) => (
-            <li key={goal.id} className="px-4 py-3 hover:bg-[var(--bg-elevated)]">
+            <li key={goal.id} className="px-4 py-3 hover:bg-elevated">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-[var(--text-primary)] truncate">{goal.title}</span>
+                <span className="text-xs text-primary truncate">{goal.title}</span>
                 <span className={`shrink-0 text-[10px] capitalize ${statusColor[goal.status] ?? 'text-gray-400'}`}>{goal.status}</span>
               </div>
               <div className="flex items-center gap-3 mt-1.5">
-                <div className="flex-1 h-1.5 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+                <div className="flex-1 h-1.5 bg-elevated rounded-full overflow-hidden">
                   <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${Math.round(goal.progress * 100)}%` }} />
                 </div>
-                <span className="text-[10px] text-[var(--text-muted)] shrink-0">{Math.round(goal.progress * 100)}%</span>
-                <span className="text-[10px] text-[var(--text-muted)] shrink-0 capitalize">{goal.horizon}</span>
+                <span className="text-[10px] text-muted shrink-0">{Math.round(goal.progress * 100)}%</span>
+                <span className="text-[10px] text-muted shrink-0 capitalize">{goal.horizon}</span>
               </div>
               {goal.keyResults.length > 0 && (
-                <div className="text-[10px] text-[var(--text-muted)] mt-1">{goal.keyResults.length} key result{goal.keyResults.length !== 1 ? 's' : ''}</div>
+                <div className="text-[10px] text-muted mt-1">{goal.keyResults.length} key result{goal.keyResults.length !== 1 ? 's' : ''}</div>
               )}
             </li>
           ))}
@@ -1404,21 +1404,21 @@ function InsightPanel() {
       loading={isLoading}
     >
       {insights.length === 0 ? (
-        <div className="flex items-center gap-2 px-4 py-6 text-[var(--text-muted)] text-sm">
+        <div className="flex items-center gap-2 px-4 py-6 text-muted text-sm">
           <Brain className="w-4 h-4" /> No active insights
         </div>
       ) : (
         <ul className="divide-y divide-[var(--border)]">
           {insights.map((insight) => (
-            <li key={insight.id} className="px-4 py-3 hover:bg-[var(--bg-elevated)]">
+            <li key={insight.id} className="px-4 py-3 hover:bg-elevated">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className={`text-[10px] font-medium ${confColor(insight.confidence)}`}>{Math.round(insight.confidence * 100)}%</span>
-                    <span className="text-xs text-[var(--text-primary)] truncate">{insight.title}</span>
+                    <span className="text-xs text-primary truncate">{insight.title}</span>
                   </div>
-                  <div className="text-[10px] text-[var(--text-muted)] mt-0.5 line-clamp-1">{insight.body}</div>
-                  <div className="text-[10px] text-[var(--text-muted)] mt-0.5">{insight.category} · {insight.source}</div>
+                  <div className="text-[10px] text-muted mt-0.5 line-clamp-1">{insight.body}</div>
+                  <div className="text-[10px] text-muted mt-0.5">{insight.category} · {insight.source}</div>
                 </div>
                 <div className="flex gap-1 shrink-0">
                   <button onClick={() => actMut.mutate(insight.id)} disabled={insight.actedOn || actMut.isPending}
@@ -1426,7 +1426,7 @@ function InsightPanel() {
                     Act
                   </button>
                   <button onClick={() => dismissMut.mutate(insight.id)} disabled={dismissMut.isPending}
-                    className="text-[10px] px-2 py-0.5 rounded border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors">
+                    className="text-[10px] px-2 py-0.5 rounded border border-border text-muted hover:text-secondary transition-colors">
                     ✕
                   </button>
                 </div>
@@ -1456,24 +1456,24 @@ function AgentPanel() {
   return (
     <SectionPanel title="Agents" {...(agents.length > 0 ? { subtitle: `${agents.length} registered` } : {})} loading={isLoading}>
       {agents.length === 0 ? (
-        <div className="flex items-center gap-2 px-4 py-6 text-[var(--text-muted)] text-sm">
+        <div className="flex items-center gap-2 px-4 py-6 text-muted text-sm">
           <Users className="w-4 h-4" /> No agents registered
         </div>
       ) : (
         <ul className="divide-y divide-[var(--border)]">
           {agents.map((agent) => (
-            <li key={agent.id} className="px-4 py-3 flex items-center gap-3 hover:bg-[var(--bg-elevated)]">
+            <li key={agent.id} className="px-4 py-3 flex items-center gap-3 hover:bg-elevated">
               <span className={`w-2 h-2 rounded-full shrink-0 ${statusDot[agent.status]}`} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-[var(--text-primary)]">{agent.name}</span>
-                  <span className="text-[10px] text-[var(--text-muted)] bg-[var(--bg-elevated)] px-1.5 py-0.5 rounded">{agent.type}</span>
+                  <span className="text-xs text-primary">{agent.name}</span>
+                  <span className="text-[10px] text-muted bg-elevated px-1.5 py-0.5 rounded">{agent.type}</span>
                 </div>
                 {agent.capabilities.length > 0 && (
-                  <div className="text-[10px] text-[var(--text-muted)] mt-0.5 truncate">{agent.capabilities.join(', ')}</div>
+                  <div className="text-[10px] text-muted mt-0.5 truncate">{agent.capabilities.join(', ')}</div>
                 )}
               </div>
-              <span className={`text-[10px] capitalize shrink-0 ${agent.status === 'running' ? 'text-emerald-400' : agent.status === 'error' ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>
+              <span className={`text-[10px] capitalize shrink-0 ${agent.status === 'running' ? 'text-emerald-400' : agent.status === 'error' ? 'text-red-400' : 'text-muted'}`}>
                 {agent.status}
               </span>
             </li>
@@ -1497,7 +1497,7 @@ function AnalyticsPanel() {
   return (
     <SectionPanel title="AI Usage" {...(d ? { subtitle: `$${d.totalCostUsd.toFixed(4)} today` } : {})} loading={isLoading}>
       {!d ? (
-        <div className="px-4 py-6 text-[var(--text-muted)] text-sm">No AI usage data</div>
+        <div className="px-4 py-6 text-muted text-sm">No AI usage data</div>
       ) : (
         <div className="divide-y divide-[var(--border)]">
           <div className="px-4 py-3 grid grid-cols-4 gap-4">
@@ -1508,19 +1508,19 @@ function AnalyticsPanel() {
               { label: 'Cached', value: `${d.totalRequests > 0 ? Math.round(d.cachedRequests / d.totalRequests * 100) : 0}%` },
             ].map(({ label, value }) => (
               <div key={label} className="text-center">
-                <div className="text-sm font-medium text-[var(--text-primary)]">{value}</div>
-                <div className="text-[10px] text-[var(--text-muted)] mt-0.5">{label}</div>
+                <div className="text-sm font-medium text-primary">{value}</div>
+                <div className="text-[10px] text-muted mt-0.5">{label}</div>
               </div>
             ))}
           </div>
           {Object.keys(d.byProvider).length > 0 && (
             <div className="px-4 py-3">
-              <div className="text-[10px] text-[var(--text-muted)] mb-2 uppercase tracking-wide">By Provider</div>
+              <div className="text-[10px] text-muted mb-2 uppercase tracking-wide">By Provider</div>
               <div className="space-y-1">
                 {Object.entries(d.byProvider).map(([provider, stats]) => (
                   <div key={provider} className="flex items-center justify-between text-xs">
-                    <span className="text-[var(--text-secondary)] capitalize">{provider}</span>
-                    <span className="text-[var(--text-muted)]">{stats.requests} req · ${stats.costUsd.toFixed(4)}</span>
+                    <span className="text-secondary capitalize">{provider}</span>
+                    <span className="text-muted">{stats.requests} req · ${stats.costUsd.toFixed(4)}</span>
                   </div>
                 ))}
               </div>
@@ -1563,24 +1563,24 @@ function NotificationsPanel() {
       }
     >
       {notifs.length === 0 ? (
-        <div className="flex items-center gap-2 px-4 py-6 text-[var(--text-muted)] text-sm">
+        <div className="flex items-center gap-2 px-4 py-6 text-muted text-sm">
           <CheckCircle className="w-4 h-4 text-emerald-500" /> All caught up
         </div>
       ) : (
         <ul className="divide-y divide-[var(--border)]">
           {notifs.map((n: Notification) => (
-            <li key={n.id} className={`px-4 py-3 flex items-start gap-3 hover:bg-[var(--bg-elevated)] transition-colors ${!n.read ? 'bg-blue-500/5' : ''}`}>
+            <li key={n.id} className={`px-4 py-3 flex items-start gap-3 hover:bg-elevated transition-colors ${!n.read ? 'bg-blue-500/5' : ''}`}>
               <span className="text-sm shrink-0 mt-0.5">{typeIcon[n.type] ?? '⚪'}</span>
               <div className="flex-1 min-w-0">
-                <div className={`text-xs font-medium ${n.read ? 'text-[var(--text-secondary)]' : 'text-[var(--text-primary)]'}`}>{n.title}</div>
-                <div className="text-[10px] text-[var(--text-muted)] mt-0.5 line-clamp-2">{n.body}</div>
-                <div className="text-[10px] text-[var(--text-muted)] mt-0.5">{n.category} · {formatDistanceToNow(n.createdAt, { addSuffix: true })}</div>
+                <div className={`text-xs font-medium ${n.read ? 'text-secondary' : 'text-primary'}`}>{n.title}</div>
+                <div className="text-[10px] text-muted mt-0.5 line-clamp-2">{n.body}</div>
+                <div className="text-[10px] text-muted mt-0.5">{n.category} · {formatDistanceToNow(n.createdAt, { addSuffix: true })}</div>
               </div>
               <div className="flex gap-1 shrink-0">
                 {!n.read && (
                   <button onClick={() => readMut.mutate(n.id)} className="text-[10px] text-blue-400 hover:text-blue-300 px-1.5 py-0.5 rounded border border-blue-500/20 transition-colors">Read</button>
                 )}
-                <button onClick={() => dismissMut.mutate(n.id)} className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] px-1.5 py-0.5 rounded border border-[var(--border)] transition-colors">✕</button>
+                <button onClick={() => dismissMut.mutate(n.id)} className="text-[10px] text-muted hover:text-secondary px-1.5 py-0.5 rounded border border-border transition-colors">✕</button>
               </div>
             </li>
           ))}
@@ -1610,23 +1610,23 @@ function WorkersPanel() {
       loading={isLoading}
     >
       {queues.length === 0 ? (
-        <div className="px-4 py-6 text-[var(--text-muted)] text-sm">No queue data</div>
+        <div className="px-4 py-6 text-muted text-sm">No queue data</div>
       ) : (
         <div className="p-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
           {queues.map((q) => (
-            <div key={q.name} className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 flex flex-col gap-1.5">
-              <div className="text-[11px] font-semibold text-[var(--text-primary)] capitalize truncate">{q.name}</div>
+            <div key={q.name} className="rounded-lg border border-border bg-elevated p-3 flex flex-col gap-1.5">
+              <div className="text-[11px] font-semibold text-primary capitalize truncate">{q.name}</div>
               <div className="flex flex-col gap-0.5">
-                <div className={`text-[10px] flex justify-between ${q.waiting > 0 ? 'text-amber-400' : 'text-[var(--text-muted)]'}`}>
+                <div className={`text-[10px] flex justify-between ${q.waiting > 0 ? 'text-amber-400' : 'text-muted'}`}>
                   <span>waiting</span><span className="font-mono">{q.waiting}</span>
                 </div>
-                <div className={`text-[10px] flex justify-between ${q.active > 0 ? 'text-blue-400' : 'text-[var(--text-muted)]'}`}>
+                <div className={`text-[10px] flex justify-between ${q.active > 0 ? 'text-blue-400' : 'text-muted'}`}>
                   <span>active</span><span className="font-mono">{q.active}</span>
                 </div>
-                <div className={`text-[10px] flex justify-between ${q.failed > 0 ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>
+                <div className={`text-[10px] flex justify-between ${q.failed > 0 ? 'text-red-400' : 'text-muted'}`}>
                   <span>failed</span><span className="font-mono">{q.failed}</span>
                 </div>
-                <div className="text-[10px] flex justify-between text-[var(--text-muted)]">
+                <div className="text-[10px] flex justify-between text-muted">
                   <span>done</span><span className="font-mono">{q.completed}</span>
                 </div>
               </div>
@@ -1644,24 +1644,24 @@ export default function WarRoom() {
   const qc = useQueryClient()
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-[var(--bg-primary)]">
+    <div className="flex flex-col h-screen overflow-hidden bg-bg">
 
       {/* Top bar */}
-      <header className="shrink-0 flex items-center justify-between px-6 py-3 border-b border-[var(--border)] bg-[var(--bg-surface)]">
+      <header className="shrink-0 flex items-center justify-between px-6 py-3 border-b border-border bg-[var(--bg-surface)]">
         <div className="flex items-center gap-3">
           <div className="w-7 h-7 rounded-lg bg-blue-500/20 border border-blue-500/30 flex items-center justify-center">
             <Activity className="w-3.5 h-3.5 text-blue-400" />
           </div>
           <div>
-            <div className="text-sm font-semibold text-[var(--text-primary)]">War Room</div>
-            <div className="text-xs text-[var(--text-secondary)]">Strategic Operational Intelligence</div>
+            <div className="text-sm font-semibold text-primary">War Room</div>
+            <div className="text-xs text-secondary">Strategic Operational Intelligence</div>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <GlobalSearch />
           <button
             onClick={() => void qc.invalidateQueries()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-secondary border border-border hover:bg-elevated transition-colors"
           >
             <RefreshCw className="w-3 h-3" />
             Refresh
