@@ -18,6 +18,7 @@ import {
 import * as THREE from 'three'
 import { api } from '../api.js'
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
+import { COLOR, STATUS_COLOR as STATUS_COLOR_TOKEN } from '../design/tokens.js'
 
 // ─── Types from API ──────────────────────────────────────────────────────
 
@@ -56,13 +57,14 @@ interface SavedView { name: string; template: string; focus: string | null; crea
 
 // ─── Visual constants ────────────────────────────────────────────────────
 
+// Local typed view of the central design tokens (keeps strict types).
 const STATUS_COLOR: Record<BrainNode['status'], string> = {
-  healthy:  '#34d399',
-  degraded: '#f59e0b',
-  down:     '#ef4444',
-  pending:  '#94a3b8',
-  paused:   '#a78bfa',
-  unknown:  '#64748b',
+  healthy:  STATUS_COLOR_TOKEN.healthy ?? COLOR.healthy,
+  degraded: STATUS_COLOR_TOKEN.degraded ?? COLOR.warning,
+  down:     STATUS_COLOR_TOKEN.down ?? COLOR.critical,
+  pending:  STATUS_COLOR_TOKEN.pending ?? COLOR.info,
+  paused:   STATUS_COLOR_TOKEN.paused ?? COLOR.paused,
+  unknown:  STATUS_COLOR_TOKEN.unknown ?? COLOR.textMuted,
 }
 
 const TEMPLATES: Array<{ id: string; label: string }> = [
@@ -487,27 +489,27 @@ export default function BrainPage() {
   const filteredGraph: BrainGraph | null = g ? { ...g, nodes: visibleNodes, edges: visibleEdges } : null
 
   return (
-    <div className="fixed inset-0 bg-[#08090b] text-white flex flex-col">
+    <div className="fixed inset-0 bg-bg text-primary flex flex-col">
       {/* Top command bar */}
-      <div className="border-b border-white/5 bg-black/40 backdrop-blur px-4 py-2 flex items-center gap-3 text-xs">
-        <Brain className="w-4 h-4 text-emerald-400" />
-        <span className="font-medium text-white/90">Novan Brain</span>
+      <div className="glass border-b border-border px-4 py-2 flex items-center gap-3 text-xs z-overlay relative">
+        <Brain className="w-4 h-4 text-healthy" />
+        <span className="font-medium text-primary tracking-tight">Novan Brain</span>
 
         {/* Breadcrumb */}
-        <div className="flex items-center gap-1 text-white/40">
-          <button onClick={clearFocus} className="hover:text-white/80 flex items-center gap-1">
+        <div className="flex items-center gap-1.5 text-muted">
+          <button onClick={clearFocus} className="hover:text-primary flex items-center gap-1 transition-colors duration-fast ease-out">
             <Brain className="w-3 h-3" /> global
           </button>
           {focusSystem && (
             <>
-              <ChevronRight className="w-3 h-3" />
-              <span className="text-emerald-300 font-mono">{focusSystem}</span>
+              <ChevronRight className="w-3 h-3 text-faint" />
+              <span className="text-healthy font-mono">{focusSystem}</span>
             </>
           )}
           {selectedId && (
             <>
-              <ChevronRight className="w-3 h-3" />
-              <span className="text-sky-300 font-mono truncate max-w-[140px]">{selectedId}</span>
+              <ChevronRight className="w-3 h-3 text-faint" />
+              <span className="text-active font-mono truncate max-w-[140px]">{selectedId}</span>
             </>
           )}
         </div>
@@ -604,8 +606,8 @@ export default function BrainPage() {
               frameloop={reducedMotion ? 'demand' : 'always'}
               gl={{ antialias: true, alpha: true }}
               onPointerMissed={() => setSelectedId(null)}>
-              <color attach="background" args={['#08090b']} />
-              <fog attach="fog" args={['#08090b', 25, 60]} />
+              <color attach="background" args={[COLOR.bg]} />
+              <fog attach="fog" args={[COLOR.bg, 25, 60]} />
               <Suspense fallback={null}>
                 <BrainScene
                   graph={filteredGraph}
@@ -623,10 +625,10 @@ export default function BrainPage() {
 
         {/* Event ticker (bottom-left) */}
         {eventTicker.length > 0 && (
-          <div className="absolute bottom-3 left-3 max-w-md text-[10px] font-mono space-y-0.5 pointer-events-none">
+          <div className="absolute bottom-3 left-3 max-w-md text-2xs mono space-y-0.5 pointer-events-none z-overlay">
             {eventTicker.slice(0, 5).map((e, i) => (
-              <div key={`${e.at}-${i}`} className="text-white/40 truncate">
-                <Activity className="w-2.5 h-2.5 inline mr-1 text-emerald-400/70" />
+              <div key={`${e.at}-${i}`} className="text-muted truncate fade-in">
+                <Activity className="w-2.5 h-2.5 inline mr-1 text-healthy opacity-70" />
                 {new Date(e.at).toLocaleTimeString()} · {e.text}
               </div>
             ))}
@@ -635,16 +637,16 @@ export default function BrainPage() {
 
         {/* Systems strip (top-right) — quick template summary */}
         {g && (
-          <div className="absolute top-3 right-3 bg-black/50 backdrop-blur border border-white/10 rounded p-2 space-y-0.5 text-[10px]">
+          <div className="absolute top-3 right-3 glass rounded-lg p-2 space-y-0.5 text-2xs z-overlay">
             {g.systems.map(s => (
               <button key={s.id} onClick={() => {
                 const node = g.nodes.find(n => n.id === s.id)
                 if (node) onNodeClick(node)
               }}
-                className="flex items-center gap-1.5 w-full hover:bg-white/5 px-1 py-0.5 rounded">
+                className="flex items-center gap-2 w-full hover:bg-[var(--surface-hover)] px-2 py-1 rounded transition-colors duration-fast ease-out">
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: STATUS_COLOR[s.status as BrainNode['status']] }} />
-                <span className="font-mono text-white/70">{s.label}</span>
-                <span className="ml-auto text-white/40">{s.count}</span>
+                <span className="font-mono text-secondary">{s.label}</span>
+                <span className="ml-auto text-muted">{s.count}</span>
               </button>
             ))}
           </div>
@@ -671,9 +673,9 @@ export default function BrainPage() {
 
         {/* Critical action confirmation modal */}
         {confirmAction && (
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60]"
+          <div className="absolute inset-0 bg-[var(--bg-glass-strong)] backdrop-blur-sm flex items-center justify-center z-modal fade-in"
             onClick={() => setConfirmAction(null)}>
-            <div className="bg-black border border-red-500/40 rounded-lg p-5 max-w-md shadow-2xl"
+            <div className="glass-strong rounded-lg p-5 max-w-md shadow-4 border border-[rgba(239,68,68,0.40)] fade-up"
               onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center gap-2 mb-3">
                 <AlertOctagon className="w-4 h-4 text-red-400" />
@@ -709,17 +711,17 @@ export default function BrainPage() {
 
         {/* Saved views strip */}
         {savedViews.length > 0 && !paletteOpen && (
-          <div className="absolute top-3 left-3 bg-black/50 backdrop-blur border border-white/10 rounded p-2 max-w-[200px]">
-            <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1 flex items-center gap-1">
+          <div className="absolute top-3 left-3 glass rounded-lg p-2 max-w-[200px] fade-in z-overlay">
+            <div className="label mb-1 flex items-center gap-1">
               <Bookmark className="w-3 h-3" /> Saved views
             </div>
-            <ul className="space-y-0.5 text-[10px]">
+            <ul className="space-y-0.5 text-2xs">
               {savedViews.slice(0, 6).map(v => (
                 <li key={v.id} className="flex items-center gap-1">
-                  <button onClick={() => loadView(v)} className="flex-1 text-left hover:bg-white/5 px-1 py-0.5 rounded truncate" title={`${v.template}${v.focusSystem ? `/${v.focusSystem}` : ''}`}>
+                  <button onClick={() => loadView(v)} className="flex-1 text-left text-secondary hover:bg-[var(--surface-hover)] hover:text-primary px-1.5 py-1 rounded truncate transition-colors duration-fast ease-out" title={`${v.template}${v.focusSystem ? `/${v.focusSystem}` : ''}`}>
                     {v.name}
                   </button>
-                  <button onClick={() => removeView(v.id)} className="text-white/30 hover:text-white/80 p-0.5"><X className="w-2.5 h-2.5" /></button>
+                  <button onClick={() => removeView(v.id)} className="text-faint hover:text-primary p-0.5 transition-colors duration-fast"><X className="w-2.5 h-2.5" /></button>
                 </li>
               ))}
             </ul>
@@ -733,7 +735,7 @@ export default function BrainPage() {
 
         {/* Replay timeline slider */}
         {replayMode && timeline.data?.data && (
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur border border-white/10 rounded-lg px-4 py-2 w-[80%] max-w-3xl">
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 glass-strong rounded-lg px-4 py-2 w-[80%] max-w-3xl fade-up z-overlay">
             <div className="flex items-center gap-3 text-[10px]">
               <Clock className="w-3 h-3 text-amber-300" />
               <span className="text-white/60">{new Date(timeline.data.data.from).toLocaleTimeString()}</span>
@@ -767,9 +769,9 @@ export default function BrainPage() {
 
         {/* Command palette */}
         {paletteOpen && (
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-24 z-50"
+          <div className="absolute inset-0 bg-[var(--bg-glass-strong)] backdrop-blur-sm flex items-start justify-center pt-24 z-command fade-in"
             onClick={() => setPaletteOpen(false)}>
-            <div className="bg-black/90 border border-white/10 rounded-lg w-[600px] max-w-[90vw] shadow-2xl"
+            <div className="drawer-edge w-[600px] max-w-[90vw] dropdown-in"
               onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center gap-2 p-3 border-b border-white/10">
                 <Command className="w-4 h-4 text-emerald-400" />
@@ -900,7 +902,7 @@ function DetailDrawer({
 }) {
   const statusColor = STATUS_COLOR[detail.status as BrainNode['status']] ?? '#64748b'
   return (
-    <div className="absolute top-3 right-3 w-80 bg-black/85 backdrop-blur border border-white/10 rounded-lg p-3 shadow-2xl"
+    <div className="absolute top-3 right-3 w-80 drawer-edge slide-from-right p-3 z-drawer"
       style={{ maxHeight: 'calc(100vh - 6rem)', overflowY: 'auto' }}>
       <div className="flex items-center gap-2 mb-2">
         <span className="w-2 h-2 rounded-full" style={{ background: statusColor }} />
@@ -997,8 +999,8 @@ function DecisionPathGraph({ steps }: { steps: DecisionPath['steps'] }) {
   if (steps.length === 0) return null
   const kinds = ['chain', 'override', 'event', 'block', 'incident'] as const
   const kindColor: Record<string, string> = {
-    chain:    '#34d399', override: '#f59e0b', event: '#64748b',
-    block:    '#ef4444', incident: '#fb923c',
+    chain:    COLOR.healthy, override: COLOR.warning, event: COLOR.textMuted,
+    block:    COLOR.critical, incident: '#fb923c',
   }
   const visible = steps.slice(0, 10)
   const w = 290, padX = 14, padY = 18
@@ -1069,9 +1071,9 @@ function MiniMap({ graph, selectedId }: { graph: BrainGraph; selectedId: string 
   const py = (y: number) => pad + ((y - minY) / spanY) * (h - pad * 2)
 
   return (
-    <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur border border-white/10 rounded p-1.5">
-      <div className="text-[9px] text-white/40 uppercase tracking-wider mb-1 flex items-center gap-1">
-        <span>mini-map</span><span className="text-white/30">XZ</span>
+    <div className="absolute bottom-3 right-3 glass rounded p-1.5 fade-in z-overlay">
+      <div className="label text-[9px] mb-1 flex items-center gap-1">
+        <span>mini-map</span><span className="text-faint">XZ</span>
       </div>
       <svg width={w} height={h} className="block">
         {/* origin crosshair */}
