@@ -3,7 +3,7 @@ import {
   Activity, Clock, Settings as SettingsIcon,
   Target, ShieldAlert, Bot, Building2, Brain,
   GitBranch, AlertOctagon, CheckSquare, BarChart3, Lightbulb, GraduationCap, Cpu,
-  Shield, ScanSearch, ShieldCheck, Terminal, Siren, GitMerge, Lock, BookOpen, TrendingUp, Rocket, Coins, Heart, Home, Code2, Bell, Search, Plus, Map as MapIcon, Hammer, ShoppingBag, Network, Wand2, FlaskConical, Compass,
+  Shield, ScanSearch, ShieldCheck, Terminal, Siren, GitMerge, Lock, BookOpen, TrendingUp, Rocket, Coins, Heart, Home, Code2, Bell, Search, Plus, Map as MapIcon, Hammer, ShoppingBag, Network, Wand2, FlaskConical, Compass, MessageSquare,
 } from 'lucide-react'
 import WarRoom                  from './pages/WarRoom.js'
 import StrategicHomePage        from './pages/StrategicHomePage.js'
@@ -31,6 +31,7 @@ import FabricPage               from './pages/FabricPage.js'
 import IdentityPage             from './pages/IdentityPage.js'
 import SimulationPage           from './pages/SimulationPage.js'
 import MissionPage              from './pages/MissionPage.js'
+import TalkPage                 from './pages/TalkPage.js'
 import Timeline                 from './pages/Timeline.js'
 import Settings                 from './pages/Settings.js'
 import GoalsPage                from './pages/GoalsPage.js'
@@ -80,6 +81,7 @@ import LaunchTonightPage       from './pages/LaunchTonightPage.js'
 import { WorkspaceSwitcher } from './components/WorkspaceSwitcher.js'
 
 const NAV_ITEMS = [
+  { to: '/talk',                 icon: MessageSquare, label: 'Talk' },
   { to: '/home',                 icon: Home,       label: 'Home' },
   { to: '/mission',              icon: Compass,    label: 'Mission' },
   { to: '/proposals',            icon: Code2,      label: 'Proposals' },
@@ -202,6 +204,7 @@ export default function App() {
           <Route path="/identity"             element={<IdentityPage />} />
           <Route path="/simulation"           element={<SimulationPage />} />
           <Route path="/mission"              element={<MissionPage />} />
+          <Route path="/talk"                 element={<TalkPage />} />
           <Route path="/war-room"    element={<WarRoom />} />
           <Route path="/timeline"    element={<Timeline />} />
           <Route path="/goals"       element={<GoalsPage />} />

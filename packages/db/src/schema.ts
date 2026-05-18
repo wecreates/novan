@@ -3346,6 +3346,44 @@ export const scenarioOutcomes = pgTable('scenario_outcomes', {
   index('so_workspace_idx').on(t.workspaceId),
 ])
 
+// ─── Migration 0022 — Novan chat ─────────────────────────────────────────
+
+export const conversations = pgTable('conversations', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  title:         text('title').notNull(),
+  messageCount:  integer('message_count').notNull().default(0),
+  totalTokens:   integer('total_tokens').notNull().default(0),
+  totalCostUsd:  real('total_cost_usd').notNull().default(0),
+  archived:      boolean('archived').notNull().default(false),
+  createdAt:     bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:     bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('conv_workspace_idx').on(t.workspaceId),
+  index('conv_updated_idx').on(t.updatedAt),
+])
+
+export const messages = pgTable('messages', {
+  id:              text('id').primaryKey(),
+  conversationId:  text('conversation_id').notNull(),
+  workspaceId:     text('workspace_id').notNull(),
+  role:            text('role').notNull(),
+  content:         text('content').notNull(),
+  citations:       jsonb('citations').$type<Array<{ kind: string; id: string; extract: string }>>().notNull().default([]),
+  audit:           jsonb('audit').$type<Record<string, unknown> | null>(),
+  tokens:          integer('tokens').notNull().default(0),
+  costUsd:         real('cost_usd').notNull().default(0),
+  provider:        text('provider'),
+  model:           text('model'),
+  streamComplete:  boolean('stream_complete').notNull().default(true),
+  error:           text('error'),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('msg_conv_idx').on(t.conversationId),
+  index('msg_workspace_idx').on(t.workspaceId),
+  index('msg_created_idx').on(t.createdAt),
+])
+
 export const cronBudgets = pgTable('cron_budgets', {
   id:            text('id').primaryKey(),
   cronName:      text('cron_name').notNull().unique(),
