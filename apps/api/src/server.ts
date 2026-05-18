@@ -96,6 +96,7 @@ import selfAwareRoutes          from './routes/self-aware.js'
 import commerceRoutes           from './routes/commerce.js'
 import fabricRoutes             from './routes/fabric.js'
 import chatRoutes               from './routes/chat.js'
+import brainRoutes              from './routes/brain.js'
 import { validateEnvOrThrow }   from './services/secrets-vault.js'
 import { startLearningCron, bootKick } from './services/learning-cron.js'
 import { registerAutonomousWorker } from './services/autonomous-orchestrator.js'
@@ -270,6 +271,7 @@ await app.register(selfAwareRoutes,        { prefix: '/api/v1/self' })
 await app.register(commerceRoutes,         { prefix: '/api/v1/commerce' })
 await app.register(fabricRoutes,           { prefix: '/api/v1' })
 await app.register(chatRoutes,             { prefix: '/api/v1/chat' })
+await app.register(brainRoutes,            { prefix: '/api/v1/brain' })
 
 // Environment validation — fails fast in production if VAULT_MASTER_KEY missing/invalid
 validateEnvOrThrow()

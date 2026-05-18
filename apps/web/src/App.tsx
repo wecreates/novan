@@ -32,6 +32,7 @@ import IdentityPage             from './pages/IdentityPage.js'
 import SimulationPage           from './pages/SimulationPage.js'
 import MissionPage              from './pages/MissionPage.js'
 import TalkPage                 from './pages/TalkPage.js'
+import BrainPage                from './pages/BrainPage.js'
 import Timeline                 from './pages/Timeline.js'
 import Settings                 from './pages/Settings.js'
 import GoalsPage                from './pages/GoalsPage.js'
@@ -81,6 +82,7 @@ import LaunchTonightPage       from './pages/LaunchTonightPage.js'
 import { WorkspaceSwitcher } from './components/WorkspaceSwitcher.js'
 
 const NAV_ITEMS = [
+  { to: '/brain',                icon: Brain,         label: 'Brain' },
   { to: '/talk',                 icon: MessageSquare, label: 'Talk' },
   { to: '/home',                 icon: Home,       label: 'Home' },
   { to: '/mission',              icon: Compass,    label: 'Mission' },
@@ -205,6 +207,7 @@ export default function App() {
           <Route path="/simulation"           element={<SimulationPage />} />
           <Route path="/mission"              element={<MissionPage />} />
           <Route path="/talk"                 element={<TalkPage />} />
+          <Route path="/brain"                element={<BrainPage />} />
           <Route path="/war-room"    element={<WarRoom />} />
           <Route path="/timeline"    element={<Timeline />} />
           <Route path="/goals"       element={<GoalsPage />} />
