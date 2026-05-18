@@ -6,7 +6,8 @@
  */
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Clock, Filter, RefreshCw } from 'lucide-react'
+import { NavLink } from 'react-router-dom'
+import { Clock, Filter, RefreshCw, Brain } from 'lucide-react'
 import { api } from '../api.js'
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
 
@@ -82,6 +83,10 @@ export default function AuditTrailPage() {
                 <span className="text-[var(--text)] font-mono truncate flex-1" title={JSON.stringify(e.payload ?? {})}>
                   {e.payload ? JSON.stringify(e.payload).slice(0, 280) : '—'}
                 </span>
+                <NavLink to={`/brain?replay_at=${e.createdAt}`}
+                  className="p-1 hover:bg-emerald-500/10 rounded" title="Open in Brain Replay at this time">
+                  <Brain className="w-3.5 h-3.5 text-emerald-400" />
+                </NavLink>
               </li>
             ))}
           </ul>

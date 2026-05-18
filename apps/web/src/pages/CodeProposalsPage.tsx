@@ -4,7 +4,8 @@
  */
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Code2, CheckCircle2, XCircle, Hammer } from 'lucide-react'
+import { NavLink } from 'react-router-dom'
+import { Code2, CheckCircle2, XCircle, Hammer, Brain } from 'lucide-react'
 import { api } from '../api.js'
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
 
@@ -101,6 +102,10 @@ export default function CodeProposalsPage() {
                       <Hammer className="w-4 h-4 text-sky-400" />
                     </button>
                   )}
+                  <NavLink to={`/brain?replay_at=${p.createdAt}&node=proposal:${p.id}&focus=war_room`}
+                    className="p-1 hover:bg-emerald-500/10 rounded" title="Open in Brain Replay at this time">
+                    <Brain className="w-4 h-4 text-emerald-400" />
+                  </NavLink>
                 </div>
                 {isOpen && (
                   <div className="px-4 py-3 border-t border-[var(--border)] text-xs space-y-2">

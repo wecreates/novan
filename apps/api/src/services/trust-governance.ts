@@ -161,6 +161,13 @@ export async function setAgentPaused(workspaceId: string, agentName: string, pau
     decision: `Agent ${agentName} ${paused ? 'PAUSED' : 'RESUMED'} by ${by}${reason ? `: ${reason}` : ''}`,
     confidence: 1.0, source: 'trust-governance',
   }).catch(() => null)
+  // Event-source the status change for replay fidelity
+  const { recordStatusChange } = await import('./brain-persistence.js')
+  await recordStatusChange({
+    workspaceId, entityType: 'agent', entityId: agentName,
+    status: paused ? 'paused' : 'healthy',
+    source: 'trust-governance', metadata: { by, reason },
+  }).catch(() => null)
 }
 
 export async function isAgentPaused(workspaceId: string, agentName: string): Promise<boolean> {

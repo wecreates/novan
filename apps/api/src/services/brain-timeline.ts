@@ -20,6 +20,7 @@ import {
 } from '../db/schema.js'
 import { and, eq, gte, lt, sql, desc } from 'drizzle-orm'
 import { buildGraph, type BrainGraph, type BrainNode, type BrainTemplate } from './brain-graph.js'
+import { bulkStatusAt } from './brain-persistence.js'
 
 // ─── Timeline buckets ───────────────────────────────────────────────────
 
@@ -80,18 +81,47 @@ export async function timelineSummary(
  * Honest: this is a "what existed by T" reconstruction. Full state replay
  * would require event sourcing on every status change, which we don't do.
  */
-export async function replayAt(workspaceId: string, at: number, template: BrainTemplate = 'neural'): Promise<BrainGraph & { replay: { at: number; readOnly: true; honestNote: string } }> {
+export async function replayAt(workspaceId: string, at: number, template: BrainTemplate = 'neural'): Promise<BrainGraph & { replay: { at: number; readOnly: true; honestNote: string; statusReconstructed: number } }> {
   const graph = await buildGraph(workspaceId, template)
-  // Filter subnodes by their underlying createdAt — system + core always shown
+
+  // Bulk historical status maps (status_changes table)
+  const [agentStatus, proposalStatus, killStatus, providerStatus, driftStatus] = await Promise.all([
+    bulkStatusAt(workspaceId, 'agent',       at),
+    bulkStatusAt(workspaceId, 'proposal',    at),
+    bulkStatusAt(workspaceId, 'kill_switch', at),
+    bulkStatusAt(workspaceId, 'provider',    at),
+    bulkStatusAt(workspaceId, 'drift',       at),
+  ])
+
+  let statusReconstructed = 0
+
+  // Filter subnodes by createdAt + overlay historical status when available
   const filteredNodes: BrainNode[] = []
   for (const node of graph.nodes) {
     if (node.kind === 'core' || node.kind === 'system') {
       filteredNodes.push(node)
       continue
     }
-    // Look up the createdAt for the underlying entity if we can
     const exists = await nodeExistedAt(workspaceId, node.id, at)
-    if (exists) filteredNodes.push(node)
+    if (!exists) continue
+
+    // Overlay historical status when we have it
+    const i = node.id.indexOf(':')
+    const prefix = i > 0 ? node.id.slice(0, i) : ''
+    const raw = i > 0 ? node.id.slice(i + 1) : node.id
+    let histStatus: string | undefined
+    if      (prefix === 'agent')    histStatus = agentStatus.get(raw)
+    else if (prefix === 'proposal') histStatus = proposalStatus.get(raw)
+    else if (prefix === 'kill')     histStatus = killStatus.get(raw)
+    else if (prefix === 'provider') histStatus = providerStatus.get(raw)
+    else if (prefix === 'drift')    histStatus = driftStatus.get(raw)
+
+    if (histStatus !== undefined) {
+      statusReconstructed++
+      filteredNodes.push({ ...node, status: histStatus as BrainNode['status'] })
+    } else {
+      filteredNodes.push(node)
+    }
   }
   const visibleIds = new Set(filteredNodes.map(n => n.id))
   const filteredEdges = graph.edges.filter(e => visibleIds.has(e.from) && visibleIds.has(e.to))
@@ -101,7 +131,10 @@ export async function replayAt(workspaceId: string, at: number, template: BrainT
     edges: filteredEdges,
     replay: {
       at, readOnly: true,
-      honestNote: 'Node existence reconstructed from created_at. Per-node status uses current-state; precise historical status would require event sourcing.',
+      statusReconstructed,
+      honestNote: statusReconstructed > 0
+        ? `${statusReconstructed} node statuses reconstructed from status_changes history; nodes without history use current-state.`
+        : 'Existence reconstructed from created_at. No historical status_changes yet — using current-state. Status history accumulates as services emit changes.',
     },
   }
 }
@@ -189,9 +222,10 @@ export interface DecisionPath {
  *   → related ethical_blocks (intent/source match)
  *   → surrounding events (±5 min)
  */
-export async function decisionPath(workspaceId: string, key: string): Promise<DecisionPath> {
+export async function decisionPath(workspaceId: string, key: string, windowMinutes = 5): Promise<DecisionPath> {
   const notes: string[] = []
   const steps: DecisionPathStep[] = []
+  const windowMs = Math.max(1, Math.min(60, windowMinutes)) * 60_000
 
   // Try as reasoning chain id first
   const chain = await db.select().from(reasoningChains)
@@ -247,10 +281,10 @@ export async function decisionPath(workspaceId: string, key: string): Promise<De
     }
   }
 
-  // Surrounding events (±5 min)
+  // Surrounding events (±windowMinutes)
   if (rootAt !== null) {
-    const winStart = rootAt - 5 * 60_000
-    const winEnd   = rootAt + 5 * 60_000
+    const winStart = rootAt - windowMs
+    const winEnd   = rootAt + windowMs
     const surrounding = await db.select().from(events)
       .where(and(gte(events.createdAt, winStart), lt(events.createdAt, winEnd)))
       .orderBy(events.createdAt).limit(20).catch(() => [])
@@ -292,8 +326,52 @@ export async function decisionPath(workspaceId: string, key: string): Promise<De
   steps.sort((a, b) => a.at - b.at)
   steps.forEach((s, i) => { s.step = i + 1 })
 
-  if (steps.length === 0) notes.push('No related events found in ±5min window.')
+  if (steps.length === 0) notes.push(`No related events found in ±${windowMinutes}min window.`)
+  if (steps.length > 0) notes.push(`Window: ±${windowMinutes}min (max 60). Use ?window_minutes= to expand.`)
   return { rootEvent, steps, notes }
+}
+
+// ─── Historical search ──────────────────────────────────────────────────
+
+export async function searchHistorical(
+  workspaceId: string, q: string, from: number, to: number, limit = 30,
+): Promise<SearchHit[]> {
+  if (!q || q.length < 2) return []
+  const needle = q.toLowerCase()
+  const out: SearchHit[] = []
+
+  // Search reasoning chains in window
+  const chains = await db.select().from(reasoningChains)
+    .where(and(eq(reasoningChains.workspaceId, workspaceId), gte(reasoningChains.createdAt, from), lt(reasoningChains.createdAt, to)))
+    .orderBy(desc(reasoningChains.createdAt)).limit(500).catch(() => [])
+  for (const c of chains) {
+    const text = `${c.decision} ${c.kind} ${c.source}`.toLowerCase()
+    if (text.includes(needle)) {
+      out.push({
+        id: `mem:${c.id}`, kind: 'chain', label: c.decision.slice(0, 80),
+        detail: `${c.kind} · ${new Date(c.createdAt).toLocaleString()} · ${c.source}`,
+        score: text.startsWith(needle) ? 1 : 0.6,
+      })
+    }
+  }
+
+  // Search events in window
+  const evRows = await db.select().from(events)
+    .where(and(gte(events.createdAt, from), lt(events.createdAt, to)))
+    .orderBy(desc(events.createdAt)).limit(500).catch(() => [])
+  for (const e of evRows) {
+    if (e.workspaceId !== workspaceId && e.workspaceId !== 'global') continue
+    const text = `${e.type} ${e.source}`.toLowerCase()
+    if (text.includes(needle)) {
+      out.push({
+        id: `event:${e.id}`, kind: 'event', label: e.type,
+        detail: `${e.source} · ${new Date(e.createdAt).toLocaleString()}`,
+        score: text.startsWith(needle) ? 1 : 0.5,
+      })
+    }
+  }
+
+  return out.sort((a, b) => b.score - a.score).slice(0, limit)
 }
 
 // ─── Command palette search ─────────────────────────────────────────────

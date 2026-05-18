@@ -139,6 +139,11 @@ export async function setProposalStatus(workspaceId: string, id: string, status:
   await db.update(codeProposals).set({ status, updatedAt: Date.now() })
     .where(and(eq(codeProposals.workspaceId, workspaceId), eq(codeProposals.id, id)))
     .catch(() => null)
+  const { recordStatusChange } = await import('./brain-persistence.js')
+  await recordStatusChange({
+    workspaceId, entityType: 'proposal', entityId: id,
+    status, source: 'code-writer',
+  }).catch(() => null)
 }
 
 export async function markShipped(workspaceId: string, id: string, commitSha: string, by = 'operator'): Promise<void> {

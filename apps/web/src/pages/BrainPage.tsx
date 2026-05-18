@@ -6,6 +6,7 @@
  * actions through /api/v1/brain/actions (approval-gated).
  */
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber'
 import { OrbitControls, Html, AdaptiveDpr, AdaptiveEvents } from '@react-three/drei'
@@ -231,13 +232,55 @@ export default function BrainPage() {
   const [replayMode, setReplayMode] = useState(false)
   const [replayAtMs, setReplayAtMs] = useState<number>(Date.now())
   const [timeRange, setTimeRange] = useState<'15m' | '1h' | '24h' | '7d'>('1h')
-  const [savedViews, setSavedViews] = useState<SavedView[]>(() => {
-    if (typeof window === 'undefined') return []
-    try { return JSON.parse(localStorage.getItem('novan.brain.savedViews') ?? '[]') } catch { return [] }
-  })
   const [recentNodes, setRecentNodes] = useState<string[]>(() => {
     if (typeof window === 'undefined') return []
     try { return JSON.parse(localStorage.getItem('novan.brain.recent') ?? '[]') } catch { return [] }
+  })
+  const [confirmAction, setConfirmAction] = useState<{ actionId: string; payload?: Record<string, unknown>; label: string } | null>(null)
+  const [confirmText, setConfirmText] = useState('')
+  const [historicalSearch, setHistoricalSearch] = useState(false)
+  const [windowMinutes, setWindowMinutes] = useState(5)
+
+  // URL params for deep-linking from War Room (Incidents/Proposals/Audit)
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const at = searchParams.get('replay_at')
+    const node = searchParams.get('node')
+    const tpl = searchParams.get('template')
+    const focus = searchParams.get('focus')
+    if (at) {
+      const n = Number(at)
+      if (Number.isFinite(n)) {
+        setReplayMode(true)
+        setReplayAtMs(n)
+      }
+    }
+    if (tpl && TEMPLATES.find(t => t.id === tpl)) setTemplate(tpl)
+    if (focus) { setFocusSystem(focus); setLod('focus') }
+    if (node) setSelectedId(node)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Backend-synced saved views
+  const savedViewsQuery = useQuery({
+    queryKey: ['brain-saved-views', workspaceId],
+    queryFn: () => api.get<{ data: Array<{ id: string; name: string; template: string; focusSystem: string | null; lod: string; cameraPosition: unknown }> }>(
+      `/api/v1/brain/saved-views?workspace_id=${workspaceId}`,
+    ),
+    refetchInterval: 5 * 60_000,
+  })
+  const savedViews = savedViewsQuery.data?.data ?? []
+
+  const createSavedView = useMutation({
+    mutationFn: (input: { name: string }) => api.post(`/api/v1/brain/saved-views`, {
+      workspace_id: workspaceId, name: input.name,
+      template, focus_system: focusSystem, lod,
+    }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['brain-saved-views', workspaceId] }),
+  })
+  const deleteSavedViewMut = useMutation({
+    mutationFn: (id: string) => fetch(`/api/v1/brain/saved-views/${id}?workspace_id=${workspaceId}`, { method: 'DELETE' }).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['brain-saved-views', workspaceId] }),
   })
 
   const graph = useQuery({
@@ -271,18 +314,24 @@ export default function BrainPage() {
   })
 
   const decisionPath = useQuery({
-    queryKey: ['brain-decision-path', workspaceId, selectedId],
+    queryKey: ['brain-decision-path', workspaceId, selectedId, windowMinutes],
     queryFn: () => {
-      // Use chain id (mem:XXX) → strip prefix
       const key = selectedId?.startsWith('mem:') ? selectedId.slice(4) : selectedId
-      return api.get<{ data: DecisionPath }>(`/api/v1/brain/decision-path/${encodeURIComponent(key ?? '')}?workspace_id=${workspaceId}`)
+      return api.get<{ data: DecisionPath }>(`/api/v1/brain/decision-path/${encodeURIComponent(key ?? '')}?workspace_id=${workspaceId}&window_minutes=${windowMinutes}`)
     },
     enabled: !!selectedId && (selectedId.startsWith('mem:') || replayMode),
   })
 
   const paletteResults = useQuery({
-    queryKey: ['brain-search', workspaceId, paletteQuery],
-    queryFn: () => api.get<{ data: SearchHit[] }>(`/api/v1/brain/search?workspace_id=${workspaceId}&q=${encodeURIComponent(paletteQuery)}&limit=15`),
+    queryKey: ['brain-search', workspaceId, paletteQuery, historicalSearch, replayMode, replayAtMs],
+    queryFn: () => {
+      if (historicalSearch) {
+        const to = replayMode ? replayAtMs : Date.now()
+        const from = to - 7 * 24 * 60 * 60_000
+        return api.get<{ data: SearchHit[] }>(`/api/v1/brain/search?workspace_id=${workspaceId}&q=${encodeURIComponent(paletteQuery)}&limit=15&historical=1&from=${from}&to=${to}`)
+      }
+      return api.get<{ data: SearchHit[] }>(`/api/v1/brain/search?workspace_id=${workspaceId}&q=${encodeURIComponent(paletteQuery)}&limit=15`)
+    },
     enabled: paletteOpen && paletteQuery.length >= 2,
   })
 
@@ -418,23 +467,16 @@ export default function BrainPage() {
   const saveView = () => {
     const name = prompt('Name this view:')
     if (!name) return
-    const v: SavedView = { name, template, focus: focusSystem, createdAt: Date.now() }
-    const next = [v, ...savedViews].slice(0, 12)
-    setSavedViews(next)
-    if (typeof window !== 'undefined') localStorage.setItem('novan.brain.savedViews', JSON.stringify(next))
+    createSavedView.mutate({ name })
   }
 
-  const loadView = (v: SavedView) => {
+  const loadView = (v: { template: string; focusSystem: string | null; lod: string }) => {
     setTemplate(v.template)
-    setFocusSystem(v.focus)
-    setLod(v.focus ? 'focus' : 'systems')
+    setFocusSystem(v.focusSystem)
+    setLod((v.lod as 'systems' | 'global' | 'focus') ?? 'systems')
   }
 
-  const removeView = (v: SavedView) => {
-    const next = savedViews.filter(x => x.createdAt !== v.createdAt)
-    setSavedViews(next)
-    if (typeof window !== 'undefined') localStorage.setItem('novan.brain.savedViews', JSON.stringify(next))
-  }
+  const removeView = (id: string) => { deleteSavedViewMut.mutate(id) }
 
   const onSearchEnter = () => {
     if (!g) return
@@ -613,9 +655,56 @@ export default function BrainPage() {
           <DetailDrawer detail={detail.data.data}
             replayMode={replayMode}
             decisionPath={decisionPath.data?.data ?? null}
+            windowMinutes={windowMinutes}
+            onExpandWindow={() => setWindowMinutes(m => Math.min(60, m + 10))}
             onClose={() => setSelectedId(null)}
-            onAction={(actionId, payload, approvalToken) => doAction.mutate({ actionId, payload: payload ?? {}, ...(approvalToken ? { approvalToken } : {}) })}
+            onAction={(actionId, payload, risk, label) => {
+              if (risk === 'critical' || risk === 'high') {
+                setConfirmAction({ actionId, payload: payload ?? {}, label })
+                setConfirmText('')
+              } else {
+                doAction.mutate({ actionId, payload: payload ?? {} })
+              }
+            }}
             pending={doAction.isPending} />
+        )}
+
+        {/* Critical action confirmation modal */}
+        {confirmAction && (
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60]"
+            onClick={() => setConfirmAction(null)}>
+            <div className="bg-black border border-red-500/40 rounded-lg p-5 max-w-md shadow-2xl"
+              onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-2 mb-3">
+                <AlertOctagon className="w-4 h-4 text-red-400" />
+                <h3 className="text-sm font-medium text-red-300">Critical action</h3>
+              </div>
+              <p className="text-sm text-white/85 mb-3">
+                You are about to: <span className="font-mono text-amber-200">{confirmAction.label}</span>
+              </p>
+              <p className="text-[10px] text-white/50 mb-2">
+                Type <span className="font-mono text-red-300">CONFIRM</span> to proceed. This action emits a runtime event and writes to override_log.
+              </p>
+              <input autoFocus value={confirmText} onChange={(e) => setConfirmText(e.target.value)}
+                placeholder="type CONFIRM"
+                className="w-full bg-black border border-white/20 rounded px-3 py-2 text-sm font-mono mb-3 outline-none focus:border-red-500/50" />
+              <div className="flex gap-2">
+                <button onClick={() => setConfirmAction(null)}
+                  className="flex-1 px-3 py-1.5 text-xs rounded border border-white/10 hover:bg-white/5">
+                  Cancel
+                </button>
+                <button onClick={() => {
+                  if (confirmText.trim() !== 'CONFIRM') return
+                  doAction.mutate({ actionId: confirmAction.actionId, payload: confirmAction.payload ?? {}, approvalToken: 'OPERATOR_APPROVED' })
+                  setConfirmAction(null); setConfirmText('')
+                }}
+                  disabled={confirmText.trim() !== 'CONFIRM'}
+                  className="flex-1 px-3 py-1.5 text-xs rounded bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30 disabled:opacity-30 disabled:cursor-not-allowed">
+                  Execute
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Saved views strip */}
@@ -626,15 +715,20 @@ export default function BrainPage() {
             </div>
             <ul className="space-y-0.5 text-[10px]">
               {savedViews.slice(0, 6).map(v => (
-                <li key={v.createdAt} className="flex items-center gap-1">
-                  <button onClick={() => loadView(v)} className="flex-1 text-left hover:bg-white/5 px-1 py-0.5 rounded truncate" title={`${v.template}${v.focus ? `/${v.focus}` : ''}`}>
+                <li key={v.id} className="flex items-center gap-1">
+                  <button onClick={() => loadView(v)} className="flex-1 text-left hover:bg-white/5 px-1 py-0.5 rounded truncate" title={`${v.template}${v.focusSystem ? `/${v.focusSystem}` : ''}`}>
                     {v.name}
                   </button>
-                  <button onClick={() => removeView(v)} className="text-white/30 hover:text-white/80 p-0.5"><X className="w-2.5 h-2.5" /></button>
+                  <button onClick={() => removeView(v.id)} className="text-white/30 hover:text-white/80 p-0.5"><X className="w-2.5 h-2.5" /></button>
                 </li>
               ))}
             </ul>
           </div>
+        )}
+
+        {/* Mini-map */}
+        {filteredGraph && !fallback2D && (
+          <MiniMap graph={filteredGraph} selectedId={selectedId} />
         )}
 
         {/* Replay timeline slider */}
@@ -683,6 +777,10 @@ export default function BrainPage() {
                   onChange={(e) => setPaletteQuery(e.target.value)}
                   placeholder="Search nodes · run actions · jump to system…"
                   className="flex-1 bg-transparent outline-none text-sm" />
+                <button onClick={() => setHistoricalSearch(h => !h)}
+                  className={`text-[10px] px-1.5 py-0.5 rounded border ${historicalSearch ? 'border-amber-500/40 text-amber-300 bg-amber-500/10' : 'border-white/10 text-white/50'}`}>
+                  history {historicalSearch ? 'on' : 'off'}
+                </button>
                 <span className="text-[10px] text-white/40">ESC</span>
               </div>
               <div className="max-h-[400px] overflow-y-auto p-2">
@@ -789,13 +887,15 @@ function Dropdown<T extends string>({
 }
 
 function DetailDrawer({
-  detail, replayMode, decisionPath, onClose, onAction, pending,
+  detail, replayMode, decisionPath, windowMinutes, onExpandWindow, onClose, onAction, pending,
 }: {
   detail: NodeDetail
   replayMode: boolean
   decisionPath: DecisionPath | null
+  windowMinutes: number
+  onExpandWindow: () => void
   onClose: () => void
-  onAction: (actionId: string, payload?: Record<string, unknown>, approvalToken?: string) => void
+  onAction: (actionId: string, payload: Record<string, unknown> | undefined, risk: 'low' | 'medium' | 'high' | 'critical', label: string) => void
   pending: boolean
 }) {
   const statusColor = STATUS_COLOR[detail.status as BrainNode['status']] ?? '#64748b'
@@ -848,7 +948,7 @@ function DetailDrawer({
             {detail.actions.map(a => {
               const isCritical = a.risk === 'high' || a.risk === 'critical'
               return (
-                <button key={a.id} onClick={() => onAction(a.id, a.payload, isCritical ? 'OPERATOR_APPROVED' : undefined)}
+                <button key={a.id} onClick={() => onAction(a.id, a.payload, a.risk, a.label)}
                   disabled={pending || replayMode}
                   className={`w-full px-2 py-1 rounded text-left flex items-center gap-2 border ${
                     isCritical
@@ -873,28 +973,120 @@ function DetailDrawer({
 
       {decisionPath && decisionPath.steps.length > 0 && (
         <div className="text-xs mt-3 pt-3 border-t border-white/10">
-          <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1.5">Decision path ({decisionPath.steps.length})</div>
-          <ol className="space-y-1">
-            {decisionPath.steps.slice(0, 8).map(s => (
-              <li key={s.step} className="flex gap-2 text-[10px]">
-                <span className="text-white/30 font-mono w-4">{s.step}</span>
-                <span className={`uppercase tracking-wider w-14 ${
-                  s.kind === 'chain' ? 'text-emerald-300'
-                  : s.kind === 'override' ? 'text-amber-300'
-                  : s.kind === 'block' ? 'text-red-300'
-                  : s.kind === 'incident' ? 'text-orange-300'
-                  : 'text-white/60'
-                }`}>{s.kind}</span>
-                <span className="text-white/40">{new Date(s.at).toLocaleTimeString()}</span>
-                <span className="text-white/85 flex-1 truncate" title={s.summary}>{s.summary}</span>
-              </li>
-            ))}
-          </ol>
+          <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1.5 flex items-center">
+            <span>Decision path ({decisionPath.steps.length}) · ±{windowMinutes}m</span>
+            {windowMinutes < 60 && (
+              <button onClick={onExpandWindow}
+                className="ml-auto text-[10px] text-sky-400 hover:underline">expand window →</button>
+            )}
+          </div>
+
+          {/* SVG mini-graph */}
+          <DecisionPathGraph steps={decisionPath.steps} />
+
           {decisionPath.notes.length > 0 && (
             <p className="text-[10px] text-white/30 mt-1.5">{decisionPath.notes.join(' · ')}</p>
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function DecisionPathGraph({ steps }: { steps: DecisionPath['steps'] }) {
+  if (steps.length === 0) return null
+  const kinds = ['chain', 'override', 'event', 'block', 'incident'] as const
+  const kindColor: Record<string, string> = {
+    chain:    '#34d399', override: '#f59e0b', event: '#64748b',
+    block:    '#ef4444', incident: '#fb923c',
+  }
+  const visible = steps.slice(0, 10)
+  const w = 290, padX = 14, padY = 18
+  const innerW = w - padX * 2
+  const minAt = visible[0]!.at
+  const maxAt = visible[visible.length - 1]!.at
+  const span = Math.max(1, maxAt - minAt)
+  const rowY = (kind: string) => padY + (kinds.indexOf(kind as typeof kinds[number]) + 0.5) * 14
+  const colX = (at: number) => padX + ((at - minAt) / span) * innerW
+  const h = padY + kinds.length * 14 + padY / 2
+
+  return (
+    <div className="bg-black/40 border border-white/5 rounded p-1 mt-1 mb-1.5">
+      <svg width={w} height={h} className="block">
+        {/* kind row labels */}
+        {kinds.map(k => (
+          <text key={k} x={2} y={rowY(k) + 3} fontSize={8} fill="rgba(255,255,255,0.30)" fontFamily="monospace">
+            {k}
+          </text>
+        ))}
+        {/* horizontal time axis */}
+        <line x1={padX} y1={h - padY / 2} x2={w - padX} y2={h - padY / 2} stroke="rgba(255,255,255,0.10)" />
+        {/* lines between sequential steps */}
+        {visible.map((s, i) => {
+          if (i === 0) return null
+          const prev = visible[i - 1]!
+          return (
+            <line key={`l-${s.step}`}
+              x1={colX(prev.at)} y1={rowY(prev.kind)}
+              x2={colX(s.at)}    y2={rowY(s.kind)}
+              stroke="rgba(255,255,255,0.18)" strokeWidth={1} />
+          )
+        })}
+        {/* step dots */}
+        {visible.map(s => (
+          <g key={s.step}>
+            <circle cx={colX(s.at)} cy={rowY(s.kind)} r={3.5}
+              fill={kindColor[s.kind] ?? '#64748b'}>
+              <title>{`${s.kind} · ${new Date(s.at).toLocaleTimeString()} · ${s.summary}`}</title>
+            </circle>
+          </g>
+        ))}
+      </svg>
+      <div className="text-[9px] text-white/40 flex justify-between px-1 pb-0.5">
+        <span>{new Date(minAt).toLocaleTimeString()}</span>
+        <span>{new Date(maxAt).toLocaleTimeString()}</span>
+      </div>
+    </div>
+  )
+}
+
+function MiniMap({ graph, selectedId }: { graph: BrainGraph; selectedId: string | null }) {
+  const w = 120, h = 120
+  // Project node positions to 2D (XZ plane) + fit to viewbox
+  const points = graph.nodes.map(n => ({
+    id: n.id,
+    x: n.position?.[0] ?? 0,
+    y: n.position?.[2] ?? 0,
+    kind: n.kind, status: n.status,
+  }))
+  if (points.length === 0) return null
+  const xs = points.map(p => p.x), ys = points.map(p => p.y)
+  const minX = Math.min(...xs), maxX = Math.max(...xs)
+  const minY = Math.min(...ys), maxY = Math.max(...ys)
+  const spanX = Math.max(1, maxX - minX), spanY = Math.max(1, maxY - minY)
+  const pad = 6
+  const px = (x: number) => pad + ((x - minX) / spanX) * (w - pad * 2)
+  const py = (y: number) => pad + ((y - minY) / spanY) * (h - pad * 2)
+
+  return (
+    <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur border border-white/10 rounded p-1.5">
+      <div className="text-[9px] text-white/40 uppercase tracking-wider mb-1 flex items-center gap-1">
+        <span>mini-map</span><span className="text-white/30">XZ</span>
+      </div>
+      <svg width={w} height={h} className="block">
+        {/* origin crosshair */}
+        <line x1={px(0)} y1={pad} x2={px(0)} y2={h - pad} stroke="rgba(255,255,255,0.06)" />
+        <line x1={pad} y1={py(0)} x2={w - pad} y2={py(0)} stroke="rgba(255,255,255,0.06)" />
+        {points.map(p => {
+          const r = p.kind === 'core' ? 3 : p.kind === 'system' ? 2 : 1
+          const isSel = p.id === selectedId
+          return (
+            <circle key={p.id} cx={px(p.x)} cy={py(p.y)} r={isSel ? r + 1.5 : r}
+              fill={STATUS_COLOR[p.status]}
+              stroke={isSel ? '#fff' : 'none'} strokeWidth={isSel ? 1 : 0} />
+          )
+        })}
+      </svg>
     </div>
   )
 }

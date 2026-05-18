@@ -5,7 +5,8 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { buildGraph, getNodeDetail, type BrainTemplate, type LODMode } from '../services/brain-graph.js'
 import { performBrainAction } from '../services/brain-actions.js'
-import { timelineSummary, replayAt, decisionPath, searchBrain } from '../services/brain-timeline.js'
+import { timelineSummary, replayAt, decisionPath, searchBrain, searchHistorical } from '../services/brain-timeline.js'
+import { saveView, listSavedViews, deleteSavedView } from '../services/brain-persistence.js'
 import { db } from '../db/client.js'
 import { events } from '../db/schema.js'
 import { and, eq, gte, desc } from 'drizzle-orm'
@@ -76,17 +77,56 @@ const brainRoutes: FastifyPluginAsync = async (fastify) => {
     return { success: true, data: await replayAt(ws, at, (req.query.template ?? 'neural') as BrainTemplate) }
   })
 
-  fastify.get<{ Params: { key: string }; Querystring: { workspace_id?: string } }>('/decision-path/:key', async (req, reply) => {
+  fastify.get<{ Params: { key: string }; Querystring: { workspace_id?: string; window_minutes?: string } }>('/decision-path/:key', async (req, reply) => {
     const ws = req.query.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
-    return { success: true, data: await decisionPath(ws, req.params.key) }
+    const wm = req.query.window_minutes ? Number(req.query.window_minutes) : 5
+    return { success: true, data: await decisionPath(ws, req.params.key, wm) }
   })
 
-  fastify.get<{ Querystring: { workspace_id?: string; q?: string; limit?: string } }>('/search', async (req, reply) => {
+  fastify.get<{ Querystring: { workspace_id?: string; q?: string; limit?: string; historical?: string; from?: string; to?: string } }>('/search', async (req, reply) => {
     const ws = req.query.workspace_id
     const q  = req.query.q
     if (!ws || !q) return reply.code(400).send({ success: false, error: 'workspace_id, q required' })
-    return { success: true, data: await searchBrain(ws, q, req.query.limit ? Number(req.query.limit) : 20) }
+    const limit = req.query.limit ? Number(req.query.limit) : 20
+    if (req.query.historical === '1' || req.query.historical === 'true') {
+      const to = req.query.to ? Number(req.query.to) : Date.now()
+      const from = req.query.from ? Number(req.query.from) : to - 7 * 24 * 60 * 60_000
+      return { success: true, data: await searchHistorical(ws, q, from, to, limit) }
+    }
+    return { success: true, data: await searchBrain(ws, q, limit) }
+  })
+
+  // ── Saved views ──────────────────────────────────────────────────────
+  fastify.get<{ Querystring: { workspace_id?: string; limit?: string } }>('/saved-views', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await listSavedViews(ws, req.query.limit ? Number(req.query.limit) : 20) }
+  })
+
+  fastify.post<{
+    Body: { workspace_id?: string; operator_id?: string; name?: string; template?: string;
+            focus_system?: string | null; camera_position?: { x: number; y: number; z: number; tx: number; ty: number; tz: number };
+            lod?: string }
+  }>('/saved-views', async (req, reply) => {
+    const b = req.body
+    if (!b.workspace_id || !b.name || !b.template) return reply.code(400).send({ success: false, error: 'workspace_id, name, template required' })
+    const id = await saveView({
+      workspaceId: b.workspace_id,
+      ...(b.operator_id ? { operatorId: b.operator_id } : {}),
+      name: b.name, template: b.template,
+      focusSystem: b.focus_system ?? null,
+      cameraPosition: b.camera_position ?? null,
+      ...(b.lod ? { lod: b.lod } : {}),
+    })
+    return reply.code(201).send({ success: true, data: { id } })
+  })
+
+  fastify.delete<{ Params: { id: string }; Querystring: { workspace_id?: string } }>('/saved-views/:id', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    await deleteSavedView(ws, req.params.id)
+    return { success: true }
   })
 
   // SSE stream — relays recent global events for the brain UI

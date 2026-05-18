@@ -3409,6 +3409,39 @@ export const chatActions = pgTable('chat_actions', {
   index('ca2_status_idx').on(t.status),
 ])
 
+// ─── Migration 0024 — Brain persistence ──────────────────────────────────
+
+export const savedViews = pgTable('saved_views', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  operatorId:      text('operator_id'),
+  name:            text('name').notNull(),
+  template:        text('template').notNull(),
+  focusSystem:     text('focus_system'),
+  cameraPosition:  jsonb('camera_position').$type<{ x: number; y: number; z: number; tx: number; ty: number; tz: number } | null>(),
+  lod:             text('lod').notNull().default('systems'),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:       bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('sv_workspace_idx').on(t.workspaceId),
+  index('sv_updated_idx').on(t.updatedAt),
+])
+
+export const statusChanges = pgTable('status_changes', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  entityType:   text('entity_type').notNull(),
+  entityId:     text('entity_id').notNull(),
+  status:       text('status').notNull(),
+  source:       text('source').notNull(),
+  changedAt:    bigint('changed_at', { mode: 'number' }).notNull(),
+  metadata:     jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+}, (t) => [
+  index('sch_workspace_idx').on(t.workspaceId),
+  index('sch_entity_idx').on(t.entityType, t.entityId),
+  index('sch_changed_idx').on(t.changedAt),
+])
+
 export const cronBudgets = pgTable('cron_budgets', {
   id:            text('id').primaryKey(),
   cronName:      text('cron_name').notNull().unique(),
