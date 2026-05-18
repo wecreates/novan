@@ -3,7 +3,7 @@ import {
   Activity, Clock, Settings as SettingsIcon,
   Target, ShieldAlert, Bot, Building2, Brain,
   GitBranch, AlertOctagon, CheckSquare, BarChart3, Lightbulb, GraduationCap, Cpu,
-  Shield, ScanSearch, ShieldCheck, Terminal, Siren, GitMerge, Lock, BookOpen, TrendingUp, Rocket, Coins, Heart, Home, Code2, Bell, Search, Plus, Map as MapIcon, Hammer, ShoppingBag,
+  Shield, ScanSearch, ShieldCheck, Terminal, Siren, GitMerge, Lock, BookOpen, TrendingUp, Rocket, Coins, Heart, Home, Code2, Bell, Search, Plus, Map as MapIcon, Hammer, ShoppingBag, Network, Wand2, FlaskConical,
 } from 'lucide-react'
 import WarRoom                  from './pages/WarRoom.js'
 import StrategicHomePage        from './pages/StrategicHomePage.js'
@@ -27,6 +27,9 @@ import SystemMapPage            from './pages/SystemMapPage.js'
 import CodePatchesPage          from './pages/CodePatchesPage.js'
 import CommerceWarRoomPage      from './pages/CommerceWarRoomPage.js'
 import TrustGovernancePage      from './pages/TrustGovernancePage.js'
+import FabricPage               from './pages/FabricPage.js'
+import IdentityPage             from './pages/IdentityPage.js'
+import SimulationPage           from './pages/SimulationPage.js'
 import Timeline                 from './pages/Timeline.js'
 import Settings                 from './pages/Settings.js'
 import GoalsPage                from './pages/GoalsPage.js'
@@ -82,6 +85,9 @@ const NAV_ITEMS = [
   { to: '/system-map',           icon: MapIcon,    label: 'System Map' },
   { to: '/commerce',             icon: ShoppingBag,label: 'Commerce' },
   { to: '/trust-governance',     icon: Shield,     label: 'Trust & Governance' },
+  { to: '/fabric',               icon: Network,    label: 'Fabric' },
+  { to: '/identity',             icon: Wand2,      label: 'Identity' },
+  { to: '/simulation',           icon: FlaskConical, label: 'Simulation' },
   { to: '/notifications',        icon: Bell,       label: 'Notifications' },
   { to: '/search',               icon: Search,     label: 'Search' },
   { to: '/operator-input',       icon: Plus,       label: 'Operator Input' },
@@ -190,6 +196,9 @@ export default function App() {
           <Route path="/patches"              element={<CodePatchesPage />} />
           <Route path="/commerce"             element={<CommerceWarRoomPage />} />
           <Route path="/trust-governance"     element={<TrustGovernancePage />} />
+          <Route path="/fabric"               element={<FabricPage />} />
+          <Route path="/identity"             element={<IdentityPage />} />
+          <Route path="/simulation"           element={<SimulationPage />} />
           <Route path="/war-room"    element={<WarRoom />} />
           <Route path="/timeline"    element={<Timeline />} />
           <Route path="/goals"       element={<GoalsPage />} />

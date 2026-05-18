@@ -3250,6 +3250,102 @@ export const ethicalBlocks = pgTable('ethical_blocks', {
   index('eb_blocked_idx').on(t.blockedAt),
 ])
 
+// ─── Migration 0021 — Fabric, identity, simulation ──────────────────────
+
+export const runtimeNodes = pgTable('runtime_nodes', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  region:           text('region').notNull(),
+  role:             text('role').notNull(),
+  status:           text('status').notNull().default('healthy'),
+  capacity:         integer('capacity').notNull().default(1),
+  activeLoad:       integer('active_load').notNull().default(0),
+  queueDepth:       integer('queue_depth').notNull().default(0),
+  endpoint:         text('endpoint'),
+  metadata:         jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  lastHeartbeatAt:  bigint('last_heartbeat_at', { mode: 'number' }).notNull(),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:        bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rn_workspace_idx').on(t.workspaceId),
+  index('rn_status_idx').on(t.status),
+  index('rn_region_idx').on(t.region),
+])
+
+export const scalingEvents = pgTable('scaling_events', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  kind:        text('kind').notNull(),
+  target:      text('target').notNull(),
+  before:      integer('before'),
+  after:       integer('after'),
+  reason:      text('reason').notNull(),
+  approvedBy:  text('approved_by'),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('se_workspace_idx').on(t.workspaceId),
+  index('se_kind_idx').on(t.kind),
+  index('se_created_idx').on(t.createdAt),
+])
+
+export const identityProfile = pgTable('identity_profile', {
+  workspaceId:  text('workspace_id').primaryKey(),
+  traits:       jsonb('traits').$type<Record<string, number>>().notNull().default({}),
+  toneSettings: jsonb('tone_settings').$type<Record<string, unknown>>().notNull().default({}),
+  version:      integer('version').notNull().default(1),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
+export const communicationAudit = pgTable('communication_audit', {
+  id:                  text('id').primaryKey(),
+  workspaceId:         text('workspace_id').notNull(),
+  source:              text('source').notNull(),
+  outputType:          text('output_type').notNull(),
+  text:                text('text').notNull(),
+  hypeScore:           real('hype_score').notNull().default(0),
+  uncertaintyHandling: text('uncertainty_handling').notNull(),
+  factEstimateOk:      boolean('fact_estimate_ok').notNull().default(true),
+  violations:          jsonb('violations').$type<Array<{ kind: string; detail: string }>>().notNull().default([]),
+  passed:              boolean('passed').notNull().default(true),
+  createdAt:           bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ca_workspace_idx').on(t.workspaceId),
+  index('ca_source_idx').on(t.source),
+  index('ca_created_idx').on(t.createdAt),
+])
+
+export const scenarios = pgTable('scenarios', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  kind:         text('kind').notNull(),
+  name:         text('name').notNull(),
+  inputs:       jsonb('inputs').$type<Record<string, unknown>>().notNull().default({}),
+  bestCase:     jsonb('best_case').$type<Record<string, unknown>>().notNull().default({}),
+  likelyCase:   jsonb('likely_case').$type<Record<string, unknown>>().notNull().default({}),
+  worstCase:    jsonb('worst_case').$type<Record<string, unknown>>().notNull().default({}),
+  confidence:   real('confidence').notNull().default(0),
+  mitigation:   jsonb('mitigation').$type<string[]>().notNull().default([]),
+  evidenceRefs: jsonb('evidence_refs').$type<Array<{ type: string; id: string; extract: string }>>().notNull().default([]),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('sc_workspace_idx').on(t.workspaceId),
+  index('sc_kind_idx').on(t.kind),
+  index('sc_created_idx').on(t.createdAt),
+])
+
+export const scenarioOutcomes = pgTable('scenario_outcomes', {
+  id:           text('id').primaryKey(),
+  scenarioId:   text('scenario_id').notNull(),
+  workspaceId:  text('workspace_id').notNull(),
+  observed:     jsonb('observed').$type<Record<string, unknown>>().notNull().default({}),
+  matchedCase:  text('matched_case'),
+  delta:        jsonb('delta').$type<Record<string, unknown>>().notNull().default({}),
+  observedAt:   bigint('observed_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('so_scenario_idx').on(t.scenarioId),
+  index('so_workspace_idx').on(t.workspaceId),
+])
+
 export const cronBudgets = pgTable('cron_budgets', {
   id:            text('id').primaryKey(),
   cronName:      text('cron_name').notNull().unique(),
