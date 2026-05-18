@@ -18,6 +18,7 @@ import {
   simulationAccuracy, simulationWarRoom, compareDecisions,
   type ScenarioKind, type DecisionOption,
 } from '../services/simulation-engine.js'
+import { CHARTER, CHARTER_HASH, adherenceReport } from '../services/mission-charter.js'
 
 const fabricRoutes: FastifyPluginAsync = async (fastify) => {
 
@@ -191,6 +192,18 @@ const fabricRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{ Body: { options?: DecisionOption[] } }>('/sim/compare', async (req, reply) => {
     if (!Array.isArray(req.body.options) || req.body.options.length < 2) return reply.code(400).send({ success: false, error: 'options[] (≥2) required' })
     return { success: true, data: compareDecisions(req.body.options) }
+  })
+
+  // ── Mission charter ──────────────────────────────────────────────────
+  fastify.get('/mission/charter', async () => ({
+    success: true,
+    data: { hash: CHARTER_HASH, totalPrinciples: CHARTER.length, principles: CHARTER },
+  }))
+
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/mission/adherence', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await adherenceReport(ws) }
   })
 }
 
