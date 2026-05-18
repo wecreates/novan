@@ -24,8 +24,8 @@
  */
 import { db } from '../db/client.js'
 import {
-  conversations, messages, reasoningChains, strategicHorizons,
-  designConcepts, driftWarnings, codeProposals,
+  conversations, messages, strategicHorizons,
+  designConcepts, driftWarnings, codeProposals, chatActions,
 } from '../db/schema.js'
 import { and, eq, desc, gte } from 'drizzle-orm'
 import { v7 as uuidv7 } from 'uuid'
@@ -36,6 +36,8 @@ import { record as recordChain } from './reasoning-chains.js'
 import { getRuntimeStatus } from './runtime-heartbeat.js'
 import { checkBudget, consume } from './cron-budget.js'
 import { checkPublishContent } from './commerce-policy.js'
+import { streamChat as multiStreamChat, type ChatMsg } from './chat-providers.js'
+import { detectIntents } from './chat-intent.js'
 
 // ─── Conversation mgmt ──────────────────────────────────────────────────
 
@@ -179,92 +181,6 @@ async function buildSystemPrompt(workspaceId: string, userMessage: string): Prom
   return { systemPrompt: lines.join('\n'), citations }
 }
 
-// ─── LLM call (Groq) ────────────────────────────────────────────────────
-
-interface LLMResult {
-  content: string
-  tokens: number
-  costUsd: number
-  provider: string
-  model: string
-}
-
-interface LLMStreamChunk { delta: string; done: boolean }
-
-async function* streamFromGroq(systemPrompt: string, history: Array<{ role: 'user' | 'assistant'; content: string }>, userMessage: string): AsyncGenerator<LLMStreamChunk, LLMResult> {
-  const apiKey = process.env['GROQ_API_KEY']
-  if (!apiKey) {
-    yield { delta: '_(LLM unavailable — GROQ_API_KEY not configured. Configure /notifications page to set up.)_', done: true }
-    return { content: '_(LLM unavailable)_', tokens: 0, costUsd: 0, provider: 'none', model: 'none' }
-  }
-
-  const msgs = [
-    { role: 'system' as const, content: systemPrompt },
-    ...history.map(m => ({ role: m.role, content: m.content })),
-    { role: 'user' as const, content: userMessage },
-  ]
-
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: msgs,
-      stream: true,
-      temperature: 0.3,
-      max_tokens: 2000,
-    }),
-    signal: AbortSignal.timeout(90_000),
-  }).catch(() => null)
-
-  if (!res || !res.ok || !res.body) {
-    const err = `_(provider error: ${res?.status ?? 'no response'})_`
-    yield { delta: err, done: true }
-    return { content: err, tokens: 0, costUsd: 0, provider: 'groq', model: 'llama-3.3-70b-versatile' }
-  }
-
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let fullContent = ''
-  let totalTokens = 0
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() ?? ''
-    for (const line of lines) {
-      const t = line.trim()
-      if (!t || !t.startsWith('data:')) continue
-      const payload = t.slice(5).trim()
-      if (payload === '[DONE]') continue
-      try {
-        const obj = JSON.parse(payload) as {
-          choices?: Array<{ delta?: { content?: string }; finish_reason?: string }>
-          x_groq?: { usage?: { total_tokens?: number } }
-        }
-        const delta = obj.choices?.[0]?.delta?.content ?? ''
-        if (delta) {
-          fullContent += delta
-          yield { delta, done: false }
-        }
-        if (obj.x_groq?.usage?.total_tokens) totalTokens = obj.x_groq.usage.total_tokens
-      } catch { /* ignore malformed chunks */ }
-    }
-  }
-
-  yield { delta: '', done: true }
-  return {
-    content: fullContent,
-    tokens: totalTokens,
-    costUsd: Number(((totalTokens * 0.59) / 1_000_000).toFixed(6)),
-    provider: 'groq',
-    model: 'llama-3.3-70b-versatile',
-  }
-}
-
 // ─── Public chat entry ──────────────────────────────────────────────────
 
 export interface ChatTurnInput {
@@ -316,17 +232,22 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
   }).catch(() => null)
   yield { event: 'assistant_start', data: { id: asstMsgId } }
 
-  // 4. Stream LLM
-  const stream = streamFromGroq(ctx.systemPrompt, history, i.userMessage)
-  let final: LLMResult = { content: '', tokens: 0, costUsd: 0, provider: '', model: '' }
-  let next: IteratorResult<LLMStreamChunk, LLMResult>
-  // eslint-disable-next-line no-cond-assign
+  // 4. Stream LLM (multi-provider with fallback)
+  const msgs: ChatMsg[] = [
+    { role: 'system', content: ctx.systemPrompt },
+    ...history.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+    { role: 'user', content: i.userMessage },
+  ]
+  const stream = multiStreamChat(i.workspaceId, msgs)
+  let final = { content: '', tokens: 0, costUsd: 0, provider: 'none', model: 'none' }
+  let next: IteratorResult<{ delta: string; done: boolean }, typeof final>
   while (!(next = await stream.next()).done) {
     if (next.value.delta) {
       yield { event: 'delta', data: { content: next.value.delta } }
     }
   }
   final = next.value
+  yield { event: 'provider', data: { provider: final.provider, model: final.model } }
 
   // 5. Hard refusal check on output (purchase/IP/spam)
   const content = checkPublishContent(final.content)
@@ -362,12 +283,34 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
   // 9. Consume budget
   await consume('novan_chat', { calls: 1, tokens: final.tokens, costUsd: final.costUsd })
 
-  // 10. Record reasoning chain + index for future semantic search
+  // 10. Detect action intents in the user's message → persist as chat_actions
+  const intents = detectIntents(i.userMessage)
+  const suggestedActions: Array<{ id: string; actionType: string; title: string; summary: string; riskLevel: string }> = []
+  for (const intent of intents) {
+    const aid = uuidv7()
+    await db.insert(chatActions).values({
+      id: aid, messageId: asstMsgId, conversationId: i.conversationId,
+      workspaceId: i.workspaceId,
+      actionType: intent.actionType, title: intent.title,
+      summary: intent.summary, payload: intent.payload,
+      riskLevel: intent.riskLevel, status: 'suggested',
+      createdAt: Date.now(),
+    }).catch(() => null)
+    suggestedActions.push({
+      id: aid, actionType: intent.actionType, title: intent.title,
+      summary: intent.summary, riskLevel: intent.riskLevel,
+    })
+  }
+  if (suggestedActions.length > 0) {
+    yield { event: 'actions_suggested', data: { actions: suggestedActions } }
+  }
+
+  // 11. Record reasoning chain + index for future semantic search
   await recordChain({
     workspaceId: i.workspaceId,
     kind: 'decision',
     subjectId: `chat:${i.conversationId}`,
-    decision: `Operator chat turn: "${i.userMessage.slice(0, 80)}…" → Novan responded (${final.tokens} tokens, audit ${auditResult.passed ? 'passed' : 'failed'})`,
+    decision: `Operator chat turn: "${i.userMessage.slice(0, 80)}…" → Novan responded (${final.tokens} tokens, audit ${auditResult.passed ? 'passed' : 'failed'}, ${suggestedActions.length} actions suggested)`,
     evidence: ctx.citations.map(c => ({ type: c.kind, id: c.id, extract: c.extract })),
     confidence: auditResult.passed ? 0.7 : 0.4,
     source: 'novan-chat',
@@ -376,6 +319,8 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
 
   yield { event: 'done', data: {
     messageId: asstMsgId, tokens: final.tokens, costUsd: final.costUsd,
+    provider: final.provider, model: final.model,
     auditPassed: auditResult.passed, citations: ctx.citations.length,
+    suggestedActions: suggestedActions.length,
   } }
 }

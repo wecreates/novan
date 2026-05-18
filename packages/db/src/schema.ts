@@ -3384,6 +3384,31 @@ export const messages = pgTable('messages', {
   index('msg_created_idx').on(t.createdAt),
 ])
 
+// ─── Migration 0023 — Chat-driven actions ────────────────────────────────
+
+export const chatActions = pgTable('chat_actions', {
+  id:                text('id').primaryKey(),
+  messageId:         text('message_id').notNull(),
+  conversationId:    text('conversation_id').notNull(),
+  workspaceId:       text('workspace_id').notNull(),
+  actionType:        text('action_type').notNull(),
+  title:             text('title').notNull(),
+  summary:           text('summary').notNull(),
+  payload:           jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+  riskLevel:         text('risk_level').notNull().default('low'),
+  status:            text('status').notNull().default('suggested'),
+  executedActionId:  text('executed_action_id'),
+  executedResult:    jsonb('executed_result').$type<Record<string, unknown>>(),
+  decidedBy:         text('decided_by'),
+  decidedAt:         bigint('decided_at', { mode: 'number' }),
+  reason:            text('reason'),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ca2_message_idx').on(t.messageId),
+  index('ca2_workspace_idx').on(t.workspaceId),
+  index('ca2_status_idx').on(t.status),
+])
+
 export const cronBudgets = pgTable('cron_budgets', {
   id:            text('id').primaryKey(),
   cronName:      text('cron_name').notNull().unique(),
