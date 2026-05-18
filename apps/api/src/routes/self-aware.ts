@@ -4,7 +4,11 @@
  * notification driver status, home dashboard.
  */
 import type { FastifyPluginAsync } from 'fastify'
-import { listProposals, setProposalStatus, persistProposal, proposeFromPlan } from '../services/code-writer.js'
+import { listProposals, setProposalStatus, persistProposal, proposeFromPlan, markShipped, credibilityMetrics } from '../services/code-writer.js'
+import {
+  listProviderPreferences, setProviderPreferenceStatus,
+  listWorkerConcurrency, setWorkerConcurrency, cronFailureSummary,
+} from '../services/preferences-mgmt.js'
 import { planBuild } from '../services/self-build-planner.js'
 import { introspectCode } from '../services/code-introspection.js'
 import { captureGitState, recentSnapshots, snapshotAt } from '../services/git-state.js'
@@ -102,6 +106,53 @@ const selfAwareRoutes: FastifyPluginAsync = async (fastify) => {
     const ws = req.query.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     return { success: true, data: await homeDashboard(ws) }
+  })
+
+  // Mark proposal shipped (records commit sha)
+  fastify.post<{ Params: { id: string }; Body: { workspace_id?: string; commit_sha?: string; by?: string } }>('/proposals/:id/shipped', async (req, reply) => {
+    const { workspace_id, commit_sha } = req.body
+    if (!workspace_id || !commit_sha) return reply.code(400).send({ success: false, error: 'workspace_id, commit_sha required' })
+    await markShipped(workspace_id, req.params.id, commit_sha, req.body.by ?? 'operator')
+    return { success: true }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/proposals/credibility', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await credibilityMetrics(ws) }
+  })
+
+  // Provider preferences mgmt
+  fastify.get<{ Querystring: { workspace_id?: string; status?: string } }>('/preferences/providers', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await listProviderPreferences(ws, req.query.status as 'pending' | 'active' | 'rejected' | undefined) }
+  })
+
+  fastify.post<{ Body: { workspace_id?: string; task_type?: string; status?: string } }>('/preferences/providers/status', async (req, reply) => {
+    const { workspace_id, task_type, status } = req.body
+    if (!workspace_id || !task_type || !status) return reply.code(400).send({ success: false, error: 'workspace_id, task_type, status required' })
+    await setProviderPreferenceStatus(workspace_id, task_type, status as 'pending' | 'active' | 'rejected')
+    return { success: true }
+  })
+
+  // Worker concurrency mgmt
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/preferences/workers', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await listWorkerConcurrency(ws) }
+  })
+
+  fastify.post<{ Body: { workspace_id?: string; queue_name?: string; factor?: number; reason?: string } }>('/preferences/workers/set', async (req, reply) => {
+    const { workspace_id, queue_name, factor } = req.body
+    if (!workspace_id || !queue_name || typeof factor !== 'number') return reply.code(400).send({ success: false, error: 'workspace_id, queue_name, factor required' })
+    await setWorkerConcurrency(workspace_id, queue_name, factor, req.body.reason)
+    return { success: true }
+  })
+
+  // Cron failure summary
+  fastify.get<{ Querystring: { hours?: string } }>('/cron-failures', async (req) => {
+    return { success: true, data: await cronFailureSummary(req.query.hours ? Number(req.query.hours) : 24) }
   })
 }
 

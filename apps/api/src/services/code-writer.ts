@@ -141,3 +141,34 @@ export async function setProposalStatus(workspaceId: string, id: string, status:
     .catch(() => null)
 }
 
+export async function markShipped(workspaceId: string, id: string, commitSha: string, by = 'operator'): Promise<void> {
+  await db.update(codeProposals).set({
+    status: 'shipped',
+    shippedAt: Date.now(),
+    shippedCommitSha: commitSha,
+    shippedBy: by,
+    updatedAt: Date.now(),
+  }).where(and(eq(codeProposals.workspaceId, workspaceId), eq(codeProposals.id, id)))
+    .catch(() => null)
+}
+
+export async function credibilityMetrics(workspaceId: string, windowDays = 90) {
+  const since = Date.now() - windowDays * 24 * 60 * 60_000
+  const rows = await db.select().from(codeProposals)
+    .where(and(eq(codeProposals.workspaceId, workspaceId)))
+    .catch(() => [])
+  const recent = rows.filter(r => r.createdAt >= since)
+  const approved = recent.filter(r => r.status === 'approved' || r.status === 'shipped').length
+  const shipped  = recent.filter(r => r.status === 'shipped').length
+  const rejected = recent.filter(r => r.status === 'rejected').length
+  const open     = recent.filter(r => r.status === 'proposed').length
+  return {
+    windowDays,
+    total: recent.length,
+    proposed: open, approved, shipped, rejected,
+    approvalRate:  recent.length > 0 ? Number((approved / recent.length).toFixed(3)) : null,
+    shippedRate:   approved > 0    ? Number((shipped  / approved).toFixed(3))     : null,
+    factType: 'fact' as const,
+  }
+}
+

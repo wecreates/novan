@@ -10,7 +10,7 @@ import { v7 as uuidv7 }   from 'uuid'
 import { and, eq, desc }  from 'drizzle-orm'
 import { db }              from '../db/client.js'
 import {
-  events, providerConfigs, providerScores, killSwitches,
+  events, providerConfigs, providerScores, killSwitches, providerPreferences,
 } from '../db/schema.js'
 import {
   evaluateKillSwitches, checkBudgetPreflight,
@@ -33,6 +33,7 @@ export interface RouteRequest {
   executionId:      string
   isWorkflow?:      boolean
   requiredCapabilities?: string[]
+  taskType?:        string           // routes through provider_preferences when active
 }
 
 export interface RouteDecision {
@@ -60,6 +61,7 @@ async function emitEvent(
 async function selectProvider(
   workspaceId: string,
   preferredId?: string,
+  taskType?: string,
 ): Promise<string | null> {
   // If specific provider requested and it's enabled, use it
   if (preferredId) {
@@ -70,6 +72,25 @@ async function selectProvider(
         eq(providerConfigs.enabled, true),
       ))
     if (configs.length > 0) return preferredId
+  }
+
+  // Operator-approved preference for this task type (status='active')
+  if (taskType) {
+    const pref = await db.select().from(providerPreferences)
+      .where(and(
+        eq(providerPreferences.workspaceId, workspaceId),
+        eq(providerPreferences.taskType, taskType),
+        eq(providerPreferences.status, 'active'),
+      )).limit(1).then(r => r[0]).catch(() => null)
+    if (pref) {
+      const configs = await db.select().from(providerConfigs)
+        .where(and(
+          eq(providerConfigs.workspaceId, workspaceId),
+          eq(providerConfigs.providerId, pref.preferredProvider),
+          eq(providerConfigs.enabled, true),
+        )).catch(() => [])
+      if (configs.length > 0) return pref.preferredProvider
+    }
   }
 
   // Pick best by composite score (highest first, circuit must not be open)
@@ -185,7 +206,7 @@ export async function routeRequest(req: RouteRequest): Promise<RouteDecision> {
   }
 
   // ── 4. Provider selection ─────────────────────────────────────────────────
-  const selectedProvider = await selectProvider(req.workspaceId, req.providerId)
+  const selectedProvider = await selectProvider(req.workspaceId, req.providerId, req.taskType)
 
   await emitEvent(req.workspaceId, 'router.approved', {
     guardId, executionId: req.executionId,

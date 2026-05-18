@@ -191,6 +191,8 @@ try {
 // ─── Register routes ───────────────────────────────────────────────────────────
 
 await app.register(healthRoutes,   { prefix: '/health' })
+// /healthz alias — k8s/UptimeRobot convention
+app.get('/healthz', async (_req, reply) => reply.send({ status: 'ok', timestamp: Date.now() }))
 await app.register(workflowRoutes, { prefix: '/api/v1/workflows' })
 await app.register(memoryRoutes,   { prefix: '/api/v1/memory' })
 await app.register(eventRoutes,    { prefix: '/api/v1/events' })

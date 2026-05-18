@@ -2941,10 +2941,14 @@ export const codeProposals = pgTable('code_proposals', {
   approvalId:    text('approval_id'),
   createdAt:     bigint('created_at', { mode: 'number' }).notNull(),
   updatedAt:     bigint('updated_at', { mode: 'number' }).notNull(),
+  shippedAt:        bigint('shipped_at', { mode: 'number' }),
+  shippedCommitSha: text('shipped_commit_sha'),
+  shippedBy:        text('shipped_by'),
 }, (t) => [
   index('cp_workspace_idx').on(t.workspaceId),
   index('cp_status_idx').on(t.status),
   index('cp_capability_idx').on(t.capabilityId),
+  index('cp_shipped_idx').on(t.shippedAt),
 ])
 
 export const workerConcurrency = pgTable('worker_concurrency', {

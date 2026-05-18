@@ -3,7 +3,7 @@ import {
   Activity, Clock, Settings as SettingsIcon,
   Target, ShieldAlert, Bot, Building2, Brain,
   GitBranch, AlertOctagon, CheckSquare, BarChart3, Lightbulb, GraduationCap, Cpu,
-  Shield, ScanSearch, ShieldCheck, Terminal, Siren, GitMerge, Lock, BookOpen, TrendingUp, Rocket, Coins, Heart, Home, Code2, Bell,
+  Shield, ScanSearch, ShieldCheck, Terminal, Siren, GitMerge, Lock, BookOpen, TrendingUp, Rocket, Coins, Heart, Home, Code2, Bell, Search, Plus,
 } from 'lucide-react'
 import WarRoom                  from './pages/WarRoom.js'
 import StrategicHomePage        from './pages/StrategicHomePage.js'
@@ -21,6 +21,8 @@ import RuntimePage              from './pages/RuntimePage.js'
 import HomeDashboardPage        from './pages/HomeDashboardPage.js'
 import NotificationDriversPage  from './pages/NotificationDriversPage.js'
 import CodeProposalsPage        from './pages/CodeProposalsPage.js'
+import SearchPage               from './pages/SearchPage.js'
+import OperatorInputPage        from './pages/OperatorInputPage.js'
 import Timeline                 from './pages/Timeline.js'
 import Settings                 from './pages/Settings.js'
 import GoalsPage                from './pages/GoalsPage.js'
@@ -73,6 +75,8 @@ const NAV_ITEMS = [
   { to: '/home',                 icon: Home,       label: 'Home' },
   { to: '/proposals',            icon: Code2,      label: 'Proposals' },
   { to: '/notifications',        icon: Bell,       label: 'Notifications' },
+  { to: '/search',               icon: Search,     label: 'Search' },
+  { to: '/operator-input',       icon: Plus,       label: 'Operator Input' },
   { to: '/strategic-home', icon: Rocket,       label: 'Strategic Home' },
   { to: '/mission-intelligence', icon: Brain,  label: 'Mission Intelligence' },
   { to: '/executive-war-room',   icon: TrendingUp, label: 'Executive War Room' },
@@ -172,6 +176,8 @@ export default function App() {
           <Route path="/home"                 element={<HomeDashboardPage />} />
           <Route path="/proposals"            element={<CodeProposalsPage />} />
           <Route path="/notifications"        element={<NotificationDriversPage />} />
+          <Route path="/search"               element={<SearchPage />} />
+          <Route path="/operator-input"       element={<OperatorInputPage />} />
           <Route path="/war-room"    element={<WarRoom />} />
           <Route path="/timeline"    element={<Timeline />} />
           <Route path="/goals"       element={<GoalsPage />} />

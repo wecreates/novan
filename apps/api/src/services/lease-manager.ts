@@ -8,7 +8,7 @@
 import { v7 as uuidv7 } from 'uuid'
 import { and, eq, lt, sql } from 'drizzle-orm'
 import { db }                from '../db/client.js'
-import { executionLeases, workerRegistry, events } from '../db/schema.js'
+import { executionLeases, workerRegistry, events, workerConcurrency } from '../db/schema.js'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,6 +44,19 @@ async function emitLeaseEvent(
  * Create a new active lease for a job on a worker.
  * Increments worker activeLeases counter atomically.
  */
+/**
+ * Read the operator-set concurrency factor for a queue (jobType).
+ * Returns 1.0 (no throttle) by default.
+ * Workers consult this BEFORE creating a lease — see throttleFactor().
+ */
+export async function throttleFactor(workspaceId: string, jobType: LeaseJobType): Promise<number> {
+  const row = await db.select().from(workerConcurrency)
+    .where(and(eq(workerConcurrency.workspaceId, workspaceId), eq(workerConcurrency.queueName, jobType)))
+    .limit(1).then(r => r[0]).catch(() => null)
+  if (!row) return 1.0
+  return Math.max(0, Math.min(2.0, Number(row.factor)))
+}
+
 export async function createLease(input: CreateLeaseInput): Promise<typeof executionLeases.$inferSelect> {
   const now       = Date.now()
   const timeoutMs = input.timeoutMs ?? 300_000
