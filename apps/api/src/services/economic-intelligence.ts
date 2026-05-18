@@ -24,6 +24,7 @@ import {
 import { and, eq, gte, sql, desc, lt, isNotNull } from 'drizzle-orm'
 import { record as recordChain }      from './reasoning-chains.js'
 import { notify }                     from './notifications.js'
+import { revenueSummary, revenueByWorkflow } from './revenue.js'
 
 type Fact     = { factType: 'fact';     value: number; source: string }
 type Estimate = { factType: 'estimate'; value: number; basis: string; confidence: number }
@@ -679,6 +680,36 @@ export async function evaluateEconomicOutcomes(workspaceId: string): Promise<{
     notes.push('No economic predictions reached horizon — try again later.')
   }
   return { evaluated: matched + unmatched, matched, unmatched, notes }
+}
+
+// ── True ROI (revenue − cost) ────────────────────────────────────────────
+
+export async function trueRoi(workspaceId: string, windowDays = 30) {
+  const [state, rev, revByWf] = await Promise.all([
+    economicState(workspaceId, windowDays),
+    revenueSummary(workspaceId, windowDays),
+    revenueByWorkflow(workspaceId, windowDays),
+  ])
+  const totalCost = state.spend.total.value
+  const netUsd    = Number((rev.totalUsd - totalCost).toFixed(2))
+  return {
+    windowDays,
+    factType: 'fact' as const,
+    revenueUsd: rev.totalUsd,
+    costUsd:    totalCost,
+    netUsd,
+    roi: totalCost > 0 ? Number((netUsd / totalCost).toFixed(3)) : null,
+    attributionRate: rev.attributionRate,
+    perWorkflow: revByWf,
+    notes: [
+      rev.totalUsd === 0
+        ? 'No revenue events in window — ingest via /economy/revenue or webhooks to enable real ROI.'
+        : `Revenue ${rev.eventCount} events from sources: ${Object.keys(rev.bySource).join(', ')}.`,
+      rev.attributionRate < 0.5 && rev.totalUsd > 0
+        ? `Only ${(rev.attributionRate * 100).toFixed(0)}% of revenue is workflow-attributed — per-workflow ROI is partial.`
+        : null,
+    ].filter(Boolean),
+  }
 }
 
 // Recent economic chains for UI

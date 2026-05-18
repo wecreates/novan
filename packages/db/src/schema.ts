@@ -2830,3 +2830,110 @@ export const runtimeSafetyFlags = pgTable('runtime_safety_flags', {
   index('rsf_workspace_idx').on(t.workspaceId),
   index('rsf_tonight_idx').on(t.tonightModeActive),
 ])
+
+// ─── Migration 0016 — Autonomy completion ────────────────────────────────
+
+export const actions = pgTable('actions', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  type:         text('type').notNull(),
+  subjectId:    text('subject_id'),
+  payload:      jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+  status:       text('status').notNull().default('pending'),
+  riskLevel:    text('risk_level').notNull().default('low'),
+  requestedBy:  text('requested_by').notNull(),
+  approvalId:   text('approval_id'),
+  result:       jsonb('result').$type<Record<string, unknown>>(),
+  error:        text('error'),
+  createdAt:    bigint('created_at',   { mode: 'number' }).notNull(),
+  startedAt:    bigint('started_at',   { mode: 'number' }),
+  completedAt:  bigint('completed_at', { mode: 'number' }),
+}, (t) => [
+  index('actions_workspace_idx').on(t.workspaceId),
+  index('actions_status_idx').on(t.status),
+  index('actions_type_idx').on(t.type),
+  index('actions_created_idx').on(t.createdAt),
+])
+
+export const revenueEvents = pgTable('revenue_events', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  source:         text('source').notNull(),
+  amountUsd:      real('amount_usd').notNull(),
+  currency:       text('currency').notNull().default('USD'),
+  customerRef:    text('customer_ref'),
+  workflowRunId:  text('workflow_run_id'),
+  occurredAt:     bigint('occurred_at', { mode: 'number' }).notNull(),
+  metadata:       jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  createdAt:      bigint('created_at',  { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rev_workspace_idx').on(t.workspaceId),
+  index('rev_occurred_idx').on(t.occurredAt),
+  index('rev_workflow_idx').on(t.workflowRunId),
+])
+
+export const recommendationFeedback = pgTable('recommendation_feedback', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  chainId:      text('chain_id').notNull(),
+  action:       text('action').notNull(),
+  reason:       text('reason'),
+  operatorId:   text('operator_id'),
+  weightDelta:  real('weight_delta').notNull().default(0),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rf_workspace_idx').on(t.workspaceId),
+  index('rf_chain_idx').on(t.chainId),
+  index('rf_action_idx').on(t.action),
+])
+
+export const inboundMessages = pgTable('inbound_messages', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  channel:      text('channel').notNull(),
+  externalId:   text('external_id'),
+  fromAddr:     text('from_addr'),
+  subject:      text('subject'),
+  body:         text('body').notNull(),
+  receivedAt:   bigint('received_at',  { mode: 'number' }).notNull(),
+  processedAt:  bigint('processed_at', { mode: 'number' }),
+  intent:       text('intent'),
+  metadata:     jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+}, (t) => [
+  index('ib_workspace_idx').on(t.workspaceId),
+  index('ib_channel_idx').on(t.channel),
+  index('ib_received_idx').on(t.receivedAt),
+])
+
+export const strategicHorizons = pgTable('strategic_horizons', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  horizon:      text('horizon').notNull(),
+  title:        text('title').notNull(),
+  objectives:   jsonb('objectives').$type<Array<Record<string, unknown>>>().notNull().default([]),
+  constraints:  jsonb('constraints').$type<Array<Record<string, unknown>>>().notNull().default([]),
+  reviewAt:     bigint('review_at', { mode: 'number' }).notNull(),
+  status:       text('status').notNull().default('active'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('sh_workspace_idx').on(t.workspaceId),
+  index('sh_horizon_idx').on(t.horizon),
+  index('sh_status_idx').on(t.status),
+])
+
+export const cronBudgets = pgTable('cron_budgets', {
+  id:            text('id').primaryKey(),
+  cronName:      text('cron_name').notNull().unique(),
+  windowStart:   bigint('window_start',  { mode: 'number' }).notNull(),
+  callsUsed:     integer('calls_used').notNull().default(0),
+  tokensUsed:    integer('tokens_used').notNull().default(0),
+  costUsdUsed:   real('cost_usd_used').notNull().default(0),
+  maxCalls:      integer('max_calls').notNull().default(1000),
+  maxTokens:     integer('max_tokens').notNull().default(1_000_000),
+  maxCostUsd:    real('max_cost_usd').notNull().default(5.0),
+  windowMs:      bigint('window_ms', { mode: 'number' }).notNull().default(3_600_000),
+  blocked:       boolean('blocked').notNull().default(false),
+  lastBlockedAt: bigint('last_blocked_at', { mode: 'number' }),
+  updatedAt:     bigint('updated_at', { mode: 'number' }).notNull(),
+})

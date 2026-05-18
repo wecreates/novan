@@ -36,6 +36,8 @@ import { extractPatterns }                     from './pattern-extractor.js'
 import { scanDrift }                           from './drift-detector.js'
 import { applyCorrections }                    from './reality-correction.js'
 import { evaluateEconomicOutcomes, generateEconomicRecommendations } from './economic-intelligence.js'
+import { sweepDueReviews }            from './strategic-horizons.js'
+import { checkBudget, consume }       from './cron-budget.js'
 import { sweepStale }                          from './assumption-tracker.js'
 import { stabilitySnapshot, emitGovernance, autoEngageThrottle, pauseUnstableAgents, autoDisengageThrottleIfStable } from './governance-core.js'
 import { crossDivisionBlockers, type CrossDivisionBlocker } from './divisions.js'
@@ -189,18 +191,40 @@ async function runRealityVerification() {
 
 async function runEconomicLearning() {
   try {
+    // Budget ceiling: at most 200 ops / 6h for economic learning
+    const budget = await checkBudget('economic_learning', {
+      maxCalls: 200, maxTokens: 200_000, maxCostUsd: 1.0, windowMs: 6 * 60 * 60_000,
+    })
+    if (!budget.ok) {
+      await emit('cron.budget_blocked', { task: 'economic_learning', reason: budget.reason })
+      return
+    }
     const ids = await listWorkspaceIds()
-    let totalEvaluated = 0, totalMatched = 0, totalRecs = 0
+    let totalEvaluated = 0, totalMatched = 0, totalRecs = 0, calls = 0
     for (const ws of ids) {
       const evald = await evaluateEconomicOutcomes(ws).catch(() => null)
       if (evald) { totalEvaluated += evald.evaluated; totalMatched += evald.matched }
       const rec   = await generateEconomicRecommendations(ws).catch(() => null)
       if (rec)   totalRecs += rec.chainsRecorded
+      calls += 2
     }
+    await consume('economic_learning', { calls })
     if (totalEvaluated + totalRecs > 0) {
       await emit('cron.economic_learning', { evaluated: totalEvaluated, matched: totalMatched, recsRecorded: totalRecs })
     }
   } catch (e) { await emit('cron.error', { task: 'economic_learning', error: (e as Error).message }) }
+}
+
+async function runHorizonReviewSweep() {
+  try {
+    const ids = await listWorkspaceIds()
+    let totalNotified = 0
+    for (const ws of ids) {
+      const r = await sweepDueReviews(ws).catch(() => null)
+      if (r) totalNotified += r.notified
+    }
+    if (totalNotified > 0) await emit('cron.horizon_reviews', { notified: totalNotified })
+  } catch (e) { await emit('cron.error', { task: 'horizon_review', error: (e as Error).message }) }
 }
 
 async function runDailyCompressionAndPatterns() {
@@ -355,6 +379,7 @@ const INTERVALS = {
   dailyCompression: 24 * 60 * 60_000, // 24 hours — knowledge compression + pattern extraction
   realityVerify:    60 * 60_000,      // 1 hour — drift scan + safe corrections + assumption staleness
   economicLearning: 6  * 60 * 60_000, // 6 hours — evaluate past predictions + regenerate recommendations
+  horizonReview:    60 * 60_000,      // 1 hour — sweep due strategic horizon reviews
 }
 
 export function startLearningCron(): void {
@@ -380,6 +405,7 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runDailyCompressionAndPatterns(), INTERVALS.dailyCompression))
   handles.push(setInterval(() => void runRealityVerification(),         INTERVALS.realityVerify))
   handles.push(setInterval(() => void runEconomicLearning(),            INTERVALS.economicLearning))
+  handles.push(setInterval(() => void runHorizonReviewSweep(),          INTERVALS.horizonReview))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

@@ -2,7 +2,7 @@
 FROM node:20-alpine
 
 # pnpm + native build tools (in case any dep needs gyp)
-RUN apk add --no-cache python3 make g++ \
+RUN apk add --no-cache python3 make g++ postgresql-client \
  && corepack enable \
  && corepack prepare pnpm@9.12.0 --activate
 
@@ -24,4 +24,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
   CMD wget -qO- http://127.0.0.1:3001/health || exit 1
 
 WORKDIR /app/apps/api
-CMD ["node", "--import", "tsx/esm", "src/server.ts"]
+RUN chmod +x boot.sh
+CMD ["./boot.sh"]
