@@ -4,7 +4,7 @@
  */
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Code2, CheckCircle2, XCircle } from 'lucide-react'
+import { Code2, CheckCircle2, XCircle, Hammer } from 'lucide-react'
 import { api } from '../api.js'
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
 
@@ -40,6 +40,11 @@ export default function CodeProposalsPage() {
   const setStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       api.post(`/api/v1/self/proposals/${id}/status`, { workspace_id: workspaceId, status }),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['proposals', workspaceId] }),
+  })
+
+  const buildPatch = useMutation({
+    mutationFn: (id: string) => api.post(`/api/v1/self/proposals/${id}/build`, { workspace_id: workspaceId }),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['proposals', workspaceId] }),
   })
 
@@ -88,6 +93,13 @@ export default function CodeProposalsPage() {
                         <XCircle className="w-4 h-4 text-red-400" />
                       </button>
                     </>
+                  )}
+                  {(p.status === 'approved' || p.status === 'proposed') && (
+                    <button onClick={() => buildPatch.mutate(p.id)}
+                      disabled={buildPatch.isPending}
+                      className="p-1 hover:bg-sky-500/10 rounded" title="Build patch (safety-gated)">
+                      <Hammer className="w-4 h-4 text-sky-400" />
+                    </button>
                   )}
                 </div>
                 {isOpen && (

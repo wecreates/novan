@@ -2998,6 +2998,54 @@ export const chainEmbeddings = pgTable('chain_embeddings', {
   index('ce_workspace_idx').on(t.workspaceId),
 ])
 
+// ─── Migration 0019 — Code agent ─────────────────────────────────────────
+
+export const codePatches = pgTable('code_patches', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  proposalId:   text('proposal_id').notNull(),
+  status:       text('status').notNull().default('pending'),
+  agent:        text('agent').notNull().default('template'),
+  files:        jsonb('files').$type<Array<{ path: string; contents: string; op: 'create' | 'modify' }>>().notNull().default([]),
+  safetyReport: jsonb('safety_report').$type<Record<string, unknown>>().notNull().default({}),
+  sandboxReport: jsonb('sandbox_report').$type<Record<string, unknown>>().notNull().default({}),
+  blockReason:  text('block_reason'),
+  tokensUsed:   integer('tokens_used').notNull().default(0),
+  costUsdUsed:  real('cost_usd_used').notNull().default(0),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+  completedAt:  bigint('completed_at', { mode: 'number' }),
+}, (t) => [
+  index('patches_workspace_idx').on(t.workspaceId),
+  index('patches_proposal_idx').on(t.proposalId),
+  index('patches_status_idx').on(t.status),
+])
+
+export const commitOutcomes = pgTable('commit_outcomes', {
+  id:                 text('id').primaryKey(),
+  workspaceId:        text('workspace_id').notNull(),
+  gitSha:             text('git_sha').notNull(),
+  evaluatedAt:        bigint('evaluated_at', { mode: 'number' }).notNull(),
+  horizonDays:        integer('horizon_days').notNull().default(7),
+  incidentsAfter:     integer('incidents_after').notNull().default(0),
+  driftWarningsAfter: integer('drift_warnings_after').notNull().default(0),
+  matchRateDelta:     real('match_rate_delta'),
+  verdict:            text('verdict').notNull(),
+  notes:              jsonb('notes').$type<string[]>().notNull().default([]),
+}, (t) => [
+  index('co_verdict_idx').on(t.verdict),
+])
+
+export const discoveredCapabilities = pgTable('discovered_capabilities', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  serviceFile:   text('service_file').notNull(),
+  exportsCount:  integer('exports_count').notNull().default(0),
+  firstSeenAt:   bigint('first_seen_at', { mode: 'number' }).notNull(),
+  lastSeenAt:    bigint('last_seen_at',  { mode: 'number' }).notNull(),
+  maturity:      text('maturity').notNull().default('basic'),
+})
+
 export const cronBudgets = pgTable('cron_budgets', {
   id:            text('id').primaryKey(),
   cronName:      text('cron_name').notNull().unique(),

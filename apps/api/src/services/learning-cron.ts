@@ -43,6 +43,8 @@ import { recordCalibrationFindings }  from './meta-learning.js'
 import { watchdogTick }                from './external-watchdog.js'
 import { captureGitState }             from './git-state.js'
 import { backfillRecent as backfillEmbeddings } from './semantic-search.js'
+import { linkCommitsToOutcomes }       from './commit-learner.js'
+import { autoRegister as autoRegisterCapabilities } from './capability-auto-register.js'
 import { sweepStale }                          from './assumption-tracker.js'
 import { stabilitySnapshot, emitGovernance, autoEngageThrottle, pauseUnstableAgents, autoDisengageThrottleIfStable } from './governance-core.js'
 import { crossDivisionBlockers, type CrossDivisionBlocker } from './divisions.js'
@@ -287,6 +289,34 @@ async function runEmbeddingsBackfill() {
   } catch (e) { await emit('cron.error', { task: 'embeddings_backfill', error: (e as Error).message }) }
 }
 
+async function runCommitLearning() {
+  try {
+    const ids = await listWorkspaceIds()
+    let totals = { evaluated: 0, regressions: 0, positives: 0 }
+    for (const ws of ids) {
+      const r = await linkCommitsToOutcomes(ws).catch(() => null)
+      if (r) {
+        totals.evaluated += r.evaluated
+        totals.regressions += r.regressions
+        totals.positives += r.positives
+      }
+    }
+    if (totals.evaluated > 0) await emit('cron.commit_learning', totals)
+  } catch (e) { await emit('cron.error', { task: 'commit_learning', error: (e as Error).message }) }
+}
+
+async function runCapabilityAutoRegister() {
+  try {
+    const ids = await listWorkspaceIds()
+    let added = 0
+    for (const ws of ids) {
+      const r = await autoRegisterCapabilities(ws).catch(() => null)
+      if (r) added += r.added
+    }
+    if (added > 0) await emit('cron.capability_auto_register', { added })
+  } catch (e) { await emit('cron.error', { task: 'capability_auto_register', error: (e as Error).message }) }
+}
+
 async function runHorizonReviewSweep() {
   try {
     const ids = await listWorkspaceIds()
@@ -457,6 +487,8 @@ const INTERVALS = {
   watchdog:         2  * 60_000,      // 2 min — best-effort in-process liveness check
   gitState:         15 * 60_000,      // 15 min — capture recent git commits
   embeddingsBackfill: 30 * 60_000,    // 30 min — index recent chains for semantic search
+  commitLearning:   6  * 60 * 60_000, // 6 hours — link commits to outcomes
+  capabilityAutoReg: 30 * 60_000,     // 30 min — auto-register discovered services
 }
 
 export function startLearningCron(): void {
@@ -488,6 +520,8 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runWatchdog(),                    INTERVALS.watchdog))
   handles.push(setInterval(() => void runGitStateCapture(),             INTERVALS.gitState))
   handles.push(setInterval(() => void runEmbeddingsBackfill(),          INTERVALS.embeddingsBackfill))
+  handles.push(setInterval(() => void runCommitLearning(),              INTERVALS.commitLearning))
+  handles.push(setInterval(() => void runCapabilityAutoRegister(),      INTERVALS.capabilityAutoReg))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

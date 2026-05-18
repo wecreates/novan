@@ -9,6 +9,12 @@ import {
   listProviderPreferences, setProviderPreferenceStatus,
   listWorkerConcurrency, setWorkerConcurrency, cronFailureSummary,
 } from '../services/preferences-mgmt.js'
+import { buildPatchFromProposal } from '../services/code-agent.js'
+import { db } from '../db/client.js'
+import { codePatches } from '../db/schema.js'
+import { and, eq, desc } from 'drizzle-orm'
+import { recentCommitOutcomes } from '../services/commit-learner.js'
+import { listDiscovered, autoRegister } from '../services/capability-auto-register.js'
 import { planBuild } from '../services/self-build-planner.js'
 import { introspectCode } from '../services/code-introspection.js'
 import { captureGitState, recentSnapshots, snapshotAt } from '../services/git-state.js'
@@ -153,6 +159,62 @@ const selfAwareRoutes: FastifyPluginAsync = async (fastify) => {
   // Cron failure summary
   fastify.get<{ Querystring: { hours?: string } }>('/cron-failures', async (req) => {
     return { success: true, data: await cronFailureSummary(req.query.hours ? Number(req.query.hours) : 24) }
+  })
+
+  // ── Code agent ─────────────────────────────────────────────────────────
+  fastify.post<{ Params: { id: string }; Body: { workspace_id?: string } }>('/proposals/:id/build', async (req, reply) => {
+    const ws = req.body.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    try {
+      const r = await buildPatchFromProposal(ws, req.params.id)
+      return { success: true, data: r }
+    } catch (e) {
+      return reply.code(500).send({ success: false, error: (e as Error).message })
+    }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string; proposal_id?: string; status?: string; limit?: string } }>('/patches', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const conds = [eq(codePatches.workspaceId, ws)]
+    if (req.query.proposal_id) conds.push(eq(codePatches.proposalId, req.query.proposal_id))
+    if (req.query.status)      conds.push(eq(codePatches.status,     req.query.status))
+    const rows = await db.select().from(codePatches)
+      .where(and(...conds))
+      .orderBy(desc(codePatches.createdAt))
+      .limit(req.query.limit ? Number(req.query.limit) : 50)
+      .catch(() => [])
+    return { success: true, data: rows }
+  })
+
+  fastify.get<{ Params: { id: string }; Querystring: { workspace_id?: string } }>('/patches/:id', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const row = await db.select().from(codePatches)
+      .where(and(eq(codePatches.workspaceId, ws), eq(codePatches.id, req.params.id)))
+      .limit(1).then(r => r[0]).catch(() => null)
+    if (!row) return reply.code(404).send({ success: false, error: 'not found' })
+    return { success: true, data: row }
+  })
+
+  // ── Commit outcomes ───────────────────────────────────────────────────
+  fastify.get<{ Querystring: { workspace_id?: string; limit?: string } }>('/commit-outcomes', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await recentCommitOutcomes(ws, req.query.limit ? Number(req.query.limit) : 30) }
+  })
+
+  // ── Discovered capabilities ───────────────────────────────────────────
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/discovered-capabilities', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await listDiscovered(ws) }
+  })
+
+  fastify.post<{ Body: { workspace_id?: string } }>('/discovered-capabilities/refresh', async (req, reply) => {
+    const ws = req.body.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await autoRegister(ws) }
   })
 }
 
