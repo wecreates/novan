@@ -91,9 +91,11 @@ import intelEffRoutes           from './routes/intelligence-efficiency.js'
 import truthRoutes              from './routes/truth.js'
 import economyRoutes            from './routes/economy.js'
 import autonomyRoutes           from './routes/autonomy.js'
+import runtimeStatusRoutes      from './routes/runtime-status.js'
 import { validateEnvOrThrow }   from './services/secrets-vault.js'
-import { startLearningCron }    from './services/learning-cron.js'
+import { startLearningCron, bootKick } from './services/learning-cron.js'
 import { registerAutonomousWorker } from './services/autonomous-orchestrator.js'
+import { startHeartbeat }          from './services/runtime-heartbeat.js'
 
 // Render/Heroku/Fly inject PORT; fall back to API_PORT for local dev
 const PORT = Number(process.env['PORT'] ?? process.env['API_PORT'] ?? 3001)
@@ -257,12 +259,17 @@ await app.register(intelEffRoutes,         { prefix: '/api/v1/intel-eff' })
 await app.register(truthRoutes,            { prefix: '/api/v1/truth' })
 await app.register(economyRoutes,          { prefix: '/api/v1/economy' })
 await app.register(autonomyRoutes,         { prefix: '/api/v1/autonomy' })
+await app.register(runtimeStatusRoutes,    { prefix: '/api/v1/runtime' })
 
 // Environment validation — fails fast in production if VAULT_MASTER_KEY missing/invalid
 validateEnvOrThrow()
 
 // Start the closed learning loop: periodic incident/improvement/suspicious scans + sweeps
 startLearningCron()
+// 24/7 self-monitoring + cron re-arm on drift
+startHeartbeat(60_000)
+// Kick the autonomous mind on boot so cold start isn't silent
+void bootKick()
 await app.register(docsRedirectRoute)
 
 // ─── Init infrastructure ───────────────────────────────────────────────────────

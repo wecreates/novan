@@ -38,6 +38,8 @@ import { applyCorrections }                    from './reality-correction.js'
 import { evaluateEconomicOutcomes, generateEconomicRecommendations } from './economic-intelligence.js'
 import { sweepDueReviews }            from './strategic-horizons.js'
 import { checkBudget, consume }       from './cron-budget.js'
+import { runMindCycle }               from './autonomous-mind.js'
+import { recordCalibrationFindings }  from './meta-learning.js'
 import { sweepStale }                          from './assumption-tracker.js'
 import { stabilitySnapshot, emitGovernance, autoEngageThrottle, pauseUnstableAgents, autoDisengageThrottleIfStable } from './governance-core.js'
 import { crossDivisionBlockers, type CrossDivisionBlocker } from './divisions.js'
@@ -215,6 +217,44 @@ async function runEconomicLearning() {
   } catch (e) { await emit('cron.error', { task: 'economic_learning', error: (e as Error).message }) }
 }
 
+async function runAutonomousMind() {
+  try {
+    const budget = await checkBudget('autonomous_mind', {
+      maxCalls: 500, maxTokens: 0, maxCostUsd: 0.50, windowMs: 60 * 60_000,
+    })
+    if (!budget.ok) {
+      await emit('cron.budget_blocked', { task: 'autonomous_mind', reason: budget.reason })
+      return
+    }
+    const ids = await listWorkspaceIds()
+    let totalGaps = 0, totalPlans = 0, totalChains = 0
+    for (const ws of ids) {
+      const r = await runMindCycle(ws).catch(() => null)
+      if (r) {
+        totalGaps   += r.gapsDetected
+        totalPlans  += r.buildPlansCreated
+        totalChains += r.chainsRecorded
+      }
+    }
+    await consume('autonomous_mind', { calls: ids.length })
+    if (totalGaps + totalPlans + totalChains > 0) {
+      await emit('cron.autonomous_mind', { gaps: totalGaps, plans: totalPlans, chainsRecorded: totalChains })
+    }
+  } catch (e) { await emit('cron.error', { task: 'autonomous_mind', error: (e as Error).message }) }
+}
+
+async function runMetaLearning() {
+  try {
+    const ids = await listWorkspaceIds()
+    let totalRecorded = 0
+    for (const ws of ids) {
+      const r = await recordCalibrationFindings(ws).catch(() => null)
+      if (r) totalRecorded += r.recorded
+    }
+    if (totalRecorded > 0) await emit('cron.meta_learning', { findingsRecorded: totalRecorded })
+  } catch (e) { await emit('cron.error', { task: 'meta_learning', error: (e as Error).message }) }
+}
+
 async function runHorizonReviewSweep() {
   try {
     const ids = await listWorkspaceIds()
@@ -380,6 +420,8 @@ const INTERVALS = {
   realityVerify:    60 * 60_000,      // 1 hour — drift scan + safe corrections + assumption staleness
   economicLearning: 6  * 60 * 60_000, // 6 hours — evaluate past predictions + regenerate recommendations
   horizonReview:    60 * 60_000,      // 1 hour — sweep due strategic horizon reviews
+  autonomousMind:   10 * 60_000,      // 10 min — capability-gap → build-plan meta-loop
+  metaLearning:     60 * 60_000,      // 1 hour — calibration auto-tune suggestions
 }
 
 export function startLearningCron(): void {
@@ -406,6 +448,8 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runRealityVerification(),         INTERVALS.realityVerify))
   handles.push(setInterval(() => void runEconomicLearning(),            INTERVALS.economicLearning))
   handles.push(setInterval(() => void runHorizonReviewSweep(),          INTERVALS.horizonReview))
+  handles.push(setInterval(() => void runAutonomousMind(),              INTERVALS.autonomousMind))
+  handles.push(setInterval(() => void runMetaLearning(),                INTERVALS.metaLearning))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
@@ -416,4 +460,18 @@ export function startLearningCron(): void {
 export function stopLearningCron(): void {
   for (const h of handles) clearInterval(h)
   handles.length = 0
+}
+
+/** Number of active cron handles — used by runtime-heartbeat to detect drift. */
+export function learningCronHandleCount(): number {
+  return handles.length
+}
+
+/** Trigger a one-shot run of the meta-loop on boot, so the platform begins
+ *  thinking immediately rather than waiting for the first interval tick. */
+export async function bootKick(): Promise<void> {
+  // Fire each long-interval task once on boot so cold start isn't silent.
+  void runAutonomousMind()
+  void runMetaLearning()
+  void runHorizonReviewSweep()
 }

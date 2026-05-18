@@ -3,7 +3,7 @@ import {
   Activity, Clock, Settings as SettingsIcon,
   Target, ShieldAlert, Bot, Building2, Brain,
   GitBranch, AlertOctagon, CheckSquare, BarChart3, Lightbulb, GraduationCap, Cpu,
-  Shield, ScanSearch, ShieldCheck, Terminal, Siren, GitMerge, Lock, BookOpen, TrendingUp, Rocket, Coins,
+  Shield, ScanSearch, ShieldCheck, Terminal, Siren, GitMerge, Lock, BookOpen, TrendingUp, Rocket, Coins, Heart,
 } from 'lucide-react'
 import WarRoom                  from './pages/WarRoom.js'
 import StrategicHomePage        from './pages/StrategicHomePage.js'
@@ -17,6 +17,7 @@ import CognitionPage            from './pages/CognitionPage.js'
 import TruthPage                from './pages/TruthPage.js'
 import EconomyPage              from './pages/EconomyPage.js'
 import AuditTrailPage           from './pages/AuditTrailPage.js'
+import RuntimePage              from './pages/RuntimePage.js'
 import Timeline                 from './pages/Timeline.js'
 import Settings                 from './pages/Settings.js'
 import GoalsPage                from './pages/GoalsPage.js'
@@ -76,6 +77,7 @@ const NAV_ITEMS = [
   { to: '/truth',                icon: ShieldCheck,label: 'Truth' },
   { to: '/economy',              icon: Coins,      label: 'Economy' },
   { to: '/audit-trail',          icon: Clock,      label: 'Audit Trail' },
+  { to: '/runtime',              icon: Heart,      label: 'Runtime 24/7' },
   { to: '/war-room',    icon: Activity,        label: 'War Room' },
   { to: '/timeline',    icon: Clock,           label: 'Timeline' },
   { to: '/goals',       icon: Target,          label: 'Goals' },
@@ -160,6 +162,7 @@ export default function App() {
           <Route path="/truth"                element={<TruthPage />} />
           <Route path="/economy"              element={<EconomyPage />} />
           <Route path="/audit-trail"          element={<AuditTrailPage />} />
+          <Route path="/runtime"              element={<RuntimePage />} />
           <Route path="/war-room"    element={<WarRoom />} />
           <Route path="/timeline"    element={<Timeline />} />
           <Route path="/goals"       element={<GoalsPage />} />

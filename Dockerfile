@@ -3,7 +3,7 @@
 FROM node:20-alpine
 
 # Native build tools for any pnpm deps that need gyp
-RUN apk add --no-cache python3 make g++ \
+RUN apk add --no-cache python3 make g++ postgresql-client \
  && corepack enable \
  && corepack prepare pnpm@9.12.0 --activate
 
@@ -24,4 +24,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
 
 # Run API via tsx so workspace packages resolve from source
 WORKDIR /app/apps/api
-CMD ["node", "--import", "tsx/esm", "src/server.ts"]
+RUN chmod +x boot.sh
+CMD ["./boot.sh"]

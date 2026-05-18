@@ -64,9 +64,10 @@ export async function checkBudget(cronName: string, cfg: BudgetConfig = {}): Pro
     }
   }
 
-  const overCalls  = row.callsUsed   >= row.maxCalls
-  const overTokens = row.tokensUsed  >= row.maxTokens
-  const overCost   = row.costUsdUsed >= row.maxCostUsd
+  // A max of 0 means "no limit on this dimension"
+  const overCalls  = row.maxCalls    > 0 && row.callsUsed   >= row.maxCalls
+  const overTokens = row.maxTokens   > 0 && row.tokensUsed  >= row.maxTokens
+  const overCost   = row.maxCostUsd  > 0 && row.costUsdUsed >= row.maxCostUsd
   if (overCalls || overTokens || overCost) {
     if (!row.blocked) {
       await db.update(cronBudgets).set({ blocked: true, lastBlockedAt: now, updatedAt: now })
@@ -79,12 +80,18 @@ export async function checkBudget(cronName: string, cfg: BudgetConfig = {}): Pro
     }
   }
 
+  // If we were previously blocked but no longer over, clear the flag
+  if (row.blocked) {
+    await db.update(cronBudgets).set({ blocked: false, updatedAt: now })
+      .where(eq(cronBudgets.id, row.id)).catch(() => null)
+  }
+
   return {
     ok: true, blocked: false,
     remaining: {
-      calls:   Math.max(0, row.maxCalls   - row.callsUsed),
-      tokens:  Math.max(0, row.maxTokens  - row.tokensUsed),
-      costUsd: Math.max(0, Number((row.maxCostUsd - row.costUsdUsed).toFixed(4))),
+      calls:   row.maxCalls   > 0 ? Math.max(0, row.maxCalls   - row.callsUsed)   : Number.POSITIVE_INFINITY,
+      tokens:  row.maxTokens  > 0 ? Math.max(0, row.maxTokens  - row.tokensUsed)  : Number.POSITIVE_INFINITY,
+      costUsd: row.maxCostUsd > 0 ? Math.max(0, Number((row.maxCostUsd - row.costUsdUsed).toFixed(4))) : Number.POSITIVE_INFINITY,
     },
   }
 }
