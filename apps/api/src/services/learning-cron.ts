@@ -40,6 +40,9 @@ import { sweepDueReviews }            from './strategic-horizons.js'
 import { checkBudget, consume }       from './cron-budget.js'
 import { runMindCycle }               from './autonomous-mind.js'
 import { recordCalibrationFindings }  from './meta-learning.js'
+import { watchdogTick }                from './external-watchdog.js'
+import { captureGitState }             from './git-state.js'
+import { backfillRecent as backfillEmbeddings } from './semantic-search.js'
 import { sweepStale }                          from './assumption-tracker.js'
 import { stabilitySnapshot, emitGovernance, autoEngageThrottle, pauseUnstableAgents, autoDisengageThrottleIfStable } from './governance-core.js'
 import { crossDivisionBlockers, type CrossDivisionBlocker } from './divisions.js'
@@ -255,6 +258,35 @@ async function runMetaLearning() {
   } catch (e) { await emit('cron.error', { task: 'meta_learning', error: (e as Error).message }) }
 }
 
+async function runWatchdog() {
+  try { await watchdogTick() }
+  catch (e) { await emit('cron.error', { task: 'watchdog', error: (e as Error).message }) }
+}
+
+async function runGitStateCapture() {
+  try {
+    const ids = await listWorkspaceIds()
+    let totalCaptured = 0
+    for (const ws of ids) {
+      const r = await captureGitState(ws).catch(() => null)
+      if (r) totalCaptured += r.captured
+    }
+    if (totalCaptured > 0) await emit('cron.git_state_captured', { snapshots: totalCaptured })
+  } catch (e) { await emit('cron.error', { task: 'git_state', error: (e as Error).message }) }
+}
+
+async function runEmbeddingsBackfill() {
+  try {
+    const ids = await listWorkspaceIds()
+    let totalIndexed = 0
+    for (const ws of ids) {
+      const r = await backfillEmbeddings(ws, 14).catch(() => null)
+      if (r) totalIndexed += r.indexed
+    }
+    if (totalIndexed > 0) await emit('cron.embeddings_indexed', { indexed: totalIndexed })
+  } catch (e) { await emit('cron.error', { task: 'embeddings_backfill', error: (e as Error).message }) }
+}
+
 async function runHorizonReviewSweep() {
   try {
     const ids = await listWorkspaceIds()
@@ -422,6 +454,9 @@ const INTERVALS = {
   horizonReview:    60 * 60_000,      // 1 hour — sweep due strategic horizon reviews
   autonomousMind:   10 * 60_000,      // 10 min — capability-gap → build-plan meta-loop
   metaLearning:     60 * 60_000,      // 1 hour — calibration auto-tune suggestions
+  watchdog:         2  * 60_000,      // 2 min — best-effort in-process liveness check
+  gitState:         15 * 60_000,      // 15 min — capture recent git commits
+  embeddingsBackfill: 30 * 60_000,    // 30 min — index recent chains for semantic search
 }
 
 export function startLearningCron(): void {
@@ -450,6 +485,9 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runHorizonReviewSweep(),          INTERVALS.horizonReview))
   handles.push(setInterval(() => void runAutonomousMind(),              INTERVALS.autonomousMind))
   handles.push(setInterval(() => void runMetaLearning(),                INTERVALS.metaLearning))
+  handles.push(setInterval(() => void runWatchdog(),                    INTERVALS.watchdog))
+  handles.push(setInterval(() => void runGitStateCapture(),             INTERVALS.gitState))
+  handles.push(setInterval(() => void runEmbeddingsBackfill(),          INTERVALS.embeddingsBackfill))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

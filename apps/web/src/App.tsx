@@ -3,7 +3,7 @@ import {
   Activity, Clock, Settings as SettingsIcon,
   Target, ShieldAlert, Bot, Building2, Brain,
   GitBranch, AlertOctagon, CheckSquare, BarChart3, Lightbulb, GraduationCap, Cpu,
-  Shield, ScanSearch, ShieldCheck, Terminal, Siren, GitMerge, Lock, BookOpen, TrendingUp, Rocket, Coins, Heart,
+  Shield, ScanSearch, ShieldCheck, Terminal, Siren, GitMerge, Lock, BookOpen, TrendingUp, Rocket, Coins, Heart, Home, Code2, Bell,
 } from 'lucide-react'
 import WarRoom                  from './pages/WarRoom.js'
 import StrategicHomePage        from './pages/StrategicHomePage.js'
@@ -18,6 +18,9 @@ import TruthPage                from './pages/TruthPage.js'
 import EconomyPage              from './pages/EconomyPage.js'
 import AuditTrailPage           from './pages/AuditTrailPage.js'
 import RuntimePage              from './pages/RuntimePage.js'
+import HomeDashboardPage        from './pages/HomeDashboardPage.js'
+import NotificationDriversPage  from './pages/NotificationDriversPage.js'
+import CodeProposalsPage        from './pages/CodeProposalsPage.js'
 import Timeline                 from './pages/Timeline.js'
 import Settings                 from './pages/Settings.js'
 import GoalsPage                from './pages/GoalsPage.js'
@@ -67,6 +70,9 @@ import LaunchTonightPage       from './pages/LaunchTonightPage.js'
 import { WorkspaceSwitcher } from './components/WorkspaceSwitcher.js'
 
 const NAV_ITEMS = [
+  { to: '/home',                 icon: Home,       label: 'Home' },
+  { to: '/proposals',            icon: Code2,      label: 'Proposals' },
+  { to: '/notifications',        icon: Bell,       label: 'Notifications' },
   { to: '/strategic-home', icon: Rocket,       label: 'Strategic Home' },
   { to: '/mission-intelligence', icon: Brain,  label: 'Mission Intelligence' },
   { to: '/executive-war-room',   icon: TrendingUp, label: 'Executive War Room' },
@@ -163,6 +169,9 @@ export default function App() {
           <Route path="/economy"              element={<EconomyPage />} />
           <Route path="/audit-trail"          element={<AuditTrailPage />} />
           <Route path="/runtime"              element={<RuntimePage />} />
+          <Route path="/home"                 element={<HomeDashboardPage />} />
+          <Route path="/proposals"            element={<CodeProposalsPage />} />
+          <Route path="/notifications"        element={<NotificationDriversPage />} />
           <Route path="/war-room"    element={<WarRoom />} />
           <Route path="/timeline"    element={<Timeline />} />
           <Route path="/goals"       element={<GoalsPage />} />

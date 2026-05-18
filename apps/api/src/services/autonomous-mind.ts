@@ -23,13 +23,16 @@ import { planBuild, persistPlan }      from './self-build-planner.js'
 import { record as recordChain }       from './reasoning-chains.js'
 import { db }                          from '../db/client.js'
 import { reasoningChains, driftWarnings, recommendationFeedback } from '../db/schema.js'
-import { and, eq, gte, isNull, desc, sql } from 'drizzle-orm'
+import { and, eq, gte, desc, sql } from 'drizzle-orm'
+import { alignmentScore }              from './horizon-scorer.js'
+import { proposeFromPlan, persistProposal } from './code-writer.js'
 
 export interface MindCycleResult {
   workspaceId:       string
   generatedAt:       number
   gapsDetected:      number
   buildPlansCreated: number
+  proposalsCreated:  number
   driftWarningsSeen: number
   chainsRecorded:    number
   notes:             string[]
@@ -43,21 +46,41 @@ export interface MindCycleResult {
 export async function runMindCycle(workspaceId: string): Promise<MindCycleResult> {
   const result: MindCycleResult = {
     workspaceId, generatedAt: Date.now(),
-    gapsDetected: 0, buildPlansCreated: 0, driftWarningsSeen: 0,
-    chainsRecorded: 0, notes: [],
+    gapsDetected: 0, buildPlansCreated: 0, proposalsCreated: 0,
+    driftWarningsSeen: 0, chainsRecorded: 0, notes: [],
   }
 
   // 1. Detect capability gaps
   const gaps = await detectGaps(workspaceId).catch(() => [])
   result.gapsDetected = gaps.length
 
-  // 2. For each gap with verdict='build' or 'hybrid', ensure a build plan exists.
-  //    self-build-planner.persistPlan() is idempotent.
-  const buildable = gaps.filter(g =>
+  // 2. Filter buildable gaps by operator bias (recent rejections of similar)
+  //    and rank by strategic-horizon alignment.
+  const rejected = await db.select({ subjectId: reasoningChains.subjectId })
+    .from(recommendationFeedback)
+    .innerJoin(reasoningChains, eq(reasoningChains.id, recommendationFeedback.chainId))
+    .where(and(
+      eq(recommendationFeedback.workspaceId, workspaceId),
+      eq(recommendationFeedback.action, 'reject'),
+      gte(recommendationFeedback.createdAt, Date.now() - 30 * 24 * 60 * 60_000),
+    )).catch(() => [])
+  const rejectedSubjects = new Set(rejected.map(r => r.subjectId).filter(Boolean) as string[])
+
+  let buildable = gaps.filter(g =>
     (g.buildVsBuy.verdict === 'build' || g.buildVsBuy.verdict === 'hybrid')
-    && (g.maturity === 'missing' || g.maturity === 'scaffolded'),
+    && (g.maturity === 'missing' || g.maturity === 'scaffolded')
+    && !rejectedSubjects.has(`mind:build:${g.id}`),    // honor operator rejection
   )
+
+  // Rank by horizon alignment
+  const ranked = await Promise.all(buildable.map(async g => ({
+    g, alignment: (await alignmentScore(workspaceId, `${g.title} ${g.description}`)).score,
+  })))
+  ranked.sort((a, b) => b.alignment - a.alignment)
+  buildable = ranked.map(r => r.g)
+
   let plansCreated = 0
+  let proposalsCreated = 0
   for (const g of buildable.slice(0, 5)) {   // cap per-cycle so we don't flood
     const plan = await planBuild(workspaceId, g.id).catch(() => null)
     if (!plan) continue
@@ -73,9 +96,17 @@ export async function runMindCycle(workspaceId: string): Promise<MindCycleResult
         confidence: 0.6,
         source: 'autonomous-mind',
       }).then(() => result.chainsRecorded++).catch(() => null)
+
+      // Generate a code proposal so the autonomy loop has an actionable artifact
+      try {
+        const proposal = proposeFromPlan(workspaceId, plan)
+        await persistProposal(proposal)
+        proposalsCreated++
+      } catch { /* tolerated */ }
     }
   }
   result.buildPlansCreated = plansCreated
+  result.proposalsCreated  = proposalsCreated
 
   // 3. Snapshot open drift warnings (reality-correction cron already acts on
   //    them per policy; we just count for status reporting)

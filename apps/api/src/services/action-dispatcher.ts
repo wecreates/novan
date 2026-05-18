@@ -11,7 +11,7 @@
  *   - NEVER bypasses safety: approval-gate, kill-switches, budget guards.
  */
 import { db } from '../db/client.js'
-import { actions, reasoningChains, killSwitches } from '../db/schema.js'
+import { actions, reasoningChains, killSwitches, workerConcurrency, providerPreferences } from '../db/schema.js'
 import { and, eq, desc, gte } from 'drizzle-orm'
 import { v7 as uuidv7 } from 'uuid'
 import { notify } from './notifications.js'
@@ -121,11 +121,19 @@ async function execute(i: DispatchInput): Promise<Record<string, unknown>> {
     }
 
     case 'throttle_queue': {
-      // SAFE THROTTLE: record intent; queue concurrency adjustments must
-      // ultimately be applied by the worker manager. We persist the signal.
+      // Persist concurrency factor to worker_concurrency table.
+      // Workers consult this table on their next leasing cycle.
       const queueName = String(i.payload['queue'] ?? 'unknown')
       const factor    = Number(i.payload['factor'] ?? 0.5)
-      return { queueName, factor, applied: 'signal-recorded', note: 'Worker manager reads next sweep' }
+      const reason    = String(i.payload['reason'] ?? 'action-dispatcher throttle')
+      await db.insert(workerConcurrency).values({
+        workspaceId: i.workspaceId, queueName, factor, setBy: 'action-dispatcher',
+        reason, updatedAt: Date.now(),
+      }).onConflictDoUpdate({
+        target: [workerConcurrency.workspaceId, workerConcurrency.queueName],
+        set: { factor, setBy: 'action-dispatcher', reason, updatedAt: Date.now() },
+      }).catch(() => null)
+      return { queueName, factor, applied: 'persisted', note: 'Workers read worker_concurrency at lease time' }
     }
 
     case 'engage_kill_switch': {
@@ -151,24 +159,33 @@ async function execute(i: DispatchInput): Promise<Record<string, unknown>> {
     }
 
     case 'swap_provider_recommendation': {
-      // Honest: actual provider swap requires operator config change.
-      // Action records the recommendation as a chain so the operator
-      // sees it in the Truth view.
+      // Persist as pending preference + record chain. Provider-router
+      // reads provider_preferences (status='active') for routing. The
+      // pending status is operator-gated.
       const from = String(i.payload['from'] ?? '?')
       const to   = String(i.payload['to']   ?? '?')
       const task = String(i.payload['taskType'] ?? 'all')
+      const reason = String(i.payload['reason'] ?? 'cost or latency optimization')
+      await db.insert(providerPreferences).values({
+        workspaceId: i.workspaceId, taskType: task,
+        preferredProvider: to, setBy: 'action-dispatcher',
+        status: 'pending', reason, updatedAt: Date.now(),
+      }).onConflictDoUpdate({
+        target: [providerPreferences.workspaceId, providerPreferences.taskType],
+        set: { preferredProvider: to, setBy: 'action-dispatcher', status: 'pending', reason, updatedAt: Date.now() },
+      }).catch(() => null)
       const id = uuidv7()
       await db.insert(reasoningChains).values({
         id, workspaceId: i.workspaceId, kind: 'recommendation',
         subjectId: `swap:${task}`,
-        decision: `Swap ${from} → ${to} for ${task}`,
+        decision: `Swap ${from} → ${to} for ${task} (preference pending operator approval)`,
         evidence: (i.payload['evidence'] as Array<{ type: string; id: string; extract: string }>) ?? [],
         confidence: typeof i.payload['confidence'] === 'number' ? (i.payload['confidence'] as number) : 0.6,
         outcomeKnown: false,
         source: 'action-dispatcher',
         createdAt: Date.now(),
       }).catch(() => null)
-      return { recommendedSwap: { from, to, task }, chainId: id }
+      return { recommendedSwap: { from, to, task }, chainId: id, preferenceStatus: 'pending' }
     }
 
     case 'cancel_pending': {

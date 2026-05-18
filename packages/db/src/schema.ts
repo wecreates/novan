@@ -10,7 +10,7 @@
  */
 import {
   pgTable, text, integer, bigint, boolean, jsonb,
-  real, index, uniqueIndex, pgEnum, vector,
+  real, index, uniqueIndex, pgEnum, vector, primaryKey,
 } from 'drizzle-orm/pg-core'
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -2920,6 +2920,78 @@ export const strategicHorizons = pgTable('strategic_horizons', {
   index('sh_workspace_idx').on(t.workspaceId),
   index('sh_horizon_idx').on(t.horizon),
   index('sh_status_idx').on(t.status),
+])
+
+// ─── Migration 0017 — Self-aware platform ───────────────────────────────
+
+export const codeProposals = pgTable('code_proposals', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  buildPlanId:   text('build_plan_id'),
+  capabilityId:  text('capability_id'),
+  title:         text('title').notNull(),
+  summary:       text('summary').notNull(),
+  filesToCreate: jsonb('files_to_create').$type<Array<{ path: string; purpose: string; estLoc: number }>>().notNull().default([]),
+  filesToModify: jsonb('files_to_modify').$type<Array<{ path: string; purpose: string; estLoc: number }>>().notNull().default([]),
+  testsRequired: jsonb('tests_required').$type<Array<{ description: string; covers: string }>>().notNull().default([]),
+  riskLevel:     text('risk_level').notNull().default('medium'),
+  estimatedLoc:  integer('estimated_loc').notNull().default(0),
+  status:        text('status').notNull().default('proposed'),
+  reasoning:     jsonb('reasoning').$type<string[]>().notNull().default([]),
+  approvalId:    text('approval_id'),
+  createdAt:     bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:     bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('cp_workspace_idx').on(t.workspaceId),
+  index('cp_status_idx').on(t.status),
+  index('cp_capability_idx').on(t.capabilityId),
+])
+
+export const workerConcurrency = pgTable('worker_concurrency', {
+  workspaceId: text('workspace_id').notNull(),
+  queueName:   text('queue_name').notNull(),
+  factor:      real('factor').notNull().default(1.0),
+  setBy:       text('set_by').notNull(),
+  reason:      text('reason'),
+  updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.workspaceId, t.queueName] }),
+])
+
+export const providerPreferences = pgTable('provider_preferences', {
+  workspaceId:        text('workspace_id').notNull(),
+  taskType:           text('task_type').notNull(),
+  preferredProvider:  text('preferred_provider').notNull(),
+  setBy:              text('set_by').notNull(),
+  status:             text('status').notNull().default('pending'),
+  reason:             text('reason'),
+  updatedAt:          bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.workspaceId, t.taskType] }),
+])
+
+export const codeStateSnapshots = pgTable('code_state_snapshots', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  gitSha:         text('git_sha').notNull(),
+  branch:         text('branch'),
+  commitMessage:  text('commit_message'),
+  filesChanged:   integer('files_changed').notNull().default(0),
+  committedAt:    bigint('committed_at', { mode: 'number' }).notNull(),
+  capturedAt:     bigint('captured_at',  { mode: 'number' }).notNull(),
+}, (t) => [
+  index('cs_committed_idx').on(t.committedAt),
+])
+
+export const chainEmbeddings = pgTable('chain_embeddings', {
+  chainId:     text('chain_id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  vector:      text('vector').notNull(),
+  dim:         integer('dim').notNull(),
+  sourceKind:  text('source_kind'),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ce_workspace_idx').on(t.workspaceId),
 ])
 
 export const cronBudgets = pgTable('cron_budgets', {
