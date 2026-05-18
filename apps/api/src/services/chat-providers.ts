@@ -307,7 +307,16 @@ export async function* streamChat(workspaceId: string, msgs: ChatMsg[], opts?: {
 }
 
 /** Enable/disable + set priority for a provider in this workspace. */
+/** Mark setup step lazily — non-blocking, swallows errors. */
+async function _markFirstProvider(workspaceId: string): Promise<void> {
+  try {
+    const { markSetupStep } = await import('./platform-hardening.js')
+    await markSetupStep(workspaceId, 'firstProviderAt')
+  } catch { /* tolerated */ }
+}
+
 export async function configureProvider(workspaceId: string, providerId: string, opts: { enabled?: boolean; priority?: number; label?: string }): Promise<void> {
+  if (opts.enabled === true) void _markFirstProvider(workspaceId)
   const existing = await db.select().from(providerConfigs)
     .where(and(eq(providerConfigs.workspaceId, workspaceId), eq(providerConfigs.providerId, providerId)))
     .limit(1).then(r => r[0]).catch(() => null)

@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import { UIModeProvider, useUIMode, UI_MODES } from './design/ui-mode.js'
 import { isAudioEnabled, setAudioEnabled, tone } from './design/audio.js'
+import { RouteErrorBoundary } from './design/ErrorBoundary.js'
+import { GlobalPalette } from './design/GlobalPalette.js'
 import WarRoom                  from './pages/WarRoom.js'
 import StrategicHomePage        from './pages/StrategicHomePage.js'
 import { useThemeAndShortcuts } from './hooks/useThemeAndShortcuts.js'
@@ -191,14 +193,31 @@ export default function App() {
 function AppShell() {
   const [searchParams] = useSearchParams()
   const screenshotMode = searchParams.get('screenshot') === '1'
+  const [paletteOpen, setPaletteOpen] = React.useState(false)
+
+  // Global Cmd/Ctrl-K opens palette (any page)
+  React.useEffect(() => {
+    const fn = (e: KeyboardEvent) => {
+      if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        setPaletteOpen(o => !o)
+      } else if (e.key === 'Escape' && paletteOpen) {
+        setPaletteOpen(false)
+      }
+    }
+    window.addEventListener('keydown', fn)
+    return () => window.removeEventListener('keydown', fn)
+  }, [paletteOpen])
 
   // Hide entire chrome in screenshot mode — just render the route
   if (screenshotMode) {
     return (
       <div className="h-screen overflow-hidden bg-bg">
-        <Suspense fallback={<RouteFallback />}>
-          <AppRoutes />
-        </Suspense>
+        <RouteErrorBoundary>
+          <Suspense fallback={<RouteFallback />}>
+            <AppRoutes />
+          </Suspense>
+        </RouteErrorBoundary>
       </div>
     )
   }
@@ -209,11 +228,14 @@ function AppShell() {
       <div className="flex-1 min-w-0 overflow-hidden flex flex-col">
         <TopControls />
         <div className="flex-1 min-h-0 overflow-hidden">
-          <Suspense fallback={<RouteFallback />}>
-            <AppRoutes />
-          </Suspense>
+          <RouteErrorBoundary>
+            <Suspense fallback={<RouteFallback />}>
+              <AppRoutes />
+            </Suspense>
+          </RouteErrorBoundary>
         </div>
       </div>
+      <GlobalPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   )
 }

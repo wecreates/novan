@@ -3442,6 +3442,57 @@ export const statusChanges = pgTable('status_changes', {
   index('sch_changed_idx').on(t.changedAt),
 ])
 
+// ─── Migration 0025 — Platform hardening ─────────────────────────────────
+
+export const archiveLog = pgTable('archive_log', {
+  id:                 text('id').primaryKey(),
+  workspaceId:        text('workspace_id').notNull(),
+  tableName:          text('table_name').notNull(),
+  rowsArchived:       integer('rows_archived').notNull(),
+  archivedThroughTs:  bigint('archived_through_ts', { mode: 'number' }).notNull(),
+  elapsedMs:          integer('elapsed_ms').notNull(),
+  createdAt:          bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('al_workspace_idx').on(t.workspaceId),
+  index('al_created_idx').on(t.createdAt),
+])
+
+export const notificationPrefs = pgTable('notification_prefs', {
+  workspaceId:   text('workspace_id').notNull(),
+  type:          text('type').notNull(),
+  severityFloor: text('severity_floor').notNull().default('normal'),
+  mutedUntil:    bigint('muted_until', { mode: 'number' }),
+  updatedAt:     bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.workspaceId, t.type] }),
+])
+
+export const setupState = pgTable('setup_state', {
+  workspaceId:         text('workspace_id').primaryKey(),
+  firstRunAt:          bigint('first_run_at', { mode: 'number' }).notNull(),
+  firstProviderAt:     bigint('first_provider_at', { mode: 'number' }),
+  firstChatAt:         bigint('first_chat_at', { mode: 'number' }),
+  firstActionAt:       bigint('first_action_at', { mode: 'number' }),
+  firstHorizonAt:      bigint('first_horizon_at', { mode: 'number' }),
+  firstProposalAt:     bigint('first_proposal_at', { mode: 'number' }),
+  firstRevenueAt:      bigint('first_revenue_at', { mode: 'number' }),
+  completedOnboarding: boolean('completed_onboarding').notNull().default(false),
+  updatedAt:           bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
+export const webhookSecrets = pgTable('webhook_secrets', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  channel:      text('channel').notNull(),
+  secretHash:   text('secret_hash').notNull(),
+  active:       boolean('active').notNull().default(true),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  lastUsedAt:   bigint('last_used_at', { mode: 'number' }),
+}, (t) => [
+  index('ws_workspace_idx').on(t.workspaceId),
+  index('ws_channel_idx').on(t.channel),
+])
+
 export const cronBudgets = pgTable('cron_budgets', {
   id:            text('id').primaryKey(),
   cronName:      text('cron_name').notNull().unique(),

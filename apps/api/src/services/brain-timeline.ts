@@ -225,7 +225,9 @@ export interface DecisionPath {
 export async function decisionPath(workspaceId: string, key: string, windowMinutes = 5): Promise<DecisionPath> {
   const notes: string[] = []
   const steps: DecisionPathStep[] = []
-  const windowMs = Math.max(1, Math.min(60, windowMinutes)) * 60_000
+  // Clamp window; notes use the clamped value so display reflects what we actually searched
+  windowMinutes = Math.max(1, Math.min(60, windowMinutes))
+  const windowMs = windowMinutes * 60_000
 
   // Try as reasoning chain id first
   const chain = await db.select().from(reasoningChains)

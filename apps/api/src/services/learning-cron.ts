@@ -47,6 +47,7 @@ import { linkCommitsToOutcomes }       from './commit-learner.js'
 import { autoRegister as autoRegisterCapabilities } from './capability-auto-register.js'
 import { autoDeriveTrust }             from './trust-governance.js'
 import { sweepStaleNodes, runScalingCycle } from './runtime-fabric.js'
+import { runRetention, notifyCronAlerts } from './platform-hardening.js'
 import { sweepStale }                          from './assumption-tracker.js'
 import { stabilitySnapshot, emitGovernance, autoEngageThrottle, pauseUnstableAgents, autoDisengageThrottleIfStable } from './governance-core.js'
 import { crossDivisionBlockers, type CrossDivisionBlocker } from './divisions.js'
@@ -319,6 +320,25 @@ async function runCapabilityAutoRegister() {
   } catch (e) { await emit('cron.error', { task: 'capability_auto_register', error: (e as Error).message }) }
 }
 
+async function runDataRetention() {
+  try {
+    const ids = await listWorkspaceIds()
+    let totalDeleted = 0
+    for (const ws of ids) {
+      const r = await runRetention(ws).catch(() => null)
+      if (r) totalDeleted += r.reduce((s, x) => s + x.deleted, 0)
+    }
+    if (totalDeleted > 0) await emit('cron.retention', { totalDeleted })
+  } catch (e) { await emit('cron.error', { task: 'data_retention', error: (e as Error).message }) }
+}
+
+async function runCronHealthAlerts() {
+  try {
+    const r = await notifyCronAlerts().catch(() => null)
+    if (r && r.alerted > 0) await emit('cron.health_alerts', { alerted: r.alerted })
+  } catch (e) { await emit('cron.error', { task: 'cron_health_alerts', error: (e as Error).message }) }
+}
+
 async function runFabricSweep() {
   try {
     const ids = await listWorkspaceIds()
@@ -519,6 +539,8 @@ const INTERVALS = {
   capabilityAutoReg: 30 * 60_000,     // 30 min — auto-register discovered services
   trustAutoDerive:  60 * 60_000,      // 1 hour — adjust trust scores from observed signals
   fabricSweep:      2  * 60_000,      // 2 min — stale-node sweep + scaling decision cycle
+  dataRetention:    24 * 60 * 60_000, // 24 hours — archive old events/chains/messages
+  cronHealthAlerts: 60 * 60_000,      // 1 hour — alert if cron failing repeatedly
 }
 
 export function startLearningCron(): void {
@@ -554,6 +576,8 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runCapabilityAutoRegister(),      INTERVALS.capabilityAutoReg))
   handles.push(setInterval(() => void runTrustAutoDerive(),             INTERVALS.trustAutoDerive))
   handles.push(setInterval(() => void runFabricSweep(),                 INTERVALS.fabricSweep))
+  handles.push(setInterval(() => void runDataRetention(),               INTERVALS.dataRetention))
+  handles.push(setInterval(() => void runCronHealthAlerts(),            INTERVALS.cronHealthAlerts))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
