@@ -189,7 +189,15 @@ function layoutSubnodes(parent: [number, number, number], count: number, parentS
 
 const SUBNODE_CAP = 6   // max real items surfaced per system
 
-export async function buildGraph(workspaceId: string, template: BrainTemplate = 'neural'): Promise<BrainGraph> {
+export type LODMode = 'global' | 'systems' | 'focus'
+
+export interface BuildGraphOpts {
+  lod?: LODMode
+  focusSystem?: string
+}
+
+export async function buildGraph(workspaceId: string, template: BrainTemplate = 'neural', opts: BuildGraphOpts = {}): Promise<BrainGraph> {
+  const lod = opts.lod ?? 'systems'
   const since7d = Date.now() - 7 * 24 * 60 * 60_000
   const since24h = Date.now() - 24 * 60 * 60_000
 
@@ -399,19 +407,34 @@ export async function buildGraph(workspaceId: string, template: BrainTemplate = 
   for (const sys of SYSTEMS) {
     const pos = systemPositions.get(sys.id) ?? [0, 0, 0]
     const data = systemData[sys.id] ?? { count: 0, status: 'unknown' as NodeStatus, items: [] }
+
+    // LOD focus: skip non-focused systems entirely in 'focus' mode
+    if (lod === 'focus' && opts.focusSystem && sys.id !== opts.focusSystem) continue
+
+    // Status-based emphasis: pull degraded/down systems forward in Z
+    const adjustedPos: [number, number, number] = [
+      pos[0],
+      pos[1],
+      pos[2] + (data.status === 'down' ? 2 : data.status === 'degraded' ? 1 : 0),
+    ]
+
     const sysNode: BrainNode = {
       id: sys.id, kind: 'system', label: sys.label,
       status: data.status, metric: data.count,
-      position: pos, scale: 0.9,
+      position: adjustedPos,
+      scale: data.status === 'down' ? 1.1 : data.status === 'degraded' ? 1.0 : 0.9,
       detail: `${data.count} items`,
     }
     nodes.push(sysNode)
     edges.push({ from: 'core', to: sys.id, kind: 'orbit' })
 
+    // LOD global: stop at systems
+    if (lod === 'global') continue
+
     // Subnodes around system
-    const subPositions = layoutSubnodes(pos, data.items.length, 0.9)
+    const subPositions = layoutSubnodes(adjustedPos, data.items.length, 0.9)
     data.items.forEach((item, idx) => {
-      const subPos = subPositions[idx] ?? pos
+      const subPos = subPositions[idx] ?? adjustedPos
       nodes.push({ ...item, position: subPos, scale: 0.4 })
       edges.push({ from: sys.id, to: item.id, kind: 'depends_on' })
     })

@@ -12,6 +12,7 @@ import { OrbitControls, Html, AdaptiveDpr, AdaptiveEvents } from '@react-three/d
 import {
   Brain, Filter, Eye, Sparkles, Activity, X, Loader2,
   ChevronDown, Search, Pause, Play, ShieldCheck, Network, AlertOctagon,
+  Command, ArrowLeft, Clock, History, Bookmark, ChevronRight,
 } from 'lucide-react'
 import * as THREE from 'three'
 import { api } from '../api.js'
@@ -38,6 +39,19 @@ interface NodeDetail {
   events: Array<{ at: number; type: string; summary: string }>
   actions: Array<{ id: string; label: string; risk: 'low' | 'medium' | 'high' | 'critical'; payload?: Record<string, unknown> }>
 }
+interface SearchHit { id: string; kind: string; label: string; detail: string; score: number }
+interface TimelineSummary {
+  from: number; to: number; bucketMs: number
+  buckets: Array<{ at: number; events: number; byKind: Record<string, number> }>
+  totalEvents: number
+  topKinds: Array<{ kind: string; count: number }>
+}
+interface DecisionPath {
+  rootEvent: { type: string; at: number } | null
+  steps: Array<{ step: number; kind: string; at: number; summary: string; source?: string }>
+  notes: string[]
+}
+interface SavedView { name: string; template: string; focus: string | null; createdAt: number }
 
 // ─── Visual constants ────────────────────────────────────────────────────
 
@@ -64,11 +78,12 @@ const TEMPLATES: Array<{ id: string; label: string }> = [
 // ─── 3D primitives ───────────────────────────────────────────────────────
 
 function NodeSphere({
-  node, selected, hovered, onClick, onHover,
+  node, selected, hovered, onClick, onDoubleClick, onHover,
 }: {
   node: BrainNode
   selected: boolean; hovered: boolean
   onClick: (n: BrainNode) => void
+  onDoubleClick: (n: BrainNode) => void
   onHover: (n: BrainNode | null) => void
 }) {
   const mesh = useRef<THREE.Mesh>(null)
@@ -93,6 +108,7 @@ function NodeSphere({
     <group position={pos}>
       <mesh ref={mesh}
         onClick={(e: ThreeEvent<MouseEvent>) => { e.stopPropagation(); onClick(node) }}
+        onDoubleClick={(e: ThreeEvent<MouseEvent>) => { e.stopPropagation(); onDoubleClick(node) }}
         onPointerOver={(e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); onHover(node) }}
         onPointerOut={() => onHover(null)}
         scale={baseScale}>
@@ -131,11 +147,12 @@ function Edge({ from, to }: { from: [number, number, number]; to: [number, numbe
 }
 
 function BrainScene({
-  graph, selectedId, hoveredId, onNodeClick, onNodeHover, focusOn,
+  graph, selectedId, hoveredId, onNodeClick, onNodeDoubleClick, onNodeHover, focusOn,
 }: {
   graph: BrainGraph
   selectedId: string | null; hoveredId: string | null
   onNodeClick: (n: BrainNode) => void
+  onNodeDoubleClick: (n: BrainNode) => void
   onNodeHover: (n: BrainNode | null) => void
   focusOn: [number, number, number] | null
 }) {
@@ -176,7 +193,7 @@ function BrainScene({
       {graph.nodes.map(n => (
         <NodeSphere key={n.id} node={n}
           selected={selectedId === n.id} hovered={hoveredId === n.id}
-          onClick={onNodeClick} onHover={onNodeHover} />
+          onClick={onNodeClick} onDoubleClick={onNodeDoubleClick} onHover={onNodeHover} />
       ))}
 
       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
@@ -206,11 +223,67 @@ export default function BrainPage() {
   const [fallback2D, setFallback2D] = useState(false)
   const [focusOn, setFocusOn] = useState<[number, number, number] | null>(null)
   const [eventTicker, setEventTicker] = useState<Array<{ at: number; text: string }>>([])
+  // New: palette / replay / focus
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [paletteQuery, setPaletteQuery] = useState('')
+  const [focusSystem, setFocusSystem] = useState<string | null>(null)
+  const [lod, setLod] = useState<'systems' | 'global' | 'focus'>('systems')
+  const [replayMode, setReplayMode] = useState(false)
+  const [replayAtMs, setReplayAtMs] = useState<number>(Date.now())
+  const [timeRange, setTimeRange] = useState<'15m' | '1h' | '24h' | '7d'>('1h')
+  const [savedViews, setSavedViews] = useState<SavedView[]>(() => {
+    if (typeof window === 'undefined') return []
+    try { return JSON.parse(localStorage.getItem('novan.brain.savedViews') ?? '[]') } catch { return [] }
+  })
+  const [recentNodes, setRecentNodes] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return []
+    try { return JSON.parse(localStorage.getItem('novan.brain.recent') ?? '[]') } catch { return [] }
+  })
 
   const graph = useQuery({
-    queryKey: ['brain-graph', workspaceId, template],
-    queryFn: () => api.get<{ data: BrainGraph }>(`/api/v1/brain/graph?workspace_id=${workspaceId}&template=${template}`),
-    refetchInterval: 15_000,
+    queryKey: ['brain-graph', workspaceId, template, lod, focusSystem, replayMode, replayAtMs],
+    queryFn: () => {
+      if (replayMode) {
+        return api.get<{ data: BrainGraph & { replay: { at: number; readOnly: true; honestNote: string } } }>(
+          `/api/v1/brain/replay?workspace_id=${workspaceId}&template=${template}&at=${replayAtMs}`
+        )
+      }
+      const params = new URLSearchParams({
+        workspace_id: workspaceId, template, lod,
+        ...(focusSystem ? { focus: focusSystem } : {}),
+      })
+      return api.get<{ data: BrainGraph }>(`/api/v1/brain/graph?${params}`)
+    },
+    refetchInterval: replayMode ? false : 15_000,
+  })
+
+  const timeline = useQuery({
+    queryKey: ['brain-timeline', workspaceId, timeRange],
+    queryFn: () => {
+      const now = Date.now()
+      const ranges = { '15m': 15 * 60_000, '1h': 60 * 60_000, '24h': 24 * 60 * 60_000, '7d': 7 * 24 * 60 * 60_000 }
+      const from = now - ranges[timeRange]
+      const bucket = timeRange === '15m' ? 30_000 : timeRange === '1h' ? 60_000 : timeRange === '24h' ? 30 * 60_000 : 6 * 60 * 60_000
+      return api.get<{ data: TimelineSummary }>(`/api/v1/brain/timeline?workspace_id=${workspaceId}&from=${from}&to=${now}&bucket_ms=${bucket}`)
+    },
+    enabled: replayMode,
+    refetchInterval: replayMode ? 30_000 : false,
+  })
+
+  const decisionPath = useQuery({
+    queryKey: ['brain-decision-path', workspaceId, selectedId],
+    queryFn: () => {
+      // Use chain id (mem:XXX) → strip prefix
+      const key = selectedId?.startsWith('mem:') ? selectedId.slice(4) : selectedId
+      return api.get<{ data: DecisionPath }>(`/api/v1/brain/decision-path/${encodeURIComponent(key ?? '')}?workspace_id=${workspaceId}`)
+    },
+    enabled: !!selectedId && (selectedId.startsWith('mem:') || replayMode),
+  })
+
+  const paletteResults = useQuery({
+    queryKey: ['brain-search', workspaceId, paletteQuery],
+    queryFn: () => api.get<{ data: SearchHit[] }>(`/api/v1/brain/search?workspace_id=${workspaceId}&q=${encodeURIComponent(paletteQuery)}&limit=15`),
+    enabled: paletteOpen && paletteQuery.length >= 2,
   })
 
   const detail = useQuery<{ data: NodeDetail | null }>({
@@ -303,6 +376,64 @@ export default function BrainPage() {
   const onNodeClick = (n: BrainNode) => {
     setSelectedId(n.id)
     if (n.position) setFocusOn(n.position)
+    // Update recent (most-recent first, dedup, cap 8)
+    setRecentNodes(prev => {
+      const next = [n.id, ...prev.filter(id => id !== n.id)].slice(0, 8)
+      if (typeof window !== 'undefined') localStorage.setItem('novan.brain.recent', JSON.stringify(next))
+      return next
+    })
+  }
+
+  // Double-click a system → focus mode
+  const onNodeDoubleClick = (n: BrainNode) => {
+    if (n.kind === 'system') {
+      setFocusSystem(n.id)
+      setLod('focus')
+    }
+  }
+
+  const clearFocus = () => {
+    setFocusSystem(null)
+    setLod('systems')
+    setSelectedId(null)
+    setFocusOn([0, 0, 0])
+  }
+
+  // Keyboard: Cmd/Ctrl-K opens palette, Esc clears focus/closes palette
+  useEffect(() => {
+    const fn = (e: KeyboardEvent) => {
+      if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        setPaletteOpen(o => !o)
+      } else if (e.key === 'Escape') {
+        if (paletteOpen) setPaletteOpen(false)
+        else if (selectedId) setSelectedId(null)
+        else if (focusSystem) clearFocus()
+      }
+    }
+    window.addEventListener('keydown', fn)
+    return () => window.removeEventListener('keydown', fn)
+  }, [paletteOpen, selectedId, focusSystem])
+
+  const saveView = () => {
+    const name = prompt('Name this view:')
+    if (!name) return
+    const v: SavedView = { name, template, focus: focusSystem, createdAt: Date.now() }
+    const next = [v, ...savedViews].slice(0, 12)
+    setSavedViews(next)
+    if (typeof window !== 'undefined') localStorage.setItem('novan.brain.savedViews', JSON.stringify(next))
+  }
+
+  const loadView = (v: SavedView) => {
+    setTemplate(v.template)
+    setFocusSystem(v.focus)
+    setLod(v.focus ? 'focus' : 'systems')
+  }
+
+  const removeView = (v: SavedView) => {
+    const next = savedViews.filter(x => x.createdAt !== v.createdAt)
+    setSavedViews(next)
+    if (typeof window !== 'undefined') localStorage.setItem('novan.brain.savedViews', JSON.stringify(next))
   }
 
   const onSearchEnter = () => {
@@ -319,6 +450,25 @@ export default function BrainPage() {
       <div className="border-b border-white/5 bg-black/40 backdrop-blur px-4 py-2 flex items-center gap-3 text-xs">
         <Brain className="w-4 h-4 text-emerald-400" />
         <span className="font-medium text-white/90">Novan Brain</span>
+
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-1 text-white/40">
+          <button onClick={clearFocus} className="hover:text-white/80 flex items-center gap-1">
+            <Brain className="w-3 h-3" /> global
+          </button>
+          {focusSystem && (
+            <>
+              <ChevronRight className="w-3 h-3" />
+              <span className="text-emerald-300 font-mono">{focusSystem}</span>
+            </>
+          )}
+          {selectedId && (
+            <>
+              <ChevronRight className="w-3 h-3" />
+              <span className="text-sky-300 font-mono truncate max-w-[140px]">{selectedId}</span>
+            </>
+          )}
+        </div>
 
         <Dropdown label="Template" icon={<Eye className="w-3 h-3" />}
           options={TEMPLATES} value={template} onChange={setTemplate} />
@@ -339,6 +489,32 @@ export default function BrainPage() {
             { id: '2d', label: '2D fallback' },
           ]} value={fallback2D ? '2d' : '3d'} onChange={v => setFallback2D(v === '2d')} />
 
+        <Dropdown label="LOD" icon={<Eye className="w-3 h-3" />}
+          options={[
+            { id: 'global',  label: 'Global only' },
+            { id: 'systems', label: 'Systems + subnodes' },
+            { id: 'focus',   label: 'Focus selected system' },
+          ]} value={lod} onChange={v => setLod(v as 'systems' | 'global' | 'focus')} />
+
+        <Dropdown label={replayMode ? 'Replay' : 'Mode'} icon={<History className="w-3 h-3" />}
+          options={[
+            { id: 'live',   label: 'Live' },
+            { id: 'replay', label: 'Replay' },
+          ]} value={replayMode ? 'replay' : 'live'} onChange={v => {
+            setReplayMode(v === 'replay')
+            if (v === 'replay') setReplayAtMs(Date.now())
+          }} />
+
+        {replayMode && (
+          <Dropdown label="Range" icon={<Clock className="w-3 h-3" />}
+            options={[
+              { id: '15m', label: 'Last 15 min' },
+              { id: '1h',  label: 'Last hour' },
+              { id: '24h', label: 'Last 24h' },
+              { id: '7d',  label: 'Last 7d' },
+            ]} value={timeRange} onChange={v => setTimeRange(v as '15m' | '1h' | '24h' | '7d')} />
+        )}
+
         <div className="flex items-center gap-1 ml-2 px-2 py-1 rounded bg-white/5 border border-white/10">
           <Search className="w-3 h-3 text-white/40" />
           <input value={search} onChange={(e) => setSearch(e.target.value)}
@@ -347,14 +523,25 @@ export default function BrainPage() {
             className="bg-transparent outline-none w-44 text-[11px]" />
         </div>
 
-        {selectedId && (
-          <button onClick={() => { setSelectedId(null); setFocusOn([0, 0, 0]) }}
-            className="ml-2 px-2 py-1 rounded text-[10px] border border-white/10 hover:bg-white/5 flex items-center gap-1">
-            <X className="w-3 h-3" /> esc to global
+        <button onClick={() => setPaletteOpen(true)}
+          className="ml-2 px-2 py-1 rounded text-[10px] border border-white/10 hover:bg-white/5 flex items-center gap-1.5">
+          <Command className="w-3 h-3" /> ⌘K
+        </button>
+
+        <button onClick={saveView} title="Save current view"
+          className="px-2 py-1 rounded text-[10px] border border-white/10 hover:bg-white/5 flex items-center gap-1">
+          <Bookmark className="w-3 h-3" />
+        </button>
+
+        {focusSystem && (
+          <button onClick={clearFocus}
+            className="px-2 py-1 rounded text-[10px] border border-white/10 hover:bg-white/5 flex items-center gap-1">
+            <ArrowLeft className="w-3 h-3" /> global
           </button>
         )}
 
         <span className="ml-auto text-[10px] text-white/40">
+          {replayMode && <span className="text-amber-300 mr-2">⏸ READ-ONLY · {new Date(replayAtMs).toLocaleTimeString()}</span>}
           {g ? `${g.nodes.length} nodes · ${g.systems.length} systems` : graph.isLoading ? 'loading…' : 'no graph'}
         </span>
       </div>
@@ -383,6 +570,7 @@ export default function BrainPage() {
                   selectedId={selectedId}
                   hoveredId={hoveredId}
                   onNodeClick={onNodeClick}
+                  onNodeDoubleClick={onNodeDoubleClick}
                   onNodeHover={(n) => setHoveredId(n?.id ?? null)}
                   focusOn={focusOn}
                 />
@@ -423,9 +611,140 @@ export default function BrainPage() {
         {/* Detail drawer */}
         {selectedId && detail.data?.data && (
           <DetailDrawer detail={detail.data.data}
+            replayMode={replayMode}
+            decisionPath={decisionPath.data?.data ?? null}
             onClose={() => setSelectedId(null)}
             onAction={(actionId, payload, approvalToken) => doAction.mutate({ actionId, payload: payload ?? {}, ...(approvalToken ? { approvalToken } : {}) })}
             pending={doAction.isPending} />
+        )}
+
+        {/* Saved views strip */}
+        {savedViews.length > 0 && !paletteOpen && (
+          <div className="absolute top-3 left-3 bg-black/50 backdrop-blur border border-white/10 rounded p-2 max-w-[200px]">
+            <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1 flex items-center gap-1">
+              <Bookmark className="w-3 h-3" /> Saved views
+            </div>
+            <ul className="space-y-0.5 text-[10px]">
+              {savedViews.slice(0, 6).map(v => (
+                <li key={v.createdAt} className="flex items-center gap-1">
+                  <button onClick={() => loadView(v)} className="flex-1 text-left hover:bg-white/5 px-1 py-0.5 rounded truncate" title={`${v.template}${v.focus ? `/${v.focus}` : ''}`}>
+                    {v.name}
+                  </button>
+                  <button onClick={() => removeView(v)} className="text-white/30 hover:text-white/80 p-0.5"><X className="w-2.5 h-2.5" /></button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Replay timeline slider */}
+        {replayMode && timeline.data?.data && (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur border border-white/10 rounded-lg px-4 py-2 w-[80%] max-w-3xl">
+            <div className="flex items-center gap-3 text-[10px]">
+              <Clock className="w-3 h-3 text-amber-300" />
+              <span className="text-white/60">{new Date(timeline.data.data.from).toLocaleTimeString()}</span>
+              <input type="range"
+                min={timeline.data.data.from} max={timeline.data.data.to}
+                value={replayAtMs} step={(timeline.data.data.to - timeline.data.data.from) / 200}
+                onChange={(e) => setReplayAtMs(Number(e.target.value))}
+                className="flex-1 accent-amber-400" />
+              <span className="text-white/60">{new Date(timeline.data.data.to).toLocaleTimeString()}</span>
+              <button onClick={() => setReplayAtMs(timeline.data!.data!.to)}
+                className="text-white/40 hover:text-white/80 text-[10px]">now</button>
+            </div>
+            {/* Histogram of events per bucket */}
+            <div className="flex items-end gap-0.5 h-8 mt-1">
+              {timeline.data.data.buckets.map(b => {
+                const max = Math.max(...timeline.data!.data!.buckets.map(x => x.events), 1)
+                const h = Math.max(2, (b.events / max) * 28)
+                const active = b.at <= replayAtMs && b.at + timeline.data!.data!.bucketMs > replayAtMs
+                return (
+                  <div key={b.at} className={`flex-1 ${active ? 'bg-amber-400' : 'bg-white/20'}`}
+                    style={{ height: h }} title={`${new Date(b.at).toLocaleTimeString()} · ${b.events} events`} />
+                )
+              })}
+            </div>
+            <div className="text-[9px] text-white/40 mt-1 flex justify-between">
+              <span>{timeline.data.data.totalEvents} events in window</span>
+              <span>{timeline.data.data.topKinds.slice(0, 3).map(k => `${k.kind}(${k.count})`).join(' · ')}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Command palette */}
+        {paletteOpen && (
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-24 z-50"
+            onClick={() => setPaletteOpen(false)}>
+            <div className="bg-black/90 border border-white/10 rounded-lg w-[600px] max-w-[90vw] shadow-2xl"
+              onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-2 p-3 border-b border-white/10">
+                <Command className="w-4 h-4 text-emerald-400" />
+                <input autoFocus value={paletteQuery}
+                  onChange={(e) => setPaletteQuery(e.target.value)}
+                  placeholder="Search nodes · run actions · jump to system…"
+                  className="flex-1 bg-transparent outline-none text-sm" />
+                <span className="text-[10px] text-white/40">ESC</span>
+              </div>
+              <div className="max-h-[400px] overflow-y-auto p-2">
+                {paletteQuery.length < 2 ? (
+                  <div className="text-xs text-white/40 p-3">
+                    <p className="mb-2">Try: <span className="font-mono">runtime</span>, <span className="font-mono">agent</span>, <span className="font-mono">drift</span>, <span className="font-mono">proposal</span>, system name, agent name.</p>
+                    {recentNodes.length > 0 && g && (
+                      <>
+                        <div className="text-[10px] uppercase tracking-wider mt-3 mb-1">Recent</div>
+                        <ul className="space-y-0.5">
+                          {recentNodes.map(id => {
+                            const n = g.nodes.find(x => x.id === id)
+                            if (!n) return null
+                            return (
+                              <li key={id}>
+                                <button onClick={() => { setPaletteOpen(false); onNodeClick(n) }}
+                                  className="w-full text-left px-2 py-1 hover:bg-white/5 rounded flex items-center gap-2">
+                                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: STATUS_COLOR[n.status] }} />
+                                  <span className="font-mono text-white/40 uppercase tracking-wider w-16 text-[10px]">{n.kind}</span>
+                                  <span className="text-white/85">{n.label}</span>
+                                </button>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                ) : paletteResults.isLoading ? (
+                  <div className="text-xs text-white/40 p-3 flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin" /> searching…</div>
+                ) : (paletteResults.data?.data ?? []).length === 0 ? (
+                  <div className="text-xs text-white/40 p-3">No matches.</div>
+                ) : (
+                  <ul className="space-y-0.5">
+                    {(paletteResults.data?.data ?? []).map(hit => {
+                      const n = g?.nodes.find(x => x.id === hit.id)
+                      return (
+                        <li key={hit.id}>
+                          <button onClick={() => {
+                            setPaletteOpen(false)
+                            if (n) onNodeClick(n)
+                            else { setSelectedId(hit.id); setFocusOn(null) }
+                          }}
+                            className="w-full text-left px-2 py-1.5 hover:bg-white/5 rounded flex items-center gap-2 text-xs">
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ background: n ? STATUS_COLOR[n.status] : '#64748b' }} />
+                            <span className="font-mono text-white/40 uppercase tracking-wider w-16 text-[10px]">{hit.kind}</span>
+                            <span className="text-white/85 flex-1 truncate">{hit.label}</span>
+                            <span className="text-[10px] text-white/30">{hit.score.toFixed(2)}</span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
+              <div className="px-3 py-2 border-t border-white/10 text-[10px] text-white/40 flex items-center gap-3">
+                <span>↵ select</span>
+                <span>esc close</span>
+                <span className="ml-auto">⌘K toggle</span>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -470,9 +789,11 @@ function Dropdown<T extends string>({
 }
 
 function DetailDrawer({
-  detail, onClose, onAction, pending,
+  detail, replayMode, decisionPath, onClose, onAction, pending,
 }: {
   detail: NodeDetail
+  replayMode: boolean
+  decisionPath: DecisionPath | null
   onClose: () => void
   onAction: (actionId: string, payload?: Record<string, unknown>, approvalToken?: string) => void
   pending: boolean
@@ -519,20 +840,23 @@ function DetailDrawer({
 
       {detail.actions.length > 0 && (
         <div className="text-xs">
-          <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1.5">Actions</div>
+          <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1.5 flex items-center gap-2">
+            Actions
+            {replayMode && <span className="text-amber-300">⏸ disabled in replay</span>}
+          </div>
           <div className="space-y-1">
             {detail.actions.map(a => {
               const isCritical = a.risk === 'high' || a.risk === 'critical'
               return (
                 <button key={a.id} onClick={() => onAction(a.id, a.payload, isCritical ? 'OPERATOR_APPROVED' : undefined)}
-                  disabled={pending}
+                  disabled={pending || replayMode}
                   className={`w-full px-2 py-1 rounded text-left flex items-center gap-2 border ${
                     isCritical
                       ? 'border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20'
                       : a.risk === 'medium'
                         ? 'border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20'
                         : 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300 hover:bg-emerald-500/15'
-                  } disabled:opacity-50`}>
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}>
                   {a.id === 'pause_agent' && <Pause className="w-3 h-3" />}
                   {a.id === 'resume_agent' && <Play className="w-3 h-3" />}
                   {a.id === 'approve_proposal' && <ShieldCheck className="w-3 h-3" />}
@@ -544,6 +868,31 @@ function DetailDrawer({
               )
             })}
           </div>
+        </div>
+      )}
+
+      {decisionPath && decisionPath.steps.length > 0 && (
+        <div className="text-xs mt-3 pt-3 border-t border-white/10">
+          <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1.5">Decision path ({decisionPath.steps.length})</div>
+          <ol className="space-y-1">
+            {decisionPath.steps.slice(0, 8).map(s => (
+              <li key={s.step} className="flex gap-2 text-[10px]">
+                <span className="text-white/30 font-mono w-4">{s.step}</span>
+                <span className={`uppercase tracking-wider w-14 ${
+                  s.kind === 'chain' ? 'text-emerald-300'
+                  : s.kind === 'override' ? 'text-amber-300'
+                  : s.kind === 'block' ? 'text-red-300'
+                  : s.kind === 'incident' ? 'text-orange-300'
+                  : 'text-white/60'
+                }`}>{s.kind}</span>
+                <span className="text-white/40">{new Date(s.at).toLocaleTimeString()}</span>
+                <span className="text-white/85 flex-1 truncate" title={s.summary}>{s.summary}</span>
+              </li>
+            ))}
+          </ol>
+          {decisionPath.notes.length > 0 && (
+            <p className="text-[10px] text-white/30 mt-1.5">{decisionPath.notes.join(' · ')}</p>
+          )}
         </div>
       )}
     </div>

@@ -3,8 +3,9 @@
  * Graph, node detail, actions, live SSE stream.
  */
 import type { FastifyPluginAsync } from 'fastify'
-import { buildGraph, getNodeDetail, type BrainTemplate } from '../services/brain-graph.js'
+import { buildGraph, getNodeDetail, type BrainTemplate, type LODMode } from '../services/brain-graph.js'
 import { performBrainAction } from '../services/brain-actions.js'
+import { timelineSummary, replayAt, decisionPath, searchBrain } from '../services/brain-timeline.js'
 import { db } from '../db/client.js'
 import { events } from '../db/schema.js'
 import { and, eq, gte, desc } from 'drizzle-orm'
@@ -15,16 +16,18 @@ const CACHE_MS = 5_000
 
 const brainRoutes: FastifyPluginAsync = async (fastify) => {
 
-  fastify.get<{ Querystring: { workspace_id?: string; template?: string } }>('/graph', async (req, reply) => {
+  fastify.get<{ Querystring: { workspace_id?: string; template?: string; lod?: string; focus?: string } }>('/graph', async (req, reply) => {
     const ws = req.query.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     const template = (req.query.template ?? 'neural') as BrainTemplate
-    const key = `${ws}:${template}`
+    const lod = (req.query.lod ?? 'systems') as LODMode
+    const focus = req.query.focus
+    const key = `${ws}:${template}:${lod}:${focus ?? ''}`
     const cached = cache.get(key)
     if (cached && Date.now() - cached.at < CACHE_MS) {
       return { success: true, data: cached.data, cached: true }
     }
-    const graph = await buildGraph(ws, template)
+    const graph = await buildGraph(ws, template, { lod, ...(focus ? { focusSystem: focus } : {}) })
     cache.set(key, { at: Date.now(), data: graph })
     return { success: true, data: graph, cached: false }
   })
@@ -53,6 +56,37 @@ const brainRoutes: FastifyPluginAsync = async (fastify) => {
     })
     if (!r.ok) return reply.code(400).send({ success: false, ...r })
     return { success: true, data: r }
+  })
+
+  // ── Timeline ───────────────────────────────────────────────────────
+  fastify.get<{ Querystring: { workspace_id?: string; from?: string; to?: string; bucket_ms?: string } }>('/timeline', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const to = req.query.to ? Number(req.query.to) : Date.now()
+    const from = req.query.from ? Number(req.query.from) : to - 60 * 60_000
+    const bucket = req.query.bucket_ms ? Number(req.query.bucket_ms) : 60_000
+    return { success: true, data: await timelineSummary(ws, from, to, bucket) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string; at?: string; template?: string } }>('/replay', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws || !req.query.at) return reply.code(400).send({ success: false, error: 'workspace_id, at required' })
+    const at = Number(req.query.at)
+    if (!Number.isFinite(at)) return reply.code(400).send({ success: false, error: 'at must be a number (ms)' })
+    return { success: true, data: await replayAt(ws, at, (req.query.template ?? 'neural') as BrainTemplate) }
+  })
+
+  fastify.get<{ Params: { key: string }; Querystring: { workspace_id?: string } }>('/decision-path/:key', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await decisionPath(ws, req.params.key) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string; q?: string; limit?: string } }>('/search', async (req, reply) => {
+    const ws = req.query.workspace_id
+    const q  = req.query.q
+    if (!ws || !q) return reply.code(400).send({ success: false, error: 'workspace_id, q required' })
+    return { success: true, data: await searchBrain(ws, q, req.query.limit ? Number(req.query.limit) : 20) }
   })
 
   // SSE stream — relays recent global events for the brain UI
