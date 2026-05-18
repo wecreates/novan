@@ -3,7 +3,7 @@ import {
   Activity, Clock, Settings as SettingsIcon,
   Target, ShieldAlert, Bot, Building2, Brain,
   GitBranch, AlertOctagon, CheckSquare, BarChart3, Lightbulb, GraduationCap, Cpu,
-  Shield, ScanSearch, ShieldCheck, Terminal, Siren, GitMerge, Lock, BookOpen, TrendingUp, Rocket, Coins, Heart, Home, Code2, Bell, Search, Plus, Map as MapIcon, Hammer,
+  Shield, ScanSearch, ShieldCheck, Terminal, Siren, GitMerge, Lock, BookOpen, TrendingUp, Rocket, Coins, Heart, Home, Code2, Bell, Search, Plus, Map as MapIcon, Hammer, ShoppingBag,
 } from 'lucide-react'
 import WarRoom                  from './pages/WarRoom.js'
 import StrategicHomePage        from './pages/StrategicHomePage.js'
@@ -25,6 +25,8 @@ import SearchPage               from './pages/SearchPage.js'
 import OperatorInputPage        from './pages/OperatorInputPage.js'
 import SystemMapPage            from './pages/SystemMapPage.js'
 import CodePatchesPage          from './pages/CodePatchesPage.js'
+import CommerceWarRoomPage      from './pages/CommerceWarRoomPage.js'
+import TrustGovernancePage      from './pages/TrustGovernancePage.js'
 import Timeline                 from './pages/Timeline.js'
 import Settings                 from './pages/Settings.js'
 import GoalsPage                from './pages/GoalsPage.js'
@@ -78,6 +80,8 @@ const NAV_ITEMS = [
   { to: '/proposals',            icon: Code2,      label: 'Proposals' },
   { to: '/patches',              icon: Hammer,     label: 'Patches' },
   { to: '/system-map',           icon: MapIcon,    label: 'System Map' },
+  { to: '/commerce',             icon: ShoppingBag,label: 'Commerce' },
+  { to: '/trust-governance',     icon: Shield,     label: 'Trust & Governance' },
   { to: '/notifications',        icon: Bell,       label: 'Notifications' },
   { to: '/search',               icon: Search,     label: 'Search' },
   { to: '/operator-input',       icon: Plus,       label: 'Operator Input' },
@@ -184,6 +188,8 @@ export default function App() {
           <Route path="/operator-input"       element={<OperatorInputPage />} />
           <Route path="/system-map"           element={<SystemMapPage />} />
           <Route path="/patches"              element={<CodePatchesPage />} />
+          <Route path="/commerce"             element={<CommerceWarRoomPage />} />
+          <Route path="/trust-governance"     element={<TrustGovernancePage />} />
           <Route path="/war-room"    element={<WarRoom />} />
           <Route path="/timeline"    element={<Timeline />} />
           <Route path="/goals"       element={<GoalsPage />} />

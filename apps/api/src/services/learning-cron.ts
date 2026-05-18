@@ -45,6 +45,7 @@ import { captureGitState }             from './git-state.js'
 import { backfillRecent as backfillEmbeddings } from './semantic-search.js'
 import { linkCommitsToOutcomes }       from './commit-learner.js'
 import { autoRegister as autoRegisterCapabilities } from './capability-auto-register.js'
+import { autoDeriveTrust }             from './trust-governance.js'
 import { sweepStale }                          from './assumption-tracker.js'
 import { stabilitySnapshot, emitGovernance, autoEngageThrottle, pauseUnstableAgents, autoDisengageThrottleIfStable } from './governance-core.js'
 import { crossDivisionBlockers, type CrossDivisionBlocker } from './divisions.js'
@@ -317,6 +318,18 @@ async function runCapabilityAutoRegister() {
   } catch (e) { await emit('cron.error', { task: 'capability_auto_register', error: (e as Error).message }) }
 }
 
+async function runTrustAutoDerive() {
+  try {
+    const ids = await listWorkspaceIds()
+    let totalAdjustments = 0
+    for (const ws of ids) {
+      const r = await autoDeriveTrust(ws).catch(() => null)
+      if (r) totalAdjustments += r.adjustments
+    }
+    if (totalAdjustments > 0) await emit('cron.trust_derived', { adjustments: totalAdjustments })
+  } catch (e) { await emit('cron.error', { task: 'trust_derive', error: (e as Error).message }) }
+}
+
 async function runHorizonReviewSweep() {
   try {
     const ids = await listWorkspaceIds()
@@ -489,6 +502,7 @@ const INTERVALS = {
   embeddingsBackfill: 30 * 60_000,    // 30 min — index recent chains for semantic search
   commitLearning:   6  * 60 * 60_000, // 6 hours — link commits to outcomes
   capabilityAutoReg: 30 * 60_000,     // 30 min — auto-register discovered services
+  trustAutoDerive:  60 * 60_000,      // 1 hour — adjust trust scores from observed signals
 }
 
 export function startLearningCron(): void {
@@ -522,6 +536,7 @@ export function startLearningCron(): void {
   handles.push(setInterval(() => void runEmbeddingsBackfill(),          INTERVALS.embeddingsBackfill))
   handles.push(setInterval(() => void runCommitLearning(),              INTERVALS.commitLearning))
   handles.push(setInterval(() => void runCapabilityAutoRegister(),      INTERVALS.capabilityAutoReg))
+  handles.push(setInterval(() => void runTrustAutoDerive(),             INTERVALS.trustAutoDerive))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

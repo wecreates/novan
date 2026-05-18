@@ -3046,6 +3046,210 @@ export const discoveredCapabilities = pgTable('discovered_capabilities', {
   maturity:      text('maturity').notNull().default('basic'),
 })
 
+// ─── Migration 0020 — Commerce, creative, trust, governance ─────────────
+
+export const commerceSessions = pgTable('commerce_sessions', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  platform:         text('platform').notNull(),
+  accountRef:       text('account_ref').notNull(),
+  status:           text('status').notNull().default('pending'),
+  scopes:           jsonb('scopes').$type<string[]>().notNull().default([]),
+  approvalId:       text('approval_id'),
+  eventsCount:      integer('events_count').notNull().default(0),
+  screenshotsTaken: integer('screenshots_taken').notNull().default(0),
+  startedAt:        bigint('started_at', { mode: 'number' }),
+  endedAt:          bigint('ended_at', { mode: 'number' }),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:        bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('csess_workspace_idx').on(t.workspaceId),
+  index('csess_status_idx').on(t.status),
+])
+
+export const commerceEvents = pgTable('commerce_events', {
+  id:              text('id').primaryKey(),
+  sessionId:       text('session_id').notNull(),
+  workspaceId:     text('workspace_id').notNull(),
+  eventType:       text('event_type').notNull(),
+  url:             text('url'),
+  actionText:      text('action_text'),
+  screenshotPath:  text('screenshot_path'),
+  requiresConfirm: boolean('requires_confirm').notNull().default(false),
+  confirmed:       boolean('confirmed').notNull().default(false),
+  blockedReason:   text('blocked_reason'),
+  occurredAt:      bigint('occurred_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('cev_session_idx').on(t.sessionId),
+  index('cev_workspace_idx').on(t.workspaceId),
+  index('cev_occurred_idx').on(t.occurredAt),
+])
+
+export const accountCredentials = pgTable('account_credentials', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  platform:       text('platform').notNull(),
+  accountRef:     text('account_ref').notNull(),
+  vaultSecretId:  text('vault_secret_id'),
+  grantedScopes:  jsonb('granted_scopes').$type<string[]>().notNull().default([]),
+  paused:         boolean('paused').notNull().default(false),
+  lastUsedAt:     bigint('last_used_at', { mode: 'number' }),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:      bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('ac_unique').on(t.workspaceId, t.platform, t.accountRef),
+  index('ac_workspace_idx').on(t.workspaceId),
+  index('ac_platform_idx').on(t.platform),
+])
+
+export const designConcepts = pgTable('design_concepts', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  brief:             text('brief').notNull(),
+  prompt:            text('prompt').notNull(),
+  assetImageRef:     text('asset_image_ref'),
+  originalityScore:  real('originality_score'),
+  ipRiskScore:       real('ip_risk_score'),
+  slopScore:         real('slop_score'),
+  qualityScore:      real('quality_score'),
+  trendRefs:         jsonb('trend_refs').$type<string[]>().notNull().default([]),
+  status:            text('status').notNull().default('draft'),
+  blockReasons:      jsonb('block_reasons').$type<string[]>().notNull().default([]),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:         bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('dc_workspace_idx').on(t.workspaceId),
+  index('dc_status_idx').on(t.status),
+])
+
+export const podListings = pgTable('pod_listings', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  platform:     text('platform').notNull(),
+  conceptId:    text('concept_id'),
+  title:        text('title').notNull(),
+  description:  text('description').notNull(),
+  tags:         jsonb('tags').$type<string[]>().notNull().default([]),
+  assetRefs:    jsonb('asset_refs').$type<string[]>().notNull().default([]),
+  externalId:   text('external_id'),
+  status:       text('status').notNull().default('draft'),
+  qualityScore: real('quality_score'),
+  performance:  jsonb('performance').$type<Record<string, unknown>>().notNull().default({}),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('pl_workspace_idx').on(t.workspaceId),
+  index('pl_platform_idx').on(t.platform),
+  index('pl_status_idx').on(t.status),
+])
+
+export const socialPosts = pgTable('social_posts', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  platform:     text('platform').notNull(),
+  accountRef:   text('account_ref').notNull(),
+  body:         text('body').notNull(),
+  assetRefs:    jsonb('asset_refs').$type<string[]>().notNull().default([]),
+  scheduledAt:  bigint('scheduled_at', { mode: 'number' }),
+  postedAt:     bigint('posted_at', { mode: 'number' }),
+  externalId:   text('external_id'),
+  status:       text('status').notNull().default('draft'),
+  approvalId:   text('approval_id'),
+  engagement:   jsonb('engagement').$type<Record<string, unknown>>().notNull().default({}),
+  spamScore:    real('spam_score'),
+  blockReasons: jsonb('block_reasons').$type<string[]>().notNull().default([]),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('sp_workspace_idx').on(t.workspaceId),
+  index('sp_status_idx').on(t.status),
+  index('sp_platform_idx').on(t.platform),
+])
+
+export const trendFindings = pgTable('trend_findings', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  source:       text('source').notNull(),
+  niche:        text('niche').notNull(),
+  signal:       text('signal').notNull(),
+  score:        real('score').notNull().default(0),
+  confidence:   real('confidence').notNull().default(0),
+  citations:    jsonb('citations').$type<Array<{ url: string; title: string; capturedAt: number }>>().notNull().default([]),
+  capturedAt:   bigint('captured_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('tf_workspace_idx').on(t.workspaceId),
+  index('tf_niche_idx').on(t.niche),
+  index('tf_captured_idx').on(t.capturedAt),
+])
+
+export const trustScores = pgTable('trust_scores', {
+  subjectType:  text('subject_type').notNull(),
+  subjectId:    text('subject_id').notNull(),
+  workspaceId:  text('workspace_id').notNull(),
+  score:        real('score').notNull().default(0.8),
+  signals:      jsonb('signals').$type<Array<{ at: number; reason: string; delta: number }>>().notNull().default([]),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.workspaceId, t.subjectType, t.subjectId] }),
+  index('ts_workspace_idx').on(t.workspaceId),
+])
+
+export const postingGovernor = pgTable('posting_governor', {
+  workspaceId: text('workspace_id').notNull(),
+  platform:    text('platform').notNull(),
+  accountRef:  text('account_ref').notNull(),
+  postsToday:  integer('posts_today').notNull().default(0),
+  maxPerDay:   integer('max_per_day').notNull().default(5),
+  cooldownMin: integer('cooldown_min').notNull().default(45),
+  lastPostAt:  bigint('last_post_at', { mode: 'number' }),
+  windowStart: bigint('window_start', { mode: 'number' }).notNull(),
+  updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.workspaceId, t.platform, t.accountRef] }),
+])
+
+export const agentPauseState = pgTable('agent_pause_state', {
+  workspaceId: text('workspace_id').notNull(),
+  agentName:   text('agent_name').notNull(),
+  paused:      boolean('paused').notNull().default(false),
+  pausedBy:    text('paused_by'),
+  pausedAt:    bigint('paused_at', { mode: 'number' }),
+  reason:      text('reason'),
+  updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.workspaceId, t.agentName] }),
+])
+
+export const overrideLog = pgTable('override_log', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  actionType:     text('action_type').notNull(),
+  subjectId:      text('subject_id'),
+  originalStatus: text('original_status').notNull(),
+  overrideStatus: text('override_status').notNull(),
+  operatorId:     text('operator_id'),
+  reason:         text('reason'),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ol_workspace_idx').on(t.workspaceId),
+  index('ol_action_idx').on(t.actionType),
+  index('ol_created_idx').on(t.createdAt),
+])
+
+export const ethicalBlocks = pgTable('ethical_blocks', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  intent:      text('intent').notNull(),
+  source:      text('source').notNull(),
+  category:    text('category').notNull(),
+  reason:      text('reason').notNull(),
+  blockedAt:   bigint('blocked_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('eb_workspace_idx').on(t.workspaceId),
+  index('eb_category_idx').on(t.category),
+  index('eb_blocked_idx').on(t.blockedAt),
+])
+
 export const cronBudgets = pgTable('cron_budgets', {
   id:            text('id').primaryKey(),
   cronName:      text('cron_name').notNull().unique(),
