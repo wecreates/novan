@@ -412,6 +412,7 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
   }
 
   const now = Date.now()
+  const turnStartedAt = now    // R146.9 — captured for ai_usage.latencyMs
 
   // 0a. Validate attachments (oversize / unknown mimes → refuse early)
   const validated = validateAttachments(i.attachments ?? [])
@@ -829,6 +830,27 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
     audit: auditResult as unknown as Record<string, unknown>,
     streamComplete: true,
   }).where(eq(messages.id, asstMsgId)).catch((e: Error) => { console.error('[novan-chat] final-persist failed:', e.message, 'msgId=', asstMsgId); return null })
+
+  // R146.9 — record to ai_usage so chat shows up in the workspace budget
+  // report, /dashboard spend-by-source, cost-drift detector, and any other
+  // consumer of ai_usage. Previously chat was the dominant LLM workload
+  // on the droplet but every turn was invisible to ai_usage (ai_usage
+  // table had ZERO rows ever, despite millions of tokens through chat).
+  // Pattern matches ceo-orchestrator.ts:182. Fire-and-forget — recordAiUsage
+  // is already async + try/catch internally so failures don't fail chat.
+  if (final.tokens > 0 && final.provider !== 'none') {
+    const { recordAiUsage } = await import('./ai-cost-tracker.js')
+    recordAiUsage({
+      workspaceId:  i.workspaceId,
+      provider:     final.provider,
+      model:        final.model,
+      promptTokens: 0,
+      outputTokens: final.tokens,
+      costUsd:      final.costUsd,
+      latencyMs:    Date.now() - turnStartedAt,
+      taskType:     'chat',
+    })
+  }
 
   // 8. Update conversation stats
   await db.update(conversations).set({
