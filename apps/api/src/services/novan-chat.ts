@@ -422,14 +422,25 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
   const attachments = validated.attachments ?? []
 
   // 1. Persist user message
+  // R146.7 — surface persistence failures instead of silently dropping
+  // them. The previous `.catch(() => null)` made user input invisible
+  // on refresh AND let the LLM run on a message that wasn't saved
+  // anywhere, burning tokens with no recoverable record. Now: log the
+  // failure, emit an SSE error frame, and short-circuit before the LLM
+  // call so the operator can retry.
   const userMsgId = uuidv7()
-  await db.insert(messages).values({
+  const userPersistErr = await db.insert(messages).values({
     id: userMsgId, conversationId: i.conversationId, workspaceId: i.workspaceId,
     role: 'user', content: i.userMessage.slice(0, 20_000),
     citations: [], tokens: 0, costUsd: 0,
     streamComplete: true, createdAt: now,
     attachments,
-  }).catch(() => null)
+  }).then(() => null).catch((e: Error) => e)
+  if (userPersistErr) {
+    console.error('[novan-chat] user message persist failed:', userPersistErr.message)
+    yield { event: 'error', data: { reason: 'persist_failed', detail: userPersistErr.message } }
+    return
+  }
   yield { event: 'user_message', data: { id: userMsgId, attachments: attachments.length } }
 
   // ─── Operator DNA observation — was wired as an op but never called
@@ -683,7 +694,7 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
     await db.update(messages)
       .set({ supersededAt: Date.now(), supersededBy: asstMsgId })
       .where(and(eq(messages.id, i.regenerateFrom), eq(messages.workspaceId, i.workspaceId)))
-      .catch(() => null)
+      .catch((e: Error) => { console.error('[novan-chat] regenerate supersede failed:', e.message); return null })
   }
   await db.insert(messages).values({
     id: asstMsgId, conversationId: i.conversationId, workspaceId: i.workspaceId,
@@ -691,7 +702,7 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
     citations: ctx.citations,
     streamComplete: false, createdAt: Date.now(),
     regeneratedFrom: i.regenerateFrom ?? null,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[novan-chat] assistant message insert failed:', e.message); return null })
   yield { event: 'assistant_start', data: { id: asstMsgId, regeneratedFrom: i.regenerateFrom ?? null } }
 
   // 4. Stream LLM (multi-provider with fallback)
@@ -783,7 +794,7 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
     // Persist whatever we have so it's visible in history + replayable
     await db.update(messages).set({
       content: accumulated, cancelled: true, streamComplete: true,
-    }).where(eq(messages.id, asstMsgId)).catch(() => null)
+    }).where(eq(messages.id, asstMsgId)).catch((e: Error) => { console.error('[novan-chat] cancel-persist failed:', e.message); return null })
     yield { event: 'cancelled', data: { id: asstMsgId, partial: accumulated.length } }
     return
   }
@@ -807,12 +818,17 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
   yield { event: 'audit', data: auditResult as unknown as Record<string, unknown> }
 
   // 7. Persist final
+  // Critical persist: stores the actual assistant content, token count,
+  // cost, provider/model, audit result. If this silently fails the user
+  // sees the streamed response live but the DB row stays empty +
+  // streamComplete=false — conversation history shows an empty bubble
+  // and ai_usage attribution is lost.
   await db.update(messages).set({
     content: final.content, tokens: final.tokens, costUsd: final.costUsd,
     provider: final.provider, model: final.model,
     audit: auditResult as unknown as Record<string, unknown>,
     streamComplete: true,
-  }).where(eq(messages.id, asstMsgId)).catch(() => null)
+  }).where(eq(messages.id, asstMsgId)).catch((e: Error) => { console.error('[novan-chat] final-persist failed:', e.message, 'msgId=', asstMsgId); return null })
 
   // 8. Update conversation stats
   await db.update(conversations).set({
@@ -867,7 +883,7 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
         id: followId, conversationId: i.conversationId, workspaceId: i.workspaceId,
         role: 'assistant', content: `**Tool results:**\n\`\`\`\n${summaryText}\n\`\`\``,
         citations: [], streamComplete: true, createdAt: Date.now(),
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[novan-chat] tool-result message insert failed:', e.message); return null })
     } catch (e) {
       yield { event: 'tools_failed', data: { error: (e as Error).message } }
     }
