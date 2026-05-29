@@ -22,6 +22,7 @@ import { v7 as uuidv7 }                from 'uuid'
 import { redactSecrets }               from './secret-redactor.js'
 import { isImageGenerationEnabled, defaultImageProvider } from './provider-validation.js'
 import { checkBeforeAction, emitGovernorBlock } from './resource-governor.js'
+import { fetchWithRetry }                       from './provider-retry.js'
 
 export type ImageProvider = 'openai' | 'stability' | 'replicate' | 'fal'
 
@@ -102,7 +103,7 @@ async function genOpenAI(input: GenerateInput): Promise<{ imageUrl: string; raw:
   const key = process.env['OPENAI_API_KEY']
   if (!key) throw new Error('OPENAI_API_KEY not configured')
   const size = `${input.width ?? 1024}x${input.height ?? 1024}`
-  const res = await fetch('https://api.openai.com/v1/images/generations', {
+  const out = await fetchWithRetry('image:openai', 'https://api.openai.com/v1/images/generations', {
     method:  'POST',
     headers: { 'content-type': 'application/json', 'authorization': `Bearer ${key}` },
     body: JSON.stringify({
@@ -113,8 +114,8 @@ async function genOpenAI(input: GenerateInput): Promise<{ imageUrl: string; raw:
     }),
     signal: AbortSignal.timeout(60_000),
   })
-  const body = await res.json().catch(() => ({})) as Record<string, unknown>
-  if (!res.ok) throw new Error(`OpenAI ${res.status}: ${JSON.stringify(body).slice(0, 200)}`)
+  if (!out.ok) throw new Error(`OpenAI ${out.status}: ${out.statusText}`)
+  const body = await out.response.json().catch(() => ({})) as Record<string, unknown>
   const data = body['data'] as Array<{ url?: string }> | undefined
   const url = data?.[0]?.url
   if (!url) throw new Error('OpenAI returned no image URL')
@@ -130,14 +131,14 @@ async function genStability(input: GenerateInput): Promise<{ imageUrl: string; r
   if (input.aspectRatio)    form.append('aspect_ratio', input.aspectRatio)
   form.append('output_format', 'png')
 
-  const res = await fetch('https://api.stability.ai/v2beta/stable-image/generate/core', {
+  const out = await fetchWithRetry('image:stability', 'https://api.stability.ai/v2beta/stable-image/generate/core', {
     method:  'POST',
     headers: { 'authorization': `Bearer ${key}`, 'accept': 'application/json' },
     body:    form,
     signal:  AbortSignal.timeout(120_000),
   })
-  const body = await res.json().catch(() => ({})) as Record<string, unknown>
-  if (!res.ok) throw new Error(`Stability ${res.status}: ${JSON.stringify(body).slice(0, 200)}`)
+  if (!out.ok) throw new Error(`Stability ${out.status}: ${out.statusText}`)
+  const body = await out.response.json().catch(() => ({})) as Record<string, unknown>
   const b64 = body['image'] as string | undefined
   if (!b64) throw new Error('Stability returned no image')
   return { imageUrl: `data:image/png;base64,${b64}`, raw: { finishReason: body['finish_reason'] } }
@@ -148,7 +149,7 @@ async function genReplicate(input: GenerateInput): Promise<{ imageUrl: string; r
   if (!key) throw new Error('REPLICATE_API_TOKEN not configured')
   const model = input.model ?? 'black-forest-labs/flux-schnell'
   // Use the synchronous predictions endpoint with `Prefer: wait`
-  const res = await fetch(`https://api.replicate.com/v1/models/${model}/predictions`, {
+  const out = await fetchWithRetry('image:replicate', `https://api.replicate.com/v1/models/${model}/predictions`, {
     method:  'POST',
     headers: {
       'authorization': `Bearer ${key}`,
@@ -169,8 +170,8 @@ async function genReplicate(input: GenerateInput): Promise<{ imageUrl: string; r
     }),
     signal: AbortSignal.timeout(120_000),
   })
-  const body = await res.json().catch(() => ({})) as Record<string, unknown>
-  if (!res.ok) throw new Error(`Replicate ${res.status}: ${JSON.stringify(body).slice(0, 200)}`)
+  if (!out.ok) throw new Error(`Replicate ${out.status}: ${out.statusText}`)
+  const body = await out.response.json().catch(() => ({})) as Record<string, unknown>
   const output = body['output']
   const url = Array.isArray(output) ? output[0] : (typeof output === 'string' ? output : null)
   if (!url) throw new Error('Replicate returned no image URL')
@@ -181,7 +182,7 @@ async function genFal(input: GenerateInput): Promise<{ imageUrl: string; raw: un
   const key = process.env['FAL_KEY']
   if (!key) throw new Error('FAL_KEY not configured')
   const model = input.model ?? 'fal-ai/flux/schnell'
-  const res = await fetch(`https://fal.run/${model}`, {
+  const out = await fetchWithRetry('image:fal', `https://fal.run/${model}`, {
     method:  'POST',
     headers: { 'authorization': `Key ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -191,8 +192,8 @@ async function genFal(input: GenerateInput): Promise<{ imageUrl: string; raw: un
     }),
     signal: AbortSignal.timeout(120_000),
   })
-  const body = await res.json().catch(() => ({})) as Record<string, unknown>
-  if (!res.ok) throw new Error(`fal ${res.status}: ${JSON.stringify(body).slice(0, 200)}`)
+  if (!out.ok) throw new Error(`fal ${out.status}: ${out.statusText}`)
+  const body = await out.response.json().catch(() => ({})) as Record<string, unknown>
   const images = body['images'] as Array<{ url?: string }> | undefined
   const url = images?.[0]?.url
   if (!url) throw new Error('fal returned no image URL')
@@ -260,6 +261,23 @@ export async function generateImage(input: GenerateInput): Promise<GenerateResul
     return { id, status: 'blocked', costEstimateUsd: 0, blockedReason: gov.reason ?? 'governor block', provider: input.provider }
   }
 
+  // 0c. Per-provider concurrency cap. If the provider is already
+  // saturated, refuse fast so the operator can fall back to a different
+  // provider rather than queue up indefinite latency.
+  const { tryAcquire, release } = await import('./provider-concurrency.js')
+  const slot = tryAcquire(input.provider)
+  if (!slot.ok) {
+    await db.update(imageGenerations).set({
+      status: 'blocked', blockedReason: `concurrency: ${slot.reason}`, completedAt: Date.now(),
+    }).where(eq(imageGenerations.id, id))
+    await emit(input.workspaceId, 'image.blocked', { id, reason: 'concurrency_cap', provider: input.provider, inflight: slot.inflight, cap: slot.cap })
+    return { id, status: 'blocked', costEstimateUsd: 0, blockedReason: slot.reason ?? 'provider saturated', provider: input.provider }
+  }
+  // Mirror the existing try/finally pattern below: every return path
+  // after this point must release the slot. We wrap the rest of the
+  // function in a try/finally to guarantee it.
+  try {
+
   // 1. Kill switch
   if (await imageKillSwitchOn(input.workspaceId)) {
     await db.update(imageGenerations).set({
@@ -312,14 +330,37 @@ export async function generateImage(input: GenerateInput): Promise<GenerateResul
       completedAt,
     }).where(eq(imageGenerations.id, id))
     await emit(input.workspaceId, 'image.generation_completed', { id, provider: input.provider, costUsd: estimate, latencyMs })
+    // Roll the cost into ai_usage so the workspace-wide cost dashboard
+    // shows image-gen alongside chat / voice / vision spend. Without
+    // this row, the operator's budget report shows $0 for image-gen
+    // even though image_generations.actualCostUsd was set.
+    const { recordAiUsage } = await import('./ai-cost-tracker.js')
+    recordAiUsage({
+      workspaceId:  input.workspaceId,
+      provider:     input.provider,
+      model:        input.model ?? 'default',
+      promptTokens: 0,
+      outputTokens: 0,
+      costUsd:      estimate,
+      latencyMs,
+      taskType:     'image-gen',
+    })
     return { id, status: 'succeeded', imageUrl: out.imageUrl, costEstimateUsd: estimate, actualCostUsd: estimate, provider: input.provider }
   } catch (e) {
     const msg = (e as Error).message
+    const failedAt = Date.now()
     await db.update(imageGenerations).set({
-      status: 'failed', errorMessage: msg, completedAt: Date.now(),
+      status: 'failed', errorMessage: msg,
+      // Persist latency on failure too — without it, rate-limit vs auth
+      // debugging requires correlating logs to wall-clock manually.
+      latencyMs: failedAt - startedAt,
+      completedAt: failedAt,
     }).where(eq(imageGenerations.id, id))
     await emit(input.workspaceId, 'image.generation_failed', { id, provider: input.provider, error: msg })
     return { id, status: 'failed', costEstimateUsd: estimate, errorMessage: msg, provider: input.provider }
+  }
+  } finally {
+    release(input.provider)
   }
 }
 

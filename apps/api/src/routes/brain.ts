@@ -5,6 +5,8 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { buildGraph, getNodeDetail, type BrainTemplate, type LODMode } from '../services/brain-graph.js'
 import { performBrainAction } from '../services/brain-actions.js'
+import { executePlan, listAvailableOperations, type TaskOperation } from '../services/brain-task.js'
+import { planTaskFromText } from '../services/brain-task-planner.js'
 import { timelineSummary, replayAt, decisionPath, searchBrain, searchHistorical } from '../services/brain-timeline.js'
 import { saveView, listSavedViews, deleteSavedView } from '../services/brain-persistence.js'
 import { db } from '../db/client.js'
@@ -57,6 +59,106 @@ const brainRoutes: FastifyPluginAsync = async (fastify) => {
     })
     if (!r.ok) return reply.code(400).send({ success: false, ...r })
     return { success: true, data: r }
+  })
+
+  // ── Task: natural-language directive interface ─────────────────────
+  // The operator says "do X" — the planner converts the text into an
+  // ordered list of whitelisted operations and runs them.
+  //
+  // Modes:
+  //   { task: "plain english", auto_execute: true }  → plan + execute
+  //   { task: "plain english", auto_execute: false } → plan only
+  //   { plan: [{op, params}, ...] }                  → execute explicit
+  //
+  // High-risk operations require approval_token=OPERATOR_APPROVED.
+  fastify.post<{ Body: {
+    workspace_id?: string
+    task?:         string
+    plan?:         TaskOperation[]
+    auto_execute?: boolean
+    approval_token?: string
+  } }>('/task', {
+    // Brain task execution dispatches arbitrary ops (LLM, workers,
+    // high-risk actions) — cap at 30/min/IP independent of the global limit.
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const b = req.body
+    const ws = b.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+
+    // Explicit plan path — skip the planner.
+    if (Array.isArray(b.plan) && b.plan.length > 0) {
+      const result = await executePlan(ws, b.task ?? '(direct plan)', b.plan, b.approval_token, 'direct plan from operator')
+      return { success: true, data: result }
+    }
+
+    const task = (b.task ?? '').trim()
+    if (!task) return reply.code(400).send({ success: false, error: 'task or plan required' })
+
+    const planned = await planTaskFromText(task)
+    if (b.auto_execute === false) {
+      return { success: true, data: { task, plan: planned.plan, reason: planned.reason } }
+    }
+    if (planned.plan.length === 0) {
+      return { success: true, data: { task, plan: [], reason: planned.reason, results: [], summary: `Could not plan: ${planned.reason}` } }
+    }
+    const result = await executePlan(ws, task, planned.plan, b.approval_token, planned.reason)
+    return { success: true, data: { ...result, plannerReason: planned.reason } }
+  })
+
+  // List the operations the brain can perform.
+  fastify.get('/task/operations', async () => {
+    return { success: true, data: listAvailableOperations() }
+  })
+
+  // ── Error ingest — operator never sees raw errors. Brain does. ─────
+  // UI mutations, API caught exceptions, worker crashes — all funnel
+  // here. Brain diagnoses, dedups, fires the auto-loop on low-risk
+  // known patterns, and returns a short operator-facing message.
+  fastify.post<{ Body: {
+    workspace_id?: string
+    source?:       'ui' | 'api' | 'worker' | 'cron' | 'voice' | 'chat'
+    error_message?: string
+    error_name?:   string
+    stack?:        string
+    url?:          string
+    method?:       string
+    status_code?:  number
+    payload?:      Record<string, unknown>
+    user_agent?:   string
+    conversation_id?: string
+    delegation_id?:   string
+    task_id?:         string
+  } }>('/errors', async (req, reply) => {
+    const b = req.body
+    if (!b.workspace_id || !b.error_message) {
+      return reply.code(400).send({ success: false, error: 'workspace_id + error_message required' })
+    }
+    const { reportError } = await import('../services/brain-error-ingest.js')
+    const result = await reportError({
+      workspaceId:    b.workspace_id,
+      source:         b.source ?? 'ui',
+      errorMessage:   b.error_message,
+      ...(b.error_name      ? { errorName:  b.error_name } : {}),
+      ...(b.stack           ? { stack:      b.stack } : {}),
+      ...(b.url             ? { url:        b.url } : {}),
+      ...(b.method          ? { method:     b.method } : {}),
+      ...(b.status_code     ? { statusCode: b.status_code } : {}),
+      ...(b.payload         ? { payload:    b.payload } : {}),
+      ...(b.user_agent      ? { userAgent:  b.user_agent } : {}),
+      ...(b.conversation_id ? { conversationId: b.conversation_id } : {}),
+      ...(b.delegation_id   ? { delegationId:   b.delegation_id } : {}),
+      ...(b.task_id         ? { taskId:         b.task_id } : {}),
+    })
+    return { success: true, data: result }
+  })
+
+  // Recent errors the brain has ingested (for /brain/errors dashboard)
+  fastify.get<{ Querystring: { workspace_id?: string; limit?: string } }>('/errors', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const { recentErrors } = await import('../services/brain-error-ingest.js')
+    return { success: true, data: await recentErrors(ws, Math.min(Number(req.query.limit ?? 30), 100)) }
   })
 
   // ── Timeline ───────────────────────────────────────────────────────
@@ -129,7 +231,17 @@ const brainRoutes: FastifyPluginAsync = async (fastify) => {
     return { success: true }
   })
 
-  // SSE stream — relays recent global events for the brain UI
+  // SSE stream — relays workspace events for the brain UI.
+  //
+  // Dual-mode delivery:
+  //   1. Postgres LISTEN on `events_changed_<workspaceId>` — the
+  //      business-construction service NOTIFYs after every insert,
+  //      which lets us flush new events within ~50 ms instead of
+  //      waiting for the 4 s poll. The wake-up just triggers a fresh
+  //      "since `last`" query; we never trust the NOTIFY payload.
+  //   2. A slow 4 s safety poll catches anything that didn't NOTIFY
+  //      (the events table is written from many places — improvement
+  //      cron, agent dispatcher, etc. — most of which don't notify).
   fastify.get<{ Querystring: { workspace_id?: string } }>('/stream', async (req, reply) => {
     const ws = req.query.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
@@ -150,29 +262,60 @@ const brainRoutes: FastifyPluginAsync = async (fastify) => {
     reply.raw.write(`event: graph\n`)
     reply.raw.write(`data: ${JSON.stringify({ generatedAt: graph.generatedAt, systemCount: graph.systems.length, nodeCount: graph.nodes.length })}\n\n`)
 
+    // Flush helper — pulls events since `last` and writes any relevant
+    // ones. Idempotent + safe to call from both the timer and the
+    // LISTEN callback.
+    let flushing = false
+    async function flush() {
+      if (!alive || flushing) return
+      flushing = true
+      try {
+        const recent = await db.select().from(events)
+          .where(and(gte(events.createdAt, last)))
+          .orderBy(desc(events.createdAt)).limit(50).catch(() => [])
+        const relevant = recent.filter(e => e.workspaceId === ws || e.workspaceId === 'global')
+        if (relevant.length > 0) {
+          last = recent[0]!.createdAt + 1   // exclusive so we don't re-emit
+          // Write in chronological order (recent[0] is newest; reverse)
+          for (let i = relevant.length - 1; i >= 0; i--) {
+            const e = relevant[i]!
+            reply.raw.write(`event: runtime\n`)
+            reply.raw.write(`data: ${JSON.stringify({
+              type: e.type, source: e.source, createdAt: e.createdAt,
+              payload: e.payload,
+            })}\n\n`)
+          }
+        }
+      } finally { flushing = false }
+    }
+
+    // ── 1. LISTEN setup ────────────────────────────────────────────
+    // We import lazily so this route stays import-cost-free for
+    // non-stream callers, and so a LISTEN setup failure never blocks
+    // the slower poll path.
+    let unlisten: (() => Promise<void>) | null = null
+    try {
+      const { pg } = await import('../db/client.js')
+      const channel = `events_changed_${ws.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`
+      const sub = await pg.listen(channel, () => { void flush() })
+      unlisten = sub.unlisten
+    } catch { /* LISTEN unavailable — poll path still works */ }
+
+    // ── 2. Slow safety poll + heartbeat ────────────────────────────
     while (alive) {
       await new Promise(r => setTimeout(r, 4_000))
       if (!alive) break
-      // Pull events since 'last' for this workspace AND global
-      const recent = await db.select().from(events)
-        .where(and(gte(events.createdAt, last)))
-        .orderBy(desc(events.createdAt)).limit(20).catch(() => [])
-      const relevant = recent.filter(e => e.workspaceId === ws || e.workspaceId === 'global')
-      if (relevant.length > 0) {
-        last = recent[0]!.createdAt
-        for (const e of relevant) {
-          reply.raw.write(`event: runtime\n`)
-          reply.raw.write(`data: ${JSON.stringify({
-            type: e.type, source: e.source, createdAt: e.createdAt,
-            payload: e.payload,
-          })}\n\n`)
-        }
-      } else {
-        // Heartbeat
+      await flush()
+      // Re-check alive — the client may have disconnected during the
+      // await above. Writing to a closed socket throws; swallow it.
+      if (!alive) break
+      try {
         reply.raw.write(`event: heartbeat\n`)
         reply.raw.write(`data: ${JSON.stringify({ at: Date.now() })}\n\n`)
-      }
+      } catch { alive = false; break }
     }
+
+    if (unlisten) { try { await unlisten() } catch { /* */ } }
     reply.raw.end()
   })
 }

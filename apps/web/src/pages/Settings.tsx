@@ -4,7 +4,7 @@
 import { useState }                    from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Settings as SettingsIcon, Database, Cpu, Globe, Shield, AlertTriangle, Activity, Key, Copy, Check, Trash2, Plus, Webhook as WebhookIcon, CalendarClock, RefreshCw, Play } from 'lucide-react'
-import { warRoomApi, authApi, webhookApi, schedulerApi, setAuthToken, type ApiToken, type Webhook, type ScheduledTrigger } from '../api.js'
+import { warRoomApi, authApi, webhookApi, schedulerApi, setAuthToken, API_BASE, type ApiToken, type Webhook, type ScheduledTrigger } from '../api.js'
 import { SectionPanel } from '../components/SectionPanel.js'
 
 // ─── Feature flags ────────────────────────────────────────────────────────────
@@ -53,7 +53,7 @@ function ToggleDisplay({ enabled }: { enabled: boolean }) {
 
 // ─── Sections ─────────────────────────────────────────────────────────────────
 
-function ApiTokensSection() {
+export function ApiTokensSection() {
   const qc = useQueryClient()
   const [creating, setCreating] = useState(false)
   const [name, setName]         = useState('')
@@ -240,7 +240,7 @@ function PasteExistingToken() {
 
 // ─── Webhooks section ─────────────────────────────────────────────────────────
 
-function WebhooksSection() {
+export function WebhooksSection() {
   const qc = useQueryClient()
   const [creating, setCreating]       = useState(false)
   const [whName, setWhName]           = useState('')
@@ -284,7 +284,7 @@ function WebhooksSection() {
     })
   }
 
-  const BASE_API = (import.meta as unknown as { env: Record<string, string> }).env['VITE_API_URL'] ?? 'http://localhost:3001'
+  const BASE_API = API_BASE
 
   return (
     <SectionPanel title="Webhooks" loading={isLoading} actions={<WebhookIcon className="w-4 h-4 text-muted" />}>
@@ -419,7 +419,7 @@ function WebhooksSection() {
 
 // ─── Scheduler section ────────────────────────────────────────────────────────
 
-function SchedulerSection() {
+export function SchedulerSection() {
   const qc = useQueryClient()
   const [creating, setCreating]     = useState(false)
   const [scName, setScName]         = useState('')
@@ -626,15 +626,15 @@ function WorkspaceSection() {
             Free
           </span>
         } />
-        <InfoRow label="Environment"   value="local" />
-        <InfoRow label="Region"        value="localhost" mono />
+        <InfoRow label="Environment"   value={import.meta.env.MODE} />
+        <InfoRow label="Region"        value={new URL(API_BASE).host} mono />
       </div>
     </SectionPanel>
   )
 }
 
 function ApiConfigSection() {
-  const baseUrl = (import.meta as unknown as { env: Record<string, string> }).env['VITE_API_URL'] ?? 'http://localhost:3001'
+  const baseUrl = API_BASE
 
   const { data, isLoading } = useQuery({
     queryKey: ['settings-health'],

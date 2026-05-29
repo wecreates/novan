@@ -167,12 +167,26 @@ export async function stabilitySnapshot(workspaceId: string): Promise<StabilityS
       .where(and(eq(events.workspaceId, workspaceId), gte(events.createdAt, hourAgo)))
       .then(r => Number(r[0]?.c ?? 0)).catch(() => 0),
 
-    // Highest single event-type count in last hour (spam detector)
+    // Highest single event-type count in last hour (spam detector).
+    // Exclude foundational high-throughput events whose high volume is
+    // *expected* (RSS poller, metrics ticks, heartbeats). The detector is
+    // meant to catch *runaway* loops, not legitimate work.
     db.select({
       type: events.type,
       c: sql<number>`count(*)::int`,
     }).from(events)
-      .where(and(eq(events.workspaceId, workspaceId), gte(events.createdAt, hourAgo)))
+      .where(and(
+        eq(events.workspaceId, workspaceId),
+        gte(events.createdAt, hourAgo),
+        sql`${events.type} NOT IN (
+          'web_fetch.completed',
+          'web_fetch.started',
+          'feed.polled',
+          'metrics.tick',
+          'cron.tick',
+          'heartbeat'
+        )`,
+      ))
       .groupBy(events.type)
       .orderBy(sql`count(*) desc`)
       .limit(1)
@@ -459,7 +473,16 @@ export async function pauseUnstableAgents(workspaceId: string): Promise<{ paused
   return { paused }
 }
 
+// R144 — NaN-safe env coercion. Number(env ?? fallback) returns NaN if
+// the env var is a non-numeric string, which silently disables the
+// daily cap (every comparison vs NaN is false).
+function _gNum(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (!raw) return fallback
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : fallback
+}
 export const GOVERNANCE_DAILY_LIMITS = {
-  maxAutonomousPatches: Number(process.env['GOV_MAX_AUTO_PATCHES_DAY'] ?? 20),
-  maxDeployments:       Number(process.env['GOV_MAX_DEPLOYS_DAY']      ?? 5),
+  maxAutonomousPatches: _gNum('GOV_MAX_AUTO_PATCHES_DAY', 20),
+  maxDeployments:       _gNum('GOV_MAX_DEPLOYS_DAY',       5),
 }

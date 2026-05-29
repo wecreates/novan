@@ -139,6 +139,9 @@ export function recordAgentFailure(workspaceId: string, type: AgentType): AgentR
     agent.state = 'error'
   }
   agent.updatedAt = Date.now()
+  // Bridge: mirror the in-memory state to the agents table so it's
+  // visible in the brain graph + activity dashboards.
+  void import('./agent-state-sync.js').then(m => m.recordAgentActivity(workspaceId, type, { status: 'error' })).catch(() => null)
   return agent
 }
 
@@ -154,5 +157,7 @@ export function recordAgentSuccess(
   agent.totalJobsRun++
   if (patchApplied) agent.totalPatchesApplied++
   agent.updatedAt = Date.now()
+  // Bridge to the agents table (same as failure path).
+  void import('./agent-state-sync.js').then(m => m.recordAgentActivity(workspaceId, type, { status: 'idle' })).catch(() => null)
   return agent
 }

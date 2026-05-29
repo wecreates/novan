@@ -17,10 +17,19 @@ import * as schema   from './schema.js'
 
 export * from './schema.js'
 export { schema }
+export { startWorkerHeartbeat, type WorkerHeartbeatOpts } from './agent-heartbeat.js'
 
-/** Create a Drizzle client bound to the given Postgres connection string. */
-export function createDb(connectionString: string, poolSize = 5) {
-  const client = postgres(connectionString, { max: poolSize, idle_timeout: 30 })
+/** Create a Drizzle client bound to the given Postgres connection string.
+ *  `applicationName` shows up in pg_stat_activity — set it per process
+ *  (worker name, "ops-api", "migrate", "seed") so pool-exhaustion debugging
+ *  doesn't require correlating opaque postgres-js connection IDs. */
+export function createDb(connectionString: string, poolSize = 5, applicationName = 'ops-platform') {
+  const client = postgres(connectionString, {
+    max: poolSize,
+    idle_timeout: 30,
+    connect_timeout: 10,
+    connection: { application_name: applicationName },
+  })
   return drizzle(client)
 }
 

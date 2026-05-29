@@ -1,0 +1,31 @@
+import type { ConnectorDef } from '../connectors.js'
+
+export const gitlabDef: ConnectorDef = {
+  id:          'gitlab',
+  name:        'GitLab',
+  category:    'developer',
+  description: 'Projects, issues, merge requests. Read + write within granted token scopes.',
+  authType:    'api_key',
+  defaultScopes: ['read_api', 'read_repository'],
+  optionalScopes: ['api', 'write_repository'],
+  blockedActions: ['gitlab.delete_project', 'gitlab.transfer_project'],
+  actions: [
+    { name: 'gitlab.list_issues',  minPermission: 'read',    risk: 'low' },
+    { name: 'gitlab.create_issue', minPermission: 'draft',   risk: 'medium', requiredScopes: ['api'] },
+    { name: 'gitlab.create_mr',    minPermission: 'publish', risk: 'high',   requiredScopes: ['api'] },
+  ],
+  metadataVerified:      true,
+  officialWebsiteUrl:    'https://gitlab.com',
+  signupUrl:             'https://gitlab.com/users/sign_up',
+  loginUrl:              'https://gitlab.com/users/sign_in',
+  apiKeyCreationUrl:     'https://gitlab.com/-/user_settings/personal_access_tokens',
+  docsUrl:               'https://docs.gitlab.com/ee/api',
+  pricingUrl:            'https://about.gitlab.com/pricing',
+  statusPageUrl:         'https://status.gitlab.com',
+  permissionExplanation: 'Read repositories, issues, merge requests. Mutations require per-action approval. Token scopes determine read vs write capability.',
+  accountRequired:       true,
+  supportsApiKey:        true,
+  supportsOauth:         true,
+  freeTierAvailable:     true,
+  iconKey:               'gitlab',
+}

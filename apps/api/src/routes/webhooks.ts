@@ -116,9 +116,16 @@ export const webhooksRoutes: FastifyPluginAsync = async (app) => {
     const [wh] = await db.select().from(webhooks).where(and(eq(webhooks.id, id), eq(webhooks.active, true))).limit(1)
     if (!wh) return reply.status(404).send({ error: 'Webhook not found' })
 
-    // Verify HMAC if signature header present
-    const sig = (req.headers['x-webhook-signature'] ?? req.headers['x-hub-signature-256']) as string | undefined
-    if (sig) {
+    // SECURITY: HMAC verification is now REQUIRED. Previously it was
+    // "verify if signature header present" — attacker could just omit
+    // the header and bypass verification entirely.
+    // Operators can opt out per-webhook by setting wh.secret to an empty
+    // string (e.g. for testing webhooks from a trusted internal source).
+    if (wh.secret) {
+      const sig = (req.headers['x-webhook-signature'] ?? req.headers['x-hub-signature-256']) as string | undefined
+      if (!sig) {
+        return reply.status(401).send({ error: 'signature required: send x-webhook-signature or x-hub-signature-256' })
+      }
       const rawBody = JSON.stringify(req.body)
       if (!verifySignature(rawBody, wh.secret, sig)) {
         return reply.status(401).send({ error: 'Invalid signature' })

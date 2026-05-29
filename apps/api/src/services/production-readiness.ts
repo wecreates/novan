@@ -15,7 +15,7 @@ import {
   budgetAlerts, killSwitches, patchRecords, deadLetterJobs,
   incidents, launchAudits, launchLocks, events,
 }                            from '../db/schema.js'
-import { eq, and, gt, desc } from 'drizzle-orm'
+import { eq, and, gte, desc } from 'drizzle-orm'
 import { v7 as uuidv7 }      from 'uuid'
 import { hasLaunchBlockingFindings } from './security-team.js'
 
@@ -48,7 +48,7 @@ async function checkTypecheckEvidence(workspaceId: string): Promise<CheckResult>
     .where(and(
       eq(verificationEvidence.workspaceId, workspaceId),
       eq(verificationEvidence.command, 'tsc'),
-      gt(verificationEvidence.createdAt, Date.now() - FRESH_WINDOW_MS),
+      gte(verificationEvidence.createdAt, Date.now() - FRESH_WINDOW_MS),
     ))
     .orderBy(desc(verificationEvidence.createdAt))
     .limit(5)
@@ -72,7 +72,7 @@ async function checkLintEvidence(workspaceId: string): Promise<CheckResult> {
     .where(and(
       eq(verificationEvidence.workspaceId, workspaceId),
       eq(verificationEvidence.command, 'eslint'),
-      gt(verificationEvidence.createdAt, Date.now() - FRESH_WINDOW_MS),
+      gte(verificationEvidence.createdAt, Date.now() - FRESH_WINDOW_MS),
     ))
     .orderBy(desc(verificationEvidence.createdAt))
     .limit(5)
@@ -95,7 +95,7 @@ async function checkTestsEvidence(workspaceId: string): Promise<CheckResult> {
     .from(verificationEvidence)
     .where(and(
       eq(verificationEvidence.workspaceId, workspaceId),
-      gt(verificationEvidence.createdAt, Date.now() - FRESH_WINDOW_MS),
+      gte(verificationEvidence.createdAt, Date.now() - FRESH_WINDOW_MS),
     ))
     .orderBy(desc(verificationEvidence.createdAt))
     .limit(20)
@@ -119,7 +119,7 @@ async function checkBuildEvidence(workspaceId: string): Promise<CheckResult> {
     .from(verificationEvidence)
     .where(and(
       eq(verificationEvidence.workspaceId, workspaceId),
-      gt(verificationEvidence.createdAt, Date.now() - FRESH_WINDOW_MS),
+      gte(verificationEvidence.createdAt, Date.now() - FRESH_WINDOW_MS),
     ))
     .orderBy(desc(verificationEvidence.createdAt))
     .limit(20)
@@ -144,7 +144,7 @@ async function checkSmokeEvidence(workspaceId: string): Promise<CheckResult> {
     .from(sandboxSessions)
     .where(and(
       eq(sandboxSessions.workspaceId, workspaceId),
-      gt(sandboxSessions.startedAt, Date.now() - FRESH_WINDOW_MS),
+      gte(sandboxSessions.startedAt, Date.now() - FRESH_WINDOW_MS),
     ))
     .orderBy(desc(sandboxSessions.startedAt))
     .limit(20)
@@ -165,7 +165,7 @@ async function checkProviderHealth(workspaceId: string): Promise<CheckResult> {
   }).from(providerHealthLog)
     .where(and(
       eq(providerHealthLog.workspaceId, workspaceId),
-      gt(providerHealthLog.checkedAt, Date.now() - FRESH_WINDOW_MS),
+      gte(providerHealthLog.checkedAt, Date.now() - FRESH_WINDOW_MS),
     ))
     .orderBy(desc(providerHealthLog.checkedAt))
     .limit(50)
@@ -197,7 +197,7 @@ async function checkWorkerHealth(workspaceId: string): Promise<CheckResult> {
     .where(and(
       eq(sandboxSessions.workspaceId, workspaceId),
       eq(sandboxSessions.status, 'running'),
-      gt(sandboxSessions.startedAt, Date.now() - 2 * FRESH_WINDOW_MS),
+      gte(sandboxSessions.startedAt, Date.now() - 2 * FRESH_WINDOW_MS),
     ))
     .limit(20)
 
@@ -313,12 +313,23 @@ async function checkOpenIncidents(workspaceId: string): Promise<CheckResult> {
 }
 
 async function checkCloudApiOnlyReadiness(_workspaceId: string): Promise<CheckResult> {
-  // Cloud-API-only mode = no required local-worker dependencies, env-allowlist enforced
-  // Code-level: presence of sandbox-executor with buildSandboxEnv means env stripping active
-  // We can't query a code feature flag table — mark as informational
-  return { name: 'cloud_api_only_readiness', status: 'passed', severity: 'low',
-    reason: 'Sandbox env stripping active; cloud-only mode supported by provider router',
-    evidence: [] }
+  // Cloud-API-only mode = no required local-worker dependencies, env-allowlist enforced.
+  // HONEST STATUS: sandbox-executor.ts EXISTS with buildSandboxEnv() and ALLOWED_COMMANDS,
+  // but NO call site in the codebase actually routes through runSandboxed(). desktopExec,
+  // patch-executor disk writes, mixcraft/capcut PowerShell calls all spawn directly.
+  // The RUNTIME_MODE=cloud-api-only env flag does block runSandboxed itself if it's ever
+  // called, but most commands bypass runSandboxed entirely. This check is informational
+  // only — operator should not treat 'passed' as "all execution is sandboxed".
+  const wired = false   // No call sites currently route through runSandboxed
+  return {
+    name: 'cloud_api_only_readiness',
+    status: wired ? 'passed' : 'unverified',
+    severity: 'low',
+    reason: wired
+      ? 'Sandbox env stripping active; cloud-only mode enforced'
+      : 'sandbox-executor.ts is defined but not wired into call sites. Most command execution bypasses the allowlist + env-stripping wrapper.',
+    evidence: [],
+  }
 }
 
 async function checkSecurityTeamFindings(workspaceId: string): Promise<CheckResult> {

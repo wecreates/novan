@@ -39,19 +39,28 @@ Reverse proxy `:8080` behind Caddy/Nginx with your TLS cert and you're live.
 ## Option 2 — Fly.io (managed, ~15 minutes)
 
 ```sh
-# Install: https://fly.io/docs/hands-on/install-flyctl/
+# Install flyctl: curl -L https://fly.io/install.sh | sh
 fly auth login
-fly launch --no-deploy --dockerfile apps/api/Dockerfile
-# Edit fly.toml: set internal_port = 3001, add health checks at /health
-fly postgres create --name novan-pg
-fly redis create   --name novan-redis
-fly secrets set AUTH_SECRET=$(openssl rand -base64 48) \
-                VAULT_MASTER_KEY=$(openssl rand -base64 32) \
-                OPENAI_API_KEY=...
-fly deploy
+
+# Get free DBs first:
+#   https://console.neon.tech      → copy DATABASE_URL
+#   https://console.upstash.com    → copy rediss:// REDIS_URL
+
+export DATABASE_URL='postgresql://USER:PASS@HOST.neon.tech/DB?sslmode=require'
+export REDIS_URL='rediss://default:PASS@HOST.upstash.io:PORT'
+./scripts/deploy-fly.sh
 ```
 
-Frontend: separate `fly launch` against `apps/web/Dockerfile`, set `VITE_API_BASE` to the API's public URL.
+The script is idempotent (re-runnable) and handles:
+- App creation (`novan-api`, `novan-web`)
+- Secret staging (auto-generates `AUTH_SECRET` + `VAULT_MASTER_KEY` if absent)
+- `fly deploy -c fly.api.toml` — API runs all 42 SQL migrations on first boot via `boot.sh`
+- `fly deploy -c fly.web.toml --build-arg VITE_API_BASE=…` — web embeds API URL
+- Smoke tests both public URLs
+
+Committed configs: `fly.api.toml`, `fly.web.toml`, `scripts/deploy-fly.sh`.
+
+**Validated:** both Docker images build clean locally; the API image was booted against a fresh Postgres + applied all 42 migrations including this session's `0042_session_schema.sql` (ideas, issues, connectors, entity_relationships, operator_presence, skill_library), `/health` returned 200.
 
 ## Option 3 — Render.com (managed, 1-click-ish)
 

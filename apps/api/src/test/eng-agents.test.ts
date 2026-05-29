@@ -311,8 +311,8 @@ describe('GET /api/v1/eng-agents/agents', () => {
     })
     expect(res.statusCode).toBe(200)
     const body = res.json()
-    expect(Array.isArray(body.agents)).toBe(true)
-    expect(body.agents).toHaveLength(7)
+    expect(Array.isArray(body.data.agents)).toBe(true)
+    expect(body.data.agents).toHaveLength(7)
   })
 })
 
@@ -324,7 +324,7 @@ describe('GET /api/v1/eng-agents/agents/:type', () => {
     })
     expect(res.statusCode).toBe(200)
     const body = res.json()
-    expect(body.agent.type).toBe('planner')
+    expect(body.data.agent.type).toBe('planner')
   })
 
   it('returns 400 for unknown type', async () => {
@@ -345,7 +345,7 @@ describe('POST /api/v1/eng-agents/agents/:type/pause', () => {
     })
     expect(res.statusCode).toBe(200)
     const body = res.json()
-    expect(body.agent.state).toBe('paused')
+    expect(body.data.agent.state).toBe('paused')
   })
 })
 
@@ -362,7 +362,7 @@ describe('POST /api/v1/eng-agents/agents/:type/resume', () => {
       payload: JSON.stringify({ workspaceId: 'ws-route-2' }),
     })
     expect(res.statusCode).toBe(200)
-    expect(res.json().agent.state).toBe('idle')
+    expect(res.json().data.agent.state).toBe('idle')
   })
 })
 
@@ -378,8 +378,8 @@ describe('POST /api/v1/eng-agents/jobs', () => {
     })
     expect(res.statusCode).toBe(201)
     const body = res.json()
-    expect(body.job.status).toBe('queued')
-    expect(body.job.agentType).toBe('planner')
+    expect(body.data.job.status).toBe('queued')
+    expect(body.data.job.agentType).toBe('planner')
   })
 
   it('returns 400 when agentType missing', async () => {
@@ -413,8 +413,9 @@ describe('POST /api/v1/eng-agents/jobs', () => {
     })
     expect(res.statusCode).toBe(201)
     const body = res.json()
-    expect(body).toHaveProperty('pipeline')
-    expect(body.pipeline.success).toBe(true)
+    // Response shape was normalized: pipeline now lives under body.data.pipeline.
+    expect(body.data).toHaveProperty('pipeline')
+    expect(body.data.pipeline.success).toBe(true)
   })
 })
 
@@ -425,7 +426,7 @@ describe('GET /api/v1/eng-agents/jobs', () => {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(res.statusCode).toBe(200)
-    expect(Array.isArray(res.json().jobs)).toBe(true)
+    expect(Array.isArray(res.json().data.jobs)).toBe(true)
   })
 })
 
@@ -437,9 +438,9 @@ describe('GET /api/v1/eng-agents/safety/limits', () => {
     })
     expect(res.statusCode).toBe(200)
     const body = res.json()
-    expect(body.limits).toHaveProperty('maxPatchSizeLines')
-    expect(body.limits).toHaveProperty('maxFilesChanged')
-    expect(body.limits).toHaveProperty('patchRetryLimit')
+    expect(body.data.limits).toHaveProperty('maxPatchSizeLines')
+    expect(body.data.limits).toHaveProperty('maxFilesChanged')
+    expect(body.data.limits).toHaveProperty('patchRetryLimit')
   })
 })
 
@@ -451,7 +452,7 @@ describe('POST /api/v1/eng-agents/safety/check', () => {
       payload: JSON.stringify({ agentType: 'planner', targetFiles: ['src/utils.ts'], estimatedLines: 20 }),
     })
     expect(res.statusCode).toBe(200)
-    expect(res.json().safety.approved).toBe(true)
+    expect(res.json().data.safety.approved).toBe(true)
   })
 
   it('rejects oversized patch', async () => {
@@ -461,7 +462,7 @@ describe('POST /api/v1/eng-agents/safety/check', () => {
       payload: JSON.stringify({ agentType: 'planner', targetFiles: [], estimatedLines: 9999 }),
     })
     expect(res.statusCode).toBe(200)
-    expect(res.json().safety.approved).toBe(false)
+    expect(res.json().data.safety.approved).toBe(false)
   })
 
   it('returns 400 when agentType missing', async () => {
@@ -490,7 +491,7 @@ describe('Full job lifecycle — create → run → rollback', () => {
       }),
     })
     expect(createRes.statusCode).toBe(201)
-    const { job } = createRes.json()
+    const { job } = createRes.json().data
     expect(job.status).toBe('completed')
 
     // Rollback
@@ -500,7 +501,7 @@ describe('Full job lifecycle — create → run → rollback', () => {
       payload: JSON.stringify({}),
     })
     expect(rollbackRes.statusCode).toBe(200)
-    expect(rollbackRes.json().job.status).toBe('rolled_back')
+    expect(rollbackRes.json().data.job.status).toBe('rolled_back')
   })
 
   it('coder job awaits approval then runs after approve', async () => {
@@ -517,7 +518,7 @@ describe('Full job lifecycle — create → run → rollback', () => {
       }),
     })
     expect(createRes.statusCode).toBe(201)
-    const { job } = createRes.json()
+    const { job } = createRes.json().data
     // After autoRun with approval gate — job should be awaiting_approval
     expect(job.status).toBe('awaiting_approval')
 
@@ -528,7 +529,7 @@ describe('Full job lifecycle — create → run → rollback', () => {
       payload: JSON.stringify({}),
     })
     expect(approveRes.statusCode).toBe(200)
-    expect(approveRes.json().job.status).toBe('queued')
+    expect(approveRes.json().data.job.status).toBe('queued')
 
     // Run
     const runRes = await app.inject({
@@ -537,6 +538,6 @@ describe('Full job lifecycle — create → run → rollback', () => {
       payload: JSON.stringify({}),
     })
     expect(runRes.statusCode).toBe(200)
-    expect(runRes.json().pipeline.success).toBe(true)
+    expect(runRes.json().data.pipeline.success).toBe(true)
   })
 })

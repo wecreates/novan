@@ -1,0 +1,11 @@
+# Pin to versions that work with XTTS-v2 as of late 2024.
+# torch wheel index recommended for CUDA: --extra-index-url https://download.pytorch.org/whl/cu121
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+numpy<2.0
+# Coqui TTS (the repo you cloned). Install in editable mode from the
+# local checkout so the operator stays on TTS-dev with no PyPI pin:
+#   pip install -e "C:/Users/19496/Downloads/TTS-dev"
+# torch is left to the operator (CUDA vs CPU choice). Example:
+#   pip install torch==2.4.0 --index-url https://download.pytorch.org/whl/cu121

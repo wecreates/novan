@@ -9,7 +9,7 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { v7 as uuidv7 }           from 'uuid'
-import { and, eq }                from 'drizzle-orm'
+import { and, eq, isNull }        from 'drizzle-orm'
 import { db }                      from '../db/client.js'
 import {
   killSwitches, providerQuarantine, queuePauses, events,
@@ -317,7 +317,7 @@ const protectionRoutes: FastifyPluginAsync = async (app) => {
     const rows = await db.select().from(providerQuarantine)
       .where(and(
         eq(providerQuarantine.workspaceId, req.query.workspaceId),
-        eq(providerQuarantine.releasedAt, null as never),
+        isNull(providerQuarantine.releasedAt),
       ))
     return { quarantined: rows }
   })
@@ -407,7 +407,7 @@ const protectionRoutes: FastifyPluginAsync = async (app) => {
       .where(and(
         eq(providerQuarantine.workspaceId, workspaceId),
         eq(providerQuarantine.providerId, providerId),
-        eq(providerQuarantine.releasedAt, null as never),
+        isNull(providerQuarantine.releasedAt),
       ))
       .returning({ id: providerQuarantine.id })
 

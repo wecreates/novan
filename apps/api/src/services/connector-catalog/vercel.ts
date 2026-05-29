@@ -1,0 +1,30 @@
+import type { ConnectorDef } from '../connectors.js'
+
+export const vercelDef: ConnectorDef = {
+  id:          'vercel',
+  name:        'Vercel',
+  category:    'cloud',
+  description: 'Deployments, projects, logs. Read-only by default; deploys require explicit approval.',
+  authType:    'token',
+  defaultScopes: [],
+  blockedActions: ['vercel.delete_project', 'vercel.modify_billing', 'vercel.transfer_team'],
+  actions: [
+    { name: 'vercel.list_projects',    minPermission: 'read',    risk: 'low' },
+    { name: 'vercel.list_deployments', minPermission: 'read',    risk: 'low' },
+    { name: 'vercel.get_logs',         minPermission: 'read',    risk: 'low' },
+    { name: 'vercel.create_deployment', minPermission: 'publish', risk: 'high' },
+  ],
+  metadataVerified:      true,
+  officialWebsiteUrl:    'https://vercel.com',
+  signupUrl:             'https://vercel.com/signup',
+  loginUrl:              'https://vercel.com/login',
+  apiKeyCreationUrl:     'https://vercel.com/account/tokens',
+  docsUrl:               'https://vercel.com/docs/rest-api',
+  pricingUrl:            'https://vercel.com/pricing',
+  statusPageUrl:         'https://www.vercel-status.com',
+  permissionExplanation: 'Read your Vercel projects and deployments. Deploys require your per-action approval. We never modify billing or delete projects.',
+  accountRequired:       true,
+  supportsApiKey:        true,
+  freeTierAvailable:     true,
+  iconKey:               'vercel',
+}

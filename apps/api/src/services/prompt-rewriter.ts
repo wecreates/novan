@@ -65,8 +65,23 @@ Rules:
   }).catch((e: Error) => ({ error: e.message } as const))
 
   if ('error' in result) return result
-  const match = result.content.match(/\{[\s\S]*\}/)
-  if (!match) {
+  // Strict parse first — if the LLM honored "JSON-only" output, this
+  // wins immediately. Only fall back to greedy {…} extraction when the
+  // LLM wrapped the JSON in prose. Greedy-first was wrong because if
+  // the prose contained any `{…}` literal (very common when the LLM
+  // describes its output format), the greedy match grabbed too much
+  // and parse failed.
+  type RewriteOut = { improved?: string; rationale?: string[] }
+  const trimmed = result.content.trim()
+  let parsed: RewriteOut | null = null
+  try { parsed = JSON.parse(trimmed) as RewriteOut }
+  catch {
+    const match = trimmed.match(/\{[\s\S]*\}/)
+    if (match) {
+      try { parsed = JSON.parse(match[0]) as RewriteOut } catch { /* */ }
+    }
+  }
+  if (!parsed) {
     return {
       improved:        original,
       rationale:       ['model did not return parseable JSON; returning original'],
@@ -75,7 +90,6 @@ Rules:
     }
   }
   try {
-    const parsed = JSON.parse(match[0]) as { improved?: string; rationale?: string[] }
     return {
       improved:        String(parsed.improved ?? original).slice(0, 4000),
       rationale:       Array.isArray(parsed.rationale) ? parsed.rationale.slice(0, 6).map(String) : [],

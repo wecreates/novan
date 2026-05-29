@@ -190,6 +190,10 @@ export const events = pgTable('events', {
   index('event_workspace_type_idx').on(t.workspaceId, t.type),
   index('event_trace_idx').on(t.traceId),
   index('event_created_idx').on(t.createdAt),
+  // HOT-PATH composite: ~80% of event queries filter (workspace_id, type)
+  // AND order by created_at desc. Single-column indexes can't satisfy this
+  // without a heap scan after the bitmap match.
+  index('event_workspace_type_created_idx').on(t.workspaceId, t.type, t.createdAt),
 ])
 
 // ─── Recovery log ─────────────────────────────────────────────────────────────
@@ -222,10 +226,38 @@ export const businesses = pgTable('businesses', {
   health:      text('health').notNull().default('green'),
   metrics:     jsonb('metrics').notNull().default({}),
   metadata:    jsonb('metadata').notNull().default({}),
+  // Migration 0041 — Business DNA (strategic identity + originating brief)
+  dna:         jsonb('dna').$type<Record<string, unknown>>().notNull().default({}),
+  vision:      text('vision'),
+  brief:       text('brief'),
   createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
   updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
 }, (t) => [
   index('business_workspace_idx').on(t.workspaceId),
+])
+
+// ─── Migration 0041 — Business spatial children ──────────────────────
+
+export const businessSystems = pgTable('business_systems', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  businessId:   text('business_id').notNull(),
+  kind:         text('kind').notNull(),
+  layer:        text('layer').notNull(),
+  name:         text('name').notNull(),
+  summary:      text('summary'),
+  status:       text('status').notNull().default('forming'),
+  agentSlug:    text('agent_slug'),
+  parentId:     text('parent_id'),
+  position:     jsonb('position').$type<{ x: number; y: number; z: number } | null>(),
+  metadata:     jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('biz_sys_ws_idx').on(t.workspaceId),
+  index('biz_sys_business_idx').on(t.businessId),
+  index('biz_sys_kind_idx').on(t.kind),
+  index('biz_sys_parent_idx').on(t.parentId),
 ])
 
 // ─── Agents ───────────────────────────────────────────────────────────────────
@@ -389,6 +421,10 @@ export const aiUsage = pgTable('ai_usage', {
   index('ai_usage_timestamp_idx').on(t.timestamp),
   index('ai_usage_trace_idx').on(t.traceId),
   index('ai_usage_workflow_idx').on(t.workflowRunId),
+  // HOT-PATH composite: billing/analytics rollups always filter
+  // (workspace_id, timestamp >= X). Two separate indexes only bitmap-AND
+  // under right stats; composite is reliable.
+  index('ai_usage_workspace_ts_idx').on(t.workspaceId, t.timestamp),
 ])
 
 // ─── Dead-letter jobs ─────────────────────────────────────────────────────────
@@ -762,6 +798,10 @@ export const briefingItems = pgTable('briefing_items', {
   index('bi_briefing_idx').on(t.briefingId),
   index('bi_workspace_idx').on(t.workspaceId),
   index('bi_section_idx').on(t.section),
+  // Composite for the common fetch pattern (ws + section + priority sort).
+  // Migration 0048. Without it Postgres bitmap-AND the workspace + section
+  // single-column indexes which is 2-3× slower at 500+ rows/workspace.
+  index('bi_workspace_section_idx').on(t.workspaceId, t.section),
   index('bi_converted_idx').on(t.converted),
 ])
 
@@ -1823,6 +1863,427 @@ export const incidents = pgTable('incidents', {
   index('inc_severity_idx').on(t.severity),
   index('inc_type_idx').on(t.type),
   index('inc_detected_idx').on(t.detectedAt),
+  // HOT-PATH composites
+  index('inc_ws_status_idx').on(t.workspaceId, t.status),
+  index('inc_ws_severity_detected_idx').on(t.workspaceId, t.severity, t.detectedAt),
+])
+
+/**
+ * Issues — the unified engineering ledger.
+ *
+ * One row per discrete problem. Threads through the full lifecycle:
+ *   symptom → diagnosis → proposed fix → patch → verification → closure
+ *
+ * Distinct from `incidents` (runtime alerts that may or may not require
+ * code changes) and `code_proposals` (concrete code change drafts).
+ * An issue can reference both: it's the unified handle for a single bug.
+ *
+ * Dedup strategy: see fingerprint field — services that auto-ingest from
+ * signal sources (cron.error, smoke regressions, security scans) compute
+ * a stable fingerprint and append evidence to an existing open issue
+ * instead of creating duplicates.
+ */
+export const issues = pgTable('issues', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+
+  // Diagnosis format (matches prompt §2)
+  symptom:          text('symptom').notNull(),
+  rootCause:        text('root_cause'),
+  evidence:         jsonb('evidence').notNull().default([]),  // [{ type, ref, summary, at }]
+  affectedSystems:  text('affected_systems').array().notNull().default([]),
+  severity:         text('severity').notNull().default('warning'),  // info|warning|critical|emergency
+  riskLevel:        text('risk_level'),                              // low|medium|high|critical
+  proposedFix:      text('proposed_fix'),
+  verificationPlan: text('verification_plan'),
+  rollbackPlan:     text('rollback_plan'),
+
+  // Lifecycle
+  status:           text('status').notNull().default('open'),
+  // open → triaged → diagnosed → patched → verified → closed
+  // open → rejected (won't fix)
+  source:           text('source').notNull(),
+  // operator | cron-incident | smoke-regression | security-scan | cron-failure | autonomous-mind
+  fingerprint:      text('fingerprint').notNull(),  // stable dedup key
+
+  // Links to other records (nullable — issue can exist before they do)
+  sourceIncidentId: text('source_incident_id'),
+  sourceEventId:    text('source_event_id'),
+  proposalId:       text('proposal_id'),
+  patchId:          text('patch_id'),
+  commitSha:        text('commit_sha'),
+
+  // Audit
+  createdBy:        text('created_by').notNull().default('system'),
+  diagnosedBy:      text('diagnosed_by'),
+  closedBy:         text('closed_by'),
+  detectedAt:       bigint('detected_at',  { mode: 'number' }).notNull(),
+  diagnosedAt:      bigint('diagnosed_at', { mode: 'number' }),
+  closedAt:         bigint('closed_at',    { mode: 'number' }),
+  createdAt:        bigint('created_at',   { mode: 'number' }).notNull(),
+  updatedAt:        bigint('updated_at',   { mode: 'number' }).notNull(),
+}, (t) => [
+  index('issue_workspace_idx').on(t.workspaceId),
+  index('issue_status_idx').on(t.status),
+  index('issue_severity_idx').on(t.severity),
+  index('issue_source_idx').on(t.source),
+  index('issue_fingerprint_idx').on(t.workspaceId, t.fingerprint),
+  index('issue_detected_idx').on(t.detectedAt),
+  // HOT-PATH composite: filter (workspace, status) order by detectedAt
+  index('issue_ws_status_detected_idx').on(t.workspaceId, t.status, t.detectedAt),
+])
+
+/**
+ * Ideas — the personal-intelligence-to-product ledger.
+ *
+ * Each row is one extracted (or manually entered) idea. Goes through:
+ *   raw → clarified → validated → blueprinted → promoted (→ business) | archived | rejected
+ *
+ * Source-traced: every idea points at the chat/file/note it came from
+ * via sourceType + sourceRef + sourceExcerpt. The fingerprint dedupes
+ * near-duplicate ideas extracted across multiple imports.
+ *
+ * Promotion: when an idea is promoted, `promotedToBusinessId` is set to
+ * the row created by constructBusiness(). The link is one-way: a single
+ * business can come from one idea, but new ideas may emerge from a
+ * running business — those get their own row.
+ */
+export const ideas = pgTable('ideas', {
+  id:                   text('id').primaryKey(),
+  workspaceId:          text('workspace_id').notNull(),
+
+  // Identity
+  title:                text('title').notNull(),
+  raw:                  text('raw').notNull(),                  // original snippet that produced this idea
+  fingerprint:          text('fingerprint').notNull(),          // dedup key (title+category normalized)
+
+  // Extraction (nullable until enriched)
+  category:             text('category'),                       // saas|website|tool|extension|content|commerce|service|other
+  targetUser:           text('target_user'),
+  painPoint:            text('pain_point'),
+  solution:             text('solution'),
+  features:             jsonb('features').notNull().default([]),// string[]
+  monetization:         text('monetization'),
+  techStack:            jsonb('tech_stack').notNull().default([]),// string[]
+
+  // Scoring (operator-editable; 0..100 scales)
+  demandScore:          integer('demand_score'),
+  difficultyScore:      integer('difficulty_score'),
+  buildReadiness:       integer('build_readiness'),
+  upsideScore:          integer('upside_score'),
+  riskScore:            integer('risk_score'),
+
+  // Source traceability
+  sourceType:           text('source_type').notNull(),          // chat|file|note|paste|manual|chat-import
+  sourceRef:            text('source_ref'),                     // file id, chat id, event id, etc.
+  sourceExcerpt:        text('source_excerpt'),                 // 500-char window around the extraction
+
+  // Lifecycle
+  status:               text('status').notNull().default('raw'),
+  // raw | clarified | validated | blueprinted | promoted | archived | rejected
+  promotedToBusinessId: text('promoted_to_business_id'),
+  promotedAt:           bigint('promoted_at', { mode: 'number' }),
+  archivedAt:           bigint('archived_at', { mode: 'number' }),
+  rejectedReason:       text('rejected_reason'),
+
+  // Audit
+  createdBy:            text('created_by').notNull().default('system'),
+  createdAt:            bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:            bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('idea_workspace_idx').on(t.workspaceId),
+  index('idea_status_idx').on(t.status),
+  index('idea_category_idx').on(t.category),
+  index('idea_fingerprint_idx').on(t.workspaceId, t.fingerprint),
+  index('idea_source_idx').on(t.sourceType, t.sourceRef),
+  index('idea_created_idx').on(t.createdAt),
+])
+
+/**
+ * Skill library — imported instructional knowledge (markdown). Each row
+ * is one SKILL.md file from an external repo (e.g. awesome-copilot).
+ *
+ * Distinct from the executable `skills` table above: that one represents
+ * runnable workflows; this one is reference documentation that callers
+ * can inject into prompts or display to the operator.
+ *
+ *   - `fileHash` makes re-ingestion idempotent. Same file = same row.
+ *   - `useCount` + `lastUsedAt` are bumped only when callers explicitly
+ *     record usage. No silent counter inflation.
+ */
+export const skillLibrary = pgTable('skill_library', {
+  id:           text('id').primaryKey(),          // slug (kebab-case from folder name)
+  workspaceId:  text('workspace_id').notNull(),   // 'global' for the shared library
+  name:         text('name').notNull(),
+  description:  text('description').notNull(),
+  body:         text('body').notNull(),           // full markdown content
+  license:      text('license'),
+  sourceRepo:   text('source_repo'),              // e.g. 'awesome-copilot'
+  sourcePath:   text('source_path').notNull(),    // path within the repo
+  category:     text('category'),                 // dotnet|react|sql|security|ai|...
+  tags:         text('tags').array().notNull().default([]),
+  fileHash:     text('file_hash').notNull(),      // sha256(body)
+  useCount:     integer('use_count').notNull().default(0),
+  lastUsedAt:   bigint('last_used_at',  { mode: 'number' }),
+  importedAt:   bigint('imported_at',   { mode: 'number' }).notNull(),
+  createdAt:    bigint('created_at',    { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at',    { mode: 'number' }).notNull(),
+}, (t) => [
+  index('sklib_workspace_idx').on(t.workspaceId),
+  index('sklib_category_idx').on(t.category),
+  index('sklib_use_idx').on(t.useCount),
+  index('sklib_hash_idx').on(t.fileHash),
+])
+
+/**
+ * Entity relationships — the world graph substrate.
+ *
+ * One row per typed edge between two real rows in the system. Every
+ * edge is BACKED by an actual FK relationship that exists in the
+ * source data — we don't infer, we project.
+ *
+ * Source-of-truth pattern: when an `issues.proposalId` is set, the
+ * populator inserts an `(issue, iss-X) → (proposal, prop-Y)` edge with
+ * relationship='spawned-proposal'. The edge is derived data; if the
+ * source field is cleared, the edge gets deleted on next populate.
+ *
+ * `evidence` carries a small JSON blob describing why the edge exists
+ * (typically the FK column name + a timestamp). Operator can trust the
+ * edge because the evidence row points at a real source record.
+ *
+ * `confidence` is 1.0 for FK-derived edges. We reserve <1.0 for future
+ * inferred edges (semantic similarity, embedding distance). Today all
+ * edges are 1.0 because we refuse to ship inference theater.
+ */
+export const entityRelationships = pgTable('entity_relationships', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  sourceKind:   text('source_kind').notNull(),    // issue|idea|proposal|patch|business|incident|action|account
+  sourceId:     text('source_id').notNull(),
+  targetKind:   text('target_kind').notNull(),
+  targetId:     text('target_id').notNull(),
+  /** Verb describing the edge (spawned-proposal, promoted-to, etc). */
+  relationship: text('relationship').notNull(),
+  /** Why this edge exists — typically { via: 'issues.proposalId', at: timestamp }. */
+  evidence:     jsonb('evidence').notNull().default({}),
+  confidence:   real('confidence').notNull().default(1),  // FK-derived = 1.0
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rel_workspace_idx').on(t.workspaceId),
+  index('rel_source_idx').on(t.sourceKind, t.sourceId),
+  index('rel_target_idx').on(t.targetKind, t.targetId),
+  index('rel_unique_idx').on(t.workspaceId, t.sourceKind, t.sourceId, t.targetKind, t.targetId, t.relationship),
+])
+
+/**
+ * Operator presence — one row per (workspace, operator) tracking when
+ * the operator last actively interacted with Novan. The recap engine
+ * uses `lastSeenAt` as the "since you were away" boundary.
+ *
+ * Why per-operator: multi-operator workspaces want each person's own
+ * "while you were gone" delta. `operatorId` defaults to 'default' so
+ * single-user setups don't need to wire identity.
+ */
+export const operatorPresence = pgTable('operator_presence', {
+  workspaceId:    text('workspace_id').notNull(),
+  operatorId:     text('operator_id').notNull().default('default'),
+  /** Updated when operator dismisses the recap (or otherwise pings the touch endpoint). */
+  lastSeenAt:     bigint('last_seen_at',  { mode: 'number' }).notNull(),
+  /** Updated on every recap fetch — separate from lastSeenAt so we can
+   *  show "Welcome back" without resetting the boundary until the
+   *  operator acknowledges. */
+  lastPolledAt:   bigint('last_polled_at', { mode: 'number' }),
+  createdAt:      bigint('created_at',    { mode: 'number' }).notNull(),
+  updatedAt:      bigint('updated_at',    { mode: 'number' }).notNull(),
+}, (t) => [
+  index('op_presence_idx').on(t.workspaceId, t.operatorId),
+])
+
+/**
+ * Connector kill switches — emergency stop flags, one row per workspace.
+ *
+ * Three orthogonal switches the action runtime checks before every
+ * dispatch:
+ *   - allBlocked       — global kill: no connector action runs anywhere
+ *   - categoryBlocked  — array of categories paused (e.g. ['commerce','social'])
+ *   - connectorBlocked — array of connector IDs paused (e.g. ['shopify'])
+ *
+ * Operator-set. Stored separately from accounts so flipping global stop
+ * is one write, not N writes across every account row.
+ */
+export const connectorKillSwitches = pgTable('connector_kill_switches', {
+  workspaceId:      text('workspace_id').primaryKey(),
+  allBlocked:       boolean('all_blocked').notNull().default(false),
+  categoryBlocked:  text('category_blocked').array().notNull().default([]),
+  connectorBlocked: text('connector_blocked').array().notNull().default([]),
+  reason:           text('reason'),
+  setBy:            text('set_by'),
+  setAt:            bigint('set_at',     { mode: 'number' }),
+  updatedAt:        bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
+/**
+ * Connector rate limits — per-(account, action) sliding-window counter.
+ * Action runtime increments on dispatch; if count exceeds threshold
+ * within window, the dispatch is blocked with reason 'rate_limited'.
+ *
+ * Defaults (in code, not config): 60 actions per minute per (account,action).
+ * Window is reset by computing count of recent connector_actions rows;
+ * this table holds operator-overridable per-key overrides.
+ */
+export const connectorRateLimits = pgTable('connector_rate_limits', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  accountId:       text('account_id'),       // null = applies to all accounts of below action
+  action:          text('action'),            // null = applies to all actions of above account
+  maxPerMinute:    integer('max_per_minute').notNull().default(60),
+  maxPerHour:      integer('max_per_hour').notNull().default(600),
+  setBy:           text('set_by'),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:       bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('conn_rl_workspace_idx').on(t.workspaceId),
+  index('conn_rl_account_idx').on(t.accountId, t.action),
+])
+
+/**
+ * Connector registry — one row per known connector KIND (not per
+ * account). Defines what GitHub / Slack / etc. look like: auth type,
+ * supported actions, blocked actions, risk level, default scopes.
+ *
+ * Connector instances (an actual account a workspace has linked) live
+ * in `connector_accounts` below.
+ */
+export const connectors = pgTable('connectors', {
+  id:               text('id').primaryKey(),          // slug: 'github', 'slack', 'gmail', 'gcal'
+  name:             text('name').notNull(),
+  category:         text('category').notNull(),       // communication|productivity|developer|...
+  description:      text('description').notNull(),
+  authType:         text('auth_type').notNull(),      // oauth|api_key|token|session|webhook
+  defaultScopes:    text('default_scopes').array().notNull().default([]),
+  optionalScopes:   text('optional_scopes').array().notNull().default([]),
+  supportedActions: text('supported_actions').array().notNull().default([]),
+  /** Actions PERMANENTLY blocked at the connector level regardless of
+   *  operator approval — purchases, payments, account deletion, etc. */
+  blockedActions:   text('blocked_actions').array().notNull().default([]),
+  riskLevel:        text('risk_level').notNull().default('low'), // low|medium|high
+  /** Whether a real handler is wired. Stays false until the SDK calls
+   *  are implemented; routes will refuse dispatch when false. */
+  implemented:      boolean('implemented').notNull().default(false),
+  // ── Authorization & signup metadata (the second-prompt demand) ───
+  // Null means "operator must verify before relying on this URL."
+  officialWebsiteUrl:    text('official_website_url'),
+  signupUrl:             text('signup_url'),
+  loginUrl:              text('login_url'),
+  oauthAuthorizationUrl: text('oauth_authorization_url'),
+  developerAppSetupUrl:  text('developer_app_setup_url'),
+  apiKeyCreationUrl:     text('api_key_creation_url'),
+  docsUrl:               text('docs_url'),
+  pricingUrl:            text('pricing_url'),
+  statusPageUrl:         text('status_page_url'),
+  permissionExplanation: text('permission_explanation'),
+  accountRequired:       boolean('account_required').notNull().default(true),
+  supportsOauth:         boolean('supports_oauth').notNull().default(false),
+  supportsApiKey:        boolean('supports_api_key').notNull().default(false),
+  supportsSessionAuth:   boolean('supports_session_auth').notNull().default(false),
+  freeTierAvailable:     boolean('free_tier_available').notNull().default(false),
+  /** ISO timestamp of last operator metadata verification. Null = unverified. */
+  metadataVerifiedAt:    bigint('metadata_verified_at', { mode: 'number' }),
+  iconKey:               text('icon_key'),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:        bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('connector_category_idx').on(t.category),
+  index('connector_implemented_idx').on(t.implemented),
+])
+
+/**
+ * Connector accounts — a workspace's linked instance of a connector.
+ * Credentials live in `secrets_vault`; this row only holds the FK to
+ * that secret plus permission scopes, status, and health.
+ *
+ * Per-workspace per-account: a workspace can have multiple GitHub
+ * accounts linked (e.g. personal + org).
+ */
+export const connectorAccounts = pgTable('connector_accounts', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  connectorId:      text('connector_id').notNull(),   // FK to connectors.id
+  /** Human label — "github (personal)", "gcal (work)" */
+  label:            text('label').notNull(),
+  /** External account identifier from the provider (login, email, id). */
+  externalAccount:  text('external_account'),
+  /** FK to secrets_vault.id; null until OAuth/key entry completes. */
+  secretRef:        text('secret_ref'),
+  /** Scopes actually GRANTED (≤ connector.defaultScopes ⊆ provider grant). */
+  grantedScopes:    text('granted_scopes').array().notNull().default([]),
+  /** Operator-set permission tier: read|draft|publish|admin.
+   *  Action runtime checks both grantedScopes AND this tier. */
+  permission:       text('permission').notNull().default('read'),
+  status:           text('status').notNull().default('active'),  // active|paused|revoked|expired
+  health:           text('health').notNull().default('unknown'), // healthy|degraded|down|unknown
+  lastActionAt:     bigint('last_action_at', { mode: 'number' }),
+  lastHealthAt:     bigint('last_health_at', { mode: 'number' }),
+  metadata:         jsonb('metadata').notNull().default({}),
+  createdBy:        text('created_by').notNull().default('operator'),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:        bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('conn_acct_workspace_idx').on(t.workspaceId),
+  index('conn_acct_connector_idx').on(t.connectorId),
+  index('conn_acct_status_idx').on(t.status),
+])
+
+/**
+ * Connector actions — append-only audit log. Every dispatch creates one
+ * row that tracks the full 7-stage pipeline: intent → permission →
+ * policy → dry_run → approval → exec → outcome. Phase column tells you
+ * exactly where a still-pending action is parked.
+ */
+export const connectorActions = pgTable('connector_actions', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  accountId:        text('account_id').notNull(),     // FK to connector_accounts.id
+  connectorId:      text('connector_id').notNull(),
+
+  // Intent
+  action:           text('action').notNull(),         // e.g. 'github.create_issue'
+  intent:           text('intent').notNull(),         // human description
+  params:           jsonb('params').notNull().default({}),
+  riskLevel:        text('risk_level').notNull().default('low'),
+
+  // Pipeline state
+  phase:            text('phase').notNull().default('queued'),
+  // queued|permission_check|policy_check|dry_run|awaiting_approval|approved|executing|completed|failed|blocked|rejected
+  blockedReason:    text('blocked_reason'),
+  dryRunPreview:    jsonb('dry_run_preview'),         // what WOULD happen — shown to operator
+
+  // Approval
+  requiresApproval: boolean('requires_approval').notNull().default(false),
+  approvedBy:       text('approved_by'),
+  approvedAt:       bigint('approved_at',  { mode: 'number' }),
+  rejectedBy:       text('rejected_by'),
+  rejectedAt:       bigint('rejected_at',  { mode: 'number' }),
+  rejectionReason:  text('rejection_reason'),
+
+  // Execution
+  startedAt:        bigint('started_at',   { mode: 'number' }),
+  completedAt:      bigint('completed_at', { mode: 'number' }),
+  result:           jsonb('result'),
+  errorMessage:     text('error_message'),
+
+  // Audit
+  initiatedBy:      text('initiated_by').notNull(),   // 'operator' | agent id | 'cron:<task>'
+  correlationId:    text('correlation_id'),           // links related actions
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:        bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('conn_act_workspace_idx').on(t.workspaceId),
+  index('conn_act_account_idx').on(t.accountId),
+  index('conn_act_phase_idx').on(t.phase),
+  index('conn_act_approval_idx').on(t.requiresApproval, t.phase),
+  index('conn_act_created_idx').on(t.createdAt),
 ])
 
 /** Append-only timeline of actions on an incident */
@@ -2256,6 +2717,11 @@ export const imageGenerations = pgTable('image_generations', {
   userRating:        integer('user_rating'),                        // 1..5 stars (operator-set)
   isFavorite:        boolean('is_favorite').notNull().default(false),
   qualityScore:      real('quality_score'),                         // computed from rating + provider perf
+  slopRiskScore:     real('slop_risk_score'),                       // 0..1, anti-slop engine
+  originalityScore:  real('originality_score'),                     // 0..1, IP / originality
+  compositionScore:  real('composition_score'),                     // 0..1
+  brandFitScore:     real('brand_fit_score'),                       // 0..1
+  creativeFlags:     jsonb('creative_flags'),                       // string[] from scorePrompt()
   // Provenance
   routerProvenance:  text('router_provenance'),                     // 'auto' | 'user_pinned'
   latencyMs:         integer('latency_ms'),
@@ -2274,6 +2740,29 @@ export const imageGenerations = pgTable('image_generations', {
   index('ig_batch_idx').on(t.batchId),
   index('ig_trace_idx').on(t.traceId),
   index('ig_workflow_idx').on(t.workflowRunId),
+])
+
+/** Migration 0033 — image quality reviews. */
+export const imageQualityReviews = pgTable('image_quality_reviews', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  generationId: text('generation_id').notNull(),
+  kind:         text('kind').notNull(),
+  verdict:      text('verdict').notNull(),
+  composite:    real('composite').notNull(),
+  qualityScore: real('quality_score').notNull(),
+  slopRisk:     real('slop_risk').notNull(),
+  originality:  real('originality').notNull(),
+  composition:  real('composition').notNull(),
+  brandFit:     real('brand_fit').notNull(),
+  reasons:      jsonb('reasons').notNull().default([]),
+  reviewer:     text('reviewer'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('iqr_workspace_idx').on(t.workspaceId),
+  index('iqr_generation_idx').on(t.generationId),
+  index('iqr_verdict_idx').on(t.verdict),
+  index('iqr_created_idx').on(t.createdAt),
 ])
 
 /** Reusable prompt templates. */
@@ -2434,6 +2923,10 @@ export const reasoningChains = pgTable('reasoning_chains', {
   index('rc_kind_idx').on(t.kind),
   index('rc_subject_idx').on(t.subjectId),
   index('rc_outcome_idx').on(t.outcomeKnown),
+  // HOT-PATH composite: outcome reconciliation queries filter
+  // (workspace, outcome_known=false, kind) — 29 queries previously
+  // bitmap-ANDed three single-col indexes.
+  index('rc_ws_outcome_kind_idx').on(t.workspaceId, t.outcomeKnown, t.kind),
 ])
 
 /**
@@ -2882,9 +3375,9 @@ export const recommendationFeedback = pgTable('recommendation_feedback', {
   weightDelta:  real('weight_delta').notNull().default(0),
   createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
 }, (t) => [
-  index('rf_workspace_idx').on(t.workspaceId),
-  index('rf_chain_idx').on(t.chainId),
-  index('rf_action_idx').on(t.action),
+  index('recfeed_workspace_idx').on(t.workspaceId),
+  index('recfeed_chain_idx').on(t.chainId),
+  index('recfeed_action_idx').on(t.action),
 ])
 
 export const inboundMessages = pgTable('inbound_messages', {
@@ -2949,6 +3442,8 @@ export const codeProposals = pgTable('code_proposals', {
   index('cp_status_idx').on(t.status),
   index('cp_capability_idx').on(t.capabilityId),
   index('cp_shipped_idx').on(t.shippedAt),
+  // HOT-PATH composite: filter (workspace, status), shipped-at order
+  index('cp_ws_status_idx').on(t.workspaceId, t.status),
 ])
 
 export const workerConcurrency = pgTable('worker_concurrency', {
@@ -3349,18 +3844,110 @@ export const scenarioOutcomes = pgTable('scenario_outcomes', {
 // ─── Migration 0022 — Novan chat ─────────────────────────────────────────
 
 export const conversations = pgTable('conversations', {
-  id:            text('id').primaryKey(),
-  workspaceId:   text('workspace_id').notNull(),
-  title:         text('title').notNull(),
-  messageCount:  integer('message_count').notNull().default(0),
-  totalTokens:   integer('total_tokens').notNull().default(0),
-  totalCostUsd:  real('total_cost_usd').notNull().default(0),
-  archived:      boolean('archived').notNull().default(false),
-  createdAt:     bigint('created_at', { mode: 'number' }).notNull(),
-  updatedAt:     bigint('updated_at', { mode: 'number' }).notNull(),
+  id:                       text('id').primaryKey(),
+  workspaceId:              text('workspace_id').notNull(),
+  title:                    text('title').notNull(),
+  messageCount:             integer('message_count').notNull().default(0),
+  totalTokens:              integer('total_tokens').notNull().default(0),
+  totalCostUsd:             real('total_cost_usd').notNull().default(0),
+  archived:                 boolean('archived').notNull().default(false),
+  forkedFromConversationId: text('forked_from_conversation_id'),
+  forkedFromMessageId:      text('forked_from_message_id'),
+  branchRootId:             text('branch_root_id'),
+  createdAt:                bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:                bigint('updated_at', { mode: 'number' }).notNull(),
 }, (t) => [
   index('conv_workspace_idx').on(t.workspaceId),
   index('conv_updated_idx').on(t.updatedAt),
+  index('conv_branch_root_idx').on(t.branchRootId),
+  index('conv_forked_from_idx').on(t.forkedFromConversationId),
+])
+
+// ─── Migration 0040 — Platform smoke self-check ────────────────────────
+
+export const platformSmokeRuns = pgTable('platform_smoke_runs', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  ranAt:        bigint('ran_at', { mode: 'number' }).notNull(),
+  durationMs:   integer('duration_ms').notNull(),
+  okCount:      integer('ok_count').notNull().default(0),
+  failCount:    integer('fail_count').notNull().default(0),
+  slowCount:    integer('slow_count').notNull().default(0),
+  probes:       jsonb('probes').$type<Array<{ path: string; status: number; ms: number; bodyExcerpt: string }>>().notNull().default([]),
+  regressions:  jsonb('regressions').$type<Array<{ path: string; prevStatus: number; nowStatus: number }>>().notNull().default([]),
+  source:       text('source').notNull().default('cron'),
+}, (t) => [
+  index('smoke_ws_idx').on(t.workspaceId),
+  index('smoke_ran_idx').on(t.ranAt),
+])
+
+// ─── Migration 0039 — Agency agents catalog + CEO delegations ──────────
+
+export const agentDefinitions = pgTable('agent_definitions', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  slug:         text('slug').notNull(),
+  department:   text('department').notNull(),
+  name:         text('name').notNull(),
+  description:  text('description'),
+  color:        text('color'),
+  emoji:        text('emoji'),
+  vibe:         text('vibe'),
+  systemPrompt: text('system_prompt').notNull(),
+  sourcePath:   text('source_path'),
+  checksum:     text('checksum').notNull(),
+  tags:         text('tags').array().notNull().default([]),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('agentdef_ws_slug_uniq').on(t.workspaceId, t.slug),
+  index('agentdef_department_idx').on(t.workspaceId, t.department),
+])
+
+export const agentDelegations = pgTable('agent_delegations', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  definitionId:     text('definition_id').notNull(),
+  department:       text('department').notNull(),
+  task:             text('task').notNull(),
+  context:          jsonb('context').$type<Record<string, unknown>>().notNull().default({}),
+  result:           text('result'),
+  tokens:           integer('tokens').notNull().default(0),
+  costUsd:          real('cost_usd').notNull().default(0),
+  provider:         text('provider'),
+  model:            text('model'),
+  status:           text('status').notNull().default('pending'),
+  requestedBy:      text('requested_by').notNull().default('ceo'),
+  reasoningChainId: text('reasoning_chain_id'),
+  startedAt:        bigint('started_at',   { mode: 'number' }),
+  completedAt:      bigint('completed_at', { mode: 'number' }),
+  error:            text('error'),
+  createdAt:        bigint('created_at',   { mode: 'number' }).notNull(),
+}, (t) => [
+  index('delegation_ws_idx').on(t.workspaceId),
+  index('delegation_def_idx').on(t.definitionId),
+  index('delegation_created_idx').on(t.createdAt),
+  index('delegation_status_idx').on(t.status),
+])
+
+// ─── Migration 0038 — Voice cloning profiles (Coqui XTTS-v2 sidecar) ────
+
+export const voiceProfiles = pgTable('voice_profiles', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  name:            text('name').notNull(),
+  refAudioPath:    text('ref_audio_path').notNull(),
+  language:        text('language').notNull().default('en'),
+  consentAttested: boolean('consent_attested').notNull().default(false),
+  isActive:        boolean('is_active').notNull().default(false),
+  durationSeconds: real('duration_seconds'),
+  sampleRate:      integer('sample_rate'),
+  notes:           text('notes'),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:       bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('vp_workspace_idx').on(t.workspaceId),
+  index('vp_active_idx').on(t.workspaceId, t.isActive),
 ])
 
 export const messages = pgTable('messages', {
@@ -3377,11 +3964,17 @@ export const messages = pgTable('messages', {
   model:           text('model'),
   streamComplete:  boolean('stream_complete').notNull().default(true),
   error:           text('error'),
+  supersededAt:    bigint('superseded_at',  { mode: 'number' }),
+  supersededBy:    text('superseded_by'),
+  regeneratedFrom: text('regenerated_from'),
+  cancelled:       boolean('cancelled').notNull().default(false),
+  attachments:     jsonb('attachments').$type<Array<{ url: string; mime: string; kind: 'image' | 'document' | 'reference'; name?: string; sizeBytes?: number }>>().notNull().default([]),
   createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
 }, (t) => [
   index('msg_conv_idx').on(t.conversationId),
   index('msg_workspace_idx').on(t.workspaceId),
   index('msg_created_idx').on(t.createdAt),
+  index('msg_superseded_idx').on(t.supersededAt),
 ])
 
 // ─── Migration 0023 — Chat-driven actions ────────────────────────────────
@@ -3423,8 +4016,8 @@ export const savedViews = pgTable('saved_views', {
   createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
   updatedAt:       bigint('updated_at', { mode: 'number' }).notNull(),
 }, (t) => [
-  index('sv_workspace_idx').on(t.workspaceId),
-  index('sv_updated_idx').on(t.updatedAt),
+  index('savedview_workspace_idx').on(t.workspaceId),
+  index('savedview_updated_idx').on(t.updatedAt),
 ])
 
 export const statusChanges = pgTable('status_changes', {
@@ -3493,6 +4086,314 @@ export const webhookSecrets = pgTable('webhook_secrets', {
   index('ws_channel_idx').on(t.channel),
 ])
 
+// ─── Migration 0026 — Voice / Speech Layer ──────────────────────────────
+
+export const speechProviderConfigs = pgTable('speech_provider_configs', {
+  id:                  text('id').primaryKey(),
+  workspaceId:         text('workspace_id').notNull(),
+  providerId:          text('provider_id').notNull(),
+  displayName:         text('display_name').notNull(),
+  kind:                text('kind').notNull(),
+  endpoint:            text('endpoint'),
+  keyRef:              text('key_ref'),
+  enabled:             boolean('enabled').notNull().default(true),
+  priority:            integer('priority').notNull().default(100),
+  preferredVoice:      text('preferred_voice'),
+  preferredLocale:     text('preferred_locale').notNull().default('en-US'),
+  maxCostPerMinUsd:    real('max_cost_per_min_usd').notNull().default(0.5),
+  maxLatencyMs:        integer('max_latency_ms').notNull().default(1500),
+  supportsStreaming:   boolean('supports_streaming').notNull().default(true),
+  supportsInterruption: boolean('supports_interruption').notNull().default(false),
+  lastHealthAt:        bigint('last_health_at', { mode: 'number' }),
+  healthScore:         real('health_score').notNull().default(1.0),
+  lastLatencyMs:       integer('last_latency_ms'),
+  lastError:           text('last_error'),
+  createdAt:           bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:           bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('spc_workspace_idx').on(t.workspaceId),
+  index('spc_kind_idx').on(t.kind),
+])
+
+export const voiceSessions = pgTable('voice_sessions', {
+  id:                  text('id').primaryKey(),
+  workspaceId:         text('workspace_id').notNull(),
+  userId:              text('user_id'),
+  mode:                text('mode').notNull(),
+  preset:              text('preset').notNull().default('calm_operator'),
+  selectedProvider:    text('selected_provider').notNull(),
+  fallbackChain:       jsonb('fallback_chain').notNull().default([]),
+  startedAt:           bigint('started_at', { mode: 'number' }).notNull(),
+  endedAt:             bigint('ended_at', { mode: 'number' }),
+  firstAudioMs:        integer('first_audio_ms'),
+  avgLatencyMs:        integer('avg_latency_ms'),
+  totalCostUsd:        real('total_cost_usd').notNull().default(0),
+  failoverCount:       integer('failover_count').notNull().default(0),
+  blockedCommands:     integer('blocked_commands').notNull().default(0),
+  transcriptRetained:  boolean('transcript_retained').notNull().default(true),
+  status:              text('status').notNull().default('active'),
+}, (t) => [
+  index('vs_workspace_idx').on(t.workspaceId),
+  index('vs_started_idx').on(t.startedAt),
+  index('vs_status_idx').on(t.status),
+])
+
+export const voiceEvents = pgTable('voice_events', {
+  id:           text('id').primaryKey(),
+  sessionId:    text('session_id').notNull(),
+  workspaceId:  text('workspace_id').notNull(),
+  kind:         text('kind').notNull(),
+  role:         text('role'),
+  text:         text('text'),
+  provider:     text('provider'),
+  latencyMs:    integer('latency_ms'),
+  costUsd:      real('cost_usd'),
+  meta:         jsonb('meta'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('vev_session_idx').on(t.sessionId),
+  index('vev_workspace_idx').on(t.workspaceId),
+  index('vev_kind_idx').on(t.kind),
+  index('vev_created_idx').on(t.createdAt),
+])
+
+// ─── Migration 0027 — Natural conversation context + feedback ──────────
+
+export const voiceSessionContext = pgTable('voice_session_context', {
+  sessionId:         text('session_id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  currentNode:       text('current_node'),
+  currentTemplate:   text('current_template'),
+  currentLod:        text('current_lod'),
+  activeMission:     text('active_mission'),
+  selectedSystem:    text('selected_system'),
+  lastPlan:          jsonb('last_plan'),
+  pendingPlan:       jsonb('pending_plan'),
+  currentRisk:       text('current_risk').notNull().default('low'),
+  currentUiMode:     text('current_ui_mode'),
+  preferences:       jsonb('preferences').notNull().default({}),
+  turnCount:         integer('turn_count').notNull().default(0),
+  expectedNext:      jsonb('expected_next'),
+  mutedUntil:        bigint('muted_until', { mode: 'number' }),
+  voiceLocked:       boolean('voice_locked').notNull().default(false),
+  pendingDryRunId:   text('pending_dry_run_id'),
+  updatedAt:         bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('vsc_workspace_idx').on(t.workspaceId),
+  index('vsc_updated_idx').on(t.updatedAt),
+])
+
+export const workspaceVoicePrefs = pgTable('workspace_voice_prefs', {
+  workspaceId:              text('workspace_id').primaryKey(),
+  preferredProvider:        text('preferred_provider'),
+  preferredPreset:          text('preferred_preset'),
+  preferredLocale:          text('preferred_locale').notNull().default('en-US'),
+  transcriptRetained:       boolean('transcript_retained').notNull().default(true),
+  autoConfirmLowRisk:       boolean('auto_confirm_low_risk').notNull().default(false),
+  bargeInEnabled:           boolean('barge_in_enabled').notNull().default(true),
+  qualityWeight:            real('quality_weight').notNull().default(0.15),
+  wakePhrases:              jsonb('wake_phrases').notNull().default(['hey novan', 'novan']),
+  wakeEnabled:              boolean('wake_enabled').notNull().default(false),
+  handsFreeEnabled:         boolean('hands_free_enabled').notNull().default(false),
+  handsFreeAllowedIntents:  jsonb('hands_free_allowed_intents').notNull().default([]),
+  ambientAlertsEnabled:     boolean('ambient_alerts_enabled').notNull().default(true),
+  ambientSeverityFloor:     text('ambient_severity_floor').notNull().default('critical'),
+  pushToTalkDefault:        boolean('push_to_talk_default').notNull().default(true),
+  updatedAt:                bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
+// ─── Migration 0030 — Voice skill memory + personalized speech ─────────
+
+export const operatorVoicePrefs = pgTable('operator_voice_prefs', {
+  workspaceId:           text('workspace_id').notNull(),
+  userId:                text('user_id').notNull(),
+  preferredVoice:        text('preferred_voice'),
+  preferredSpeed:        real('preferred_speed').notNull().default(1.0),
+  preferredLength:       text('preferred_length').notNull().default('short'),
+  confirmationStyle:     text('confirmation_style').notNull().default('chip'),
+  preferredWake:         text('preferred_wake'),
+  preferredDefaultMode:  text('preferred_default_mode').notNull().default('push_to_talk'),
+  responseMode:          text('response_mode').notNull().default('normal'),
+  createdAt:             bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:             bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.workspaceId, t.userId] }),
+])
+
+export const voiceSkillObservations = pgTable('voice_skill_observations', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  userId:       text('user_id'),
+  sessionId:    text('session_id'),
+  kind:         text('kind').notNull(),
+  phrase:       text('phrase'),
+  intentKind:   text('intent_kind'),
+  fromIntent:   text('from_intent'),
+  toIntent:     text('to_intent'),
+  confidence:   real('confidence'),
+  nodeId:       text('node_id'),
+  meta:         jsonb('meta'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('vso_workspace_idx').on(t.workspaceId),
+  index('vso_kind_idx').on(t.kind),
+  index('vso_phrase_idx').on(t.phrase),
+  index('vso_intent_idx').on(t.intentKind),
+  index('vso_created_idx').on(t.createdAt),
+])
+
+export const voiceShortcuts = pgTable('voice_shortcuts', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  userId:       text('user_id'),
+  phrase:       text('phrase').notNull(),
+  expansion:    text('expansion').notNull(),
+  description:  text('description'),
+  useCount:     integer('use_count').notNull().default(0),
+  lastUsedAt:   bigint('last_used_at', { mode: 'number' }),
+  enabled:      boolean('enabled').notNull().default(true),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('vsc_workspace_phrase_idx').on(t.workspaceId, t.phrase),
+  index('vsc_user_idx').on(t.userId),
+])
+
+// ─── Migration 0031 — Voice dry-run simulator ──────────────────────────
+
+export const voiceDryRuns = pgTable('voice_dry_runs', {
+  id:                  text('id').primaryKey(),
+  workspaceId:         text('workspace_id').notNull(),
+  userId:              text('user_id'),
+  sessionId:           text('session_id'),
+  command:             text('command').notNull(),
+  intentKind:          text('intent_kind').notNull(),
+  intentTarget:        text('intent_target'),
+  verdict:             text('verdict').notNull(),
+  risk:                text('risk').notNull(),
+  riskScore:           real('risk_score').notNull().default(0),
+  estimatedCostUsd:    real('estimated_cost_usd').notNull().default(0),
+  permissions:         jsonb('permissions').notNull().default([]),
+  plannedSteps:        jsonb('planned_steps').notNull().default([]),
+  browserPreview:      jsonb('browser_preview'),
+  affectedSystems:     jsonb('affected_systems').notNull().default([]),
+  blockedActions:      jsonb('blocked_actions').notNull().default([]),
+  rollbackAvailable:   boolean('rollback_available').notNull().default(false),
+  rollbackStrategy:    text('rollback_strategy'),
+  spokenPreview:       text('spoken_preview').notNull(),
+  status:              text('status').notNull().default('pending'),
+  approvedViaSpoken:   boolean('approved_via_spoken').notNull().default(false),
+  approvedViaUi:       boolean('approved_via_ui').notNull().default(false),
+  approvedAt:          bigint('approved_at', { mode: 'number' }),
+  executedAt:          bigint('executed_at', { mode: 'number' }),
+  executeResult:       jsonb('execute_result'),
+  rejectedReason:      text('rejected_reason'),
+  executeHook:         jsonb('execute_hook'),
+  budgetDecision:      jsonb('budget_decision'),
+  browserActionPlan:   jsonb('browser_action_plan'),
+  executedVia:         text('executed_via'),
+  createdAt:           bigint('created_at', { mode: 'number' }).notNull(),
+  expiresAt:           bigint('expires_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('vdr_workspace_idx').on(t.workspaceId),
+  index('vdr_session_idx').on(t.sessionId),
+  index('vdr_status_idx').on(t.status),
+  index('vdr_created_idx').on(t.createdAt),
+])
+
+export const voiceAmbientBriefings = pgTable('voice_ambient_briefings', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  kind:         text('kind').notNull(),
+  severity:     text('severity').notNull(),
+  summary:      text('summary').notNull(),
+  sourceEventId: text('source_event_id'),
+  deliveredAt:  bigint('delivered_at', { mode: 'number' }),
+  ackedAt:      bigint('acked_at', { mode: 'number' }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('vab_workspace_idx').on(t.workspaceId),
+  index('vab_severity_idx').on(t.severity),
+  index('vab_created_idx').on(t.createdAt),
+])
+
+export const voiceQualityFeedback = pgTable('voice_quality_feedback', {
+  id:           text('id').primaryKey(),
+  sessionId:    text('session_id').notNull(),
+  workspaceId:  text('workspace_id').notNull(),
+  provider:     text('provider'),
+  naturalness:  integer('naturalness'),
+  speed:        integer('speed'),
+  clarity:      integer('clarity'),
+  tone:         integer('tone'),
+  usefulness:   integer('usefulness'),
+  comment:      text('comment'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('vqf_workspace_idx').on(t.workspaceId),
+  index('vqf_session_idx').on(t.sessionId),
+  index('vqf_provider_idx').on(t.provider),
+  index('vqf_created_idx').on(t.createdAt),
+])
+
+// ─── Migration 0034 — Operational intelligence primitives ───────────────
+
+export const operatorLoadSnapshots = pgTable('operator_load_snapshots', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  userId:           text('user_id'),
+  windowMs:         bigint('window_ms', { mode: 'number' }).notNull(),
+  eventVolume:      integer('event_volume').notNull(),
+  alertVolume:      integer('alert_volume').notNull(),
+  pendingCount:     integer('pending_count').notNull(),
+  interruptionRate: real('interruption_rate').notNull(),
+  loadScore:        real('load_score').notNull(),
+  mode:             text('mode').notNull(),
+  recommendation:   text('recommendation'),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ols_workspace_idx').on(t.workspaceId),
+  index('ols_created_idx').on(t.createdAt),
+])
+
+export const anomalySignals = pgTable('anomaly_signals', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  kind:         text('kind').notNull(),
+  severity:     text('severity').notNull(),
+  score:        real('score').notNull(),
+  subject:      text('subject'),
+  evidence:     jsonb('evidence').notNull().default({}),
+  firstSeenAt:  bigint('first_seen_at', { mode: 'number' }).notNull(),
+  lastSeenAt:   bigint('last_seen_at',  { mode: 'number' }).notNull(),
+  occurrences:  integer('occurrences').notNull().default(1),
+  ackedAt:      bigint('acked_at',     { mode: 'number' }),
+  resolvedAt:   bigint('resolved_at',  { mode: 'number' }),
+  createdAt:    bigint('created_at',   { mode: 'number' }).notNull(),
+}, (t) => [
+  index('as_workspace_idx').on(t.workspaceId),
+  index('as_kind_idx').on(t.kind),
+  index('as_severity_idx').on(t.severity),
+  index('as_created_idx').on(t.createdAt),
+])
+
+export const selfHealActions = pgTable('self_heal_actions', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  kind:         text('kind').notNull(),
+  targetKind:   text('target_kind').notNull(),
+  targetId:     text('target_id').notNull(),
+  reason:       text('reason').notNull(),
+  applied:      boolean('applied').notNull().default(false),
+  result:       jsonb('result'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  appliedAt:    bigint('applied_at', { mode: 'number' }),
+}, (t) => [
+  index('sha_workspace_idx').on(t.workspaceId),
+  index('sha_kind_idx').on(t.kind),
+  index('sha_created_idx').on(t.createdAt),
+])
+
 export const cronBudgets = pgTable('cron_budgets', {
   id:            text('id').primaryKey(),
   cronName:      text('cron_name').notNull().unique(),
@@ -3508,3 +4409,181 @@ export const cronBudgets = pgTable('cron_budgets', {
   lastBlockedAt: bigint('last_blocked_at', { mode: 'number' }),
   updatedAt:     bigint('updated_at', { mode: 'number' }).notNull(),
 })
+
+// ─── Business portfolio (revenue + prompt evolution) ─────────────────────
+// The existing `businesses` table (line 219) holds the identity, brief,
+// DNA, and metrics. The portfolio system adds:
+//   • business_revenue  — append-only ledger of every $ event
+//   • business_prompts  — versioned, score-tracked prompts the brain uses
+// The $10k/mo per-business floor lives in businesses.metrics.monthlyTargetUsd
+// (defaults to 10000 in services/business-portfolio.ts) — no schema change
+// needed to track it, because we can read/write JSON into the existing
+// `metrics` jsonb column without a migration.
+
+// Append-only revenue ledger.
+export const businessRevenue = pgTable('business_revenue', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  businessId:       text('business_id').notNull(),
+  kind:             text('kind').notNull(),       // ad_share | sale | sponsorship | affiliate | tip | refund | other
+  amountUsdCents:   bigint('amount_usd_cents', { mode: 'number' }).notNull(),
+  source:           text('source'),
+  sourceRef:        text('source_ref'),
+  earningsMonth:    text('earnings_month').notNull(), // YYYY-MM
+  landedAt:         bigint('landed_at', { mode: 'number' }),
+  recordedAt:       bigint('recorded_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('biz_rev_biz_month_idx').on(t.businessId, t.earningsMonth),
+  index('biz_rev_ws_idx').on(t.workspaceId, t.recordedAt),
+])
+
+// Versioned prompt registry — the self-evolving prompt layer.
+export const businessPrompts = pgTable('business_prompts', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  slot:         text('slot').notNull(),
+  version:      integer('version').notNull(),
+  body:         text('body').notNull(),
+  uses:         integer('uses').notNull().default(0),
+  scoreSum:     real('score_sum').notNull().default(0),
+  lastScore:    real('last_score'),
+  lastUsedAt:   bigint('last_used_at', { mode: 'number' }),
+  enabled:      boolean('enabled').notNull().default(true),
+  parentId:     text('parent_id'),
+  origin:       text('origin').notNull().default('seed'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('biz_prompt_ws_slot_idx').on(t.workspaceId, t.slot, t.enabled),
+  uniqueIndex('biz_prompt_ws_slot_version_uq').on(t.workspaceId, t.slot, t.version),
+])
+
+// ─── Business attachments — links external revenue sources to a business
+//   so the portfolio system rolls up revenue + performance signals without
+//   the operator manually recording every event. See migration 0047.
+export const businessAttachments = pgTable('business_attachments', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  businessId:    text('business_id').notNull(),
+  source:        text('source').notNull(),     // youtube_channel | etsy_shop | tiktok_account | …
+  sourceRef:     text('source_ref').notNull(), // platform-stable id (NEVER the friendly name)
+  label:         text('label'),
+  enabled:       boolean('enabled').notNull().default(true),
+  attachedAt:    bigint('attached_at',   { mode: 'number' }).notNull(),
+  lastSyncedAt:  bigint('last_synced_at',{ mode: 'number' }),
+  metadata:      jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  createdAt:     bigint('created_at',    { mode: 'number' }).notNull(),
+  updatedAt:     bigint('updated_at',    { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('bizattach_ws_biz_src_ref_uq').on(t.workspaceId, t.businessId, t.source, t.sourceRef),
+  index('bizattach_ws_idx').on(t.workspaceId),
+  index('bizattach_biz_idx').on(t.businessId),
+  index('bizattach_src_ref_idx').on(t.source, t.sourceRef),
+])
+
+// ─── Migration 0049: Blueprint persistence ───────────────────────────────
+// Portfolios (Holding-co tier), eval sets, policy rules, approved knowledge
+// patterns, cartographer snapshots. Each table is workspace-scoped except
+// portfolios (which group workspaces).
+
+export const portfolios = pgTable('portfolios', {
+  id:           text('id').primaryKey(),
+  name:         text('name').notNull(),
+  slug:         text('slug').notNull().unique(),
+  description:  text('description'),
+  ownerUserId:  text('owner_user_id'),
+  config:       jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
+  archived:     boolean('archived').notNull().default(false),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
+export const evalSets = pgTable('eval_sets', {
+  id:                text('id').primaryKey(),
+  workspaceId:       text('workspace_id').notNull(),
+  name:              text('name').notNull(),
+  description:       text('description'),
+  targetSubject:     text('target_subject').notNull(),
+  baselinePassRate:  real('baseline_pass_rate').notNull().default(0.80),
+  tags:              text('tags').array().notNull().default([]),
+  archived:          boolean('archived').notNull().default(false),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:         bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('eval_sets_ws_name_uq').on(t.workspaceId, t.name),
+  index('eval_sets_workspace_idx').on(t.workspaceId),
+  index('eval_sets_target_idx').on(t.targetSubject),
+])
+
+export const evalCases = pgTable('eval_cases', {
+  id:                text('id').primaryKey(),
+  evalSetId:         text('eval_set_id').notNull(),
+  input:             text('input').notNull(),
+  expectedBehavior:  text('expected_behavior').notNull(),
+  tags:              text('tags').array().notNull().default([]),
+  knownFailure:      boolean('known_failure').notNull().default(false),
+  notes:             text('notes'),
+  createdAt:         bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('eval_cases_set_idx').on(t.evalSetId),
+])
+
+export const evalRuns = pgTable('eval_runs', {
+  id:           text('id').primaryKey(),
+  evalSetId:    text('eval_set_id').notNull(),
+  workspaceId:  text('workspace_id').notNull(),
+  trigger:      text('trigger').notNull(),
+  totalCases:   integer('total_cases').notNull(),
+  passedCount:  integer('passed_count').notNull(),
+  avgGrade:     real('avg_grade').notNull(),
+  perCase:      jsonb('per_case').notNull().default([]),
+  regressions:  text('regressions').array().notNull().default([]),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('eval_runs_set_idx').on(t.evalSetId, t.createdAt),
+  index('eval_runs_workspace_idx').on(t.workspaceId, t.createdAt),
+])
+
+export const policyRules = pgTable('policy_rules', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  kind:         text('kind').notNull(),
+  description:  text('description').notNull(),
+  params:       jsonb('params').$type<Record<string, unknown>>().notNull(),
+  priority:     integer('priority').notNull().default(100),
+  enabled:      boolean('enabled').notNull().default(true),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('policy_rules_ws_id_uq').on(t.workspaceId, t.id),
+  index('policy_rules_workspace_idx').on(t.workspaceId),
+  index('policy_rules_enabled_idx').on(t.workspaceId, t.enabled),
+])
+
+export const approvedPatterns = pgTable('approved_patterns', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  source:        text('source').notNull(),
+  title:         text('title').notNull(),
+  description:   text('description').notNull(),
+  appliesTo:     text('applies_to').array().notNull().default([]),
+  evidence:      jsonb('evidence').notNull().default([]),
+  confidence:    real('confidence').notNull().default(0.7),
+  approvedBy:    text('approved_by').notNull(),
+  approvedAt:    bigint('approved_at', { mode: 'number' }).notNull(),
+  supersededBy:  text('superseded_by'),
+  archived:      boolean('archived').notNull().default(false),
+}, (t) => [
+  index('approved_patterns_ws_idx').on(t.workspaceId),
+])
+
+export const cartographerSnapshots = pgTable('cartographer_snapshots', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  rootPath:     text('root_path').notNull(),
+  fileCount:    integer('file_count').notNull(),
+  snapshot:     jsonb('snapshot').notNull(),
+  generatedAt:  bigint('generated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('cartographer_ws_idx').on(t.workspaceId, t.generatedAt),
+])

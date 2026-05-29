@@ -23,14 +23,18 @@ import { EVENT_TYPES, EVENT_SCHEMA_VERSION } from '@ops/event-contracts'
 export const briefingRoutes: FastifyPluginAsync = async (app) => {
 
   // ── POST /  — request briefing generation ─────────────────────────────────
-  app.post('/', async (req, reply) => {
+  // Briefings enqueue a job that runs an LLM analysis across recent events.
+  // Per-IP cap of 10/min prevents storm-of-jobs DoS.
+  app.post('/', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     const schema = z.object({
       windowMs:    z.number().int().positive().optional().default(86_400_000),
       requestedBy: z.string().optional().default('user'),
     })
 
     const parsed = schema.safeParse(req.body)
-    if (!parsed.success) return reply.status(400).send({ error: 'Invalid request body' })
+    if (!parsed.success) return reply.status(400).send({ success: false, error: 'Invalid request body' })
 
     const workspaceId = (req as unknown as { workspaceId: string }).workspaceId ?? 'default'
     const { windowMs, requestedBy } = parsed.data
@@ -95,7 +99,7 @@ export const briefingRoutes: FastifyPluginAsync = async (app) => {
       .where(and(eq(briefings.id, id), eq(briefings.workspaceId, workspaceId)))
       .limit(1)
 
-    if (!briefing) return reply.status(404).send({ error: 'Briefing not found' })
+    if (!briefing) return reply.status(404).send({ success: false, error: 'Briefing not found' })
 
     const items = await db.select()
       .from(briefingItems)
@@ -118,7 +122,7 @@ export const briefingRoutes: FastifyPluginAsync = async (app) => {
     })
 
     const parsed = schema.safeParse(req.body)
-    if (!parsed.success) return reply.status(400).send({ error: 'Invalid request body' })
+    if (!parsed.success) return reply.status(400).send({ success: false, error: 'Invalid request body' })
     const { workflowId, context, convertedBy } = parsed.data
 
     // Fetch item — verify ownership
@@ -131,8 +135,8 @@ export const briefingRoutes: FastifyPluginAsync = async (app) => {
       ))
       .limit(1)
 
-    if (!item) return reply.status(404).send({ error: 'Briefing item not found' })
-    if (item.converted) return reply.status(409).send({ error: 'Item already converted to a task' })
+    if (!item) return reply.status(404).send({ success: false, error: 'Briefing item not found' })
+    if (item.converted) return reply.status(409).send({ success: false, error: 'Item already converted to a task' })
 
     // Resolve workflow definition — use provided or find/create a generic one
     let resolvedWorkflowId = workflowId

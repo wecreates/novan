@@ -11,7 +11,7 @@
 import { createHash, createHmac } from 'node:crypto'
 import { writeFile, mkdir }       from 'node:fs/promises'
 import { existsSync }             from 'node:fs'
-import { join }                   from 'node:path'
+import { join, resolve, sep }     from 'node:path'
 
 export interface StoreResult {
   storedUrl: string
@@ -26,17 +26,52 @@ export function s3Configured(): boolean {
   return !!(process.env['AWS_S3_BUCKET'] && process.env['AWS_S3_REGION'] && process.env['AWS_ACCESS_KEY_ID'] && process.env['AWS_SECRET_ACCESS_KEY'])
 }
 
+/** Hard cap on bytes downloaded per image. Provider-generated images are
+ *  ~5 MB at the high end; 50 MB gives 10× headroom while preventing a
+ *  malicious URL from filling the disk in one call. */
+const MAX_IMAGE_BYTES = 50 * 1024 * 1024
+
 async function fetchBytes(url: string): Promise<Buffer> {
   // Data URL passthrough
   if (url.startsWith('data:')) {
     const [meta, payload] = url.split(',', 2)
     if (!meta || !payload) throw new Error('invalid data url')
-    if (meta.includes(';base64')) return Buffer.from(payload, 'base64')
-    return Buffer.from(decodeURIComponent(payload), 'utf8')
+    const buf = meta.includes(';base64')
+      ? Buffer.from(payload, 'base64')
+      : Buffer.from(decodeURIComponent(payload), 'utf8')
+    if (buf.length > MAX_IMAGE_BYTES) {
+      throw new Error(`data url too large: ${buf.length} bytes (max ${MAX_IMAGE_BYTES})`)
+    }
+    return buf
   }
   const res = await fetch(url, { signal: AbortSignal.timeout(60_000) })
   if (!res.ok) throw new Error(`fetch ${res.status}`)
-  return Buffer.from(await res.arrayBuffer())
+  // Pre-check Content-Length when present. Catches large payloads before
+  // we materialize them in memory.
+  const declared = Number(res.headers.get('content-length') ?? 0)
+  if (Number.isFinite(declared) && declared > MAX_IMAGE_BYTES) {
+    throw new Error(`image too large: ${declared} bytes (max ${MAX_IMAGE_BYTES})`)
+  }
+  // Stream + enforce running total in case Content-Length was lying or absent.
+  const reader = res.body?.getReader()
+  if (!reader) {
+    const buf = Buffer.from(await res.arrayBuffer())
+    if (buf.length > MAX_IMAGE_BYTES) throw new Error(`image too large: ${buf.length} bytes`)
+    return buf
+  }
+  const chunks: Uint8Array[] = []
+  let total = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.length
+    if (total > MAX_IMAGE_BYTES) {
+      await reader.cancel().catch(() => null)
+      throw new Error(`image exceeded ${MAX_IMAGE_BYTES} bytes mid-stream — aborted`)
+    }
+    chunks.push(value)
+  }
+  return Buffer.concat(chunks.map(c => Buffer.from(c)))
 }
 
 // ─── S3 PutObject via AWS Signature v4 (no SDK dep) ──────────────────────────
@@ -102,12 +137,38 @@ async function s3Put(key: string, bytes: Buffer, contentType: string): Promise<s
 
 async function localPut(key: string, bytes: Buffer): Promise<string> {
   if (!existsSync(LOCAL_DIR)) await mkdir(LOCAL_DIR, { recursive: true })
-  const path = join(LOCAL_DIR, key)
-  await writeFile(path, bytes)
-  return `file://${path}`
+  // Defense in depth: even though `key` here is built from imageId +
+  // a known extension, callers have been known to pass values like
+  // `../../../etc/passwd`. resolve() + prefix-check ensures the final
+  // path stays within LOCAL_DIR.
+  const base = resolve(LOCAL_DIR)
+  const target = resolve(base, key)
+  if (!target.startsWith(base + sep) && target !== base) {
+    throw new Error(`localPut: refused path traversal: ${key}`)
+  }
+  await writeFile(target, bytes)
+  return `file://${target}`
 }
 
 // ─── Public ──────────────────────────────────────────────────────────────────
+
+/** Sniff the leading bytes of a buffer for a supported image MIME type.
+ *  Returns null if no signature matches — the caller refuses persistence
+ *  on null. Without this check, a `data:text/plain;…` URL or an HTML
+ *  error page from a provider would land on disk as a `.png`. */
+function detectImageMime(buf: Buffer): 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' | null {
+  if (buf.length < 12) return null
+  // JPEG: FF D8 FF
+  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'image/jpeg'
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return 'image/png'
+  // WebP: 'RIFF' …4 bytes… 'WEBP'
+  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46
+      && buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return 'image/webp'
+  // GIF: 'GIF87a' | 'GIF89a'
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) return 'image/gif'
+  return null
+}
 
 /**
  * Persist the image referenced by `sourceUrl`. Returns the durable URL.
@@ -120,7 +181,18 @@ export async function storeImage(opts: {
   contentType?: string
 }): Promise<StoreResult> {
   const bytes = await fetchBytes(opts.sourceUrl)
-  const ext = (opts.contentType ?? 'image/png').includes('jpeg') ? 'jpg' : 'png'
+  // MIME validation: sniff the magic bytes rather than trusting the
+  // caller-supplied contentType. A data URL like `data:text/plain;…`
+  // would previously land on disk with a `.png` extension because the
+  // detection used `.includes('jpeg')` on the contentType string alone.
+  const detected = detectImageMime(bytes)
+  if (!detected) {
+    throw new Error(`storeImage: bytes do not match any supported image format (jpeg/png/webp/gif)`)
+  }
+  const ext = detected === 'image/jpeg' ? 'jpg'
+            : detected === 'image/png'  ? 'png'
+            : detected === 'image/webp' ? 'webp'
+            : 'gif'
   const key = `images/${opts.imageId}.${ext}`
 
   if (s3Configured()) {

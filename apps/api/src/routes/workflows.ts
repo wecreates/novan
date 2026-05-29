@@ -88,8 +88,13 @@ export const workflowRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ success: true, data: definitions })
   })
 
-  // Trigger a workflow run
-  app.post('/:id/run', { onRequest: [app.authenticate] }, async (req, reply) => {
+  // Trigger a workflow run — enqueues a job that may run LLM calls,
+  // browser sessions, or code execution. Per-IP cap of 30/min prevents
+  // accidental flood from a runaway client.
+  app.post('/:id/run', {
+    onRequest: [app.authenticate],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     const { id }      = req.params as { id: string }
     const workspaceId = req.workspaceId as WorkspaceId
     const body        = TriggerRunSchema.parse(req.body)

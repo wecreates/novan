@@ -5,6 +5,7 @@ import { useState }                          from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Building2, ExternalLink, Plus, Pencil, BarChart2, Search, X, Check } from 'lucide-react'
 import { businessApi, type Business }        from '../api.js'
+import { NavLink }                            from 'react-router-dom'
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -331,7 +332,7 @@ function BusinessCard({
       {/* Top: name + badges */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-primary truncate">{business.name}</div>
+          <NavLink to={`/businesses/${business.id}`} className="text-sm font-semibold text-primary truncate hover:text-[var(--accent)] block">{business.name}</NavLink>
           <div className="flex items-center gap-1.5 flex-wrap mt-1">
             {business.industry && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400">

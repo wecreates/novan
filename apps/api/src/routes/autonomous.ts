@@ -44,7 +44,9 @@ const autonomousRoutes: FastifyPluginAsync = async (fastify) => {
   }>('/runs', async (req, reply) => {
     const { workspace_id, limit } = req.query
     if (!workspace_id) return reply.code(400).send({ success: false, error: 'workspace_id required' })
-    const runs = await listRuns(workspace_id, limit ? Number(limit) : 50)
+    const parsedLimit = limit ? Number(limit) : 50
+    const safeLimit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 500) : 50
+    const runs = await listRuns(workspace_id, safeLimit)
     return { success: true, data: runs }
   })
 

@@ -57,7 +57,11 @@ const WebCaptureSchema = z.object({
 export const browserRoutes: FastifyPluginAsync = async (app) => {
 
   // POST /tasks — submit a web-capture task
-  app.post('/tasks', { onRequest: [app.authenticate] }, async (req, reply) => {
+  app.post('/tasks', {
+    onRequest: [app.authenticate],
+    // Each task spawns a Playwright session — expensive, cap at 15/min.
+    config: { rateLimit: { max: 15, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     const workspaceId = req.workspaceId as WorkspaceId
     const parsed = WebCaptureSchema.safeParse(req.body)
     if (!parsed.success) {

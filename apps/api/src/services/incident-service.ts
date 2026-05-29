@@ -95,6 +95,11 @@ async function createOrUpdateIncident(
     if (!prev) return { id: existingId, isNew: false, signalCount: candidate.signalCount }
 
     const mergedIds = [...new Set([...(prev.linkedEventIds ?? []), ...candidate.linkedEventIds])]
+    // R142 — also refresh summary so the operator sees current state.
+    // Previously: incident opened with "1 health check reported X as
+    // degraded" and summary stayed that way even after signal_count
+    // climbed to 194. New candidate summaries already include the
+    // latest aggregate ("N health checks..."), so adopt them.
     await db.update(incidents).set({
       signalCount:        prev.signalCount + candidate.signalCount,
       linkedEventIds:     mergedIds,
@@ -102,6 +107,8 @@ async function createOrUpdateIncident(
             candidate.severity === 'emergency' ? 'emergency'
           : candidate.severity === 'critical' && prev.severity !== 'emergency' ? 'critical'
           : prev.severity,
+      title:              candidate.title,
+      summary:            candidate.summary,
       updatedAt:          now,
     }).where(eq(incidents.id, existingId))
 

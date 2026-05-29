@@ -7,19 +7,24 @@
  */
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber'
 import { OrbitControls, Html, AdaptiveDpr, AdaptiveEvents, Stats } from '@react-three/drei'
 import {
   Brain, Filter, Eye, Sparkles, Activity, X, Loader2,
   ChevronDown, Search, Pause, Play, ShieldCheck, Network, AlertOctagon,
   Command, ArrowLeft, Clock, History, Bookmark, ChevronRight,
+  MoreHorizontal,
 } from 'lucide-react'
 import * as THREE from 'three'
 import { api } from '../api.js'
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
 import { COLOR, STATUS_COLOR as STATUS_COLOR_TOKEN } from '../design/tokens.js'
 import { tone } from '../design/audio.js'
+import { VoiceHaloVisualizer } from '../components/voice-visuals/VoiceHaloVisualizer.js'
+import { VoiceVisualControls } from '../components/voice-visuals/VoiceVisualControls.js'
+import { BrainPulseGroup, OrbitRings } from '../components/voice-visuals/BrainR3FVisuals.js'
+import { useVoiceVisual } from '../contexts/VoiceVisualContext.js'
 
 // ─── Types from API ──────────────────────────────────────────────────────
 
@@ -188,10 +193,12 @@ function BrainScene({
       <pointLight position={[-10, -10, -10]} intensity={0.3} color="#64748b" />
 
       {/* Edges first so spheres render on top */}
-      {graph.edges.map((e, i) => {
+      {graph.edges.map((e) => {
         const a = posById.get(e.from); const b = posById.get(e.to)
         if (!a || !b) return null
-        return <Edge key={i} from={a} to={b} />
+        // Stable key — array-index keys cause React to mis-reuse Edge
+        // refs when the graph mutates, leaking three.js geometries.
+        return <Edge key={`${e.from}::${e.to}`} from={a} to={b} />
       })}
 
       {graph.nodes.map(n => (
@@ -204,8 +211,9 @@ function BrainScene({
       <OrbitControls
         ref={controlsRef as any}
         enableDamping dampingFactor={0.08}
-        rotateSpeed={0.6} zoomSpeed={0.7}
+        rotateSpeed={0.6} zoomSpeed={0.8}
         minDistance={3} maxDistance={50}
+        zoomToCursor
       />
       <AdaptiveDpr pixelated />
       <AdaptiveEvents />
@@ -218,7 +226,15 @@ function BrainScene({
 export default function BrainPage() {
   const { workspaceId } = useWorkspace()
   const qc = useQueryClient()
-  const [template, setTemplate] = useState('neural')
+  // Default template is whichever the operator selected on /account.
+  // Falls back to 'neural' on a fresh browser. ?template= still overrides.
+  const [template, setTemplate] = useState<string>(() => {
+    try { return localStorage.getItem('novan:brain-template') ?? 'neural' } catch { return 'neural' }
+  })
+  // Persist any in-page template change so /account reflects it on next visit.
+  useEffect(() => {
+    try { localStorage.setItem('novan:brain-template', template) } catch {}
+  }, [template])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -248,23 +264,22 @@ export default function BrainPage() {
   // URL params for deep-linking from War Room (Incidents/Proposals/Audit)
   const [searchParams] = useSearchParams()
   const screenshotMode = searchParams.get('screenshot') === '1'
+  // React to URL changes so voice navigation (e.g. ?focus=security) is live.
   useEffect(() => {
-    const at = searchParams.get('replay_at')
-    const node = searchParams.get('node')
-    const tpl = searchParams.get('template')
+    const at    = searchParams.get('replay_at')
+    const node  = searchParams.get('node')
+    const tpl   = searchParams.get('template')
     const focus = searchParams.get('focus')
+    const lodQ  = searchParams.get('lod')
     if (at) {
       const n = Number(at)
-      if (Number.isFinite(n)) {
-        setReplayMode(true)
-        setReplayAtMs(n)
-      }
+      if (Number.isFinite(n)) { setReplayMode(true); setReplayAtMs(n) }
     }
     if (tpl && TEMPLATES.find(t => t.id === tpl)) setTemplate(tpl)
     if (focus) { setFocusSystem(focus); setLod('focus') }
+    else if (lodQ === 'global' || lodQ === 'systems') { setFocusSystem(null); setLod(lodQ) }
     if (node) setSelectedId(node)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [searchParams])
 
   // Backend-synced saved views
   const savedViewsQuery = useQuery({
@@ -302,8 +317,38 @@ export default function BrainPage() {
       })
       return api.get<{ data: BrainGraph }>(`/api/v1/brain/graph?${params}`)
     },
-    refetchInterval: replayMode ? false : 15_000,
+    // 24/7 brain: keep polling even when the tab is backgrounded so the
+    // map reflects reality the instant the operator switches back. Also
+    // refetch on window focus + network reconnect (set globally on the
+    // QueryClient, repeated here to make the intent explicit).
+    refetchInterval:             replayMode ? false : 15_000,
+    refetchIntervalInBackground: !replayMode,
+    refetchOnWindowFocus:        true,
+    refetchOnReconnect:          true,
+    // Keep the previous template's graph painted while the new one
+    // loads — switching templates feels instant instead of going blank
+    // for the ~200ms network roundtrip.
+    placeholderData:             keepPreviousData,
   })
+
+  // Prefetch the other templates on mount so cold switches are
+  // ~0ms after the first visit. ~600ms of one-time work amortised
+  // across every subsequent switch.
+  useEffect(() => {
+    if (replayMode) return
+    for (const t of TEMPLATES) {
+      if (t.id === template) continue
+      const tpl = t.id
+      void qc.prefetchQuery({
+        queryKey: ['brain-graph', workspaceId, tpl, lod, focusSystem, false, null],
+        queryFn: () => {
+          const params = new URLSearchParams({ workspace_id: workspaceId, template: tpl, lod, ...(focusSystem ? { focus: focusSystem } : {}) })
+          return api.get<{ data: BrainGraph }>(`/api/v1/brain/graph?${params}`)
+        },
+        staleTime: 30_000,
+      })
+    }
+  }, [workspaceId, template, lod, focusSystem, replayMode, qc])
 
   const timeline = useQuery({
     queryKey: ['brain-timeline', workspaceId, timeRange],
@@ -324,7 +369,11 @@ export default function BrainPage() {
       const key = selectedId?.startsWith('mem:') ? selectedId.slice(4) : selectedId
       return api.get<{ data: DecisionPath }>(`/api/v1/brain/decision-path/${encodeURIComponent(key ?? '')}?workspace_id=${workspaceId}&window_minutes=${windowMinutes}`)
     },
-    enabled: !!selectedId && (selectedId.startsWith('mem:') || replayMode),
+    // Enable for ANY selected node — the decision-path query is cheap
+    // (1 SELECT against reasoning_chains scoped by subjectId) and gives
+    // the operator immediate context on why this node is in the state
+    // it's in.
+    enabled: !!selectedId,
   })
 
   const paletteResults = useQuery({
@@ -494,21 +543,25 @@ export default function BrainPage() {
 
   return (
     <div className="fixed inset-0 bg-bg text-primary flex flex-col">
-      {/* Top command bar — hidden in screenshot mode */}
-      <div className={`glass border-b border-border px-4 py-2 flex items-center gap-3 text-xs z-overlay relative ${screenshotMode ? 'hidden' : ''}`}>
-        <Brain className="w-4 h-4 text-healthy" />
-        <span className="font-medium text-primary tracking-tight">Novan Brain</span>
+      {/* Consolidated command bar — primary controls inline, secondary
+         knobs tucked behind an overflow menu (…). The brain stays the
+         star of the page; the bar is just a single thin strip. */}
+      <div className={`glass border-b border-border px-4 py-2 flex items-center gap-2 text-xs z-overlay relative ${screenshotMode ? 'hidden' : ''}`}>
+        <Brain className="w-4 h-4 text-healthy shrink-0" />
 
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-1.5 text-muted">
-          <button onClick={clearFocus} className="hover:text-primary flex items-center gap-1 transition-colors duration-fast ease-out">
-            <Brain className="w-3 h-3" /> global
-          </button>
-          {focusSystem && (
+        {/* Breadcrumb — focus + selection only (the global / brand
+           wordmark is implicit in the sidebar). */}
+        <div className="flex items-center gap-1.5 text-muted shrink-0 min-w-0">
+          {focusSystem ? (
             <>
+              <button onClick={clearFocus} className="hover:text-primary flex items-center gap-1 transition-colors">
+                <ArrowLeft className="w-3 h-3" /> global
+              </button>
               <ChevronRight className="w-3 h-3 text-faint" />
-              <span className="text-healthy font-mono">{focusSystem}</span>
+              <span className="text-healthy font-mono truncate max-w-[120px]">{focusSystem}</span>
             </>
+          ) : (
+            <span className="font-medium text-primary tracking-tight">Brain</span>
           )}
           {selectedId && (
             <>
@@ -518,41 +571,19 @@ export default function BrainPage() {
           )}
         </div>
 
-        <Dropdown label="Template" icon={<Eye className="w-3 h-3" />}
-          options={TEMPLATES} value={template} onChange={setTemplate} />
+        {/* Search — primary input, always visible. */}
+        <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--bg-elevated)] border border-[var(--border)] focus-within:border-[var(--border-strong)] transition-colors ml-1">
+          <Search className="w-3 h-3 text-muted" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') onSearchEnter() }}
+            placeholder="search nodes…"
+            className="bg-transparent outline-none w-40 text-[11px] placeholder:text-[var(--text-muted)]" />
+          <button onClick={() => setPaletteOpen(true)}
+            title="Open palette (⌘K)"
+            className="ml-1 px-1 py-0.5 rounded text-[9px] font-mono text-muted border border-[var(--border)] hover:bg-[var(--surface-hover)] hover:text-primary transition-colors">⌘K</button>
+        </div>
 
-        <Dropdown label="Status" icon={<Filter className="w-3 h-3" />}
-          options={[
-            { id: 'all', label: 'All' },
-            { id: 'healthy', label: 'Healthy' },
-            { id: 'degraded', label: 'Degraded' },
-            { id: 'down', label: 'Down' },
-            { id: 'paused', label: 'Paused' },
-            { id: 'pending', label: 'Pending' },
-          ]} value={statusFilter} onChange={setStatusFilter} />
-
-        <Dropdown label="View" icon={<Network className="w-3 h-3" />}
-          options={[
-            { id: '3d', label: '3D' },
-            { id: '2d', label: '2D fallback' },
-          ]} value={fallback2D ? '2d' : '3d'} onChange={v => setFallback2D(v === '2d')} />
-
-        <Dropdown label="LOD" icon={<Eye className="w-3 h-3" />}
-          options={[
-            { id: 'global',  label: 'Global only' },
-            { id: 'systems', label: 'Systems + subnodes' },
-            { id: 'focus',   label: 'Focus selected system' },
-          ]} value={lod} onChange={v => setLod(v as 'systems' | 'global' | 'focus')} />
-
-        <Dropdown label={replayMode ? 'Replay' : 'Mode'} icon={<History className="w-3 h-3" />}
-          options={[
-            { id: 'live',   label: 'Live' },
-            { id: 'replay', label: 'Replay' },
-          ]} value={replayMode ? 'replay' : 'live'} onChange={v => {
-            setReplayMode(v === 'replay')
-            if (v === 'replay') setReplayAtMs(Date.now())
-          }} />
-
+        {/* Replay mode pill — visible only when in replay (high-signal). */}
         {replayMode && (
           <Dropdown label="Range" icon={<Clock className="w-3 h-3" />}
             options={[
@@ -563,40 +594,21 @@ export default function BrainPage() {
             ]} value={timeRange} onChange={v => setTimeRange(v as '15m' | '1h' | '24h' | '7d')} />
         )}
 
-        <div className="flex items-center gap-1 ml-2 px-2 py-1 rounded bg-white/5 border border-white/10">
-          <Search className="w-3 h-3 text-white/40" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') onSearchEnter() }}
-            placeholder="search nodes…"
-            className="bg-transparent outline-none w-44 text-[11px]" />
-        </div>
+        {/* Voice visuals — its own consolidated dropdown */}
+        <VoiceVisualControls />
 
-        <button onClick={() => setPaletteOpen(true)}
-          className="ml-2 px-2 py-1 rounded text-[10px] border border-border hover:bg-[var(--surface-hover)] flex items-center gap-1.5 transition-colors duration-fast ease-out">
-          <Command className="w-3 h-3" /> ⌘K
-        </button>
+        {/* Everything else lives behind the overflow … */}
+        <BrainOverflowMenu
+          template={template} setTemplate={setTemplate}
+          statusFilter={statusFilter} setStatusFilter={setStatusFilter}
+          fallback2D={fallback2D} setFallback2D={setFallback2D}
+          lod={lod} setLod={setLod}
+          replayMode={replayMode} setReplayMode={setReplayMode} setReplayAtMs={setReplayAtMs}
+          showFps={showFps} setShowFps={setShowFps}
+          saveView={saveView}
+        />
 
-        <button onClick={() => setShowFps(f => !f)}
-          title="Toggle FPS stats"
-          className={`px-2 py-1 rounded text-[10px] border transition-colors duration-fast ease-out ${
-            showFps ? 'border-[rgba(103,232,249,0.30)] text-active bg-[rgba(103,232,249,0.05)]' : 'border-border text-muted hover:bg-[var(--surface-hover)]'
-          }`}>
-          fps
-        </button>
-
-        <button onClick={saveView} title="Save current view"
-          className="px-2 py-1 rounded text-[10px] border border-white/10 hover:bg-white/5 flex items-center gap-1">
-          <Bookmark className="w-3 h-3" />
-        </button>
-
-        {focusSystem && (
-          <button onClick={clearFocus}
-            className="px-2 py-1 rounded text-[10px] border border-white/10 hover:bg-white/5 flex items-center gap-1">
-            <ArrowLeft className="w-3 h-3" /> global
-          </button>
-        )}
-
-        <span className="ml-auto text-[10px] text-white/40">
+        <span className="ml-auto text-[10px] text-muted shrink-0 truncate">
           {replayMode && <span className="text-amber-300 mr-2">⏸ READ-ONLY · {new Date(replayAtMs).toLocaleTimeString()}</span>}
           {g ? `${g.nodes.length} nodes · ${g.systems.length} systems` : graph.isLoading ? 'loading…' : 'no graph'}
         </span>
@@ -621,20 +633,42 @@ export default function BrainPage() {
               <color attach="background" args={[COLOR.bg]} />
               <fog attach="fog" args={[COLOR.bg, 25, 60]} />
               <Suspense fallback={null}>
-                <BrainScene
-                  graph={filteredGraph}
-                  selectedId={selectedId}
-                  hoveredId={hoveredId}
-                  onNodeClick={onNodeClick}
-                  onNodeDoubleClick={onNodeDoubleClick}
-                  onNodeHover={(n) => setHoveredId(n?.id ?? null)}
-                  focusOn={focusOn}
-                />
+                {/* Voice-reactive 3D layer:
+                   - BrainPulseGroup wraps the scene so the brain
+                     softly breathes with voice amplitude.
+                   - OrbitRings render concentric expanding rings on
+                     speech. Both subscribe to VoiceVisualContext and
+                     no-op when settings disable them. */}
+                <BrainPulseGroup>
+                  <BrainScene
+                    graph={filteredGraph}
+                    selectedId={selectedId}
+                    hoveredId={hoveredId}
+                    onNodeClick={onNodeClick}
+                    onNodeDoubleClick={onNodeDoubleClick}
+                    onNodeHover={(n) => setHoveredId(n?.id ?? null)}
+                    focusOn={focusOn}
+                  />
+                </BrainPulseGroup>
+                <OrbitRings origin={[0, 0, 0]} />
                 {showFps && <Stats className="!left-auto !right-2 !top-auto !bottom-2" />}
               </Suspense>
             </Canvas>
+            {/* SVG overlay halo — sits above the canvas, never blocks
+               interaction (pointer-events: none). Hidden when mode=off. */}
+            <VoiceHaloVisualizer />
           </ErrorBoundary>
         )}
+
+        {/* Interaction hint — auto-dismisses after first interaction.
+           Operators often don't realize the 3D scene rotates / zooms. */}
+        {!screenshotMode && <BrainInteractionHint />}
+
+        {/* Preview voice-visuals CTA — only renders when nothing is
+           speaking + no mic stream, so it never competes with real
+           audio for attention. Click → synthetic amplitude drives
+           the halo/pulse/rings/equalizer for testing. */}
+        {!screenshotMode && <BrainPreviewCTA />}
 
         {/* All overlay chrome below hides in ?screenshot=1 mode */}
         {!screenshotMode && eventTicker.length > 0 && (
@@ -943,8 +977,8 @@ function DetailDrawer({
         <div className="text-xs mb-3">
           <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Recent events</div>
           <ul className="space-y-0.5">
-            {detail.events.slice(0, 5).map((e, i) => (
-              <li key={i} className="text-white/70">
+            {detail.events.slice(0, 5).map((e) => (
+              <li key={`${e.at}-${e.summary.slice(0, 24)}`} className="text-white/70">
                 <span className="text-white/40">{new Date(e.at).toLocaleTimeString()}</span>{' '}
                 {e.summary}
               </li>
@@ -1141,4 +1175,244 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode; onError
     }
     return this.props.children
   }
+}
+
+// ─── Brain Overflow Menu ──────────────────────────────────────────────
+// Tucks secondary header controls (template / status / view / lod /
+// replay mode / fps / save view) into a single … dropdown so the
+// command bar stays calm. Controls grouped by purpose, not source-
+// order. Click-outside closes.
+
+interface OverflowProps {
+  template:     string
+  setTemplate:  (v: string) => void
+  statusFilter: string
+  setStatusFilter: (v: string) => void
+  fallback2D:   boolean
+  setFallback2D: (v: boolean) => void
+  lod:          'systems' | 'global' | 'focus'
+  setLod:       (v: 'systems' | 'global' | 'focus') => void
+  replayMode:   boolean
+  setReplayMode: (v: boolean) => void
+  setReplayAtMs: (v: number) => void
+  showFps:      boolean
+  setShowFps:   (v: boolean) => void
+  saveView:     () => void
+}
+
+function BrainOverflowMenu(p: OverflowProps) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const fn = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    window.addEventListener('mousedown', fn)
+    return () => window.removeEventListener('mousedown', fn)
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen(s => !s)}
+        title="More brain controls"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="px-2 py-1 rounded-md border border-[var(--border)] hover:border-[var(--border-strong)] text-muted hover:text-primary transition-colors focus-ring">
+        <MoreHorizontal className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <div role="menu"
+          className="absolute top-full right-0 mt-1 panel-elevated dropdown-in min-w-[260px] z-dropdown overflow-hidden p-1">
+
+          {/* Layout */}
+          <Section label="Layout">
+            <Row label="Template">
+              <SelectInline value={p.template} onChange={p.setTemplate}
+                options={TEMPLATES} />
+            </Row>
+            <Row label="Detail (LOD)">
+              <SelectInline value={p.lod} onChange={(v) => p.setLod(v as OverflowProps['lod'])}
+                options={[
+                  { id: 'global',  label: 'Global only' },
+                  { id: 'systems', label: 'Systems + subnodes' },
+                  { id: 'focus',   label: 'Focus selected' },
+                ]} />
+            </Row>
+            <Row label="Renderer">
+              <SelectInline value={p.fallback2D ? '2d' : '3d'} onChange={v => p.setFallback2D(v === '2d')}
+                options={[
+                  { id: '3d', label: '3D' },
+                  { id: '2d', label: '2D fallback' },
+                ]} />
+            </Row>
+          </Section>
+
+          {/* Filter */}
+          <Section label="Filter">
+            <Row label="Status">
+              <SelectInline value={p.statusFilter} onChange={p.setStatusFilter}
+                options={[
+                  { id: 'all', label: 'All' },
+                  { id: 'healthy',  label: 'Healthy' },
+                  { id: 'degraded', label: 'Degraded' },
+                  { id: 'down',     label: 'Down' },
+                  { id: 'paused',   label: 'Paused' },
+                  { id: 'pending',  label: 'Pending' },
+                ]} />
+            </Row>
+          </Section>
+
+          {/* Mode */}
+          <Section label="Mode">
+            <Row label="Live / Replay">
+              <SelectInline value={p.replayMode ? 'replay' : 'live'}
+                onChange={v => {
+                  const next = v === 'replay'
+                  p.setReplayMode(next)
+                  if (next) p.setReplayAtMs(Date.now())
+                }}
+                options={[
+                  { id: 'live',   label: 'Live' },
+                  { id: 'replay', label: 'Replay' },
+                ]} />
+            </Row>
+          </Section>
+
+          {/* Actions */}
+          <Section label="Actions" last>
+            <button
+              onClick={() => { p.saveView(); setOpen(false) }}
+              role="menuitem"
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-secondary hover:text-primary hover:bg-[var(--surface-hover)] rounded transition-colors">
+              <Bookmark className="w-3 h-3" /> Save current view
+            </button>
+            <button
+              onClick={() => { p.setShowFps(!p.showFps); setOpen(false) }}
+              role="menuitemcheckbox"
+              aria-checked={p.showFps}
+              className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-[12px] text-secondary hover:text-primary hover:bg-[var(--surface-hover)] rounded transition-colors">
+              <span className="flex items-center gap-2">
+                <Activity className="w-3 h-3" /> FPS stats
+              </span>
+              <span className={`text-[10px] font-mono ${p.showFps ? 'text-[var(--accent-active)]' : 'text-muted'}`}>
+                {p.showFps ? 'ON' : 'OFF'}
+              </span>
+            </button>
+          </Section>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Section({ label, children, last }: { label: string; children: React.ReactNode; last?: boolean }) {
+  return (
+    <div className={last ? '' : 'border-b border-[var(--border)] pb-1 mb-1'}>
+      <div className="text-[10px] uppercase tracking-[0.12em] text-muted px-3 pt-1.5 pb-0.5">{label}</div>
+      {children}
+    </div>
+  )
+}
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-3 py-1.5">
+      <span className="text-[12px] text-secondary">{label}</span>
+      <span className="shrink-0">{children}</span>
+    </div>
+  )
+}
+function SelectInline({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: Array<{ id: string; label: string }> }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}
+      className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2 py-0.5 text-[11px] text-primary focus-ring outline-none cursor-pointer">
+      {options.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+    </select>
+  )
+}
+
+// ─── Brain Preview CTA ────────────────────────────────────────────────
+// When /brain is mounted but no audio is flowing, surface a subtle
+// pill at the bottom-center that lets the operator preview the voice-
+// reactive visuals without granting mic access. Vanishes the moment
+// real audio (TTS playback or stream attachment) takes over.
+
+function BrainPreviewCTA() {
+  const { audio, ctl, settings } = useVoiceVisual()
+  // Hide when visuals are off entirely
+  if (settings.mode === 'off') return null
+  // Hide when there's any real signal — TTS playback or mic listening
+  if (audio.amplitude > 0.04 || audio.isSpeaking || audio.isListening) return null
+
+  if (audio.preview) {
+    return (
+      <button
+        onClick={() => ctl.setPreview(false)}
+        className="absolute bottom-4 left-1/2 -translate-x-1/2 z-overlay px-3 py-1.5 rounded-full bg-[var(--bg-glass-strong)] backdrop-blur border border-[var(--accent-active)]/50 text-[11px] text-[var(--accent-active)] flex items-center gap-1.5 hover:border-[var(--accent-active)] transition-colors focus-ring shadow-lg"
+        title="Preview is synthetic — Novan is not actually speaking">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--accent-active)] opacity-60 animate-ping" />
+          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[var(--accent-active)]" />
+        </span>
+        Preview running — click to stop
+      </button>
+    )
+  }
+
+  return (
+    <button
+      onClick={() => ctl.setPreview(true)}
+      className="absolute bottom-4 left-1/2 -translate-x-1/2 z-overlay px-3 py-1.5 rounded-full bg-[var(--bg-glass-strong)] backdrop-blur border border-[var(--border)] hover:border-[var(--border-strong)] text-[11px] text-muted hover:text-primary flex items-center gap-1.5 transition-colors focus-ring opacity-70 hover:opacity-100"
+      title="Run synthetic audio to test the voice-reactive visuals — no microphone used">
+      <Play className="w-3 h-3" />
+      Preview voice visuals
+    </button>
+  )
+}
+
+// ─── Interaction hint ─────────────────────────────────────────────────
+// Tells operators how to interact with the 3D scene. Auto-dismisses
+// after first pointerdown OR first wheel — by the time someone has
+// scrolled or clicked, they don't need to see the legend anymore.
+// Sticky-dismissed in localStorage so it doesn't re-appear after
+// every page reload.
+
+function BrainInteractionHint() {
+  const HINT_KEY = 'novan:brain-hint-dismissed'
+  const [visible, setVisible] = useState(() => {
+    try { return localStorage.getItem(HINT_KEY) !== '1' } catch { return true }
+  })
+  useEffect(() => {
+    if (!visible) return
+    const dismiss = () => {
+      setVisible(false)
+      try { localStorage.setItem(HINT_KEY, '1') } catch {}
+    }
+    // Any meaningful interaction with the scene → dismiss
+    window.addEventListener('pointerdown', dismiss, { once: true })
+    window.addEventListener('wheel', dismiss, { once: true, passive: true })
+    return () => {
+      window.removeEventListener('pointerdown', dismiss)
+      window.removeEventListener('wheel', dismiss)
+    }
+  }, [visible])
+
+  if (!visible) return null
+  return (
+    <div className="absolute top-3 left-1/2 -translate-x-1/2 pointer-events-none z-overlay fade-in">
+      <div className="px-3 py-1.5 rounded-full bg-[var(--bg-glass-strong)] border border-[var(--border)] backdrop-blur-sm flex items-center gap-3 text-[11px] text-[var(--text-secondary)]">
+        <span className="flex items-center gap-1">
+          <span className="font-mono text-[var(--text-muted)]">drag</span> rotate
+        </span>
+        <span className="text-[var(--text-faint)]">·</span>
+        <span className="flex items-center gap-1">
+          <span className="font-mono text-[var(--text-muted)]">scroll</span> zoom
+        </span>
+        <span className="text-[var(--text-faint)]">·</span>
+        <span className="flex items-center gap-1">
+          <span className="font-mono text-[var(--text-muted)]">click</span> inspect
+        </span>
+      </div>
+    </div>
+  )
 }

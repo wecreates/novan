@@ -292,10 +292,7 @@ export async function markAssignmentComplete(
     updatedAt:    now,
   }).where(eq(agentAssignments.id, assignmentId))
 
-  // Release all locks held by this assignment
-  const heldLocks = await db.select({ id: 'execution_locks.id' as never }).from(events) // placeholder
-  void heldLocks
-  // Actually release by holderId — lock-manager API
+  // Release all locks held by this assignment via lock-manager API
   const { releaseLock: _r } = await import('./lock-manager.js')
   void _r
   // Get lock IDs held by this assignmentId

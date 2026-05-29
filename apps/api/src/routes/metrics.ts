@@ -1,6 +1,7 @@
 /**
  * Metrics route — Prometheus-compatible /metrics endpoint.
- * Exposes queue depths, runtime stats, and API health.
+ * Exposes queue depths, runtime stats, API health, AND the R119
+ * counter/gauge registry (cron ticks, media analyses, etc.).
  */
 import type { FastifyPluginAsync } from 'fastify'
 import { getQueueMetrics }         from '../queues/index.js'
@@ -9,7 +10,7 @@ export const metricsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/', async (_req, reply) => {
     const queueMetrics = await getQueueMetrics()
 
-    const lines: string[] = [
+    const queueLines: string[] = [
       '# HELP ops_queue_waiting Number of waiting jobs per queue',
       '# TYPE ops_queue_waiting gauge',
       ...Object.entries(queueMetrics).map(([name, m]) =>
@@ -27,7 +28,16 @@ export const metricsRoutes: FastifyPluginAsync = async (app) => {
       '',
     ]
 
+    // R119 counter/gauge registry (cron tick metrics, media analyses,
+    // recovery executor, etc.). Loaded lazily so this route works even
+    // if the metrics module fails to load for any reason.
+    let registryLines = ''
+    try {
+      const { renderMetrics } = await import('../services/metrics.js')
+      registryLines = renderMetrics()
+    } catch { /* tolerated — registry metrics are best-effort */ }
+
     reply.header('Content-Type', 'text/plain; version=0.0.4')
-    return reply.send(lines.join('\n'))
+    return reply.send(queueLines.join('\n') + (registryLines ? '\n' + registryLines : ''))
   })
 }

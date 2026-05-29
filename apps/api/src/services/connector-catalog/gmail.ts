@@ -1,0 +1,30 @@
+import type { ConnectorDef } from '../connectors.js'
+
+export const gmailDef: ConnectorDef = {
+  id:          'gmail',
+  name:        'Gmail (drafts only)',
+  category:    'communication',
+  description: 'Draft emails into the operator\'s Gmail drafts folder. Sending requires explicit approval.',
+  authType:    'oauth',
+  defaultScopes: ['https://www.googleapis.com/auth/gmail.compose'],
+  optionalScopes: ['https://www.googleapis.com/auth/gmail.readonly'],
+  blockedActions: ['gmail.delete_message', 'gmail.empty_trash'],
+  actions: [
+    { name: 'gmail.list_drafts',  minPermission: 'read',    risk: 'low' },
+    { name: 'gmail.create_draft', minPermission: 'draft',   risk: 'low' },
+    { name: 'gmail.send_message', minPermission: 'publish', risk: 'high' },
+  ],
+  metadataVerified:      true,
+  officialWebsiteUrl:    'https://mail.google.com',
+  signupUrl:             'https://accounts.google.com/signup',
+  loginUrl:              'https://accounts.google.com',
+  developerAppSetupUrl:  'https://console.cloud.google.com/apis/credentials',
+  docsUrl:               'https://developers.google.com/gmail/api',
+  pricingUrl:            'https://workspace.google.com/pricing',
+  statusPageUrl:         'https://www.google.com/appsstatus',
+  permissionExplanation: 'Create email drafts in your Gmail. We never send mail or delete messages without your explicit per-action approval.',
+  accountRequired:       true,
+  supportsOauth:         true,
+  freeTierAvailable:     true,
+  iconKey:               'gmail',
+}

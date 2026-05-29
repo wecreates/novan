@@ -1,0 +1,56 @@
+# fly.api.toml — Novan API on fly.io.
+#
+# Apply with:  fly deploy -c fly.api.toml
+#
+# Assumes you already ran:
+#   fly apps create novan-api
+#   fly secrets set -c fly.api.toml DATABASE_URL=postgresql://… \
+#                                   REDIS_URL=redis://…           \
+#                                   AUTH_SECRET=$(openssl rand -base64 48) \
+#                                   VAULT_MASTER_KEY=$(openssl rand -base64 32)
+#
+# Adjust app + primary_region to taste. The defaults below assume a US
+# West deployment; Neon/Upstash are usually closer to iad/lhr — pick a
+# region near your data store to keep DB roundtrips < 50ms.
+
+app            = "novan-api"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "Dockerfile"            # the root-level Dockerfile
+
+[env]
+  NODE_ENV  = "production"
+  API_HOST  = "0.0.0.0"
+  PORT      = "3001"
+  # Default no-local-heavy-compute. Operator can override via secret if
+  # they explicitly want fly.io to run heavy workloads.
+  NOVAN_LOCAL_HEAVY_COMPUTE = "block"
+
+[http_service]
+  internal_port       = 3001
+  force_https         = true
+  auto_stop_machines  = false        # supervisor wants 24/7 — never auto-stop
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type       = "requests"
+    soft_limit = 100
+    hard_limit = 200
+
+# Health check uses the existing /health endpoint (already wired and
+# verified against real Postgres in this session's boot test).
+[[http_service.checks]]
+  grace_period  = "30s"
+  interval      = "15s"
+  method        = "GET"
+  timeout       = "5s"
+  path          = "/health"
+
+# Single small VM to start. Scale up via:  fly scale vm shared-cpu-2x --memory 2048
+[[vm]]
+  size      = "shared-cpu-1x"
+  memory    = "1gb"
+  cpu_kind  = "shared"
+  cpus      = 1

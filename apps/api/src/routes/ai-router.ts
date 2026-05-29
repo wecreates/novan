@@ -19,7 +19,7 @@
  */
 import type { FastifyPluginAsync } from 'fastify'
 import { v7 as uuidv7 } from 'uuid'
-import { desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { db }         from '../db/client.js'
 import {
   events,
@@ -261,7 +261,9 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
   }>('/configs/:id', {
     schema: { tags: ['ai-router'], summary: 'Update provider config' },
   }, async (req, reply) => {
-    const existing = await db.select().from(providerConfigs).where(eq(providerConfigs.id, req.params.id)).limit(1)
+    const workspaceId = ws(req)
+    const scope = and(eq(providerConfigs.id, req.params.id), eq(providerConfigs.workspaceId, workspaceId))
+    const existing = await db.select().from(providerConfigs).where(scope).limit(1)
     if (!existing[0]) return reply.status(404).send({ success: false, error: 'Not found' })
 
     const updates: Partial<typeof providerConfigs.$inferInsert> = { updatedAt: Date.now() }
@@ -278,7 +280,7 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
       updates.apiKeyIv        = enc.iv
     }
 
-    await db.update(providerConfigs).set(updates).where(eq(providerConfigs.id, req.params.id))
+    await db.update(providerConfigs).set(updates).where(scope)
     return reply.send({ success: true })
   })
 
@@ -286,7 +288,8 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
   app.delete<{ Params: { id: string } }>('/configs/:id', {
     schema: { tags: ['ai-router'], summary: 'Remove provider config' },
   }, async (req, reply) => {
-    await db.delete(providerConfigs).where(eq(providerConfigs.id, req.params.id))
+    const workspaceId = ws(req)
+    await db.delete(providerConfigs).where(and(eq(providerConfigs.id, req.params.id), eq(providerConfigs.workspaceId, workspaceId)))
     return reply.send({ success: true })
   })
 
@@ -415,7 +418,9 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
   }>('/endpoints/:id', {
     schema: { tags: ['ai-router'], summary: 'Update remote endpoint' },
   }, async (req, reply) => {
-    const existing = await db.select().from(remoteEndpoints).where(eq(remoteEndpoints.id, req.params.id)).limit(1)
+    const workspaceId = ws(req)
+    const scope = and(eq(remoteEndpoints.id, req.params.id), eq(remoteEndpoints.workspaceId, workspaceId))
+    const existing = await db.select().from(remoteEndpoints).where(scope).limit(1)
     if (!existing[0]) return reply.status(404).send({ success: false, error: 'Not found' })
 
     const updates: Partial<typeof remoteEndpoints.$inferInsert> = { updatedAt: Date.now() }
@@ -441,7 +446,7 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
       updates.customHeadersEncrypted = enc.ciphertext; updates.customHeadersIv = enc.iv
     }
 
-    await db.update(remoteEndpoints).set(updates).where(eq(remoteEndpoints.id, req.params.id))
+    await db.update(remoteEndpoints).set(updates).where(scope)
     return reply.send({ success: true })
   })
 
@@ -449,7 +454,8 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
   app.delete<{ Params: { id: string } }>('/endpoints/:id', {
     schema: { tags: ['ai-router'], summary: 'Remove remote endpoint' },
   }, async (req, reply) => {
-    await db.delete(remoteEndpoints).where(eq(remoteEndpoints.id, req.params.id))
+    const workspaceId = ws(req)
+    await db.delete(remoteEndpoints).where(and(eq(remoteEndpoints.id, req.params.id), eq(remoteEndpoints.workspaceId, workspaceId)))
     return reply.send({ success: true })
   })
 
@@ -457,9 +463,9 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { id: string } }>('/endpoints/:id/pause', {
     schema: { tags: ['ai-router'], summary: 'Pause (soft-disable) a remote endpoint' },
   }, async (req, reply) => {
-    const ep = await db.select().from(remoteEndpoints).where(eq(remoteEndpoints.id, req.params.id)).limit(1)
+    const ep = await db.select().from(remoteEndpoints).where(and(eq(remoteEndpoints.id, req.params.id), eq(remoteEndpoints.workspaceId, ws(req)))).limit(1)
     if (!ep[0]) return reply.status(404).send({ success: false, error: 'Not found' })
-    await db.update(remoteEndpoints).set({ paused: true, updatedAt: Date.now() }).where(eq(remoteEndpoints.id, req.params.id))
+    await db.update(remoteEndpoints).set({ paused: true, updatedAt: Date.now() }).where(and(eq(remoteEndpoints.id, req.params.id), eq(remoteEndpoints.workspaceId, ws(req))))
     await emit('provider.health.checked', ep[0].workspaceId, { endpointId: req.params.id, status: 'paused', source: 'manual_pause' })
     return reply.send({ success: true, data: { paused: true } })
   })
@@ -468,9 +474,9 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { id: string } }>('/endpoints/:id/resume', {
     schema: { tags: ['ai-router'], summary: 'Resume a paused remote endpoint' },
   }, async (req, reply) => {
-    const ep = await db.select().from(remoteEndpoints).where(eq(remoteEndpoints.id, req.params.id)).limit(1)
+    const ep = await db.select().from(remoteEndpoints).where(and(eq(remoteEndpoints.id, req.params.id), eq(remoteEndpoints.workspaceId, ws(req)))).limit(1)
     if (!ep[0]) return reply.status(404).send({ success: false, error: 'Not found' })
-    await db.update(remoteEndpoints).set({ paused: false, updatedAt: Date.now() }).where(eq(remoteEndpoints.id, req.params.id))
+    await db.update(remoteEndpoints).set({ paused: false, updatedAt: Date.now() }).where(and(eq(remoteEndpoints.id, req.params.id), eq(remoteEndpoints.workspaceId, ws(req))))
     return reply.send({ success: true, data: { paused: false } })
   })
 
@@ -478,7 +484,7 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { id: string } }>('/endpoints/:id/discover', {
     schema: { tags: ['ai-router'], summary: 'Discover available models on a remote endpoint' },
   }, async (req, reply) => {
-    const rows = await db.select().from(remoteEndpoints).where(eq(remoteEndpoints.id, req.params.id)).limit(1)
+    const rows = await db.select().from(remoteEndpoints).where(and(eq(remoteEndpoints.id, req.params.id), eq(remoteEndpoints.workspaceId, ws(req)))).limit(1)
     if (!rows[0]) return reply.status(404).send({ success: false, error: 'Not found' })
 
     const epConfig = toEndpointConfig(rows[0])
@@ -494,7 +500,7 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
         lastModelDiscovery: now,
         lastDiscoveryError: null,
         updatedAt:          now,
-      }).where(eq(remoteEndpoints.id, req.params.id))
+      }).where(and(eq(remoteEndpoints.id, req.params.id), eq(remoteEndpoints.workspaceId, ws(req))))
 
       await emit('provider.health.checked', rows[0].workspaceId, {
         endpointId: req.params.id, name: rows[0].name,
@@ -508,7 +514,7 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
         lastModelDiscovery: now,
         lastDiscoveryError: errorMsg.substring(0, 500),
         updatedAt:          now,
-      }).where(eq(remoteEndpoints.id, req.params.id))
+      }).where(and(eq(remoteEndpoints.id, req.params.id), eq(remoteEndpoints.workspaceId, ws(req))))
 
       return reply.status(502).send({ success: false, error: errorMsg })
     }
@@ -531,7 +537,7 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
       },
     },
   }, async (req, reply) => {
-    const rows = await db.select().from(remoteEndpoints).where(eq(remoteEndpoints.id, req.params.id)).limit(1)
+    const rows = await db.select().from(remoteEndpoints).where(and(eq(remoteEndpoints.id, req.params.id), eq(remoteEndpoints.workspaceId, ws(req)))).limit(1)
     if (!rows[0]) return reply.status(404).send({ success: false, error: 'Not found' })
     if (rows[0].paused) return reply.status(409).send({ success: false, error: 'Endpoint is paused' })
 
@@ -602,7 +608,10 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
       },
     },
   }, async (req, reply) => {
-    const rows = await db.select().from(remoteEndpoints).where(eq(remoteEndpoints.id, req.params.id)).limit(1)
+    const workspaceId = ws(req)
+    const rows = await db.select().from(remoteEndpoints)
+      .where(and(eq(remoteEndpoints.id, req.params.id), eq(remoteEndpoints.workspaceId, workspaceId)))
+      .limit(1)
     if (!rows[0]) return reply.status(404).send({ success: false, error: 'Not found' })
     if (rows[0].paused) return reply.status(409).send({ success: false, error: 'Endpoint is paused' })
 
@@ -621,6 +630,14 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
       'X-Accel-Buffering': 'no',
     })
 
+    // Stop relaying (and stop the underlying LLM call) the moment the
+    // client disconnects — otherwise the loop keeps consuming provider
+    // tokens for a stream nobody is reading. The AbortController feeds
+    // into remoteChatStream so the underlying provider fetch is cancelled.
+    let cancelled = false
+    const abortCtl = new AbortController()
+    req.raw.on('close', () => { cancelled = true; abortCtl.abort() })
+
     const t0 = Date.now()
     let _fullContent = ''
     let outputTokens = 0
@@ -633,9 +650,10 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
         messages:  [{ role: 'user', content: prompt }],
         maxTokens: req.body.max_tokens ?? 256,
         stream:    true,
-      })
+      }, abortCtl.signal)
 
       for await (const chunk of stream) {
+        if (cancelled) break
         if (chunk.done) {
           reply.raw.write(`data: [DONE]\n\n`)
           break
@@ -696,7 +714,7 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { id: string } }>('/endpoints/:id/check', {
     schema: { tags: ['ai-router'], summary: 'Trigger manual health check on remote endpoint' },
   }, async (req, reply) => {
-    const rows = await db.select().from(remoteEndpoints).where(eq(remoteEndpoints.id, req.params.id)).limit(1)
+    const rows = await db.select().from(remoteEndpoints).where(and(eq(remoteEndpoints.id, req.params.id), eq(remoteEndpoints.workspaceId, ws(req)))).limit(1)
     if (!rows[0]) return reply.status(404).send({ success: false, error: 'Not found' })
 
     const endpoint = rows[0]
@@ -825,6 +843,7 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
     prefer_provider?: string
     max_cost_usd?:   number
   } }>('/chat', {
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
     schema: {
       tags: ['ai-router'], summary: 'Chat completion via provider router',
       body: {
@@ -922,6 +941,7 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
 
   // ── POST /embed ───────────────────────────────────────────────────────────
   app.post<{ Body: { text: string; workspace_id: string; dimensions?: number } }>('/embed', {
+    config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
     schema: {
       tags: ['ai-router'], summary: 'Generate embedding via provider router',
       body: {

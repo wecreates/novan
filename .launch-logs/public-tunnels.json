@@ -1,0 +1,6 @@
+{
+  "webUrl": "https://fathers-manual-terrain-illustrations.trycloudflare.com",
+  "apiUrl": "https://subscribe-interactions-headed-aquarium.trycloudflare.com",
+  "startedAt": "2026-05-19T23:25:16Z",
+  "note": "Ephemeral quick-tunnel URLs. They change on tunnel restart. For permanent URLs, run scripts/Go-Public.ps1 with --named flag and a Cloudflare account."
+}

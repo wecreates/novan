@@ -30,6 +30,9 @@ export async function emitEvent(
     version:       EVENT_SCHEMA_VERSION,
     createdAt:     Date.now(),
   }).catch((err: unknown) => {
-    console.error('Failed to persist event:', type, err)
+    // Log only the error message — full error objects from postgres-js can
+    // include the failing SQL and bound parameter values, which may leak
+    // payload contents into logs.
+    console.error('[workflow-worker] Failed to persist event:', type, (err as Error).message)
   })
 }

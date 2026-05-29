@@ -1,0 +1,30 @@
+import type { ConnectorDef } from '../connectors.js'
+
+export const neonDef: ConnectorDef = {
+  id:          'neon',
+  name:        'Neon',
+  category:    'database',
+  description: 'Serverless Postgres. Read-only branch/project metadata; mutations approval-gated.',
+  authType:    'api_key',
+  defaultScopes: [],
+  blockedActions: ['neon.delete_project', 'neon.modify_billing'],
+  actions: [
+    { name: 'neon.list_projects',  minPermission: 'read',    risk: 'low' },
+    { name: 'neon.list_branches',  minPermission: 'read',    risk: 'low' },
+    { name: 'neon.create_branch',  minPermission: 'publish', risk: 'medium' },
+    { name: 'neon.delete_branch',  minPermission: 'admin',   risk: 'high' },
+  ],
+  metadataVerified:      true,
+  officialWebsiteUrl:    'https://neon.com',
+  signupUrl:             'https://console.neon.tech/signup',
+  loginUrl:              'https://console.neon.tech',
+  apiKeyCreationUrl:     'https://console.neon.tech/app/settings/api-keys',
+  docsUrl:               'https://neon.com/docs/reference/api-reference',
+  pricingUrl:            'https://neon.com/pricing',
+  statusPageUrl:         'https://neonstatus.com',
+  permissionExplanation: 'Read your Neon projects + branches. Branch creation + deletion require per-action approval. We never modify billing.',
+  accountRequired:       true,
+  supportsApiKey:        true,
+  freeTierAvailable:     true,
+  iconKey:               'neon',
+}

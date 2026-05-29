@@ -19,7 +19,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, dirname } from 'node:path'
+import { join, dirname, resolve, sep, relative, isAbsolute } from 'node:path'
 
 const execFileP = promisify(execFile)
 
@@ -74,9 +74,26 @@ export async function applyAndValidate(patch: PatchFile[], opts?: { repoRoot?: s
       writeFileSync(join(sandboxPath, '.degraded'), 'no-worktree')
     }
 
-    // 3) Apply patch files into sandbox
+    // 3) Apply patch files into sandbox with PATH-CONTAINMENT check.
+    //    SECURITY: path.join does NOT prevent ../ escapes —
+    //    join('/tmp/sandbox', '../../etc/cron.d/exploit') resolves outside
+    //    the sandbox. A malicious or LLM-injected patch file path could
+    //    write arbitrary files on the host. We resolve the absolute target
+    //    and verify it's within sandboxPath before writing.
+    const sandboxResolved = resolve(sandboxPath) + sep
     for (const f of patch) {
-      const target = join(sandboxPath, f.path)
+      // Reject absolute paths outright — patches must be repo-relative.
+      if (isAbsolute(f.path)) {
+        errors.push(`security: refusing absolute path ${f.path}`)
+        continue
+      }
+      const target = resolve(sandboxPath, f.path)
+      // Containment check: targetPath must be inside sandboxPath/
+      const rel = relative(sandboxResolved, target + sep)
+      if (rel.startsWith('..') || isAbsolute(rel)) {
+        errors.push(`security: patch path escapes sandbox: ${f.path}`)
+        continue
+      }
       try {
         mkdirSync(dirname(target), { recursive: true })
         writeFileSync(target, f.contents, 'utf8')

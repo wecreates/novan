@@ -9,7 +9,7 @@
  * Build-vs-buy scoring is a transparent matrix per capability, not
  * fabricated by a model.
  */
-import { existsSync, readdirSync }     from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, dirname }               from 'node:path'
 import { fileURLToPath }               from 'node:url'
 import { db }                          from '../db/client.js'
@@ -19,6 +19,8 @@ import { and, eq, gte, sql }           from 'drizzle-orm'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const SERVICES_DIR = HERE   // same dir as this file
 const ROUTES_DIR   = join(HERE, '..', 'routes')
+// apps/api/src/services -> apps/web/src
+const WEB_SRC_DIR  = join(HERE, '..', '..', '..', '..', 'web', 'src')
 
 export type CapabilityDimension =
   | 'engineering' | 'security' | 'image_generation' | 'research'
@@ -35,6 +37,7 @@ export interface CapabilityDef {
   signals: {
     serviceFile?: string    // expected file under services/
     routeFile?:   string    // expected file under routes/
+    webFiles?:    string[]  // expected files under apps/web/src/ (any-match)
     eventPrefix?: string    // expected event type prefix
     minEventsLastWeek?: number
   }
@@ -74,7 +77,7 @@ export const CAPABILITY_REGISTRY: CapabilityDef[] = [
     signals: { serviceFile: 'risk-classifier.ts' },
     buildVsBuy: { costToBuild: 0.3, speedToBuy: 0.2, qualityIfBuilt: 0.85, securityIfBuilt: 0.9, vendorLockRisk: 0.2, runtimeRiskIfBuilt: 0.3, notes: 'Build — domain-specific' } },
   { id: 'red_team_runtime', dimension: 'security', title: 'Red team runtime', description: 'Adversarial testing harness',
-    signals: { eventPrefix: 'red_team.' },
+    signals: { serviceFile: 'security-team.ts', eventPrefix: 'red_team.' },
     buildVsBuy: { costToBuild: 0.6, speedToBuy: 0.5, qualityIfBuilt: 0.7, securityIfBuilt: 0.95, vendorLockRisk: 0.3, runtimeRiskIfBuilt: 0.5, notes: 'Build, but seed with public pentest frameworks' } },
 
   // Image generation
@@ -118,13 +121,13 @@ export const CAPABILITY_REGISTRY: CapabilityDef[] = [
 
   // UI/UX
   { id: 'strategic_home', dimension: 'ui_ux', title: 'Strategic Home page', description: 'First-screen operational view',
-    signals: {},  // detected by web-app build, not API
+    signals: { webFiles: ['pages/StrategicHomePage.tsx', 'pages/TodayPage.tsx', 'pages/HomeDashboardPage.tsx'] },
     buildVsBuy: { costToBuild: 0.2, speedToBuy: 0.0, qualityIfBuilt: 1.0, securityIfBuilt: 1.0, vendorLockRisk: 0.0, runtimeRiskIfBuilt: 0.1, notes: 'Build — operator UX is the product' } },
   { id: 'image_studio_ui', dimension: 'ui_ux', title: 'Image Studio UI', description: 'Premium generation workspace',
-    signals: {},
+    signals: { webFiles: ['pages/ImageStudioPage.tsx'] },
     buildVsBuy: { costToBuild: 0.3, speedToBuy: 0.4, qualityIfBuilt: 0.9, securityIfBuilt: 0.95, vendorLockRisk: 0.0, runtimeRiskIfBuilt: 0.1, notes: 'Build — UX differentiator' } },
   { id: 'voice_command', dimension: 'ui_ux', title: 'Voice command bar', description: 'Browser-native STT/TTS',
-    signals: {},
+    signals: { webFiles: ['components/VoiceCommandBar.tsx'] },
     buildVsBuy: { costToBuild: 0.2, speedToBuy: 0.5, qualityIfBuilt: 0.7, securityIfBuilt: 1.0, vendorLockRisk: 0.0, runtimeRiskIfBuilt: 0.1, notes: 'Build — Web Speech API is free' } },
 
   // Infrastructure
@@ -200,6 +203,23 @@ function fileExists(dir: string, name: string): boolean {
   } catch { return false }
 }
 
+/**
+ * Substantial = file exists and is >100 source lines (implementation, not stub).
+ * Used to treat a real service as 'basic' instead of 'scaffolded' even when
+ * it emits no prefixed events — many services are inline-callable and never
+ * touch the events table.
+ */
+function fileIsSubstantial(dir: string, name: string | undefined): boolean {
+  if (!name) return false
+  try {
+    if (!fileExists(dir, name)) return false
+    const path = join(dir, name)
+    // Cheap line-count read — these files are <2k lines.
+    const txt = readFileSync(path, 'utf8')
+    return txt.split('\n').length >= 100
+  } catch { return false }
+}
+
 function computeBuildScore(c: CapabilityDef): { score: number; verdict: CapabilityStatus['buildVsBuy']['verdict']; rationale: string } {
   // Higher = prefer build. Weighted combination of inverted cost,
   // quality/security advantage, vendor-lock avoidance, runtime risk.
@@ -241,16 +261,38 @@ export async function detectCapabilities(workspaceId: string): Promise<Capabilit
     const evidence: string[] = []
     const hasService = c.signals.serviceFile ? fileExists(SERVICES_DIR, c.signals.serviceFile) : false
     const hasRoute   = c.signals.routeFile   ? fileExists(ROUTES_DIR,   c.signals.routeFile)   : false
+    // Web file check: any-match against a list of relative paths
+    // (e.g. ['pages/VoiceBar.tsx','components/VoiceCommandBar.tsx']).
+    const hasWeb = (c.signals.webFiles ?? []).some(rel => {
+      const slash = rel.replace(/\\/g, '/')
+      const idx   = slash.lastIndexOf('/')
+      const dir   = idx >= 0 ? join(WEB_SRC_DIR, slash.slice(0, idx)) : WEB_SRC_DIR
+      const name  = idx >= 0 ? slash.slice(idx + 1) : slash
+      return fileExists(dir, name)
+    })
     if (hasService) evidence.push(`service: ${c.signals.serviceFile}`)
     if (hasRoute)   evidence.push(`route: ${c.signals.routeFile}`)
+    if (hasWeb)     evidence.push(`web: ${c.signals.webFiles?.find(rel => {
+      const slash = rel.replace(/\\/g, '/')
+      const idx   = slash.lastIndexOf('/')
+      const dir   = idx >= 0 ? join(WEB_SRC_DIR, slash.slice(0, idx)) : WEB_SRC_DIR
+      const name  = idx >= 0 ? slash.slice(idx + 1) : slash
+      return fileExists(dir, name)
+    })}`)
     const eventCount = await recentEventCount(c.signals.eventPrefix, workspaceId)
     if (eventCount > 0) evidence.push(`${eventCount} events/7d with prefix '${c.signals.eventPrefix}'`)
 
-    const exists = hasService || hasRoute || eventCount > 0
+    const substantial = fileIsSubstantial(SERVICES_DIR, c.signals.serviceFile)
+                     || fileIsSubstantial(ROUTES_DIR,   c.signals.routeFile)
+    if (substantial) evidence.push('substantial implementation (>=100 LOC)')
+    const exists = hasService || hasRoute || hasWeb || eventCount > 0
     const min = c.signals.minEventsLastWeek ?? 1
     let maturity: Maturity
     if (!exists) maturity = 'missing'
-    else if (eventCount === 0 && (hasService || hasRoute)) maturity = 'scaffolded'
+    // A substantial file with no events is still 'basic' (real impl, just
+    // doesn't emit prefixed events). Only treat as 'scaffolded' when the
+    // file is small/stubby.
+    else if (eventCount === 0 && (hasService || hasRoute || hasWeb) && !substantial) maturity = 'scaffolded'
     else if (eventCount < min) maturity = 'basic'
     else if (eventCount < 50)   maturity = 'healthy'
     else                        maturity = 'mature'

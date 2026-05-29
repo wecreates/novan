@@ -25,6 +25,7 @@ import {
   createLease, renewLease, releaseLease, cancelLease,
   getActiveLease, reclaimStaleLeases,
 } from '../services/lease-manager.js'
+import { dispatchJob, workerCostSummary } from '../services/remote-dispatch.js'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -506,6 +507,181 @@ const runtimeRegistryRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ success: true, data: { ...row, ...circuitStatus } })
     },
   )
+
+  // ─── Dispatch + remote callbacks ──────────────────────────────────────
+  //
+  // POST /dispatch              — submit a job through routeJob; if remote,
+  //                               actually HTTP-call the worker's endpointUrl
+  //                               and create a lease. Returns decision.
+  // POST /leases/:id/logs       — worker streams log lines back. We persist
+  //                               them as `remote.log` events; the lease SSE
+  //                               relays them to subscribed UIs.
+  // POST /leases/:id/done       — worker signals completion + reports cost.
+  //                               Calls releaseLease(costUsd).
+  // GET  /leases/:id/stream     — SSE for the UI to watch a remote job's
+  //                               logs + completion in real time.
+  // GET  /workers/costs         — per-worker cost rollup for the war room.
+
+  app.post<{
+    Body: {
+      workspaceId:   string
+      kind:          string
+      jobId?:        string
+      payload?:      Record<string, unknown>
+      capability?:   string
+      timeoutMs?:    number
+      callbackBase?: string
+    }
+  }>('/dispatch', async (req, reply) => {
+    const b = req.body
+    if (!b.workspaceId || !b.kind) {
+      return reply.code(400).send({ success: false, error: 'workspaceId, kind required' })
+    }
+    // Infer callbackBase from request if not provided
+    const inferred = `${req.protocol}://${req.headers.host}`
+    const out = await dispatchJob({
+      workspaceId: b.workspaceId,
+      kind:        b.kind,
+      ...(b.jobId      ? { jobId: b.jobId } : {}),
+      ...(b.payload    ? { payload: b.payload } : {}),
+      ...(b.capability ? { capability: b.capability } : {}),
+      ...(b.timeoutMs  ? { timeoutMs: b.timeoutMs } : {}),
+      callbackBase: b.callbackBase ?? inferred,
+    })
+    if (!out.ok) return reply.code(out.decision.decision === 'block' ? 409 : 502).send({ success: false, ...out })
+    return { success: true, data: out }
+  })
+
+  // Worker → us: log lines. Lookup workspaceId from the lease row so
+  // workers don't need to know it (they only echo the URL we gave them).
+  app.post<{ Params: { id: string }; Body: { lines?: Array<{ at?: number; level?: string; msg: string }> } }>(
+    '/leases/:id/logs',
+    async (req, reply) => {
+      const lease = await db.select().from(executionLeases)
+        .where(eq(executionLeases.id, req.params.id))
+        .limit(1).then(r => r[0]).catch(() => null)
+      if (!lease) return reply.code(404).send({ success: false, error: 'lease not found' })
+
+      const lines = req.body.lines ?? []
+      if (lines.length === 0) return { success: true, data: { written: 0 } }
+
+      // Persist each line as a typed event with leaseId in payload — keeps
+      // the events table single-source-of-truth without a new table.
+      const now = Date.now()
+      const rows = lines.map(l => ({
+        id: uuidv7(), type: 'remote.log',
+        workspaceId: lease.workspaceId,
+        payload: {
+          leaseId: lease.id, workerId: lease.workerId, jobId: lease.jobId,
+          level: l.level ?? 'info', msg: l.msg, at: l.at ?? now,
+        },
+        traceId: uuidv7(), correlationId: lease.id, causationId: null,
+        source: 'remote-worker', version: 1, createdAt: l.at ?? now,
+      }))
+      await db.insert(events).values(rows).catch(() => null)
+      return { success: true, data: { written: rows.length } }
+    },
+  )
+
+  // Worker → us: job finished. Reports cost + outcome. Releases the lease.
+  app.post<{ Params: { id: string }; Body: { ok?: boolean; costUsd?: number; tokensUsed?: number; output?: unknown; error?: string } }>(
+    '/leases/:id/done',
+    async (req, reply) => {
+      const lease = await db.select().from(executionLeases)
+        .where(eq(executionLeases.id, req.params.id))
+        .limit(1).then(r => r[0]).catch(() => null)
+      if (!lease) return reply.code(404).send({ success: false, error: 'lease not found' })
+
+      const ok      = req.body.ok ?? true
+      const costUsd = Number(req.body.costUsd ?? 0)
+      if (ok) {
+        await releaseLease(lease.id, lease.workspaceId, costUsd)
+        await emit(lease.workspaceId, 'remote.job.completed', {
+          leaseId: lease.id, workerId: lease.workerId, jobId: lease.jobId,
+          costUsd, tokensUsed: req.body.tokensUsed ?? 0, output: req.body.output,
+        })
+      } else {
+        await cancelLease(lease.id, lease.workspaceId)
+        await emit(lease.workspaceId, 'remote.job.failed', {
+          leaseId: lease.id, workerId: lease.workerId, jobId: lease.jobId,
+          costUsd, error: req.body.error ?? 'unknown',
+        })
+      }
+      return { success: true, data: { leaseId: lease.id, status: ok ? 'completed' : 'failed', costUsd } }
+    },
+  )
+
+  // UI → us: subscribe to a lease's log stream. SSE; relays both already-
+  // persisted log lines (last 5 min) and new ones as they arrive.
+  app.get<{ Params: { id: string } }>('/leases/:id/stream', async (req, reply) => {
+    const lease = await db.select().from(executionLeases)
+      .where(eq(executionLeases.id, req.params.id))
+      .limit(1).then(r => r[0]).catch(() => null)
+    if (!lease) return reply.code(404).send({ success: false, error: 'lease not found' })
+
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+
+    // Hydrate from recent history first
+    let since = Date.now() - 5 * 60_000
+    let alive = true
+    req.raw.on('close', () => { alive = false })
+
+    async function flush() {
+      const rows = await db.select().from(events)
+        .where(and(
+          eq(events.correlationId, lease!.id),
+          eq(events.type, 'remote.log'),
+        ))
+        .orderBy(desc(events.createdAt))
+        .limit(100)
+        .catch(() => [])
+      const fresh = rows.filter(r => r.createdAt > since).reverse()
+      if (fresh.length > 0) {
+        since = fresh[fresh.length - 1]!.createdAt + 1
+        for (const r of fresh) {
+          reply.raw.write(`event: log\n`)
+          reply.raw.write(`data: ${JSON.stringify(r.payload)}\n\n`)
+        }
+      }
+      // Also relay terminal events
+      const term = await db.select().from(events)
+        .where(and(
+          eq(events.correlationId, lease!.id),
+        ))
+        .orderBy(desc(events.createdAt))
+        .limit(5)
+        .catch(() => [])
+      for (const t of term) {
+        if (t.type === 'remote.job.completed' || t.type === 'remote.job.failed') {
+          reply.raw.write(`event: ${t.type === 'remote.job.completed' ? 'done' : 'failed'}\n`)
+          reply.raw.write(`data: ${JSON.stringify(t.payload)}\n\n`)
+          alive = false
+          break
+        }
+      }
+    }
+
+    await flush()
+    while (alive) {
+      await new Promise(r => setTimeout(r, 2_000))
+      if (!alive) break
+      await flush()
+      reply.raw.write(`event: heartbeat\ndata: ${Date.now()}\n\n`)
+    }
+    reply.raw.end()
+  })
+
+  // Per-worker cost rollup for the war room
+  app.get<{ Querystring: { workspace_id?: string } }>('/workers/costs', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await workerCostSummary(ws) }
+  })
 }
 
 export default runtimeRegistryRoutes

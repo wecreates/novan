@@ -1,0 +1,32 @@
+﻿{
+    "web":  9128,
+    "workers":  [
+                    15184,
+                    15712,
+                    2216,
+                    17664,
+                    5160,
+                    8524
+                ],
+    "restartCounts":  {
+                          "analytics-worker":  0,
+                          "recovery-worker":  0,
+                          "web":  0,
+                          "optimization-worker":  0,
+                          "briefing-worker":  0,
+                          "api":  293,
+                          "workflow-worker":  0,
+                          "memory-worker":  0
+                      },
+    "lastCheckAt":  "2026-05-28T17:13:36.6944614-07:00",
+    "startedAt":  "2026-05-28T14:13:17.8525651-07:00",
+    "workerNames":  [
+                        "workflow-worker",
+                        "analytics-worker",
+                        "recovery-worker",
+                        "memory-worker",
+                        "briefing-worker",
+                        "optimization-worker"
+                    ],
+    "api":  11272
+}

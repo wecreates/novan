@@ -2,8 +2,6 @@
 # Full infra stack: infra/docker/docker-compose.yml
 # This file adds the API and web app containers on top of infra services.
 
-version: '3.9'
-
 services:
   postgres:
     image: pgvector/pgvector:pg16

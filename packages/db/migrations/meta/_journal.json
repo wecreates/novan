@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1779216465462,
+      "tag": "0000_motionless_payback",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779217041999,
+      "tag": "0042_session_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780013054414,
+      "tag": "0002_missing_tables",
+      "breakpoints": true
+    }
+  ]
+}

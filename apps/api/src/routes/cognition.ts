@@ -160,7 +160,10 @@ export const skillsRoutes: FastifyPluginAsync = async (fastify) => {
     return { success: true, data: await listSkills(ws, opts) }
   })
 
-  fastify.post<{ Params: { slug: string }; Body: { workspace_id?: string; inputs?: Record<string, unknown> } }>('/:slug/execute', async (req, reply) => {
+  fastify.post<{ Params: { slug: string }; Body: { workspace_id?: string; inputs?: Record<string, unknown> } }>('/:slug/execute', {
+    // Skill execution can call LLMs, workers, or spawn browser sessions.
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     const ws = req.body.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     return { success: true, data: await executeSkill(ws, req.params.slug, req.body.inputs ?? {}) }

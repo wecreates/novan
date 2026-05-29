@@ -1,7 +1,3 @@
-// TODO: Register in server.ts:
-// import { workspacesRoutes } from './routes/workspaces.js'
-// await app.register(workspacesRoutes, { prefix: '/api/v1/workspaces' })
-
 /**
  * Workspace management routes.
  * GET    /api/v1/workspaces         — list all workspaces
@@ -35,6 +31,9 @@ const createSchema = z.object({
   slug:     z.string().min(1).max(60).regex(/^[a-z0-9-]+$/, 'slug must be lowercase alphanumeric with hyphens'),
   plan:     z.enum(['free', 'pro', 'enterprise']).optional(),
   settings: z.record(z.unknown()).optional(),
+  // BO14 — pick a business template for the first-install seed. Defaults
+  // to 'generic'. Unknown values fall back to generic (see getTemplate).
+  template: z.enum(['generic', 'ecommerce', 'saas', 'content', 'services']).optional(),
 })
 
 const updateSchema = createSchema.partial()
@@ -73,7 +72,7 @@ export const workspacesRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(400).send({ success: false, error: parsed.error.issues[0]?.message })
     }
 
-    const { name, slug, plan, settings } = parsed.data
+    const { name, slug, plan, settings, template } = parsed.data
     const now = Date.now()
     const id  = crypto.randomUUID()
 
@@ -90,6 +89,17 @@ export const workspacesRoutes: FastifyPluginAsync = async (app) => {
         updatedAt: now,
       })
       .returning()
+
+    // First-install hook per SPEC §18.16. Fire-and-forget — workspace
+    // creation succeeds even if seeding fails (we record the error so
+    // the operator can see it via getSeedStatus). Eval seeds are
+    // idempotent so re-running is safe.
+    void (async () => {
+      try {
+        const { seedWorkspaceOnFirstInstall } = await import('../services/workspace-seed.js')
+        await seedWorkspaceOnFirstInstall(id, template)
+      } catch { /* tolerated — workspace.seeded event captures failures */ }
+    })()
 
     return reply.status(201).send({ success: true, data: row })
   })

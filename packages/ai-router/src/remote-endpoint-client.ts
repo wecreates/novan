@@ -255,11 +255,17 @@ export interface StreamChunk {
  * Works for all OpenAI-compatible servers (Ollama, vLLM, LocalAI, TGI, etc.)
  */
 export async function* remoteChatStream(
-  ep:  RemoteEndpointConfig,
-  req: RemoteCompletionRequest,
+  ep:    RemoteEndpointConfig,
+  req:   RemoteCompletionRequest,
+  abort?: AbortSignal,
 ): AsyncGenerator<StreamChunk> {
   const headers = { ...buildAuthHeaders(ep), Accept: 'text/event-stream' }
-  const signal  = AbortSignal.timeout(ep.timeoutMs)
+  // Combine the per-endpoint timeout with the caller's abort signal so a
+  // client disconnect halts the underlying provider stream instead of
+  // letting it burn tokens until the timeout fires.
+  const signal = abort
+    ? AbortSignal.any([abort, AbortSignal.timeout(ep.timeoutMs)])
+    : AbortSignal.timeout(ep.timeoutMs)
   const base    = ep.baseUrl.replace(/\/$/, '').replace(/\/v1$/, '')
 
   // Ollama also supports /api/chat with stream:true (native)
@@ -287,6 +293,7 @@ export async function* remoteChatStream(
 
   try {
     while (true) {
+      if (abort?.aborted) { await reader.cancel().catch(() => null); break }
       const { done, value } = await reader.read()
       if (done) { yield { content: '', done: true }; break }
 

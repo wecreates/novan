@@ -14,12 +14,17 @@ export const streamRoutes: FastifyPluginAsync = async (app) => {
   app.get('/', async (req, reply) => {
     const workspaceId = ((req as { workspaceId?: string }).workspaceId ?? 'default')
 
+    // CORS for SSE: the @fastify/cors plugin already sets the right
+    // Access-Control-Allow-Origin header on the route based on the
+    // request Origin. Hard-coding '*' here both overrides that AND
+    // breaks credentialed SSE (browsers reject wildcard + credentials),
+    // so omit it — the plugin's header is applied to streaming responses
+    // the same as any other.
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
-      'Access-Control-Allow-Origin': '*',
     })
 
     const send = (eventType: string, data: unknown) => {

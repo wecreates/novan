@@ -44,6 +44,24 @@ export interface AgentJob {
 
 const jobs = new Map<string, AgentJob>()
 
+/** Bound the in-memory store. Without this, a long-lived API process that
+ *  drives many eng-agent jobs grows the map unboundedly because completed/
+ *  failed/rolled_back jobs are never deleted (the events table is the
+ *  durable audit trail; the map is just live status). Evict terminal jobs
+ *  older than the TTL whenever the map exceeds the soft cap. */
+const JOB_RETENTION_MS = 24 * 60 * 60 * 1000  // 24h
+const JOB_SOFT_CAP     = 5_000
+
+function evictStale(): void {
+  if (jobs.size < JOB_SOFT_CAP) return
+  const cutoff = Date.now() - JOB_RETENTION_MS
+  const terminal = new Set<JobStatus>(['completed', 'failed', 'rolled_back'])
+  for (const [id, j] of jobs) {
+    const finishedAt = j.completedAt ?? j.createdAt
+    if (terminal.has(j.status) && finishedAt < cutoff) jobs.delete(id)
+  }
+}
+
 // ─── Event helper ─────────────────────────────────────────────────────────────
 
 async function emit(
@@ -80,6 +98,7 @@ export async function createJob(
     createdAt: Date.now(),
     _retryCount: 0,
   }
+  evictStale()
   jobs.set(job.id, job)
   await emit(workspaceId, 'eng_job.created', {
     jobId: job.id, agentType, description, requiresApproval,

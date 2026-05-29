@@ -1,7 +1,3 @@
-// TODO: Register in server.ts after errorHandlerPlugin:
-// import { auditPlugin } from './plugins/audit.js'
-// await app.register(auditPlugin)
-
 /**
  * Audit logging plugin — logs sensitive API actions to the events table.
  *

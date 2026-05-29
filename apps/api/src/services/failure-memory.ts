@@ -129,27 +129,39 @@ export async function recordFailure(input: RecordFailureInput): Promise<Recorded
     }
   }
 
-  // New failure
+  // New failure. The (workspace_id, signature) unique index from migration
+  // 0044 means a concurrent caller could win the race — handle that by
+  // falling back to a recursive recordFailure() call, which now finds the
+  // existing row and increments instead of inserting.
   const id = uuidv7()
-  await db.insert(failureMemory).values({
-    id,
-    workspaceId:     input.workspaceId,
-    failureType:     input.failureType,
-    rootCauseClass:  input.rootCauseClass,
-    targetRef:       input.targetRef,
-    targetKind:      input.targetKind,
-    signature,
-    errorPattern,
-    agentId:         input.agentId ?? null,
-    evidenceIds:     input.evidenceIds,
-    attemptedFixIds: input.attemptedFixId ? [input.attemptedFixId] : [],
-    occurrenceCount: 1,
-    blocked:         false,
-    firstSeenAt:     now,
-    lastSeenAt:      now,
-    createdAt:       now,
-    updatedAt:       now,
-  })
+  try {
+    await db.insert(failureMemory).values({
+      id,
+      workspaceId:     input.workspaceId,
+      failureType:     input.failureType,
+      rootCauseClass:  input.rootCauseClass,
+      targetRef:       input.targetRef,
+      targetKind:      input.targetKind,
+      signature,
+      errorPattern,
+      agentId:         input.agentId ?? null,
+      evidenceIds:     input.evidenceIds,
+      attemptedFixIds: input.attemptedFixId ? [input.attemptedFixId] : [],
+      occurrenceCount: 1,
+      blocked:         false,
+      firstSeenAt:     now,
+      lastSeenAt:      now,
+      createdAt:       now,
+      updatedAt:       now,
+    })
+  } catch (e) {
+    // Unique-index violation → another caller inserted between our SELECT
+    // and INSERT. Retry once: the second pass takes the existing-row path.
+    if (/unique|duplicate|23505/i.test((e as Error).message)) {
+      return recordFailure(input)
+    }
+    throw e
+  }
 
   await emitEvent(input.workspaceId, 'failure_memory.recorded', {
     memoryId: id, signature, failureType: input.failureType, targetRef: input.targetRef,

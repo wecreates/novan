@@ -15,6 +15,7 @@ import { actions, reasoningChains, killSwitches, workerConcurrency, providerPref
 import { and, eq, desc, gte } from 'drizzle-orm'
 import { v7 as uuidv7 } from 'uuid'
 import { notify } from './notifications.js'
+import { shouldAutoAct, type LoadMode } from './strategic-restraint.js'
 
 export type ActionType =
   | 'notify_operator'
@@ -23,6 +24,8 @@ export type ActionType =
   | 'engage_kill_switch'
   | 'swap_provider_recommendation'
   | 'cancel_pending'
+  | 'delegate_to_agency'
+  | 'construct_business'
 
 export type ActionStatus =
   | 'pending' | 'approved' | 'executing' | 'succeeded' | 'failed' | 'rejected' | 'cancelled'
@@ -40,6 +43,8 @@ function classifyRisk(type: ActionType): 'low' | 'medium' | 'high' | 'critical' 
   switch (type) {
     case 'notify_operator':              return 'low'
     case 'record_decision':              return 'low'
+    case 'delegate_to_agency':           return 'low'
+    case 'construct_business':           return 'low'
     case 'throttle_queue':               return 'medium'
     case 'swap_provider_recommendation': return 'medium'
     case 'cancel_pending':               return 'medium'
@@ -67,6 +72,40 @@ export async function dispatch(input: DispatchInput): Promise<{ id: string; stat
       await db.update(actions).set({ status: 'pending', error: 'approval_required' })
         .where(eq(actions.id, id)).catch(() => null)
       return { id, status: 'pending', error: 'approval_required' }
+    }
+  }
+
+  // Strategic-restraint gate for autonomous callers (#42).
+  // Operator-initiated requests (`chat-approval`, `ui:*`, `operator:*`)
+  // bypass — the operator already chose. Autonomous callers (anything
+  // starting with `auto`, `autonomous`, `worker`, `cron`, `agent`) go
+  // through `shouldAutoAct` for medium/high-risk plans.
+  const isAutonomous = /^(auto|autonomous|worker|cron|agent)/i.test(input.requestedBy)
+  if (isAutonomous && risk !== 'low') {
+    let loadMode: LoadMode = 'normal'
+    try {
+      const { snapshotOperatorLoad } = await import('./operator-cognitive-load.js')
+      const verdict = await snapshotOperatorLoad(input.workspaceId).catch(() => null)
+      if (verdict) loadMode = verdict.mode as LoadMode
+    } catch { /* tolerated */ }
+
+    const decision = shouldAutoAct({
+      risk: risk as 'low' | 'medium' | 'high',
+      hardBlocked:   false,
+      budgetBlocked: false,
+      loadMode,
+      // These two are conservative defaults — wiring trusted-pattern + HF
+      // requires the per-operator preference store, which is a separate
+      // primitive. Defaulting to `false` makes the gate err toward dry-run.
+      trustedPattern:   Boolean(input.payload['trustedPattern']   === true),
+      handsFreeEnabled: Boolean(input.payload['handsFreeEnabled'] === true),
+    })
+    if (!decision.allow) {
+      await db.update(actions).set({
+        status: 'pending',
+        error: `restraint:${decision.deferTo}:${decision.reason}`,
+      }).where(eq(actions.id, id)).catch(() => null)
+      return { id, status: 'pending', error: `restraint:${decision.deferTo}:${decision.reason}` }
     }
   }
 
@@ -196,6 +235,52 @@ async function execute(i: DispatchInput): Promise<Record<string, unknown>> {
         status: 'cancelled', completedAt: Date.now(),
       }).where(and(eq(actions.id, targetId), eq(actions.status, 'pending'))).catch(() => null)
       return { cancelled: targetId }
+    }
+
+    case 'delegate_to_agency': {
+      // Brain-as-CEO: route the task to the best specialist agent.
+      // Lazy-imported so non-chat flows stay light.
+      const task = String(i.payload['task'] ?? '').trim()
+      if (!task) throw new Error('task required')
+      const hint = String(i.payload['hint'] ?? '').trim()
+      const { delegateToAgent } = await import('./ceo-orchestrator.js')
+      const r = await delegateToAgent({
+        workspaceId: i.workspaceId,
+        task,
+        ...(hint ? { hint } : {}),
+        requestedBy: i.requestedBy,
+      })
+      if (!r.ok) throw new Error(r.reason)
+      return {
+        delegationId: r.delegationId,
+        slug:         r.slug,
+        department:   r.department,
+        tokens:       r.tokens,
+        costUsd:      r.costUsd,
+        // The agent's actual response — chat surface can display it.
+        result:       r.result.slice(0, 4_000),
+      }
+    }
+
+    case 'construct_business': {
+      // Decompose a high-level brief into a real business + systems
+      // and emit the spawn event stream the brain canvas consumes.
+      const brief = String(i.payload['brief'] ?? '').trim()
+      if (!brief || brief.length < 5) throw new Error('brief required (min 5 chars)')
+      const name = String(i.payload['name'] ?? '').trim() || undefined
+      const { constructBusiness } = await import('./business-construction.js')
+      const r = await constructBusiness({
+        workspaceId: i.workspaceId,
+        brief,
+        ...(name ? { name } : {}),
+      })
+      return {
+        businessId:     r.businessId,
+        name:           r.name,
+        industry:       r.industry,
+        systemsSpawned: r.systemIds.length,
+        navigateTo:     '/brain',
+      }
     }
   }
 }

@@ -1,0 +1,37 @@
+import type { ConnectorDef } from '../connectors.js'
+import * as gc from '../connector-gcal.js'
+
+export const gcalDef: ConnectorDef = {
+  id:          'gcal',
+  name:        'Google Calendar',
+  category:    'productivity',
+  description: 'Read + create calendar events on the authenticated user\'s calendars.',
+  authType:    'oauth',
+  defaultScopes: ['https://www.googleapis.com/auth/calendar.events'],
+  optionalScopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+  blockedActions: ['gcal.delete_calendar'],
+  actions: [
+    { name: 'gcal.list_events',  minPermission: 'read',  risk: 'low',
+      handler: gc.listEvents },
+    { name: 'gcal.read_event',   minPermission: 'read',  risk: 'low',
+      handler: gc.readEvent },
+    { name: 'gcal.create_event', minPermission: 'draft', risk: 'medium',
+      handler: gc.createEvent, dryRun: gc.createEventDryRun },
+    { name: 'gcal.update_event', minPermission: 'draft', risk: 'medium',
+      handler: gc.updateEvent, dryRun: gc.updateEventDryRun },
+    { name: 'gcal.delete_event', minPermission: 'admin', risk: 'high' },
+  ],
+  metadataVerified:      true,
+  officialWebsiteUrl:    'https://calendar.google.com',
+  signupUrl:             'https://accounts.google.com/signup',
+  loginUrl:              'https://accounts.google.com',
+  developerAppSetupUrl:  'https://console.cloud.google.com/apis/credentials',
+  docsUrl:               'https://developers.google.com/calendar/api/v3/reference',
+  pricingUrl:            'https://workspace.google.com/pricing',
+  statusPageUrl:         'https://www.google.com/appsstatus',
+  permissionExplanation: 'Read your calendar events and create new ones only when you explicitly approve each action. We never delete entire calendars.',
+  accountRequired:       true,
+  supportsOauth:         true,
+  freeTierAvailable:     true,
+  iconKey:               'google-calendar',
+}

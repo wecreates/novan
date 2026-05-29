@@ -86,8 +86,13 @@ export async function upsertBudgetCap(
   },
 ): Promise<typeof budgetCaps.$inferSelect> {
   const now        = Date.now()
-  const dayEnd     = new Date(); dayEnd.setHours(23, 59, 59, 999); const dayEndMs = dayEnd.getTime()
-  const monthEnd   = new Date(); monthEnd.setDate(1); monthEnd.setMonth(monthEnd.getMonth() + 1); const monthEndMs = monthEnd.getTime()
+  // UTC boundaries — local-time setMonth() across Jan 31 → Mar 3 rolls
+  // the day into March when the intent is "end of February"; setHours()
+  // shifts on DST. Budgets must reset at deterministic UTC midnight,
+  // not whatever wall-clock the API host happens to live in.
+  const _d = new Date()
+  const dayEndMs   = Date.UTC(_d.getUTCFullYear(), _d.getUTCMonth(), _d.getUTCDate(), 23, 59, 59, 999)
+  const monthEndMs = Date.UTC(_d.getUTCFullYear(), _d.getUTCMonth() + 1, 1) - 1
 
   const [row] = await db.insert(budgetCaps).values({
     id:                  uuidv7(),

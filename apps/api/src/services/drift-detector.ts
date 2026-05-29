@@ -41,12 +41,19 @@ async function recordDrift(workspaceId: string, opts: {
   evidence: unknown[]
   recommendedAction: string
 }): Promise<{ created: boolean }> {
-  // Idempotency: skip if open warning with same (kind, subjectId) exists
+  // Idempotency: skip if open OR acknowledged warning with same
+  // (kind, subjectId) exists. R141 — previously only deduped against
+  // 'open', which let reality-correction's notify_only / no-op branches
+  // (which set status='acknowledged' or 'resolved' WITHOUT actually
+  // fixing the underlying condition) trigger a loop: warning created →
+  // marked resolved without action → next tick re-creates because
+  // underlying low-confidence chains are still there. 97 resolved
+  // low_confidence_loop warnings in 7d before this fix.
   const existing = await db.select({ id: driftWarnings.id }).from(driftWarnings)
     .where(and(
       eq(driftWarnings.workspaceId, workspaceId),
       eq(driftWarnings.kind, opts.kind),
-      eq(driftWarnings.status, 'open'),
+      sql`${driftWarnings.status} IN ('open', 'acknowledged')`,
       opts.subjectId ? eq(driftWarnings.subjectId, opts.subjectId) : sql`${driftWarnings.subjectId} IS NULL`,
     ))
     .limit(1).then(r => r[0]).catch(() => null)

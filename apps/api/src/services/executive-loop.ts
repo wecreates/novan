@@ -87,6 +87,8 @@ async function writeState(workspaceId: string, patch: {
 // ─── Cycle implementations ──────────────────────────────────────────────────
 
 export async function runHourlyHealthReview(workspaceId: string): Promise<ReviewResult> {
+  const { recordAgentActivityAsync } = await import('./agent-state-sync.js')
+  recordAgentActivityAsync(workspaceId, 'research_planner', { status: 'running' })
   const stab = await stabilitySnapshot(workspaceId).catch(() => null)
   const before = await readState(workspaceId)
   const beforePrio = (before?.topPriorities ?? []) as Array<{ title: string }>

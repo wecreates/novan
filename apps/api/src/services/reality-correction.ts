@@ -162,7 +162,19 @@ export async function applyCorrections(workspaceId: string): Promise<CorrectionR
         if (engaged) result.killSwitchEngagements++
         action = engaged ? 'research kill_switch ENGAGED' : 'kill_switch already engaged or skipped'
       } else {
+        // R141 — no-op branch. Mark acknowledged (not resolved below) so
+        // drift-detector dedup catches the next tick. Otherwise we burn
+        // a new warning every tick while the underlying chains stay
+        // <0.4 confidence. Skip the unconditional 'resolved' update by
+        // continuing here.
         action = `kill_switch NOT engaged (policy=${policy}, severity=${w.severity})`
+        await db.update(driftWarnings).set({
+          status: 'acknowledged', appliedAction: action,
+        }).where(eq(driftWarnings.id, w.id)).catch(() => null)
+        result.warningsHandled++
+        result.details.push({ warningId: w.id, kind: w.kind, action })
+        await emit(workspaceId, 'governance.reality_correction', { warningId: w.id, kind: w.kind, action, policy })
+        continue
       }
     } else if (w.kind === 'unsupported_conclusion' && w.subjectId) {
       await db.update(assumptions).set({ status: 'unverified', updatedAt: Date.now() })

@@ -6,7 +6,7 @@
  */
 
 import { v7 as uuidv7 }     from 'uuid'
-import { and, eq, lt }      from 'drizzle-orm'
+import { and, eq, lt, isNotNull } from 'drizzle-orm'
 import { db }                from '../db/client.js'
 import {
   recoveryCheckpoints, events,
@@ -129,11 +129,16 @@ export async function pruneOldCheckpoints(
 ): Promise<number> {
   const cutoff = Date.now() - maxAgeMs
 
+  // SQL semantics: `col = NULL` is always false in Postgres, so the
+  // prior `eq(restoredAt, null as never)` predicate matched zero rows
+  // and the prune effectively never ran. Use `isNotNull` so we delete
+  // OLD checkpoints THAT HAVE BEEN RESTORED — keeping unrestored recent
+  // ones around for retry, which matches the original intent.
   const rows = await db.delete(recoveryCheckpoints)
     .where(and(
       eq(recoveryCheckpoints.workspaceId, workspaceId),
       lt(recoveryCheckpoints.createdAt, cutoff),
-      eq(recoveryCheckpoints.restoredAt, null as never),  // keep unrestored recent ones
+      isNotNull(recoveryCheckpoints.restoredAt),
     ))
     .returning({ id: recoveryCheckpoints.id })
     .catch(() => [])

@@ -24,6 +24,24 @@ export const QUEUE_CONFIG = {
   DEFAULT_BACKOFF_DELAY_MS: 2_000,
 } as const
 
+/**
+ * Per-queue lock overrides. Long-running job types need a wider lock window
+ * than the default 60s to prevent lock expiry mid-execution → duplicate
+ * processing under concurrent workers. BullMQ renews the lock every
+ * lockDuration/2 while the job is alive, but the *initial* window must be
+ * larger than the worst-case single iteration of synchronous work.
+ *
+ *   - workflow: workflow runs can do heavy step-by-step execution; bounded
+ *     by step timeouts, but a single complex step (e.g. nested workflow
+ *     dispatch + DB writes) can exceed 60s. 5 min is generous but safe.
+ *   - learning: merge_duplicates / dedupe on a 1M-row workspace can run
+ *     several minutes before yielding. 5 min covers the worst observed run.
+ */
+export const QUEUE_LOCK_OVERRIDES: Partial<Record<QueueName, number>> = {
+  workflow: 5 * 60_000,
+  learning: 5 * 60_000,
+}
+
 // --- Workflow queue ---
 export interface ExecuteWorkflowJobData { runId: string; workflowId: string; workspaceId: string; traceId: string }
 export interface ResumeWorkflowJobData  { runId: string; workspaceId: string; approvalId: string; approved: boolean; resolvedBy: string; traceId?: string }

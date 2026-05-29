@@ -16,7 +16,7 @@ import { db }                          from '../db/client.js'
 import {
   agents, strategicGoals, incidents, auditFindings, events,
   researchFindings, researchTopics, feedbackReports, telemetryEvents,
-  imageGenerations, providerHealthLog, killSwitches, workflowRuns,
+  imageGenerations, killSwitches, workflowRuns,
 } from '../db/schema.js'
 import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm'
 import { generateRecommendations, type Recommendation, type RecKind } from './recommendation-engine.js'
@@ -335,7 +335,6 @@ export async function crossDivisionBlockers(workspaceId: string): Promise<CrossD
   }
 
   // Budget cap > 90% → blocks all autonomous divisions
-  const budget = await db.select().from(providerHealthLog).limit(0).catch(() => [])  // placeholder no-op import use
   const { providerBudgets: pb } = await import('../db/schema.js')
   const budgetRow = await db.select().from(pb).where(eq(pb.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch(() => null)
   if (budgetRow) {

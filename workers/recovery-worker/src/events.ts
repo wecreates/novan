@@ -34,6 +34,6 @@ export async function emitEvent(
     version:       EVENT_SCHEMA_VERSION,
     createdAt:     Date.now(),
   }).catch((err: unknown) => {
-    console.error('Failed to persist recovery event:', type, err)
+    console.error('[recovery-worker] Failed to persist event:', type, (err as Error).message)
   })
 }

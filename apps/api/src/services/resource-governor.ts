@@ -40,14 +40,25 @@ export interface GovernorLimits {
   maxDeploymentsPerDay:    number
 }
 
+/** R143 — `Number(process.env['X'] ?? fallback)` returns NaN if the env
+ *  var is set to a non-numeric string. Comparisons against NaN are
+ *  always false, which silently disables the cap (e.g. agent concurrency
+ *  cap becomes infinite). Guard with isFinite + fallback. */
+function envNum(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (raw === undefined || raw === '') return fallback
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : fallback
+}
+
 const DEFAULT_LIMITS: GovernorLimits = {
-  maxConcurrentAgents:        Number(process.env['GOV_MAX_AGENTS']         ?? 8),
-  maxResearchPerHour:         Number(process.env['GOV_MAX_RESEARCH_HR']    ?? 30),
-  maxImagesPerHour:           Number(process.env['GOV_MAX_IMAGES_HR']      ?? 20),
-  maxProviderSpendUsdPerHour: Number(process.env['GOV_MAX_SPEND_HR']       ?? 1.0),
-  maxQueueDepth:              Number(process.env['GOV_MAX_QUEUE']          ?? 200),
-  maxAutonomousPatchesPerDay: Number(process.env['GOV_MAX_AUTO_PATCHES_DAY'] ?? 20),
-  maxDeploymentsPerDay:       Number(process.env['GOV_MAX_DEPLOYS_DAY']    ?? 5),
+  maxConcurrentAgents:        envNum('GOV_MAX_AGENTS',           8),
+  maxResearchPerHour:         envNum('GOV_MAX_RESEARCH_HR',     30),
+  maxImagesPerHour:           envNum('GOV_MAX_IMAGES_HR',       20),
+  maxProviderSpendUsdPerHour: envNum('GOV_MAX_SPEND_HR',         1.0),
+  maxQueueDepth:              envNum('GOV_MAX_QUEUE',          200),
+  maxAutonomousPatchesPerDay: envNum('GOV_MAX_AUTO_PATCHES_DAY', 20),
+  maxDeploymentsPerDay:       envNum('GOV_MAX_DEPLOYS_DAY',      5),
 }
 
 // In-process counters — token-bucket style, reset hourly per process

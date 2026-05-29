@@ -24,7 +24,17 @@ import {
   aiUsage,
 } from './schema.js'
 
-const sql = postgres(process.env['DATABASE_URL'] ?? 'postgresql://postgres:postgres@localhost:5432/ops', { max: 1 })
+// Seed must NOT fall back to a hardcoded localhost connection — accidental
+// runs against a stale or production DB would dump demo data into it.
+const connectionString = process.env['DATABASE_URL']
+if (!connectionString) {
+  console.error('[seed] DATABASE_URL is required')
+  process.exit(1)
+}
+const sql = postgres(connectionString, {
+  max: 1,
+  connection: { application_name: 'ops-seed' },
+})
 const db = drizzle(sql)
 
 const WS_ID = 'default'

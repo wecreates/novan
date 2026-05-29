@@ -10,13 +10,15 @@
 
 import { Worker, Queue, type Job } from 'bullmq'
 import { pino }                    from 'pino'
-import { eq, and, lt, isNotNull, isNull, sql } from 'drizzle-orm'
+import { eq, and, lt, isNotNull, isNull, sql, inArray } from 'drizzle-orm'
 import { drizzle }                 from 'drizzle-orm/postgres-js'
 import postgres                    from 'postgres'
 import { v7 as uuidv7 }            from 'uuid'
 import * as schema from '@ops/db'
+import { startWorkerHeartbeat } from '@ops/db'
 import {
   attachWorkerLifecycle,
+  installProcessSafetyNet,
   createRedisFromEnv,
 } from '@ops/runtime-kernel'
 
@@ -32,6 +34,7 @@ const QUEUE_NAME = 'optimization'
 
 const queryClient = postgres(DATABASE_URL, { max: 3, idle_timeout: 30 })
 const db          = drizzle(queryClient)
+startWorkerHeartbeat({ db, name: 'optimization-worker', capabilities: ['optimization', 'recommendation-rank'] })
 const connection  = createRedisFromEnv()
 
 // ─── Event helper ─────────────────────────────────────────────────────────────
@@ -126,12 +129,14 @@ async function handleCleanupStaleMemories(data: CleanupStaleMemoriesJob): Promis
 
   const ids = expired.map((r) => r.id)
 
+  // SECURITY: previously used `sql.raw(\`ARRAY[${ids.map(...)}]\`)` which
+  // interpolated IDs as strings. Currently safe because IDs come from
+  // our own SELECT, but if a future change feeds external IDs in,
+  // instant injection. Use drizzle's parameterized inArray instead.
   await db
     .update(schema.memories)
     .set({ updatedAt: now })
-    .where(
-      sql`${schema.memories.id} = any(${sql.raw(`ARRAY[${ids.map((id) => `'${id}'`).join(',')}]`)})`,
-    )
+    .where(inArray(schema.memories.id, ids))
 
   // Emit one event per unique workspace to keep events workspace-scoped
   const byWorkspace = new Map<string, number>()
@@ -348,6 +353,19 @@ async function registerScheduledJobs(): Promise<void> {
   log.info('Scheduled optimization jobs registered')
 }
 
+// ─── Dead-letter persistence ──────────────────────────────────────────────────
+async function persistDeadLetter(record: import('@ops/runtime-kernel').DeadLetterRecord): Promise<void> {
+  try {
+    await db.insert(schema.deadLetterJobs).values({
+      id: record.id, queueName: record.queueName, jobId: record.jobId, jobName: record.jobName,
+      workspaceId: record.workspaceId, payload: record.payload, error: record.error,
+      attempts: record.attempts, workerId: record.workerId, traceId: record.traceId ?? null,
+      firstFailedAt: record.firstFailedAt, deadLetteredAt: record.deadLetteredAt,
+    })
+    log.warn({ jobId: record.jobId, error: record.error }, 'optimization-worker job dead-lettered')
+  } catch (e) { log.error({ err: (e as Error).message, jobId: record.jobId }, 'failed to persist dead letter') }
+}
+
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 
 const cleanupLifecycle = attachWorkerLifecycle(worker, {
@@ -356,6 +374,7 @@ const cleanupLifecycle = attachWorkerLifecycle(worker, {
   workerId:   WORKER_ID,
   log,
   emitEvent,
+  onDeadLetter: persistDeadLetter,
 })
 
 async function shutdown(signal: string): Promise<void> {
@@ -370,10 +389,14 @@ async function shutdown(signal: string): Promise<void> {
 
 process.on('SIGTERM', () => { void shutdown('SIGTERM') })
 process.on('SIGINT',  () => { void shutdown('SIGINT') })
+installProcessSafetyNet({ workerName: 'optimization-worker', log })
 
-// Register schedules then start
+// Register schedules then start. Fail-fast on registration errors so the
+// orchestrator surfaces the missing periodic work instead of silently
+// running without cleanup-stale-memories and risk-score recompute.
 registerScheduledJobs().catch((err) => {
-  log.error({ err }, 'Failed to register scheduled jobs')
+  log.error({ err }, 'Failed to register scheduled jobs — exiting')
+  process.exit(1)
 })
 
 log.info({ workerId: WORKER_ID }, 'Optimization worker started')

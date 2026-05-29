@@ -30,9 +30,14 @@ async function emitEvent(workspaceId: string, type: string, payload: Record<stri
 // ─── Period helpers ───────────────────────────────────────────────────────────
 
 function currentMonthPeriod(): { start: number; end: number } {
+  // Use UTC for billing boundaries — local-time Date() constructors shift
+  // on DST transitions and across timezones, which means a workspace's
+  // "month" can be 1h short or long depending on where the API host runs.
+  // Billing periods must be deterministic; the operator-visible month
+  // string is rendered separately from the operator's timezone.
   const now = new Date()
-  const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime() - 1
+  const start = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
+  const end = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1) - 1
   return { start, end }
 }
 

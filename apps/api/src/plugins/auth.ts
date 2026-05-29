@@ -29,10 +29,28 @@ function sha256(input: string): string {
   return createHash('sha256').update(input).digest('hex')
 }
 
+/** Local-dev auto-auth: when NODE_ENV !== 'production', requests with
+ *  no Bearer token transparently get a default operator identity so
+ *  the solo-operator UI works without a login flow. Production keeps
+ *  the strict Bearer requirement. Read per-request so tests can mock. */
+function devAutoAuthActive(): boolean {
+  return process.env['NODE_ENV'] !== 'production'
+}
+
 const authPluginImpl: FastifyPluginAsync = async (app) => {
   app.decorate('authenticate', async (req: FastifyRequest, reply: FastifyReply) => {
     const authHeader = req.headers['authorization']
     if (!authHeader?.startsWith('Bearer ')) {
+      if (devAutoAuthActive()) {
+        // Solo-operator local-dev shortcut. Workspace pulled from query
+        // string when present, else default — matches the rest of the
+        // codebase's default-workspace convention.
+        const qs = (req.query as Record<string, unknown>) ?? {}
+        const ws = String(qs['workspace_id'] ?? qs['workspaceId'] ?? '') || 'default'
+        req.userId      = 'operator'
+        req.workspaceId = ws
+        return
+      }
       return reply.status(401).send({ success: false, error: 'Unauthorized', code: 'UNAUTHORIZED', requestId: req.id })
     }
 

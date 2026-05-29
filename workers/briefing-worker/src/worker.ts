@@ -7,8 +7,8 @@
 import { Worker, type Job }              from 'bullmq'
 import { pino }                          from 'pino'
 import { eq }                            from 'drizzle-orm'
-import { createDb, briefings, events }   from '@ops/db'
-import { createRedisFromEnv, attachWorkerLifecycle } from '@ops/runtime-kernel'
+import { createDb, briefings, events, startWorkerHeartbeat, deadLetterJobs } from '@ops/db'
+import { createRedisFromEnv, attachWorkerLifecycle, installProcessSafetyNet } from '@ops/runtime-kernel'
 import { EVENT_TYPES, EVENT_SCHEMA_VERSION }         from '@ops/event-contracts'
 import { v7 as uuidv7 }                  from 'uuid'
 import { generateBriefing, persistBriefing } from './generator.js'
@@ -20,7 +20,8 @@ const log = pino({ name: 'briefing-worker', level: process.env['LOG_LEVEL'] ?? '
 const connectionString = process.env['DATABASE_URL']
 if (!connectionString) throw new Error('DATABASE_URL is required')
 
-const db    = createDb(connectionString, 3)
+const db    = createDb(connectionString, 3, 'ops-briefing-worker')
+startWorkerHeartbeat({ db, name: 'briefing-worker', capabilities: ['briefing', 'summary'] })
 const redis = createRedisFromEnv()
 
 // ─── Event emitter ────────────────────────────────────────────────────────────
@@ -133,6 +134,19 @@ const worker = new Worker(
   },
 )
 
+// ─── Dead-letter persistence ──────────────────────────────────────────────────
+async function persistDeadLetter(record: import('@ops/runtime-kernel').DeadLetterRecord): Promise<void> {
+  try {
+    await db.insert(deadLetterJobs).values({
+      id: record.id, queueName: record.queueName, jobId: record.jobId, jobName: record.jobName,
+      workspaceId: record.workspaceId, payload: record.payload, error: record.error,
+      attempts: record.attempts, workerId: record.workerId, traceId: record.traceId ?? null,
+      firstFailedAt: record.firstFailedAt, deadLetteredAt: record.deadLetteredAt,
+    })
+    log.warn({ jobId: record.jobId, error: record.error }, 'briefing-worker job dead-lettered')
+  } catch (e) { log.error({ err: e, jobId: record.jobId }, 'failed to persist dead letter') }
+}
+
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 
 const workerId = `briefing-worker-${process.pid}`
@@ -142,9 +156,19 @@ const cleanup  = attachWorkerLifecycle(worker, {
   workerId,
   log,
   emitEvent,
+  onDeadLetter: persistDeadLetter,
 })
 
-process.on('SIGTERM', () => { void cleanup().then(() => worker.close()).then(() => process.exit(0)) })
-process.on('SIGINT',  () => { void cleanup().then(() => worker.close()).then(() => process.exit(0)) })
+// SHUTDOWN — previously `worker.close()` returned void and the inner
+// .then() ran immediately, exiting before close drained jobs.
+async function shutdown(signal: string): Promise<void> {
+  log.info({ signal }, 'briefing-worker shutting down')
+  try { await cleanup() } catch { /* */ }
+  try { await worker.close() } catch { /* */ }
+  process.exit(0)
+}
+process.on('SIGTERM', () => { void shutdown('SIGTERM') })
+process.on('SIGINT',  () => { void shutdown('SIGINT') })
+installProcessSafetyNet({ workerName: 'briefing-worker', log })
 
 log.info('Briefing worker started')

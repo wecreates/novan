@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Mic, MicOff, Volume2 }        from 'lucide-react'
 import { useNavigate }                 from 'react-router-dom'
-import { intelligenceApi }             from '../api.js'
+import { intelligenceApi, API_BASE }    from '../api.js'
 import { useWorkspace }                from '../contexts/WorkspaceContext.js'
 
 type SpeechRecognitionLike = {
@@ -104,6 +104,24 @@ export function VoiceCommandBar() {
       return
     }
 
+    // Fall through to the brain — anything the local handlers don't
+    // recognize is sent to /api/v1/brain/task. The planner turns
+    // arbitrary speech into an operation plan.
+    try {
+      const res  = await fetch(`${API_BASE}/api/v1/brain/task`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspace_id: workspaceId, task: raw }),
+      })
+      const json = await res.json() as { success: boolean; data?: { results?: Array<{ op: string; ok: boolean }>; plannerReason?: string; reason?: string } }
+      if (json.success && json.data) {
+        const ok  = (json.data.results ?? []).filter(r => r.ok).length
+        const err = (json.data.results ?? []).filter(r => !r.ok).length
+        const why = json.data.plannerReason ?? json.data.reason ?? 'task complete'
+        speak(`Brain: ${why}. ${ok} succeeded, ${err} failed.`)
+        return
+      }
+    } catch { /* fall through */ }
     speak('Command not recognized.')
   }
 

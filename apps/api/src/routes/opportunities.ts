@@ -123,7 +123,7 @@ export const opportunityRoutes: FastifyPluginAsync = async (app) => {
   // ── POST /  — create ─────────────────────────────────────────────────────
   app.post('/', async (req, reply) => {
     const parsed = createSchema.safeParse(req.body)
-    if (!parsed.success) return reply.status(400).send({ error: parsed.error.issues[0]?.message ?? 'Invalid body' })
+    if (!parsed.success) return reply.status(400).send({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' })
 
     const d = parsed.data
     const workspaceId = ws(req)
@@ -206,7 +206,7 @@ export const opportunityRoutes: FastifyPluginAsync = async (app) => {
       .where(and(eq(opportunities.id, id), eq(opportunities.workspaceId, workspaceId)))
       .limit(1)
 
-    if (!row) return reply.status(404).send({ error: 'Opportunity not found' })
+    if (!row) return reply.status(404).send({ success: false, error: 'Opportunity not found' })
 
     // Attach linked memory summaries
     let linkedMemories: { id: string; content: string; confidence: number }[] = []
@@ -225,12 +225,12 @@ export const opportunityRoutes: FastifyPluginAsync = async (app) => {
     const workspaceId = ws(req)
 
     const parsed = updateSchema.safeParse(req.body)
-    if (!parsed.success) return reply.status(400).send({ error: parsed.error.issues[0]?.message ?? 'Invalid body' })
+    if (!parsed.success) return reply.status(400).send({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' })
 
     const [existing] = await db.select().from(opportunities)
       .where(and(eq(opportunities.id, id), eq(opportunities.workspaceId, workspaceId)))
       .limit(1)
-    if (!existing) return reply.status(404).send({ error: 'Opportunity not found' })
+    if (!existing) return reply.status(404).send({ success: false, error: 'Opportunity not found' })
 
     const d = parsed.data
     const now = Date.now()
@@ -302,7 +302,7 @@ export const opportunityRoutes: FastifyPluginAsync = async (app) => {
     const [existing] = await db.select().from(opportunities)
       .where(and(eq(opportunities.id, id), eq(opportunities.workspaceId, workspaceId)))
       .limit(1)
-    if (!existing) return reply.status(404).send({ error: 'Opportunity not found' })
+    if (!existing) return reply.status(404).send({ success: false, error: 'Opportunity not found' })
 
     const { score, scoreBreakdown } = computeScore({
       estimatedROI:       existing.estimatedROI,
@@ -332,13 +332,13 @@ export const opportunityRoutes: FastifyPluginAsync = async (app) => {
       changedBy: z.string().optional().default('user'),
     })
     const parsed = schema.safeParse(req.body)
-    if (!parsed.success) return reply.status(400).send({ error: 'Invalid status' })
+    if (!parsed.success) return reply.status(400).send({ success: false, error: 'Invalid status' })
 
     const [existing] = await db.select({ status: opportunities.status })
       .from(opportunities)
       .where(and(eq(opportunities.id, id), eq(opportunities.workspaceId, workspaceId)))
       .limit(1)
-    if (!existing) return reply.status(404).send({ error: 'Opportunity not found' })
+    if (!existing) return reply.status(404).send({ success: false, error: 'Opportunity not found' })
 
     const { status, changedBy } = parsed.data
     const now = Date.now()
@@ -371,13 +371,13 @@ export const opportunityRoutes: FastifyPluginAsync = async (app) => {
       context:     z.record(z.unknown()).optional().default({}),
     })
     const parsed = schema.safeParse(req.body)
-    if (!parsed.success) return reply.status(400).send({ error: 'Invalid body' })
+    if (!parsed.success) return reply.status(400).send({ success: false, error: 'Invalid body' })
 
     const [opp] = await db.select().from(opportunities)
       .where(and(eq(opportunities.id, id), eq(opportunities.workspaceId, workspaceId)))
       .limit(1)
-    if (!opp) return reply.status(404).send({ error: 'Opportunity not found' })
-    if (opp.convertedRunId) return reply.status(409).send({ error: 'Already converted to a workflow run' })
+    if (!opp) return reply.status(404).send({ success: false, error: 'Opportunity not found' })
+    if (opp.convertedRunId) return reply.status(409).send({ success: false, error: 'Already converted to a workflow run' })
 
     const { workflowId: requestedWorkflowId, convertedBy, context } = parsed.data
 
@@ -472,13 +472,13 @@ export const opportunityRoutes: FastifyPluginAsync = async (app) => {
 
     const schema = z.object({ memoryIds: z.array(z.string()).min(1) })
     const parsed = schema.safeParse(req.body)
-    if (!parsed.success) return reply.status(400).send({ error: 'Invalid body' })
+    if (!parsed.success) return reply.status(400).send({ success: false, error: 'Invalid body' })
 
     const [opp] = await db.select({ linkedMemoryIds: opportunities.linkedMemoryIds })
       .from(opportunities)
       .where(and(eq(opportunities.id, id), eq(opportunities.workspaceId, workspaceId)))
       .limit(1)
-    if (!opp) return reply.status(404).send({ error: 'Opportunity not found' })
+    if (!opp) return reply.status(404).send({ success: false, error: 'Opportunity not found' })
 
     const merged = [...new Set([...opp.linkedMemoryIds, ...parsed.data.memoryIds])]
     await db.update(opportunities)

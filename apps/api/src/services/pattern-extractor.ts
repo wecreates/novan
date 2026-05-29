@@ -59,6 +59,8 @@ async function ensurePreventiveTask(workspaceId: string, recoId: string, opts: {
 }
 
 export async function extractPatterns(workspaceId: string): Promise<PatternExtractionResult> {
+  const { recordAgentActivityAsync } = await import('./agent-state-sync.js')
+  recordAgentActivityAsync(workspaceId, 'trend_detection', { status: 'running' })
   const result: PatternExtractionResult = {
     workspaceId,
     recurringBottlenecks: 0, recurringOperatorPain: 0,

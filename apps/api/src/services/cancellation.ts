@@ -47,13 +47,16 @@ export async function cancelWorkflowRun(
 ): Promise<CancelResult> {
   const now = Date.now()
 
+  // workflowRuns has no `updatedAt` column — removing the bogus field
+  // also removes the `as never` cast that was hiding the schema mismatch.
+  // Drizzle was silently dropping the field at runtime, so behavior is
+  // unchanged; the lie is just gone.
   const rows = await db.update(workflowRuns)
     .set({
       status:      'cancelled',
       completedAt: now,
       errorMessage: `Cancelled: ${reason}`,
-      updatedAt:   now,
-    } as never)
+    })
     .where(and(
       eq(workflowRuns.id, runId),
       eq(workflowRuns.workspaceId, workspaceId),

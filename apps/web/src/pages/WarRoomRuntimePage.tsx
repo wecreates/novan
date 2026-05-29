@@ -13,7 +13,7 @@ import {
   Activity, Cpu, Server, ShieldAlert, RotateCcw, Zap,
   AlertTriangle, XCircle, RefreshCw,
   Power, Pause, Play, AlertOctagon,
-  Radio,
+  Radio, Network, Bug,
 } from 'lucide-react'
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
 
@@ -105,6 +105,22 @@ function useWorkerHealth() {
 }
 function useWorkerQueues() {
   return useQuery({ queryKey:['wroom-worker-queues'], queryFn: () => get(`${API}/workers/queues`), refetchInterval:15_000 })
+}
+function useExecutionFabric() {
+  const { workspaceId } = useWorkspace()
+  return useQuery({
+    queryKey:['wroom-fabric', workspaceId],
+    queryFn: () => get(`${API}/runtime/fabric?workspace_id=${workspaceId}`),
+    refetchInterval: 10_000,
+  })
+}
+function useWorkerCosts() {
+  const { workspaceId } = useWorkspace()
+  return useQuery({
+    queryKey:['wroom-worker-costs', workspaceId],
+    queryFn: () => get(`${API}/runtime/workers/costs?workspace_id=${workspaceId}`),
+    refetchInterval: 15_000,
+  })
 }
 function useProviderHealth() {
   const { workspaceId } = useWorkspace()
@@ -789,6 +805,8 @@ const TABS = [
   { id:'workers',   label:'Workers',        Icon: Cpu         },
   { id:'budget',    label:'Budget / KS',    Icon: ShieldAlert },
   { id:'recovery',  label:'Recovery',       Icon: RotateCcw   },
+  { id:'fabric',    label:'Exec Fabric',    Icon: Network     },
+  { id:'issues',    label:'Issues',         Icon: Bug         },
   { id:'events',    label:'Event Timeline', Icon: Zap         },
 ] as const
 
@@ -840,7 +858,368 @@ export default function WarRoomRuntimePage() {
         {tab === 'workers'   && <WorkersTab />}
         {tab === 'budget'    && <BudgetKillTab />}
         {tab === 'recovery'  && <RecoveryTab />}
+        {tab === 'fabric'    && <FabricTab />}
+        {tab === 'issues'    && <IssuesTab />}
         {tab === 'events'    && <EventsTab />}
+      </div>
+    </div>
+  )
+}
+
+// ─── Execution Fabric Tab ─────────────────────────────────────────────────────
+// Shows what's local vs remote: local hardware (CPU load, memory), worker
+// pool (alive count, by type, capability union), and which heavy job kinds
+// have NO remote worker yet — i.e. would be blocked if requested.
+
+interface FabricData {
+  policy: string
+  hardware: {
+    cpuLoad1m: number; processMemMb: number; systemMemPct: number; cores: number
+    cpuOverLimit: boolean; memOverLimit: boolean
+  }
+  workers: {
+    total: number; alive: number
+    byType: Record<string, number>
+    capabilities: string[]
+  }
+  heavyKindsCovered:   string[]
+  heavyKindsUncovered: string[]
+}
+
+interface WorkerCostRow {
+  workerId: string; workerName: string; workerType: string
+  endpointUrl: string | null; alive: boolean
+  totalCostUsd: number; leases: number; completed: number; failed: number
+}
+
+function FabricTab() {
+  const { data, isFetching, refetch } = useExecutionFabric() as {
+    data?: { data?: FabricData }; isFetching: boolean; refetch: () => void
+  }
+  const { data: costData } = useWorkerCosts() as { data?: { data?: WorkerCostRow[] } }
+  const costs = costData?.data ?? []
+  const f = data?.data
+  if (!f) {
+    return <div style={{ color:'var(--text-muted)', fontSize:12 }}>Loading fabric snapshot…</div>
+  }
+
+  const policyOk    = f.policy === 'block'
+  const cpuPct      = Math.round(f.hardware.cpuLoad1m * 100)
+  const cpuColor    = f.hardware.cpuOverLimit ? '#f43f5e' : cpuPct > 50 ? '#f59e0b' : '#10b981'
+  const memColor    = f.hardware.memOverLimit ? '#f43f5e' : f.hardware.systemMemPct > 60 ? '#f59e0b' : '#10b981'
+  const coverColor  = f.heavyKindsUncovered.length === 0 ? '#10b981' : '#f59e0b'
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+      {/* Policy banner */}
+      <div style={{ background: policyOk ? '#10b98115' : '#f5970015',
+        border: `1px solid ${policyOk ? '#10b98144' : '#f59e0b44'}`, borderRadius:10,
+        padding:'12px 16px', display:'flex', alignItems:'center', gap:12 }}>
+        <Network style={{ width:16, height:16, color: policyOk ? '#10b981' : '#f59e0b' }} />
+        <div style={{ flex:1 }}>
+          <span style={{ fontSize:12, fontWeight:700, color: policyOk ? '#10b981' : '#f59e0b' }}>
+            Heavy-compute policy: {f.policy.toUpperCase()}
+          </span>
+          <span style={{ fontSize:11, color:'var(--text-muted)', marginLeft:10 }}>
+            {policyOk
+              ? 'Heavy jobs route to remote workers; local fallback is blocked.'
+              : 'Heavy jobs may fall back to local execution if no remote worker is found.'}
+          </span>
+        </div>
+        <button onClick={() => refetch()} disabled={isFetching}
+          style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:6,
+            padding:'4px 10px', fontSize:11, color:'var(--text-primary)', cursor:'pointer' }}>
+          {isFetching ? '…' : 'Refresh'}
+        </button>
+      </div>
+
+      {/* Local hardware */}
+      <div>
+        <h3 style={{ fontSize:10, fontWeight:700, letterSpacing:'0.08em', color:'var(--text-muted)',
+          textTransform:'uppercase', margin:'0 0 8px 0' }}>Local hardware</h3>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))', gap:10 }}>
+          <Kpi label="CPU load (1m)" value={`${cpuPct}%`} color={cpuColor} />
+          <Kpi label="System memory" value={`${f.hardware.systemMemPct}%`} color={memColor} />
+          <Kpi label="API process RSS" value={`${f.hardware.processMemMb} MB`} color="var(--text-primary)" />
+          <Kpi label="Cores" value={f.hardware.cores} color="var(--text-primary)" />
+        </div>
+        {(f.hardware.cpuOverLimit || f.hardware.memOverLimit) && (
+          <div style={{ marginTop:8, fontSize:11, color:'#f43f5e' }}>
+            ⚠ Local hardware over configured limits — heavy jobs will block until usage drops.
+          </div>
+        )}
+      </div>
+
+      {/* Worker pool */}
+      <div>
+        <h3 style={{ fontSize:10, fontWeight:700, letterSpacing:'0.08em', color:'var(--text-muted)',
+          textTransform:'uppercase', margin:'0 0 8px 0' }}>Remote worker pool</h3>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))', gap:10 }}>
+          <Kpi label="Alive workers" value={f.workers.alive} color={f.workers.alive > 0 ? '#10b981' : '#f43f5e'} />
+          <Kpi label="Registered total" value={f.workers.total} color="var(--text-primary)" />
+          {Object.entries(f.workers.byType).map(([t, n]) => (
+            <Kpi key={t} label={`type: ${t}`} value={n} color="var(--text-primary)" />
+          ))}
+        </div>
+        {f.workers.capabilities.length > 0 && (
+          <div style={{ marginTop:8, display:'flex', flexWrap:'wrap', gap:6 }}>
+            {f.workers.capabilities.map(c =>
+              <span key={c} style={{ fontSize:10, padding:'3px 8px', borderRadius:4,
+                background:'#6366f122', color:'#a5b4fc', border:'1px solid #6366f144' }}>{c}</span>
+            )}
+          </div>
+        )}
+        {f.workers.alive === 0 && (
+          <div style={{ marginTop:8, fontSize:11, color:'var(--text-muted)' }}>
+            No remote workers registered. Register one with
+            <code style={{ margin:'0 4px', padding:'1px 5px', background:'var(--bg-elevated)',
+              borderRadius:3, fontSize:10 }}>POST /api/v1/runtime/workers</code>
+            advertising the capabilities below.
+          </div>
+        )}
+      </div>
+
+      {/* Per-worker cost rollup */}
+      {costs.length > 0 && (
+        <div>
+          <h3 style={{ fontSize:10, fontWeight:700, letterSpacing:'0.08em', color:'var(--text-muted)',
+            textTransform:'uppercase', margin:'0 0 8px 0' }}>Cost by worker (lifetime)</h3>
+          <div style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:8, overflow:'hidden' }}>
+            <table style={{ width:'100%', fontSize:11, borderCollapse:'collapse' }}>
+              <thead style={{ background:'var(--bg-surface)' }}>
+                <tr>
+                  <th style={{ textAlign:'left', padding:'6px 10px', color:'var(--text-muted)', fontWeight:600 }}>Worker</th>
+                  <th style={{ textAlign:'left', padding:'6px 10px', color:'var(--text-muted)', fontWeight:600 }}>Type</th>
+                  <th style={{ textAlign:'right', padding:'6px 10px', color:'var(--text-muted)', fontWeight:600 }}>Leases</th>
+                  <th style={{ textAlign:'right', padding:'6px 10px', color:'var(--text-muted)', fontWeight:600 }}>Done / Failed</th>
+                  <th style={{ textAlign:'right', padding:'6px 10px', color:'var(--text-muted)', fontWeight:600 }}>Total $</th>
+                </tr>
+              </thead>
+              <tbody>
+                {costs
+                  .slice()
+                  .sort((a, b) => b.totalCostUsd - a.totalCostUsd)
+                  .map(w => (
+                    <tr key={w.workerId} style={{ borderTop:'1px solid var(--border)' }}>
+                      <td style={{ padding:'6px 10px', color:'var(--text-primary)' }}>
+                        <Dot ok={w.alive} warn={!w.alive} /> <span style={{ marginLeft:6 }}>{w.workerName}</span>
+                      </td>
+                      <td style={{ padding:'6px 10px', color:'var(--text-secondary)' }}>{w.workerType}</td>
+                      <td style={{ padding:'6px 10px', textAlign:'right', color:'var(--text-secondary)' }}>{w.leases}</td>
+                      <td style={{ padding:'6px 10px', textAlign:'right', color:'var(--text-secondary)' }}>
+                        <span style={{ color:'#10b981' }}>{w.completed}</span>
+                        <span style={{ color:'var(--text-muted)' }}> / </span>
+                        <span style={{ color: w.failed > 0 ? '#f43f5e' : 'var(--text-muted)' }}>{w.failed}</span>
+                      </td>
+                      <td style={{ padding:'6px 10px', textAlign:'right', color:'var(--text-primary)', fontWeight:600 }}>
+                        ${w.totalCostUsd.toFixed(4)}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Capability coverage */}
+      <div>
+        <h3 style={{ fontSize:10, fontWeight:700, letterSpacing:'0.08em', color:'var(--text-muted)',
+          textTransform:'uppercase', margin:'0 0 8px 0' }}>Heavy-job coverage</h3>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+          <div style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)',
+            borderRadius:8, padding:12 }}>
+            <div style={{ fontSize:11, fontWeight:600, color:'#10b981', marginBottom:6 }}>
+              Covered ({f.heavyKindsCovered.length})
+            </div>
+            {f.heavyKindsCovered.length === 0
+              ? <div style={{ fontSize:11, color:'var(--text-muted)' }}>—</div>
+              : f.heavyKindsCovered.map(k =>
+                  <div key={k} style={{ fontSize:11, color:'var(--text-secondary)', marginBottom:2 }}>● {k}</div>
+                )}
+          </div>
+          <div style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)',
+            borderRadius:8, padding:12 }}>
+            <div style={{ fontSize:11, fontWeight:600, color: coverColor, marginBottom:6 }}>
+              No remote worker ({f.heavyKindsUncovered.length})
+            </div>
+            {f.heavyKindsUncovered.length === 0
+              ? <div style={{ fontSize:11, color:'var(--text-muted)' }}>All covered.</div>
+              : f.heavyKindsUncovered.map(k =>
+                  <div key={k} style={{ fontSize:11, color:'var(--text-secondary)', marginBottom:2 }}>○ {k}</div>
+                )}
+          </div>
+        </div>
+        <div style={{ marginTop:8, fontSize:11, color:'var(--text-muted)' }}>
+          Uncovered kinds are blocked locally by current policy. Register a worker that advertises
+          the matching capability to enable them.
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Issues Tab ───────────────────────────────────────────────────────────────
+// Unified engineering ledger — symptom → diagnosis → patch → verification.
+
+interface IssueRow {
+  id: string; symptom: string; status: string; severity: string; source: string
+  rootCause: string | null; affectedSystems: string[]
+  proposalId: string | null; patchId: string | null; commitSha: string | null
+  detectedAt: number; updatedAt: number
+  evidence: Array<{ type: string; ref: string; summary: string; at: number }>
+}
+
+function useIssues(filters: { status?: string; severity?: string }) {
+  const { workspaceId } = useWorkspace()
+  const q = new URLSearchParams({ workspace_id: workspaceId })
+  if (filters.status)   q.set('status',   filters.status)
+  if (filters.severity) q.set('severity', filters.severity)
+  return useQuery({
+    queryKey:['wroom-issues', workspaceId, filters.status, filters.severity],
+    queryFn: () => get(`${API}/issues?${q.toString()}`),
+    refetchInterval: 15_000,
+  })
+}
+function useIssueStats() {
+  const { workspaceId } = useWorkspace()
+  return useQuery({
+    queryKey:['wroom-issue-stats', workspaceId],
+    queryFn: () => get(`${API}/issues/stats?workspace_id=${workspaceId}`),
+    refetchInterval: 30_000,
+  })
+}
+
+function IssuesTab() {
+  const { workspaceId } = useWorkspace()
+  const [statusFilter, setStatusFilter] = useState<string>('')
+  const { data: issuesData, refetch } = useIssues({ status: statusFilter }) as { data?: { data?: IssueRow[] }; refetch: () => void }
+  const { data: statsData } = useIssueStats() as { data?: { data?: Array<{ status: string; severity: string; count: number }> } }
+  const issues = issuesData?.data ?? []
+  const stats  = statsData?.data ?? []
+
+  // Roll stats into status totals + open-severity totals
+  const byStatus = new Map<string, number>()
+  const bySev    = new Map<string, number>()
+  for (const s of stats) {
+    byStatus.set(s.status, (byStatus.get(s.status) ?? 0) + s.count)
+    if (s.status !== 'closed' && s.status !== 'rejected') {
+      bySev.set(s.severity, (bySev.get(s.severity) ?? 0) + s.count)
+    }
+  }
+
+  async function ingestNow() {
+    await fetch(`${API}/issues/auto-ingest`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ workspace_id: workspaceId }),
+    })
+    refetch()
+  }
+
+  const statusColors: Record<string, string> = {
+    open: '#f43f5e', triaged: '#f59e0b', diagnosed: '#6366f1',
+    patched: '#a78bfa', verified: '#10b981', closed: '#64748b', rejected: '#475569',
+  }
+  const sevColors: Record<string, string> = {
+    emergency: '#f43f5e', critical: '#f43f5e', warning: '#f59e0b', info: '#6366f1',
+  }
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+      {/* Header w/ stats + actions */}
+      <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          {['open','triaged','diagnosed','patched','verified','closed'].map(s => (
+            <button key={s} onClick={() => setStatusFilter(statusFilter === s ? '' : s)}
+              style={{ background: statusFilter === s ? `${statusColors[s]}33` : 'var(--bg-elevated)',
+                border: `1px solid ${statusFilter === s ? statusColors[s] : 'var(--border)'}`,
+                borderRadius: 6, padding: '4px 10px', fontSize: 11, color: 'var(--text-primary)',
+                cursor: 'pointer', display:'flex', alignItems:'center', gap:6 }}>
+              <span style={{ width:6, height:6, borderRadius:'50%', background: statusColors[s] }} />
+              {s} <span style={{ color:'var(--text-muted)' }}>{byStatus.get(s) ?? 0}</span>
+            </button>
+          ))}
+        </div>
+        <button onClick={ingestNow}
+          style={{ marginLeft:'auto', background:'#6366f122', border:'1px solid #6366f144',
+            borderRadius:6, padding:'4px 10px', fontSize:11, color:'#a5b4fc', cursor:'pointer' }}>
+          <RefreshCw style={{ width:11, height:11, marginRight:4, display:'inline' }} /> Auto-ingest now
+        </button>
+      </div>
+
+      {/* Open-by-severity strip */}
+      {bySev.size > 0 && (
+        <div style={{ display:'flex', gap:10, fontSize:11 }}>
+          <span style={{ color:'var(--text-muted)' }}>Open by severity:</span>
+          {['emergency','critical','warning','info'].map(sev =>
+            (bySev.get(sev) ?? 0) > 0 && (
+              <span key={sev} style={{ color: sevColors[sev] }}>
+                ● {sev} <strong>{bySev.get(sev)}</strong>
+              </span>
+            ),
+          )}
+        </div>
+      )}
+
+      {/* Issues table */}
+      <div style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:8, overflow:'hidden' }}>
+        <table style={{ width:'100%', fontSize:11, borderCollapse:'collapse' }}>
+          <thead style={{ background:'var(--bg-surface)' }}>
+            <tr>
+              <th style={{ textAlign:'left', padding:'6px 10px', color:'var(--text-muted)', fontWeight:600, width:90 }}>Status</th>
+              <th style={{ textAlign:'left', padding:'6px 10px', color:'var(--text-muted)', fontWeight:600, width:90 }}>Severity</th>
+              <th style={{ textAlign:'left', padding:'6px 10px', color:'var(--text-muted)', fontWeight:600 }}>Symptom</th>
+              <th style={{ textAlign:'left', padding:'6px 10px', color:'var(--text-muted)', fontWeight:600, width:120 }}>Source</th>
+              <th style={{ textAlign:'right', padding:'6px 10px', color:'var(--text-muted)', fontWeight:600, width:90 }}>Evidence</th>
+              <th style={{ textAlign:'right', padding:'6px 10px', color:'var(--text-muted)', fontWeight:600, width:120 }}>Detected</th>
+            </tr>
+          </thead>
+          <tbody>
+            {issues.length === 0 && (
+              <tr><td colSpan={6} style={{ padding:'20px', textAlign:'center', color:'var(--text-muted)' }}>
+                No issues match this filter.
+              </td></tr>
+            )}
+            {issues.map(i => (
+              <tr key={i.id} style={{ borderTop:'1px solid var(--border)' }}>
+                <td style={{ padding:'6px 10px' }}>
+                  <span style={{ fontSize:10, fontWeight:600, padding:'2px 6px', borderRadius:3,
+                    background: `${statusColors[i.status] ?? '#64748b'}22`,
+                    color: statusColors[i.status] ?? 'var(--text-secondary)' }}>{i.status}</span>
+                </td>
+                <td style={{ padding:'6px 10px', color: sevColors[i.severity] ?? 'var(--text-secondary)' }}>{i.severity}</td>
+                <td style={{ padding:'6px 10px', color:'var(--text-primary)' }}>
+                  {i.symptom}
+                  {i.rootCause && (
+                    <div style={{ fontSize:10, color:'var(--text-muted)', marginTop:2 }}>
+                      <strong>RC:</strong> {i.rootCause.slice(0, 120)}
+                    </div>
+                  )}
+                  {i.affectedSystems.length > 0 && (
+                    <div style={{ marginTop:3, display:'flex', gap:4, flexWrap:'wrap' }}>
+                      {i.affectedSystems.slice(0, 5).map(s =>
+                        <span key={s} style={{ fontSize:9, padding:'1px 5px', borderRadius:3,
+                          background:'#6366f122', color:'#a5b4fc' }}>{s}</span>
+                      )}
+                    </div>
+                  )}
+                </td>
+                <td style={{ padding:'6px 10px', color:'var(--text-secondary)', fontSize:10 }}>{i.source}</td>
+                <td style={{ padding:'6px 10px', textAlign:'right', color:'var(--text-muted)' }}>
+                  {i.evidence?.length ?? 0}
+                </td>
+                <td style={{ padding:'6px 10px', textAlign:'right', color:'var(--text-muted)', fontSize:10 }}>
+                  {new Date(i.detectedAt).toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ fontSize:11, color:'var(--text-muted)' }}>
+        Auto-ingestion runs every 5 minutes from <code style={{ background:'var(--bg-elevated)', padding:'1px 4px', borderRadius:3 }}>cron.error</code> events
+        and new incidents. Same-fingerprint events append evidence to the existing open issue instead of creating duplicates.
       </div>
     </div>
   )

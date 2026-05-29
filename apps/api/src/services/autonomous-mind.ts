@@ -25,7 +25,7 @@ import { db }                          from '../db/client.js'
 import { reasoningChains, driftWarnings, recommendationFeedback } from '../db/schema.js'
 import { and, eq, gte, desc, sql } from 'drizzle-orm'
 import { alignmentScore }              from './horizon-scorer.js'
-import { proposeFromPlan, persistProposal } from './code-writer.js'
+import { proposeFromPlanWithSkills, persistProposal } from './code-writer.js'
 
 export interface MindCycleResult {
   workspaceId:       string
@@ -44,10 +44,37 @@ export interface MindCycleResult {
  * Safe to call repeatedly — every step is idempotent or guarded.
  */
 export async function runMindCycle(workspaceId: string): Promise<MindCycleResult> {
+  const { recordAgentActivityAsync } = await import('./agent-state-sync.js')
+  recordAgentActivityAsync(workspaceId, 'research_planner', { status: 'running' })
+  try {
+    return await runMindCycleInner(workspaceId)
+  } finally {
+    recordAgentActivityAsync(workspaceId, 'research_planner', { status: 'idle' })
+  }
+}
+
+async function runMindCycleInner(workspaceId: string): Promise<MindCycleResult> {
   const result: MindCycleResult = {
     workspaceId, generatedAt: Date.now(),
     gapsDetected: 0, buildPlansCreated: 0, proposalsCreated: 0,
     driftWarningsSeen: 0, chainsRecorded: 0, notes: [],
+  }
+
+  // Respect the autonomous_writes safety flag. Previously the mind
+  // cycle queued buildPlans + proposals even after the operator pulled
+  // the kill switch — by the time runAutoLoopFor checked the gate, 2-3
+  // proposals had already landed in the DB.
+  try {
+    const { isAllowed } = await import('./safety-mode.js')
+    // self_edit_loop is the broadest safety flag in scope here — when
+    // it's off, the operator has opted out of brain-initiated writes.
+    if (!(await isAllowed(workspaceId, 'self_edit_loop'))) {
+      result.notes.push('self_edit_loop flag is OFF — mind cycle skipped (operator opted out)')
+      return result
+    }
+  } catch (e) {
+    result.notes.push(`safety check failed: ${(e as Error).message} — refusing cycle`)
+    return result
   }
 
   // 1. Detect capability gaps
@@ -99,7 +126,7 @@ export async function runMindCycle(workspaceId: string): Promise<MindCycleResult
 
       // Generate a code proposal so the autonomy loop has an actionable artifact
       try {
-        const proposal = proposeFromPlan(workspaceId, plan)
+        const proposal = await proposeFromPlanWithSkills(workspaceId, plan)
         await persistProposal(proposal)
         proposalsCreated++
       } catch { /* tolerated */ }

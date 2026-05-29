@@ -155,8 +155,13 @@ export async function runSandboxed(opts: SandboxOptions): Promise<SandboxResult>
   const safeEnv = buildSandboxEnv(process.env as Record<string, string | undefined>)
 
   // ── Heartbeat interval ────────────────────────────────────────────────────
+  // Log emit failures rather than swallowing them — without this the
+  // operator can't tell a hanging exec from a heartbeat outage, and
+  // dead-worker detection silently fails.
   const heartbeatTimer = setInterval(() => {
-    emitHeartbeat(sessionId, opts.worker.workerId).catch(() => null)
+    emitHeartbeat(sessionId, opts.worker.workerId).catch((e: unknown) => {
+      console.error('[sandbox-executor] heartbeat emit failed:', (e as Error).message)
+    })
   }, HEARTBEAT_INTERVAL_MS)
 
   // ── Execute ───────────────────────────────────────────────────────────────

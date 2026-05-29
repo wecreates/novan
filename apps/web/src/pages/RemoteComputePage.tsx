@@ -134,7 +134,7 @@ export default function RemoteComputePage() {
           <QuickLink to="/compute/settings"  icon={Settings}    label="Provider Settings"   description="Manage API keys, remote endpoints, fallback chain, and routing priority" />
           <QuickLink to="/compute/health"    icon={Cpu}         label="Provider Health"      description="Real-time status, latency, and error rates across all providers and endpoints" />
           <QuickLink to="/compute/cost"      icon={BarChart3}   label="Cost Dashboard"       description="Spending per provider, budget limits, daily and monthly breakdowns" />
-          <QuickLink to="/compute/failures"  icon={AlertCircle} label="Failure Log"          description="Every failed request with error type, fallback used, and cost incurred" />
+          <QuickLink to="/dead-letter"       icon={AlertCircle} label="Failure Log"          description="Every failed request with error type, fallback used, and cost incurred" />
         </div>
 
       </div>

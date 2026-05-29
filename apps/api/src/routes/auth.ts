@@ -24,8 +24,15 @@ function generateToken(): string {
   return 'ops_' + randomBytes(32).toString('hex')
 }
 
+/** Resolve the workspace ID from the authenticated request context. The
+ *  routes that use this all run behind the `authenticate` preHandler,
+ *  which guarantees req.workspaceId is set; the explicit guard below
+ *  prevents a silent fallback to the magic 'default' workspace if the
+ *  preHandler is ever accidentally removed. */
 function ws(req: unknown): string {
-  return (req as { workspaceId?: string }).workspaceId ?? 'default'
+  const id = (req as { workspaceId?: string }).workspaceId
+  if (!id) throw new Error('ws(): workspaceId missing — route must run behind app.authenticate')
+  return id
 }
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -44,8 +51,15 @@ const verifySchema = z.object({
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
 
-  // POST /tokens — create a new API token
-  app.post('/tokens', async (req, reply) => {
+  // POST /tokens — create a new API token. Requires existing
+  // authentication: an attacker reaching this endpoint anonymously
+  // could otherwise mint tokens in the default workspace.
+  // Per-route rate limit caps brute-force creation attempts independent
+  // of the global 200/min ceiling.
+  app.post('/tokens', {
+    onRequest: [app.authenticate],
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     const parsed = createTokenSchema.safeParse(req.body)
     if (!parsed.success) return reply.status(400).send({ success: false, error: parsed.error.issues[0]?.message })
 
@@ -75,7 +89,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // GET /tokens — list tokens (no raw token hashes)
-  app.get('/tokens', async (req, reply) => {
+  app.get('/tokens', { onRequest: [app.authenticate] }, async (req, reply) => {
     const workspaceId = ws(req)
     const rows = await db
       .select({
@@ -98,8 +112,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ success: true, data: rows })
   })
 
-  // DELETE /tokens/:id — revoke a token
-  app.delete('/tokens/:id', async (req, reply) => {
+  // DELETE /tokens/:id — revoke a token. Same auth gate as create —
+  // otherwise any unauthenticated caller guessing token IDs could
+  // revoke arbitrary tokens (denial of service).
+  app.delete('/tokens/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
     const { id }      = req.params as { id: string }
     const workspaceId = ws(req)
     const now         = Date.now()
@@ -121,8 +137,13 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ success: true })
   })
 
-  // POST /verify — verify a raw token
-  app.post('/verify', async (req, reply) => {
+  // POST /verify — verify a raw token. Tight rate limit (20/min/IP) caps
+  // brute-force enumeration of the 12-char prefix space; without this,
+  // the global 200/min limit lets an attacker check 200 candidates per
+  // minute against the hash table.
+  app.post('/verify', {
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     const parsed = verifySchema.safeParse(req.body)
     if (!parsed.success) return reply.status(400).send({ success: false, error: parsed.error.issues[0]?.message })
 

@@ -77,8 +77,33 @@ function urlIsSafe(rawUrl: string): { ok: boolean; reason?: string } {
   if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return { ok: false, reason: 'Private 172.16/12 not allowed' }
   if (/^169\.254\./.test(host)) return { ok: false, reason: 'Link-local 169.254/16 not allowed' }
   if (host.endsWith('.local')) return { ok: false, reason: 'mDNS .local not allowed' }
+  if (host === 'metadata.google.internal' || host === 'instance-data') {
+    return { ok: false, reason: 'Cloud metadata service not allowed' }
+  }
 
   return { ok: true }
+}
+
+/** Async DNS-rebinding-resistant check — resolve hostname and verify the
+ *  resolved IP isn't private. Catches attacks where rebind.attacker.com
+ *  resolves to 127.0.0.1 between the string check and the actual fetch. */
+async function dnsResolvedSafe(host: string): Promise<{ ok: boolean; reason?: string }> {
+  try {
+    const dns = await import('node:dns/promises')
+    const addrs = await dns.lookup(host, { all: true })
+    for (const a of addrs) {
+      const ip = a.address
+      if (ip === '127.0.0.1' || ip === '::1' || ip.startsWith('10.')
+       || ip.startsWith('192.168.') || /^172\.(1[6-9]|2\d|3[01])\./.test(ip)
+       || ip.startsWith('169.254.') || ip.startsWith('fc') || ip.startsWith('fd')) {
+        return { ok: false, reason: `Hostname ${host} resolves to private IP ${ip} (DNS rebinding protection)` }
+      }
+    }
+    return { ok: true }
+  } catch {
+    // DNS resolution failure = host doesn't resolve; allow caller to fail naturally
+    return { ok: true }
+  }
 }
 
 /** Crude HTML title extraction without a parser dep. */
@@ -110,6 +135,19 @@ export async function webFetch(input: WebFetchInput): Promise<WebFetchResult> {
   if (!safety.ok) {
     await emitEvent(input.workspaceId, 'web_fetch.blocked', { url: input.url, reason: safety.reason })
     throw new Error(`URL rejected: ${safety.reason}`)
+  }
+  // DNS-rebind check — attacker hostname that resolves to 127.0.0.1
+  // would pass urlIsSafe (string check) but fail this resolve-and-check.
+  try {
+    const host = new URL(input.url).hostname.toLowerCase()
+    const resolved = await dnsResolvedSafe(host)
+    if (!resolved.ok) {
+      await emitEvent(input.workspaceId, 'web_fetch.blocked', { url: input.url, reason: resolved.reason })
+      throw new Error(`URL rejected: ${resolved.reason}`)
+    }
+  } catch (e) {
+    if ((e as Error).message?.startsWith('URL rejected')) throw e
+    // DNS or URL parse failure — let the natural fetch fail surface
   }
 
   // Cache-first

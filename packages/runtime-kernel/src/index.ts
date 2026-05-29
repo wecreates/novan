@@ -212,7 +212,7 @@ export function readyNodes(nodes: Node[], completed: Set<string>): string[] {
 
 // ─── Queue contracts ──────────────────────────────────────────────────────────
 export {
-  QUEUE_NAMES, QUEUE_CONFIG,
+  QUEUE_NAMES, QUEUE_CONFIG, QUEUE_LOCK_OVERRIDES,
   type QueueName,
   type ExecuteWorkflowJobData, type ResumeWorkflowJobData, type CancelWorkflowJobData,
   type WorkflowQueueJobData,
@@ -242,6 +242,12 @@ export {
   attachWorkerLifecycle,
   type WorkerLifecycleOptions,
 } from './worker-lifecycle.js'
+
+// ─── Process safety ───────────────────────────────────────────────────────────
+export {
+  installProcessSafetyNet,
+  type ProcessSafetyOptions,
+} from './process-safety.js'
 
 // ─── Trace IDs ────────────────────────────────────────────────────────────────
 export {

@@ -101,7 +101,13 @@ export async function economicState(workspaceId: string, windowDays = 7): Promis
       spendUsd: Number(spend.toFixed(4)),
       calls,
       avgCostUsd:  calls > 0 ? Number((spend / calls).toFixed(6)) : 0,
-      failureRate: calls > 0 ? Number((fails / Math.max(calls, fails)).toFixed(3)) : 0,
+      // `calls` counts successful ai_usage rows; `fails` counts
+       // provider_failures separately. Total attempts = calls + fails.
+       // The previous formula `fails / max(calls, fails)` was wrong both
+       // ways: when fails > calls it returned 1.0 (always 100% failure
+       // even though many calls succeeded), and when fails ≤ calls it
+       // returned fails/calls (which misses the "of all attempts" frame).
+      failureRate: (calls + fails) > 0 ? Number((fails / (calls + fails)).toFixed(3)) : 0,
     }
   }).sort((a, b) => b.spendUsd - a.spendUsd)
 

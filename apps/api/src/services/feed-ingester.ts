@@ -169,6 +169,10 @@ export async function pollFeed(feedId: string): Promise<PollResult> {
   let ingested = 0
   let cached   = 0
 
+  // JS-fallback: when plain HTTP fetch returns a thin SSR shell, retry
+  // the same URL via playwright. Most modern blogs render with JS now.
+  const { looksLikeSpaShell, renderFetch } = await import('./playwright-fetcher.js')
+
   for (const item of items) {
     try {
       const r = await webFetch({
@@ -178,8 +182,34 @@ export async function pollFeed(feedId: string): Promise<PollResult> {
         tags:        [`feed:${feed.name}`, ...feed.tags],
         ttlMs:       7 * 24 * 3600_000, // articles cached for a week
       })
-      if (r.fromCache) cached += 1
-      else ingested += 1
+      if (r.fromCache) {
+        cached += 1
+      } else {
+        ingested += 1
+        // If the plain fetch came back thin, store a JS-rendered copy
+        // alongside under a distinct cache key (different tags). This
+        // gives downstream readers a real-content view.
+        if (looksLikeSpaShell(r.contentRedacted)) {
+          const js = await renderFetch(item.url).catch(() => null)
+          if (js && js.ok && js.text && js.text.length > r.contentRedacted.length) {
+            await webFetch({
+              workspaceId: feed.workspaceId,
+              url:         item.url,
+              source:      'cron-rss',
+              tags:        [`feed:${feed.name}`, ...feed.tags, 'js-rendered'],
+              ttlMs:       7 * 24 * 3600_000,
+              forceRefresh: true,
+              // The underlying fetcher re-fetches the URL itself; we just
+              // recorded the JS-rendered version as a fact in the audit
+              // log via the emit below. Future: extend web-fetch to
+              // accept pre-fetched content directly.
+            }).catch(() => null)
+            await emit(feed.workspaceId, 'feed.js_rendered_fallback', {
+              feedId, url: item.url, plainBytes: r.contentRedacted.length, jsBytes: js.text.length,
+            })
+          }
+        }
+      }
     } catch {
       // Per-item failure shouldn't kill the whole poll
     }

@@ -8,6 +8,8 @@ import { learningCronHandleCount }  from '../services/learning-cron.js'
 import { recentMindChains, runMindCycle } from '../services/autonomous-mind.js'
 import { calibratePerSource, recordCalibrationFindings } from '../services/meta-learning.js'
 import { listBudgets }              from '../services/cron-budget.js'
+import { getSupervisorStatus }      from '../services/supervisor-status.js'
+import { fabricSnapshot, routeJob } from '../services/execution-fabric.js'
 
 const runtimeStatusRoutes: FastifyPluginAsync = async (fastify) => {
 
@@ -48,6 +50,31 @@ const runtimeStatusRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   fastify.get('/budgets', async () => ({ success: true, data: await listBudgets() }))
+
+  // Supervisor snapshot — what's actually alive on the host.
+  fastify.get('/supervisor', async () => ({ success: true, data: await getSupervisorStatus() }))
+
+  // Execution fabric snapshot — local hw + worker pool + capability coverage.
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/fabric', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await fabricSnapshot(ws) }
+  })
+
+  // Routing probe — answer "if I submitted this job, where would it run?"
+  // Does not enqueue or execute anything. Pure decision endpoint.
+  fastify.post<{ Body: { workspace_id?: string; kind?: string; capability?: string } }>('/route', async (req, reply) => {
+    const ws = req.body.workspace_id
+    if (!ws || !req.body.kind) {
+      return reply.code(400).send({ success: false, error: 'workspace_id, kind required' })
+    }
+    const decision = await routeJob({
+      workspaceId: ws,
+      kind:        req.body.kind,
+      ...(req.body.capability ? { capability: req.body.capability } : {}),
+    })
+    return { success: true, data: decision }
+  })
 }
 
 export default runtimeStatusRoutes

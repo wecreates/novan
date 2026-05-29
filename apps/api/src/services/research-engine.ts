@@ -151,11 +151,21 @@ Rules:
 
   if (!result) return { summary: body.slice(0, 400), facts: [], confidence: 0.2 }
 
-  const match = result.content.match(/\{[\s\S]*\}/)
-  if (!match) return { summary: result.content.slice(0, 400), facts: [], confidence: 0.3 }
+  // Strict parse first — greedy {…} extract was over-matching when the
+  // LLM's prose preamble contained brace literals (e.g. when describing
+  // its own output schema), producing a parse failure that downgraded
+  // to a 0.3-confidence stub. Now: pure-JSON output succeeds cleanly,
+  // wrapped JSON falls back to greedy extract.
+  const trimmed = result.content.trim()
+  let parsed: ExtractResult | null = null
+  try { parsed = JSON.parse(trimmed) as ExtractResult }
+  catch {
+    const match = trimmed.match(/\{[\s\S]*\}/)
+    if (match) { try { parsed = JSON.parse(match[0]) as ExtractResult } catch { /* */ } }
+  }
+  if (!parsed) return { summary: result.content.slice(0, 400), facts: [], confidence: 0.3 }
 
   try {
-    const parsed = JSON.parse(match[0]) as ExtractResult
     return {
       summary:    String(parsed.summary ?? '').slice(0, 1000),
       facts:      Array.isArray(parsed.facts) ? parsed.facts.slice(0, 6) : [],
@@ -181,6 +191,8 @@ export async function runTopic(topicId: string, agentId?: string): Promise<RunRe
   const topic = await db.select().from(researchTopics)
     .where(eq(researchTopics.id, topicId)).limit(1).then(r => r[0])
   if (!topic) throw new Error('topic not found')
+  const { recordAgentActivityAsync } = await import('./agent-state-sync.js')
+  recordAgentActivityAsync(topic.workspaceId, 'web_research', { status: 'running' })
   if (topic.status !== 'active') {
     return { topicId, sourcesTried: 0, findingsAdded: 0, duplicates: 0, blocked: 1, errors: [`topic status=${topic.status}`] }
   }

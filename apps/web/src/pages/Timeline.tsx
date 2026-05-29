@@ -5,7 +5,7 @@ import { useState, useCallback, useEffect, useMemo }     from 'react'
 import { useQuery, useQueryClient }                      from '@tanstack/react-query'
 import { formatDistanceToNow, format }                   from 'date-fns'
 import { Activity, Filter, Search, RefreshCw, ChevronDown, ChevronRight, Clock, Download } from 'lucide-react'
-import { warRoomApi, type OpsEvent }                     from '../api.js'
+import { warRoomApi, API_BASE, type OpsEvent }            from '../api.js'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -42,6 +42,8 @@ const COLOR_MAP: Record<string, string> = {
   webhook:      '#0891b2',
   notification: '#c026d3',
   search:       '#64748b',
+  brain_task:   '#14b8a6',
+  issue:        '#fb7185',
 }
 
 function getEventColor(type: string): string {
@@ -62,6 +64,8 @@ function eventColor(type: string): { dot: string; badge: string } {
   if (t.startsWith('risk'))                                 return { dot: 'bg-red-500',     badge: 'bg-red-600/15 text-red-400 border-red-600/25' }
   if (t.startsWith('insight'))                              return { dot: 'bg-violet-400',  badge: 'bg-violet-500/15 text-violet-400 border-violet-500/25' }
   if (t.startsWith('goal'))                                 return { dot: 'bg-emerald-500', badge: 'bg-emerald-600/15 text-emerald-400 border-emerald-600/25' }
+  if (t.startsWith('brain_task'))                           return { dot: 'bg-teal-400',    badge: 'bg-teal-500/15 text-teal-400 border-teal-500/25' }
+  if (t.startsWith('issue'))                                return { dot: 'bg-rose-400',    badge: 'bg-rose-500/15 text-rose-400 border-rose-500/25' }
   if (t.startsWith('agent'))                                return { dot: 'bg-sky-400',     badge: 'bg-sky-500/15 text-sky-400 border-sky-500/25' }
   if (t.startsWith('business'))                             return { dot: 'bg-amber-500',   badge: 'bg-amber-600/15 text-amber-400 border-amber-600/25' }
   if (t.startsWith('scheduler'))                            return { dot: 'bg-violet-500',  badge: 'bg-violet-600/15 text-violet-400 border-violet-600/25' }
@@ -223,7 +227,8 @@ export default function Timeline() {
   // SSE live events
   useEffect(() => {
     const token = localStorage.getItem('ops_token') ?? ''
-    const es = new EventSource(`/api/v1/stream?token=${encodeURIComponent(token)}`)
+    // Direct to API (skip Vite proxy) — proxied SSE leaks sockets across HMR.
+    const es = new EventSource(`${API_BASE}/api/v1/stream?token=${encodeURIComponent(token)}`)
     setStreaming(true)
 
     es.onmessage = (e) => {

@@ -1,0 +1,31 @@
+import type { ConnectorDef } from '../connectors.js'
+
+export const dropboxDef: ConnectorDef = {
+  id:          'dropbox',
+  name:        'Dropbox',
+  category:    'storage',
+  description: 'Files + folders. Read + upload within app folder scopes. No deletes without approval.',
+  authType:    'oauth',
+  defaultScopes: ['files.content.read', 'files.metadata.read'],
+  optionalScopes: ['files.content.write'],
+  blockedActions: ['dropbox.delete_account', 'dropbox.empty_trash'],
+  actions: [
+    { name: 'dropbox.list_files',     minPermission: 'read',  risk: 'low' },
+    { name: 'dropbox.download_file',  minPermission: 'read',  risk: 'low' },
+    { name: 'dropbox.upload_file',    minPermission: 'draft', risk: 'medium', requiredScopes: ['files.content.write'] },
+    { name: 'dropbox.delete_file',    minPermission: 'admin', risk: 'high',   requiredScopes: ['files.content.write'] },
+  ],
+  metadataVerified:      true,
+  officialWebsiteUrl:    'https://www.dropbox.com',
+  signupUrl:             'https://www.dropbox.com/register',
+  loginUrl:              'https://www.dropbox.com/login',
+  developerAppSetupUrl:  'https://www.dropbox.com/developers/apps',
+  docsUrl:               'https://developers.dropbox.com',
+  pricingUrl:            'https://www.dropbox.com/plans',
+  statusPageUrl:         'https://status.dropbox.com',
+  permissionExplanation: 'Read your Dropbox files + folders. Uploads + deletes require per-action approval and explicit write scope.',
+  accountRequired:       true,
+  supportsOauth:         true,
+  freeTierAvailable:     true,
+  iconKey:               'dropbox',
+}

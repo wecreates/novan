@@ -1,0 +1,30 @@
+import type { ConnectorDef } from '../connectors.js'
+
+export const discordDef: ConnectorDef = {
+  id:          'discord',
+  name:        'Discord',
+  category:    'communication',
+  description: 'Bot-based messaging in approved servers. Draft + approval-gated post.',
+  authType:    'oauth',
+  defaultScopes: ['bot'],
+  optionalScopes: ['messages.read'],
+  blockedActions: ['discord.ban_member', 'discord.delete_guild', 'discord.kick_everyone'],
+  actions: [
+    { name: 'discord.list_channels', minPermission: 'read',    risk: 'low' },
+    { name: 'discord.draft_message', minPermission: 'draft',   risk: 'low' },
+    { name: 'discord.post_message',  minPermission: 'publish', risk: 'medium' },
+  ],
+  metadataVerified:      true,
+  officialWebsiteUrl:    'https://discord.com',
+  signupUrl:             'https://discord.com/register',
+  loginUrl:              'https://discord.com/login',
+  developerAppSetupUrl:  'https://discord.com/developers/applications',
+  docsUrl:               'https://discord.com/developers/docs',
+  pricingUrl:            'https://discord.com/pricing',
+  statusPageUrl:         'https://discordstatus.com',
+  permissionExplanation: 'Read channels and post messages only in servers where you invite the bot. Posting requires per-action approval. We never ban, kick, or delete.',
+  accountRequired:       true,
+  supportsOauth:         true,
+  freeTierAvailable:     true,
+  iconKey:               'discord',
+}

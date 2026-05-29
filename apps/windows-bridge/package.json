@@ -1,0 +1,11 @@
+{
+  "name": "@ops/windows-bridge",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Always-on Windows worker for cloud-hosted Novan: executes GUI-driven ops (CapCut/Mixcraft/ACE-Step) on the operator's local box while the rest of the platform runs in the cloud.",
+  "main": "bridge.mjs",
+  "scripts": {
+    "start": "node bridge.mjs"
+  }
+}

@@ -78,3 +78,49 @@ describe('action-dispatcher risk classification', () => {
     expect(r.error).toMatch(/actionId/)
   })
 })
+
+// ─── strategic-restraint gate on autonomous callers ──────────────────────
+
+describe('action-dispatcher: shouldAutoAct gate', () => {
+  it('autonomous medium-risk plan is deferred to dry_run by default', async () => {
+    const r = await dispatch({
+      workspaceId: '__test_action__',
+      type: 'throttle_queue',                       // medium risk
+      payload: { queue: 'ai', factor: 0.3 },
+      requestedBy: 'autonomous-watcher',
+    })
+    expect(r.status).toBe('pending')
+    expect(r.error).toMatch(/restraint:dry_run/)
+  })
+
+  it('operator-initiated medium-risk plan bypasses the gate', async () => {
+    const r = await dispatch({
+      workspaceId: '__test_action__',
+      type: 'throttle_queue',
+      payload: { queue: 'ai', factor: 0.3 },
+      requestedBy: 'chat-approval',                  // operator-initiated
+    })
+    expect(['succeeded', 'failed']).toContain(r.status)
+  })
+
+  it('autonomous low-risk plans are not gated by restraint', async () => {
+    const r = await dispatch({
+      workspaceId: '__test_action__',
+      type: 'record_decision',
+      payload: { decision: 'auto-noted', confidence: 0.7 },
+      requestedBy: 'autonomous-watcher',
+    })
+    // shouldAutoAct only intercepts medium+ risk
+    expect(['succeeded', 'failed']).toContain(r.status)
+  })
+
+  it('autonomous trustedPattern + handsFree releases medium-risk plans', async () => {
+    const r = await dispatch({
+      workspaceId: '__test_action__',
+      type: 'throttle_queue',
+      payload: { queue: 'ai', factor: 0.3, trustedPattern: true, handsFreeEnabled: true },
+      requestedBy: 'autonomous-watcher',
+    })
+    expect(['succeeded', 'failed']).toContain(r.status)
+  })
+})

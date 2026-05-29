@@ -15,8 +15,10 @@ import { drizzle }                 from 'drizzle-orm/postgres-js'
 import postgres                    from 'postgres'
 import { v7 as uuidv7 }            from 'uuid'
 import * as schema from '@ops/db'
+import { startWorkerHeartbeat } from '@ops/db'
 import {
   attachWorkerLifecycle,
+  installProcessSafetyNet,
   createRedisFromEnv,
 } from '@ops/runtime-kernel'
 
@@ -32,6 +34,7 @@ const QUEUE_NAME  = 'analytics'
 
 const queryClient = postgres(DATABASE_URL, { max: 3, idle_timeout: 30 })
 const db          = drizzle(queryClient)
+startWorkerHeartbeat({ db, name: 'analytics-worker', capabilities: ['analytics', 'metrics-rollup'] })
 const connection  = createRedisFromEnv()
 
 // ─── Event helper ─────────────────────────────────────────────────────────────
@@ -490,6 +493,19 @@ async function registerScheduledJobs(): Promise<void> {
   log.info('Scheduled analytics jobs registered')
 }
 
+// ─── Dead-letter persistence ──────────────────────────────────────────────────
+async function persistDeadLetter(record: import('@ops/runtime-kernel').DeadLetterRecord): Promise<void> {
+  try {
+    await db.insert(schema.deadLetterJobs).values({
+      id: record.id, queueName: record.queueName, jobId: record.jobId, jobName: record.jobName,
+      workspaceId: record.workspaceId, payload: record.payload, error: record.error,
+      attempts: record.attempts, workerId: record.workerId, traceId: record.traceId ?? null,
+      firstFailedAt: record.firstFailedAt, deadLetteredAt: record.deadLetteredAt,
+    })
+    log.warn({ jobId: record.jobId, error: record.error }, 'analytics-worker job dead-lettered')
+  } catch (e) { log.error({ err: (e as Error).message, jobId: record.jobId }, 'failed to persist dead letter') }
+}
+
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 
 const cleanupLifecycle = attachWorkerLifecycle(worker, {
@@ -498,6 +514,7 @@ const cleanupLifecycle = attachWorkerLifecycle(worker, {
   workerId:   WORKER_ID,
   log,
   emitEvent,
+  onDeadLetter: persistDeadLetter,
 })
 
 async function shutdown(signal: string): Promise<void> {
@@ -512,9 +529,11 @@ async function shutdown(signal: string): Promise<void> {
 
 process.on('SIGTERM', () => { void shutdown('SIGTERM') })
 process.on('SIGINT',  () => { void shutdown('SIGINT') })
+installProcessSafetyNet({ workerName: 'analytics-worker', log })
 
 registerScheduledJobs().catch((err) => {
-  log.error({ err }, 'Failed to register scheduled jobs')
+  log.error({ err }, 'Failed to register scheduled jobs — exiting')
+  process.exit(1)
 })
 
 log.info({ workerId: WORKER_ID }, 'Analytics worker started')

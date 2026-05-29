@@ -24,9 +24,11 @@ import {
   createRedisFromEnv,
   QUEUE_NAMES,
   QUEUE_CONFIG,
+  QUEUE_LOCK_OVERRIDES,
+  installProcessSafetyNet,
   type DeadLetterRecord,
 } from '@ops/runtime-kernel'
-import { deadLetterJobs }          from '@ops/db'
+import { deadLetterJobs, startWorkerHeartbeat } from '@ops/db'
 import {
   openWorkflowTrace,
   closeWorkflowTrace,
@@ -51,6 +53,8 @@ if (!REDIS_URL) throw new Error('REDIS_URL is required')
 
 const CONCURRENCY = Number(process.env['WORKFLOW_WORKER_CONCURRENCY'] ?? 5)
 const WORKER_ID   = `${QUEUE_NAMES.WORKFLOW}-worker-${process.pid}`
+
+startWorkerHeartbeat({ db, name: 'workflow-worker', capabilities: ['workflow-execution', 'retry-handling', 'snapshot'] })
 
 const connection  = createRedisFromEnv()
 
@@ -166,7 +170,7 @@ const worker = new Worker<WorkflowJobData>(
     concurrency:     CONCURRENCY,
     stalledInterval: QUEUE_CONFIG.STALL_INTERVAL_MS,
     maxStalledCount: QUEUE_CONFIG.MAX_STALL_COUNT,
-    lockDuration:    QUEUE_CONFIG.LOCK_DURATION_MS,
+    lockDuration:    QUEUE_LOCK_OVERRIDES[QUEUE_NAMES.WORKFLOW] ?? QUEUE_CONFIG.LOCK_DURATION_MS,
   },
 )
 
@@ -193,5 +197,6 @@ const shutdown = async (signal: string): Promise<void> => {
 
 process.on('SIGTERM', () => void shutdown('SIGTERM'))
 process.on('SIGINT',  () => void shutdown('SIGINT'))
+installProcessSafetyNet({ workerName: 'workflow-worker', log })
 
 log.info({ workerId: WORKER_ID, concurrency: CONCURRENCY }, 'Workflow worker started')

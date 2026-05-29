@@ -59,9 +59,12 @@ export function GlobalSearch() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  // Focus input when opened
+  // Focus input when opened. Track the timer so unmount-while-opening
+  // doesn't fire .focus() on a torn-down ref.
   useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 50)
+    if (!open) return
+    const t = setTimeout(() => inputRef.current?.focus(), 50)
+    return () => clearTimeout(t)
   }, [open])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

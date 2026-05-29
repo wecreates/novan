@@ -162,6 +162,28 @@ async function dispatchStep(
 
       if (!url) return { status: 'failed', error: 'http step missing url' }
 
+      // SECURITY: SSRF guard — block private IP ranges + internal hostnames.
+      // Workflows can be created by any authenticated user; without this
+      // guard a workflow step could fetch http://169.254.169.254 (AWS IMDS),
+      // http://10.x.x.x (internal LAN), http://localhost:5432 (Postgres), etc.
+      try {
+        const u = new URL(url)
+        const host = u.hostname.toLowerCase()
+        const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]'
+        const isPrivate = /^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|169\.254\.|fc00::|fd[0-9a-f]{2}:)/.test(host)
+        const isInternalTLD = host.endsWith('.local') || host.endsWith('.internal') || host === 'metadata.google.internal'
+        const isAllowed = process.env['WORKFLOW_ALLOW_PRIVATE_HOSTS'] === '1'
+        if (!isAllowed && (isLocalhost || isPrivate || isInternalTLD)) {
+          return { status: 'failed', error: `http step blocked: ${host} is a private/internal host (SSRF protection)` }
+        }
+        // Require http(s)
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+          return { status: 'failed', error: `http step blocked: protocol ${u.protocol} not allowed` }
+        }
+      } catch (e) {
+        return { status: 'failed', error: `http step invalid url: ${(e as Error).message}` }
+      }
+
       const timeout = typeof step.timeout === 'number' ? step.timeout : 30_000
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), timeout)
@@ -171,6 +193,7 @@ async function dispatchStep(
           method,
           headers: { 'Content-Type': 'application/json', ...headers },
           signal:  controller.signal,
+          redirect: 'manual',   // prevent SSRF via redirect-to-private
         }
         if (body !== undefined) reqInit.body = JSON.stringify(body)
         const res = await fetch(url, reqInit)

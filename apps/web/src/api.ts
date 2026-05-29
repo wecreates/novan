@@ -1,7 +1,11 @@
 /**
  * API client — typed fetch wrapper for the Fastify API.
  */
-const BASE = import.meta.env['VITE_API_URL'] ?? 'http://localhost:3001'
+// SINGLE SOURCE OF TRUTH for API base URL. Previously 12 files
+// re-declared this constant; some used import.meta.env safely, others
+// used unsafe `as unknown as` casts. Importers should use `API_BASE`.
+export const API_BASE = import.meta.env['VITE_API_URL'] ?? 'http://localhost:3001'
+const BASE = API_BASE
 
 let authToken: string | null =
   typeof localStorage !== 'undefined' ? localStorage.getItem('ops_auth_token') : null
@@ -40,6 +44,7 @@ export const api = {
   get:    <T>(path: string) => request<T>(path),
   post:   <T>(path: string, body: unknown) => request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
   put:    <T>(path: string, body: unknown) => request<T>(path, { method: 'PUT',  body: JSON.stringify(body) }),
+  patch:  <T>(path: string, body: unknown) => request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 }
 
@@ -967,7 +972,7 @@ export const enhancementsApi = {
       `/api/v1/x/rewrite-prompt`, { workspace_id: workspaceId, prompt, purpose },
     ),
   divisionsCsvUrl: (workspaceId: string): string =>
-    `${(import.meta as { env?: Record<string, string> }).env?.['VITE_API_URL'] ?? 'http://localhost:3001'}/api/v1/x/export/divisions.csv?workspace_id=${encodeURIComponent(workspaceId)}`,
+    `${API_BASE}/api/v1/x/export/divisions.csv?workspace_id=${encodeURIComponent(workspaceId)}`,
 }
 
 // ─── Image Studio client ────────────────────────────────────────────────────
@@ -1254,8 +1259,9 @@ export function createEventStream(
   onEvent: (type: string, data: unknown) => void,
   onError?: (err: Event) => void,
 ): () => void {
-  const BASE = (import.meta as { env?: Record<string, string> }).env?.['VITE_API_URL'] ?? 'http://localhost:3001'
-  const url = `${BASE}/api/v1/stream`
+  // Scope the SSE stream to the current workspace so the server can filter
+  // events at the source instead of relying on the client to discard.
+  const url = `${API_BASE}/api/v1/stream?workspace_id=${encodeURIComponent(workspaceId)}`
   const es = new EventSource(url)
 
   es.addEventListener('event', (e: MessageEvent<string>) => {

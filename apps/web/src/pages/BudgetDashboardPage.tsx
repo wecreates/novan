@@ -101,8 +101,8 @@ function RuleRow({
                 autoFocus
               />
             )}
-            <button onClick={commit} className="text-green-400 hover:text-green-300"><Save className="w-3 h-3" /></button>
-            <button onClick={() => setEditing(false)} className="text-muted hover:text-secondary"><X className="w-3 h-3" /></button>
+            <button onClick={commit} aria-label="Save budget" title="Save" className="text-green-400 hover:text-green-300"><Save className="w-3 h-3" /></button>
+            <button onClick={() => setEditing(false)} aria-label="Cancel edit" title="Cancel" className="text-muted hover:text-secondary"><X className="w-3 h-3" /></button>
           </>
         ) : (
           <>

@@ -5,7 +5,12 @@
  * Each adapter returns a normalized SearchHit[] array.
  *
  * No fakes: if SEARCH_API_KEY/SEARCH_PROVIDER missing → empty result + reason.
+ *
+ * All providers route through `fetchWithRetry` so 429/5xx/network blips don't
+ * collapse a research request — exponential backoff + per-provider circuit
+ * breaker prevents thrashing during incidents.
  */
+import { fetchWithRetry } from './provider-retry.js'
 export interface SearchHit {
   url:     string
   title:   string
@@ -21,7 +26,7 @@ export interface SearchResult {
 }
 
 async function tavily(query: string, key: string, max: number): Promise<SearchHit[]> {
-  const res = await fetch('https://api.tavily.com/search', {
+  const out = await fetchWithRetry('search:tavily', 'https://api.tavily.com/search', {
     method:  'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -33,8 +38,12 @@ async function tavily(query: string, key: string, max: number): Promise<SearchHi
     }),
     signal: AbortSignal.timeout(15_000),
   })
-  const body = await res.json().catch(() => ({})) as Record<string, unknown>
-  if (!res.ok) throw new Error(`Tavily ${res.status}: ${JSON.stringify(body).slice(0, 200)}`)
+  if (!out.ok) throw new Error(`Tavily ${out.status}: ${out.statusText}`)
+  const res = out.response
+  const body = await res.json().catch((e: unknown) => {
+    console.error('[search-providers] JSON parse failed on Tavily 2xx response:', (e as Error).message)
+    return {}
+  }) as Record<string, unknown>
   const results = (body['results'] as Array<{ url?: string; title?: string; content?: string }> | undefined) ?? []
   return results.slice(0, max).map((r, i) => ({
     url:     String(r.url ?? ''),
@@ -45,14 +54,18 @@ async function tavily(query: string, key: string, max: number): Promise<SearchHi
 }
 
 async function serper(query: string, key: string, max: number): Promise<SearchHit[]> {
-  const res = await fetch('https://google.serper.dev/search', {
+  const out = await fetchWithRetry('search:serper', 'https://google.serper.dev/search', {
     method:  'POST',
     headers: { 'content-type': 'application/json', 'X-API-KEY': key },
     body:    JSON.stringify({ q: query, num: max }),
     signal:  AbortSignal.timeout(15_000),
   })
-  const body = await res.json().catch(() => ({})) as Record<string, unknown>
-  if (!res.ok) throw new Error(`Serper ${res.status}: ${JSON.stringify(body).slice(0, 200)}`)
+  if (!out.ok) throw new Error(`Serper ${out.status}: ${out.statusText}`)
+  const res = out.response
+  const body = await res.json().catch((e: unknown) => {
+    console.error('[search-providers] JSON parse failed on Serper 2xx response:', (e as Error).message)
+    return {}
+  }) as Record<string, unknown>
   const results = (body['organic'] as Array<{ link?: string; title?: string; snippet?: string }> | undefined) ?? []
   return results.slice(0, max).map((r, i) => ({
     url:     String(r.link ?? ''),
@@ -64,12 +77,16 @@ async function serper(query: string, key: string, max: number): Promise<SearchHi
 
 async function brave(query: string, key: string, max: number): Promise<SearchHit[]> {
   const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${max}`
-  const res = await fetch(url, {
+  const out = await fetchWithRetry('search:brave', url, {
     headers: { 'X-Subscription-Token': key, 'accept': 'application/json' },
     signal:  AbortSignal.timeout(15_000),
   })
-  const body = await res.json().catch(() => ({})) as Record<string, unknown>
-  if (!res.ok) throw new Error(`Brave ${res.status}: ${JSON.stringify(body).slice(0, 200)}`)
+  if (!out.ok) throw new Error(`Brave ${out.status}: ${out.statusText}`)
+  const res = out.response
+  const body = await res.json().catch((e: unknown) => {
+    console.error('[search-providers] JSON parse failed on Brave 2xx response:', (e as Error).message)
+    return {}
+  }) as Record<string, unknown>
   const web = body['web'] as { results?: Array<{ url?: string; title?: string; description?: string }> } | undefined
   const results = web?.results ?? []
   return results.slice(0, max).map((r, i) => ({

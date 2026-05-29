@@ -42,7 +42,9 @@ export const searchRoutes: FastifyPluginAsync = async (app) => {
     const { q, types, limit = '20' } = req.query as { q?: string; types?: string; limit?: string }
     const workspaceId = ((req as { workspaceId?: string }).workspaceId ?? 'default')
     const query = (q ?? '').trim()
-    const maxResults = Math.min(Number(limit), 50)
+    const parsedLimit = Number(limit)
+    const maxResults = Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? Math.min(parsedLimit, 50) : 20
 
     if (query.length < 2) return reply.send({ success: true, data: [], meta: { count: 0, query } })
 

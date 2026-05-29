@@ -1,7 +1,3 @@
-// TODO: Register in server.ts:
-// import { exportRoutes } from './routes/export.js'
-// await app.register(exportRoutes, { prefix: '/api/v1/export' })
-
 /**
  * Data export routes — CSV/JSON export of platform data.
  *
@@ -74,7 +70,7 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
         .header('Content-Disposition', 'attachment; filename="events-export.csv"')
         .send(toCsv(rows, fields))
     }
-    return reply.send({ success: true, data: rows, count: rows.length })
+    return reply.send({ success: true, data: rows, meta: { count: rows.length } })
   })
 
   // GET /risks
@@ -97,7 +93,7 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
         .header('Content-Disposition', 'attachment; filename="risks-export.csv"')
         .send(toCsv(rows, fields))
     }
-    return reply.send({ success: true, data: rows, count: rows.length })
+    return reply.send({ success: true, data: rows, meta: { count: rows.length } })
   })
 
   // GET /goals
@@ -120,7 +116,7 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
         .header('Content-Disposition', 'attachment; filename="goals-export.csv"')
         .send(toCsv(rows, fields))
     }
-    return reply.send({ success: true, data: rows, count: rows.length })
+    return reply.send({ success: true, data: rows, meta: { count: rows.length } })
   })
 
   // GET /insights
@@ -157,7 +153,7 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
         .header('Content-Disposition', 'attachment; filename="insights-export.csv"')
         .send(toCsv(rows, fields))
     }
-    return reply.send({ success: true, data: rows, count: rows.length })
+    return reply.send({ success: true, data: rows, meta: { count: rows.length } })
   })
 
   // GET /opportunities
@@ -180,7 +176,7 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
         .header('Content-Disposition', 'attachment; filename="opportunities-export.csv"')
         .send(toCsv(rows, fields))
     }
-    return reply.send({ success: true, data: rows, count: rows.length })
+    return reply.send({ success: true, data: rows, meta: { count: rows.length } })
   })
 
   // GET /ai-usage
@@ -203,6 +199,6 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
         .header('Content-Disposition', 'attachment; filename="ai-usage-export.csv"')
         .send(toCsv(rows, fields))
     }
-    return reply.send({ success: true, data: rows, count: rows.length })
+    return reply.send({ success: true, data: rows, meta: { count: rows.length } })
   })
 }

@@ -467,9 +467,15 @@ async function runBlueTeam(workspaceId: string): Promise<Finding[]> {
   const resolved   = all.filter((f) => f.status === 'resolved').length
   const mitigating = all.filter((f) => f.status === 'mitigating').length
 
-  // Only produce a finding if there are unmitigated highs/criticals
+  // Only produce a finding if there are unmitigated highs/criticals.
+  // R142 — exclude blue_team's own summary findings; otherwise the count
+  // includes prior blue_team summaries, which makes the next tick add
+  // ANOTHER summary with N+1, growing forever. Saw 301 blue_team
+  // summaries accumulated before this fix.
   const unmitigated = all.filter((f) =>
-    (f.severity === 'critical' || f.severity === 'high') && f.status === 'open',
+    (f.severity === 'critical' || f.severity === 'high')
+    && f.status === 'open'
+    && f.category !== 'blue_team',
   )
   if (unmitigated.length === 0) return []
   return [{
@@ -574,6 +580,8 @@ export interface SecurityScanResult {
 }
 
 export async function runSecurityScan(workspaceId: string): Promise<SecurityScanResult> {
+  const { recordAgentActivityAsync } = await import('./agent-state-sync.js')
+  recordAgentActivityAsync(workspaceId, 'security_research', { status: 'running' })
   await ensureSecurityTeam()
   const findingIds: string[] = []
   let blocking = 0
@@ -591,6 +599,7 @@ export async function runSecurityScan(workspaceId: string): Promise<SecurityScan
     findingsCreated: findingIds.length, blockingCount: blocking,
   })
 
+  recordAgentActivityAsync(workspaceId, 'security_research', { status: 'idle' })
   return {
     agentsRun: RUNNERS.length, findingsCreated: findingIds.length,
     blockingCount: blocking, findingIds,

@@ -132,9 +132,10 @@ export const agentsRoutes: FastifyPluginAsync = async (app) => {
     if (body.capabilities !== undefined) updates.capabilities = body.capabilities
     if (body.config !== undefined) updates.config = body.config as Record<string, unknown>
 
-    await db.update(agents).set(updates).where(eq(agents.id, id))
+    await db.update(agents).set(updates).where(and(eq(agents.id, id), eq(agents.workspaceId, workspaceId)))
 
-    const [updated] = await db.select().from(agents).where(eq(agents.id, id)).limit(1)
+    const [updated] = await db.select().from(agents)
+      .where(and(eq(agents.id, id), eq(agents.workspaceId, workspaceId))).limit(1)
     await emit('agent.updated', workspaceId, { agentId: id, changes: Object.keys(updates) })
 
     return reply.send({ success: true, data: updated })
@@ -159,7 +160,7 @@ export const agentsRoutes: FastifyPluginAsync = async (app) => {
     }
     if (existing.status === 'offline') updates.status = 'idle'
 
-    await db.update(agents).set(updates).where(eq(agents.id, id))
+    await db.update(agents).set(updates).where(and(eq(agents.id, id), eq(agents.workspaceId, workspaceId)))
     await emit('agent.heartbeat', workspaceId, { agentId: id, timestamp: now })
 
     return reply.send({ success: true, data: { agentId: id, timestamp: now } })
@@ -178,7 +179,8 @@ export const agentsRoutes: FastifyPluginAsync = async (app) => {
     if (!existing) return reply.code(404).send({ success: false, error: 'Agent not found' })
 
     const previousStatus = existing.status
-    await db.update(agents).set({ status, updatedAt: Date.now() }).where(eq(agents.id, id))
+    await db.update(agents).set({ status, updatedAt: Date.now() })
+      .where(and(eq(agents.id, id), eq(agents.workspaceId, workspaceId)))
     await emit('agent.status_changed', workspaceId, { agentId: id, previousStatus, status })
 
     return reply.send({ success: true, data: { agentId: id, status } })
@@ -195,7 +197,8 @@ export const agentsRoutes: FastifyPluginAsync = async (app) => {
 
     if (!existing) return reply.code(404).send({ success: false, error: 'Agent not found' })
 
-    await db.update(agents).set({ status: 'offline', updatedAt: Date.now() }).where(eq(agents.id, id))
+    await db.update(agents).set({ status: 'offline', updatedAt: Date.now() })
+      .where(and(eq(agents.id, id), eq(agents.workspaceId, workspaceId)))
     await emit('agent.deregistered', workspaceId, { agentId: id, name: existing.name })
 
     return reply.send({ success: true, data: { agentId: id } })

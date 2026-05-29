@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev":       "tsx watch src/worker.ts",
-    "start":     "tsx src/worker.ts",
+    "dev":       "tsx watch --env-file=../../.env src/worker.ts",
+    "start":     "tsx --env-file=../../.env src/worker.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

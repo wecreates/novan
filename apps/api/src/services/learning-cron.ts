@@ -55,8 +55,14 @@ import { notify }                            from './notifications.js'
 
 const handles: NodeJS.Timeout[] = []
 
+let _warnedAtCap = false
 async function listWorkspaceIds(): Promise<string[]> {
   const rows = await db.select({ id: workspaces.id }).from(workspaces).limit(500)
+  if (rows.length === 500 && !_warnedAtCap) {
+    // Silent 500-cap was a footgun — workspaces beyond 500 never swept.
+    _warnedAtCap = true
+    console.warn('[learning-cron] listWorkspaceIds hit 500 cap — workspaces beyond limit are not being swept by any cron. Increase the cap + add pagination.')
+  }
   return rows.map((r) => r.id)
 }
 
@@ -78,6 +84,32 @@ async function runIncidentScans() {
     }
     await emit('cron.incident_scan_completed', { workspaces: ids.length, opened, updated })
   } catch (e) { await emit('cron.error', { task: 'incident', error: (e as Error).message }) }
+}
+
+async function runIssueAutoIngest() {
+  try {
+    const { autoIngestSignals } = await import('./issues.js')
+    const ids = await listWorkspaceIds()
+    let created = 0, appended = 0, scanned = 0
+    for (const ws of ids) {
+      const r = await autoIngestSignals(ws).catch(() => ({ created: 0, appended: 0, scanned: 0 }))
+      created += r.created; appended += r.appended; scanned += r.scanned
+    }
+    await emit('cron.issue_ingest_completed', { workspaces: ids.length, created, appended, scanned })
+  } catch (e) { await emit('cron.error', { task: 'issue_ingest', error: (e as Error).message }) }
+}
+
+async function runIssueAutoLoop() {
+  try {
+    const { runAutoLoopFor } = await import('./issue-auto-loop.js')
+    const ids = await listWorkspaceIds()
+    let promoted = 0, verified = 0
+    for (const ws of ids) {
+      const r = await runAutoLoopFor(ws).catch(() => null)
+      if (r) { promoted += r.promote.promoted; verified += r.reconcile.verified }
+    }
+    await emit('cron.issue_auto_loop_completed', { workspaces: ids.length, promoted, verified })
+  } catch (e) { await emit('cron.error', { task: 'issue_auto_loop', error: (e as Error).message }) }
 }
 
 async function runImprovementScans() {
@@ -251,6 +283,217 @@ async function runAutonomousMind() {
   } catch (e) { await emit('cron.error', { task: 'autonomous_mind', error: (e as Error).message }) }
 }
 
+async function runCeoCycleCron() {
+  try {
+    const { runCeoCycle } = await import('./ceo-cycle.js')
+    const ids = await listWorkspaceIds()
+    let totalDelegations = 0, totalChains = 0, totalRed = 0, totalYellow = 0
+    for (const ws of ids) {
+      const r = await runCeoCycle(ws).catch(() => null)
+      if (r) {
+        totalDelegations += r.delegationsCreated
+        totalChains      += r.chainsRecorded
+        totalRed         += r.divisionsRed
+        totalYellow      += r.divisionsYellow
+      }
+    }
+    if (totalDelegations + totalChains + totalRed + totalYellow > 0) {
+      await emit('cron.ceo_cycle', { delegations: totalDelegations, chains: totalChains, red: totalRed, yellow: totalYellow, workspaces: ids.length })
+    }
+  } catch (e) { await emit('cron.error', { task: 'ceo_cycle', error: (e as Error).message }) }
+}
+
+async function runOpenJarvisMonitorsCron() {
+  try {
+    const { runMonitorCycle } = await import('./openjarvis-monitors.js')
+    const ids = await listWorkspaceIds()
+    let totalFired = 0, totalSkipped = 0
+    for (const ws of ids) {
+      const r = await runMonitorCycle(ws).catch(() => null)
+      if (r) {
+        totalFired   += r.fired
+        totalSkipped += r.skipped
+      }
+    }
+    if (totalFired > 0) {
+      await emit('cron.openjarvis_monitors', { fired: totalFired, skipped: totalSkipped, workspaces: ids.length })
+    }
+  } catch (e) { await emit('cron.error', { task: 'openjarvis_monitors', error: (e as Error).message }) }
+}
+
+async function runBrainBroadcastCron() {
+  try {
+    const { runBroadcastCycle } = await import('./brain-broadcast.js')
+    const ids = await listWorkspaceIds()
+    for (const ws of ids) {
+      const r = await runBroadcastCycle(ws).catch(() => null)
+      if (r?.broadcasted) {
+        await emit('brain.broadcast_posted', { workspace_id: ws, messageId: r.messageId, conversationId: r.conversationId })
+      }
+    }
+    // Monday-morning briefing: once per workspace per Monday (UTC), the
+    // brain posts the structured weekly action plan into the operator's
+    // chat. Idempotency uses events table — we emit only if no
+    // `brain.monday_briefing_posted` event landed in the last 6 days.
+    // Without this the weekly review exists but the operator never sees
+    // it unless they explicitly ask. With this, the brain proactively
+    // surfaces the highest-leverage moment of the week.
+    try {
+      const now = new Date()
+      if (now.getUTCDay() === 1) {   // Monday in UTC
+        await runMondayBriefing(ids)
+      }
+    } catch (e) { await emit('cron.error', { task: 'monday_briefing', error: (e as Error).message }) }
+  } catch (e) { await emit('cron.error', { task: 'brain_broadcast', error: (e as Error).message }) }
+}
+
+async function runEconomicHealth() {
+  try {
+    // Idempotency: 7-day cadence is process-timer; restart resets to 0.
+    // Check events table for a prior emission within 6 days. Same pattern
+    // as runWeeklyExecutiveBriefings (the only one done correctly before).
+    const sinceCutoff = Date.now() - 6 * 86_400_000
+    const recent = await db.select({ id: events.id }).from(events)
+      .where(and(gte(events.createdAt, sinceCutoff), eq(events.type, 'civilization.economic_health')))
+      .limit(1)
+    if (recent.length > 0) return
+    const { workspaceHealth } = await import('./economic-engine.js')
+    const ids = await listWorkspaceIds()
+    for (const ws of ids) {
+      const h = await workspaceHealth(ws, 30).catch(() => null)
+      if (h && h.totalProductions > 0) {
+        await emit('civilization.economic_health', {
+          workspace_id: ws, productions: h.totalProductions,
+          roi: Number(h.aggregateRoi.toFixed(2)),
+          winners: h.topWinners.length, wastes: h.biggestWastes.length,
+        })
+      }
+    }
+  } catch (e) { await emit('cron.error', { task: 'economic_health', error: (e as Error).message }) }
+}
+
+async function runEmergentPatterns() {
+  try {
+    const { discoverPatterns } = await import('./civilization-core.js')
+    const ids = await listWorkspaceIds()
+    for (const ws of ids) {
+      const patterns = await discoverPatterns(ws).catch(() => [])
+      const highLev = patterns.filter(p => p.leverage === 'high').length
+      if (patterns.length > 0) await emit('civilization.emergent_patterns', {
+        workspace_id: ws, total: patterns.length, high_leverage: highLev,
+      })
+    }
+  } catch (e) { await emit('cron.error', { task: 'emergent_patterns', error: (e as Error).message }) }
+}
+
+async function runExecutionPhysics() {
+  try {
+    const { execPhysics } = await import('./civilization-core.js')
+    const ids = await listWorkspaceIds()
+    for (const ws of ids) {
+      const phys = await execPhysics(ws).catch(() => null)
+      if (phys) await emit('civilization.execution_physics', {
+        workspace_id: ws,
+        velocity: Number(phys.velocity.toFixed(2)),
+        friction: Number(phys.friction.toFixed(2)),
+        bottlenecks: phys.bottlenecks.length,
+      })
+    }
+  } catch (e) { await emit('cron.error', { task: 'execution_physics', error: (e as Error).message }) }
+}
+
+async function runRiskScan() {
+  try {
+    const { scanAll } = await import('./failure-detector.js')
+    const ids = await listWorkspaceIds()
+    for (const ws of ids) {
+      const r = await scanAll(ws).catch(() => ({ alerts: [] }))
+      const critical = r.alerts.filter(a => a.severity === 'critical').length
+      if (r.alerts.length > 0) {
+        await emit('risk.scan_completed', {
+          workspace_id: ws, total: r.alerts.length, critical,
+          categories: Array.from(new Set(r.alerts.map(a => a.category))),
+        })
+      }
+    }
+  } catch (e) { await emit('cron.error', { task: 'risk_scan', error: (e as Error).message }) }
+}
+
+async function runTwinSnapshot() {
+  try {
+    const { snapshotAllForWorkspace } = await import('./digital-twin.js')
+    const ids = await listWorkspaceIds()
+    for (const ws of ids) {
+      const r = await snapshotAllForWorkspace(ws).catch(() => ({ count: 0, twins: [] }))
+      if (r.count > 0) await emit('civilization.twin_snapshot', { workspace_id: ws, count: r.count })
+    }
+  } catch (e) { await emit('cron.error', { task: 'twin_snapshot', error: (e as Error).message }) }
+}
+
+async function runEvolutionDiscover() {
+  try {
+    const { discoverWeaknesses } = await import('./civilization-core.js')
+    const ids = await listWorkspaceIds()
+    for (const ws of ids) {
+      const proposals = await discoverWeaknesses(ws).catch(() => [])
+      if (proposals.length > 0) await emit('civilization.evolution_proposals', { workspace_id: ws, count: proposals.length })
+    }
+  } catch (e) { await emit('cron.error', { task: 'evolution_discover', error: (e as Error).message }) }
+}
+
+async function runDailyRecap() {
+  try {
+    const { generateRecap } = await import('./civilization-core.js')
+    const { db } = await import('../db/client.js')
+    const { memories } = await import('../db/schema.js')
+    const { v7 } = await import('uuid')
+    const ids = await listWorkspaceIds()
+    for (const ws of ids) {
+      const recap = await generateRecap(ws, 24).catch(() => null)
+      if (!recap) continue
+      // Persist as a memory tagged 'executive-recap' so the chat session-
+      // start surface can pull it on the next operator return.
+      try {
+        const content = [
+          `Executive Recap (${new Date().toISOString().slice(0, 10)})`,
+          `Productions: ${recap.productions.total} (${recap.productions.succeeded} ok / ${recap.productions.failed} failed)`,
+          recap.alerts.length > 0   ? `Alerts:\n- ${recap.alerts.join('\n- ')}` : '',
+          recap.nextMoves.length > 0 ? `Next moves:\n- ${recap.nextMoves.join('\n- ')}` : '',
+          recap.patterns.length > 0  ? `Patterns:\n- ${recap.patterns.map(p => p.pattern).join('\n- ')}` : '',
+        ].filter(Boolean).join('\n\n')
+        const now = Date.now()
+        await db.insert(memories).values({
+          id: v7(), workspaceId: ws, type: 'fact',
+          content, confidence: 0.9,
+          tags: ['executive-recap', 'civilization'],
+          source: 'civilization-core',
+          sourceRef: `recap:${new Date().toISOString().slice(0, 10)}`,
+          createdAt: now, updatedAt: now,
+        })
+      } catch { /* */ }
+      await emit('civilization.daily_recap', {
+        workspace_id: ws,
+        productions: recap.productions, alerts_count: recap.alerts.length,
+        next_moves_count: recap.nextMoves.length,
+      })
+    }
+  } catch (e) { await emit('cron.error', { task: 'daily_recap', error: (e as Error).message }) }
+}
+
+async function runScheduledProductionTick() {
+  try {
+    const { tick } = await import('./scheduled-production.js')
+    const r = await tick()
+    if (r.fired > 0 || r.errors.length > 0) {
+      await emit('scheduled_production.tick', {
+        checked: r.schedulesChecked, fired: r.fired,
+        produced: r.produced, published: r.published,
+        errors: r.errors.slice(0, 5),
+      })
+    }
+  } catch (e) { await emit('cron.error', { task: 'scheduled_production', error: (e as Error).message }) }
+}
+
 async function runMetaLearning() {
   try {
     const ids = await listWorkspaceIds()
@@ -337,6 +580,94 @@ async function runCronHealthAlerts() {
     const r = await notifyCronAlerts().catch(() => null)
     if (r && r.alerted > 0) await emit('cron.health_alerts', { alerted: r.alerted })
   } catch (e) { await emit('cron.error', { task: 'cron_health_alerts', error: (e as Error).message }) }
+}
+
+async function runVoiceDryRunSweep() {
+  try {
+    const { sweepExpiredDryRuns } = await import('./voice-dry-run.js')
+    const r = await sweepExpiredDryRuns().catch(() => null)
+    if (r && r.expired > 0) await emit('cron.voice_dry_run_sweep', { expired: r.expired })
+  } catch (e) { await emit('cron.error', { task: 'voice_dry_run_sweep', error: (e as Error).message }) }
+}
+
+async function runSelfHealScan() {
+  try {
+    const { scanAndHeal } = await import('./self-healing.js')
+    const r = await scanAndHeal().catch(() => null)
+    if (r && r.applied > 0) await emit('cron.self_heal', { applied: r.applied, byKind: r.byKind })
+  } catch (e) { await emit('cron.error', { task: 'self_heal_scan', error: (e as Error).message }) }
+}
+
+async function runFailoverProbe() {
+  try {
+    const { runFailoverHealthCheck, getLastFailoverState } = await import('./db-failover.js')
+    const prior = getLastFailoverState()
+    const next = await runFailoverHealthCheck()
+    // Emit only when the recommendation transitions — keeps the audit
+    // log quiet during steady-state.
+    if (!prior || prior.recommendation !== next.recommendation) {
+      await emit('runtime.failover.alert', {
+        recommendation: next.recommendation,
+        reason:         next.reason,
+        primary:        { status: next.primary.status, latencyMs: next.primary.latencyMs },
+        replica:        next.replica ? { status: next.replica.status, latencyMs: next.replica.latencyMs } : null,
+      })
+    }
+  } catch (e) { await emit('cron.error', { task: 'failover_probe', error: (e as Error).message }) }
+}
+
+// ── Platform self-check — runs the same smoke the operator can trigger
+//    on demand. Hits every public GET route the UI uses. Persists each
+//    run + detects regressions vs the prior run.
+async function runPlatformSmokeAll() {
+  try {
+    const { runPlatformSmoke } = await import('./platform-smoke.js')
+    const ids = await listWorkspaceIds()
+    let totalFails = 0, totalSlow = 0, errored = 0
+    for (const id of ids) {
+      // Per-workspace try/catch — without this, one workspace's failure
+      // (e.g. a 500 from an unreachable feature route) would abort the
+      // entire tick and leave every later workspace unscanned for the
+      // full INTERVALS.platformSmoke window.
+      try {
+        const r = await runPlatformSmoke(id, { source: 'cron' })
+        totalFails += r.failCount
+        totalSlow  += r.slowCount
+      } catch (e) {
+        errored++
+        await emit('cron.platform_smoke_workspace_failed', { workspaceId: id, error: (e as Error).message })
+      }
+    }
+    await emit('cron.platform_smoke_completed', { workspaces: ids.length, fails: totalFails, slow: totalSlow, errored })
+  } catch (e) { await emit('cron.error', { task: 'platform_smoke', error: (e as Error).message }) }
+}
+
+async function runChaosDrill() {
+  // Strictly opt-in: only fires when CHAOS_SAFE_WORKSPACE is set to a
+  // specific tenant id. Production workspaces are NEVER affected.
+  const target = process.env['CHAOS_SAFE_WORKSPACE']
+  if (!target || target === 'global' || target === 'production') return
+  try {
+    const { drDrill } = await import('./dr-drill.js')
+    const r = await drDrill(target).catch(() => null)
+    if (r) await emit('cron.chaos_drill', { workspace: target, result: 'ok' })
+  } catch (e) { await emit('cron.error', { task: 'chaos_drill', error: (e as Error).message }) }
+}
+
+async function runAnomalyScan() {
+  try {
+    // Use the file-local listWorkspaceIds (with cap warning) instead of
+    // re-importing from platform-hardening — copy-paste leftover causing
+    // potential divergence between cron iterations.
+    const { scanAnomalies } = await import('./anomaly-detection.js')
+    const ids = await listWorkspaceIds()
+    let raised = 0, updated = 0
+    for (const ws of ids) {
+      const r = await scanAnomalies(ws).catch(() => null)
+      if (r) { raised += r.raised; updated += r.updated }
+    }
+    if (raised + updated > 0) await emit('cron.anomaly_scan', { raised, updated })
+  } catch (e) { await emit('cron.error', { task: 'anomaly_scan', error: (e as Error).message }) }
 }
 
 async function runFabricSweep() {
@@ -507,6 +838,188 @@ async function runFeedIngestion() {
   } catch (e) { await emit('cron.error', { task: 'feeds', error: (e as Error).message }) }
 }
 
+// ─── Monday briefing ────────────────────────────────────────────────────────
+
+/**
+ * Compose the weekly action plan + post it as a brain-broadcast chat
+ * message into the operator's most-recent conversation. Idempotent via
+ * the events table: skips a workspace if `brain.monday_briefing_posted`
+ * has already landed in the last 6 days.
+ */
+async function runMondayBriefing(workspaceIds: string[]): Promise<void> {
+  const { db: _db } = await import('../db/client.js')
+  const { events: _events, conversations, messages } = await import('../db/schema.js')
+  const { eq, and: _and, gte: _gte, desc: _desc, sql: _sql } = await import('drizzle-orm')
+  const { v7: _uuidv7 } = await import('uuid')
+  const { improvePlan } = await import('./portfolio-improve.js')
+  const sixDaysMs = 6 * 86_400_000
+
+  for (const ws of workspaceIds) {
+    try {
+      // Postgres advisory lock per (workspace, 'monday_briefing') —
+      // serialises concurrent invocations across processes. The previous
+      // SELECT-then-INSERT was a TOCTOU window: two workers both saw no
+      // event in the last 6 days and both posted a duplicate briefing.
+      // `pg_try_advisory_lock` returns false if another session holds it,
+      // letting us skip cleanly rather than block. Released explicitly
+      // at the end of the iteration regardless of which branch returned.
+      const lockKey = `monday_briefing:${ws}`
+      const lockRows = await _db.execute(_sql`SELECT pg_try_advisory_lock(hashtext(${lockKey})) AS got`)
+      const got = ((lockRows as unknown as { rows?: Array<{ got?: boolean }> }).rows?.[0]?.got) === true
+      if (!got) continue
+      try {
+      // Idempotency check (now safe: only one session past the advisory lock at a time)
+      const recent = await _db.select({ id: _events.id }).from(_events)
+        .where(_and(
+          eq(_events.workspaceId, ws),
+          eq(_events.type, 'brain.monday_briefing_posted'),
+          _gte(_events.createdAt, Date.now() - sixDaysMs),
+        ))
+        .limit(1)
+      if (recent.length > 0) continue
+
+      // Find the operator's most-recent conversation; skip if none.
+      const conv = await _db.select({ id: conversations.id }).from(conversations)
+        .where(_and(eq(conversations.workspaceId, ws), eq(conversations.archived, false)))
+        .orderBy(_desc(conversations.updatedAt))
+        .limit(1)
+      if (conv.length === 0) continue
+      const conversationId = conv[0]!.id
+
+      // Compose the plan. Bail silently if the workspace has zero
+      // businesses — operator hasn't onboarded yet.
+      const plan = await improvePlan(ws)
+      if (plan.reviewSummary.businessCount === 0) continue
+
+      // Render as chat-friendly markdown
+      const body = [
+        `## Monday briefing — week of ${new Date().toISOString().slice(0, 10)}`,
+        '',
+        `**Portfolio state**: ${plan.reviewSummary.businessCount} businesses · $${plan.reviewSummary.totalMonthlyUsd.toFixed(0)}/mo vs $${plan.reviewSummary.totalTargetUsd.toFixed(0)} combined target · ${plan.reviewSummary.underperformingCount} need attention`,
+        `**Gap to combined floor**: $${plan.reviewSummary.gapUsd.toFixed(0)}/mo`,
+        '',
+        '### Action items',
+        ...plan.steps.slice(0, 5).map((s, i) =>
+          `${i + 1}. **${s.priority === 'high' ? '🔴' : s.priority === 'medium' ? '🟡' : '⚪️'} ${s.action}**\n   _${s.rationale}_\n   Expected impact: ${s.expectedImpact}${s.suggestedOp ? ` · suggested op: \`${s.suggestedOp}\`` : ''}`
+        ),
+        '',
+        '### Honest caveats',
+        ...plan.honestCaveats.map(c => `- ${c}`),
+        '',
+        '_Reply with the number of any action item to expand it, or `skip` to dismiss._',
+      ].join('\n')
+
+      const messageId = _uuidv7()
+      await _db.insert(messages).values({
+        id: messageId,
+        workspaceId: ws,
+        conversationId,
+        role: 'assistant',
+        content: body,
+        createdAt: Date.now(),
+      } as never).catch(() => null)
+
+      await _db.insert(_events).values({
+        id: _uuidv7(),
+        type: 'brain.monday_briefing_posted',
+        workspaceId: ws,
+        payload: { conversationId, messageId, businessCount: plan.reviewSummary.businessCount, gapUsd: plan.reviewSummary.gapUsd },
+        traceId: _uuidv7(), correlationId: _uuidv7(), causationId: null,
+        source: 'learning-cron', version: 1, createdAt: Date.now(),
+      }).catch(() => null)
+      } finally {
+        // Always release the advisory lock — Postgres holds it for the
+        // session lifetime otherwise, blocking the next Monday cycle.
+        await _db.execute(_sql`SELECT pg_advisory_unlock(hashtext(${lockKey}))`).catch(() => null)
+      }
+    } catch (e) {
+      await emit('cron.monday_briefing_workspace_failed', { workspaceId: ws, error: (e as Error).message })
+    }
+  }
+}
+
+// ─── Continuous improvement: portfolio + prompt evolution ───────────────────
+
+/**
+ * Daily per-workspace portfolio review. Pulls the weekly-review struct
+ * (gap to $10k/mo per business, sunset candidates, action items) and
+ * persists it as a memory the operator's Monday briefing can render.
+ * Emits a single `cron.portfolio_review_completed` event with the
+ * aggregate gap-to-target across all businesses in the workspace.
+ */
+async function runPortfolioReview() {
+  try {
+    const { weeklyReview } = await import('./business-portfolio.js')
+    const ids = await listWorkspaceIds()
+    let totalGap = 0
+    let underperformingCount = 0
+    let touched = 0
+    for (const ws of ids) {
+      try {
+        const review = await weeklyReview(ws)
+        totalGap += Math.max(0, review.totalTargetUsd - review.totalMonthlyUsd)
+        underperformingCount += review.underperforming.length
+        touched++
+        await emit('cron.portfolio_review', {
+          workspaceId: ws,
+          businessCount: review.businessCount,
+          totalMonthlyUsd: review.totalMonthlyUsd,
+          totalTargetUsd:  review.totalTargetUsd,
+          pctToGoal:       review.pctToCombinedGoal,
+          actionItems:     review.actionable.slice(0, 5),
+        })
+      } catch (e) {
+        // Per-workspace try/catch — one workspace's failure does not
+        // kill the rest of the sweep.
+        await emit('cron.portfolio_review_failed', { workspaceId: ws, error: (e as Error).message })
+      }
+    }
+    await emit('cron.portfolio_review_completed', {
+      workspaces: touched, totalGapUsd: totalGap, underperformingCount,
+    })
+  } catch (e) { await emit('cron.error', { task: 'portfolio_review', error: (e as Error).message }) }
+}
+
+/**
+ * Prompt-evolution tick: per workspace, pick at most one slot to evolve
+ * (round-robin via `mod` over the slot list keyed on the day-of-year so
+ * the same slot doesn't get hammered). Slot-internal idempotency (24h
+ * lockout in evolvePrompt) handles the rest.
+ *
+ * The point of this cron is *steady drift* — every 6 hours, one slot
+ * across the workspace tries one mutation. Over a week the system
+ * cycles through ~28 mutations per workspace; over a month ~120. With
+ * an exploration rate of 10% inside usePrompt, that's enough sample
+ * size for a slot with > 10 uses/day to converge.
+ */
+async function runPromptEvolutionTick() {
+  try {
+    const { listSlots, evolvePrompt } = await import('./prompt-evolution.js')
+    const ids = await listWorkspaceIds()
+    let evolved = 0
+    let retired = 0
+    for (const ws of ids) {
+      try {
+        const slots = await listSlots(ws)
+        if (slots.length === 0) continue
+        // Pick the slot with the highest totalUses that's also reasonably
+        // active (≥ 20 uses) — that's where one extra version actually
+        // gets sampled. Fall back to the highest-uses slot if none clear
+        // the 20-use bar.
+        const candidates = slots.filter(s => s.totalUses >= 20)
+        const pick = (candidates[0] ?? slots[0])
+        if (!pick) continue
+        const r = await evolvePrompt(ws, pick.slot)
+        if (r.added)   evolved++
+        if (r.retired) retired += r.retired
+      } catch (e) {
+        await emit('cron.prompt_evolution_failed', { workspaceId: ws, error: (e as Error).message })
+      }
+    }
+    await emit('cron.prompt_evolution_completed', { workspaces: ids.length, evolved, retired })
+  } catch (e) { await emit('cron.error', { task: 'prompt_evolution', error: (e as Error).message }) }
+}
+
 // ─── Public boot/stop ─────────────────────────────────────────────────────────
 
 const INTERVALS = {
@@ -531,6 +1044,9 @@ const INTERVALS = {
   economicLearning: 6  * 60 * 60_000, // 6 hours — evaluate past predictions + regenerate recommendations
   horizonReview:    60 * 60_000,      // 1 hour — sweep due strategic horizon reviews
   autonomousMind:   10 * 60_000,      // 10 min — capability-gap → build-plan meta-loop
+  ceoCycle:         15 * 60_000,      // 15 min — CEO snapshots divisions + delegates remediation
+  brainBroadcast:   5  * 60_000,      // 5 min — brain proactive chat digest to operator
+  openjarvisMonitors: 15 * 60_000,    // 15 min — OpenJarvis monitor-operative agents (each has its own interval)
   metaLearning:     60 * 60_000,      // 1 hour — calibration auto-tune suggestions
   watchdog:         2  * 60_000,      // 2 min — best-effort in-process liveness check
   gitState:         15 * 60_000,      // 15 min — capture recent git commits
@@ -541,43 +1057,392 @@ const INTERVALS = {
   fabricSweep:      2  * 60_000,      // 2 min — stale-node sweep + scaling decision cycle
   dataRetention:    24 * 60 * 60_000, // 24 hours — archive old events/chains/messages
   cronHealthAlerts: 60 * 60_000,      // 1 hour — alert if cron failing repeatedly
+  voiceDryRunSweep: 60_000,           // 60 s — expire stale pending voice dry-runs
+  selfHealScan:     2 * 60_000,       // 2 min — recover stuck sessions / dry-runs
+  anomalyScan:      5 * 60_000,       // 5 min — behavioral anomaly detection
+  chaosDrill:       7 * 86_400_000,   // weekly — only fires when CHAOS_SAFE_WORKSPACE is set
+  failoverProbe:    60 * 60_000,      // 1 hour — probe primary + replica DB endpoints
+  platformSmoke:    15 * 60_000,      // 15 min — exercise every public GET route the UI hits
+  issueIngest:      5  * 60_000,      // 5 min — convert recent incidents + cron errors into issues
+  issueAutoLoop:    10 * 60_000,      // 10 min — diagnosed→proposed; patched→verified (when proposal shipped)
+  scheduledProduction: 15 * 60_000,   // 15 min — fire daily-quota video production schedules
+  twinSnapshot:        30 * 60_000,   // 30 min — refresh digital-twin mirrors of channels + businesses
+  evolutionDiscover:    6 * 60 * 60_000,  // 6 hours — discover self-evolution candidates
+  recapDaily:          24 * 60 * 60_000,  // 24 hours — generate executive recap memory
+  riskScan:            20 * 60_000,       // 20 min — active failure-mode scan against the 30-risk taxonomy
+  economicHealth:      7 * 24 * 60 * 60_000, // weekly — workspace ROI rollup memory
+  emergentPatterns:    24 * 60 * 60_000,     // daily — discover strategic patterns
+  executionPhysics:    24 * 60 * 60_000,     // daily — momentum/friction snapshot
+  portfolioReview:     24 * 60 * 60_000,     // daily — per-business gap to $10k/mo target + Monday weekly review
+  promptEvolution:     6 * 60 * 60_000,      // 6h — pick one prompt slot per workspace and run evolvePrompt
+
+  // Round 117 — Blueprint persistence cron wiring
+  memoryDecay:         60 * 60_000,          // hourly — age + prune semantic memories
+  knowledgeCurate:     6 * 60 * 60_000,      // 6h — surface curated patterns to operator
+  cartographerSnapshot: 24 * 60 * 60_000,    // daily — refresh codebase map
+
+  // Round 120-122
+  evalDriftCheck:       6  * 60 * 60_000,    // 6h — output distribution drift
+  evalProductionSample: 60 * 60_000,         // hourly — production-traffic eval sample
+  curatorPeriodicReview: 24 * 60 * 60_000,   // daily — full curator cycle + auto-deprecate
+
+  // Round 116 — self-improvement health check (SPEC §10.4)
+  selfImprovementHealthCheck: 24 * 60 * 60_000,   // daily — 5 pathology detectors
+
+  // Round 119 — SOC2 compliance + AI drift detection (BO17/BO19)
+  complianceEvidence:   24 * 60 * 60_000,         // daily — collect SOC2 evidence
+  cveScan:              24 * 60 * 60_000,         // daily — pnpm audit
+  accessReviewCheck:    24 * 60 * 60_000,         // daily — fires quarterly when due
+  aiDriftSample:         6 * 60 * 60_000,         // 6h — production AI drift detection
+
+  // Round 120 — self-maintaining capabilities (Layer 5 lock integrity)
+  lockIntegrityCheck:    6 * 60 * 60_000,         // 6h — hash + verify LOCKED_PATHS
+
+  // Round 123 — close remaining wiring gaps (workers + consumers)
+  mediaVideoWorker:      2 * 60_000,              // 2 min — drain video job queue
+  recoveryExecutor:      5 * 60_000,              // 5 min — act on playbook suggestions
+  secretsRotationDrain:  3 * 60_000,              // 3 min — drop cached rotated secrets
+}
+
+/**
+ * Schedule a cron job with a random start offset so 30+ jobs don't
+ * collide at boot + at every minute-boundary. Without jitter, every
+ * 2-min and 5-min job fires simultaneously at t=2:00, 4:00, 6:00, etc.
+ * — saturating the event loop and starving HTTP requests for seconds.
+ * Jitter spreads them across the interval so the load is amortized.
+ *
+ * Diagnosis: postgres was completely idle while /api/v1/workspaces
+ * blocked for 6–8 s. The bottleneck was 100 % the Node event loop,
+ * not the DB. Jitter is the safe minimal fix.
+ */
+// Self-rescheduling jittered scheduler with in-flight guard.
+// REPLACES the broken setTimeout-then-setInterval pattern that produced
+// 100 entries in handles[] (50 setTimeouts + 50 setIntervals) and let
+// ticks overlap under slow DB. Now: single chained setTimeout per cron,
+// re-jittered each tick (±10% spread breaks deterministic stacking),
+// and an in-flight guard prevents tick-stacking when work runs long.
+const _running = new Map<string, boolean>()
+function scheduleJittered(fn: () => void | Promise<void>, intervalMs: number, name?: string): NodeJS.Timeout {
+  // R142 — was `name ?? fn.name ?? fallback`. `??` only coalesces null/
+  // undefined, but `fn.name` is the empty string for inline arrows
+  // (every call site here passes an inline `() => void runX()`). Result:
+  // every cron metric got tagged `task=""`. Use `||` so empty strings
+  // fall through to the next candidate.
+  const tag = name || fn.name || `cron-${Math.random().toString(36).slice(2, 8)}`
+  let handle: NodeJS.Timeout | null = null
+  const jitter = () => intervalMs + Math.floor((Math.random() - 0.5) * 0.2 * intervalMs)
+  const tick = async (): Promise<void> => {
+    if (_running.get(tag)) {
+      // Previous tick still running — skip this one to avoid stacking.
+      // Metrics surface stack-prevention so over-tight intervals are visible.
+      void import('./metrics.js').then(m => m.incCounter('cron_tick_skipped_total', { task: tag })).catch(() => {})
+    } else {
+      _running.set(tag, true)
+      const startedAt = Date.now()
+      try {
+        await fn()
+        void import('./metrics.js').then(m => m.incCounter('cron_tick_succeeded_total', { task: tag })).catch(() => {})
+      } catch {
+        // Runners already emit cron.error to events; metrics also count.
+        void import('./metrics.js').then(m => m.incCounter('cron_tick_failed_total', { task: tag })).catch(() => {})
+      }
+      finally {
+        _running.set(tag, false)
+        const dur = Date.now() - startedAt
+        void import('./metrics.js').then(m => m.setGauge('cron_tick_last_duration_ms', dur, { task: tag })).catch(() => {})
+      }
+    }
+    handle = setTimeout(() => void tick(), jitter())
+  }
+  // First fire: random startOffset within min(intervalMs, 60s)
+  const startOffset = Math.floor(Math.random() * Math.min(intervalMs, 60_000))
+  handle = setTimeout(() => void tick(), startOffset)
+  // Return a wrapper handle the caller can clear. We expose a getter so
+  // stopLearningCron can clear whichever timer is currently armed.
+  const wrapper = handle as NodeJS.Timeout & { __getCurrent?: () => NodeJS.Timeout | null }
+  ;(wrapper as { __getCurrent?: () => NodeJS.Timeout | null }).__getCurrent = () => handle
+  return wrapper
+}
+
+// Round 117 cron runners — pull each service's main entry and emit
+// telemetry so the cron-health-alerts sweep can spot regressions.
+async function runMemoryDecaySweep(): Promise<void> {
+  try {
+    const { decaySweepAll } = await import('./memory-tiers.js')
+    const r = await decaySweepAll()
+    await emit('cron.memory_decay', r)
+  } catch (e) { await emit('cron.error', { task: 'memory_decay', error: (e as Error).message }) }
+}
+
+async function runKnowledgeCurate(): Promise<void> {
+  try {
+    const { curate } = await import('./knowledge-curator.js')
+    // Curate across all workspaces with recent activity.
+    const { db: _db } = await import('../db/client.js')
+    const { events: _events } = await import('../db/schema.js')
+    const { sql: _sql, gte: _gte } = await import('drizzle-orm')
+    const rows = await _db.select({ ws: _events.workspaceId })
+      .from(_events)
+      .where(_gte(_events.createdAt, Date.now() - 7 * 86_400_000))
+      .groupBy(_events.workspaceId)
+      .limit(50)
+      .catch(() => [])
+    let totalProposed = 0
+    for (const r of rows) {
+      const proposed = await curate(r.ws).catch(() => [])
+      totalProposed += proposed.length
+    }
+    await emit('cron.knowledge_curate', { workspacesScanned: rows.length, totalProposed })
+  } catch (e) { await emit('cron.error', { task: 'knowledge_curate', error: (e as Error).message }) }
+}
+
+// Round 120-122 cron runners
+async function runEvalDriftCheck(): Promise<void> {
+  try {
+    const { detectDrift } = await import('./eval-system.js')
+    const { db: _db } = await import('../db/client.js')
+    const { workspaces } = await import('../db/schema.js')
+    const rows = await _db.select({ id: workspaces.id }).from(workspaces).limit(50).catch(() => [])
+    let drifted = 0
+    for (const r of rows) {
+      const d = await detectDrift({ workspaceId: r.id }).catch(() => null)
+      if (d?.drifted) drifted++
+    }
+    await emit('cron.eval_drift', { workspacesScanned: rows.length, drifted })
+  } catch (e) { await emit('cron.error', { task: 'eval_drift', error: (e as Error).message }) }
+}
+
+async function runEvalProductionSample(): Promise<void> {
+  try {
+    const { sampleProductionTraffic } = await import('./eval-system.js')
+    const { db: _db } = await import('../db/client.js')
+    const { workspaces } = await import('../db/schema.js')
+    const rows = await _db.select({ id: workspaces.id }).from(workspaces).limit(20).catch(() => [])
+    let totalConcerning = 0
+    for (const r of rows) {
+      const out = await sampleProductionTraffic({
+        workspaceId: r.id,
+        rubric:      { expectedBehavior: 'helpful, grounded in playbooks or operator data, citation when claiming facts, refusal when policy demands' },
+      }).catch(() => null)
+      if (out) totalConcerning += out.concerning.length
+    }
+    await emit('cron.eval_production_sample', { workspacesScanned: rows.length, totalConcerning })
+  } catch (e) { await emit('cron.error', { task: 'eval_production_sample', error: (e as Error).message }) }
+}
+
+async function runCuratorPeriodicReview(): Promise<void> {
+  try {
+    const { runPeriodicReview } = await import('./knowledge-curator-v2.js')
+    const { db: _db } = await import('../db/client.js')
+    const { workspaces } = await import('../db/schema.js')
+    const rows = await _db.select({ id: workspaces.id }).from(workspaces).limit(50).catch(() => [])
+    let totalProposals = 0, totalDeprecated = 0
+    for (const r of rows) {
+      const out = await runPeriodicReview(r.id).catch(() => null)
+      if (out) { totalProposals += out.newProposals; totalDeprecated += out.autoDeprecated }
+    }
+    await emit('cron.curator_periodic', { workspacesScanned: rows.length, totalProposals, totalDeprecated })
+  } catch (e) { await emit('cron.error', { task: 'curator_periodic', error: (e as Error).message }) }
+}
+
+/** Self-improvement health check — runs all 5 pathology detectors from
+ *  SPEC §10.4 daily across all workspaces. Surfaces critical-verdict
+ *  workspaces as `governance.stability_alert` events so the brain
+ *  pauses autonomous self-modification while operator reviews. */
+async function runSelfImprovementHealthCheck(): Promise<void> {
+  try {
+    const { runAllImprovementHealthChecks } = await import('./self-improvement.js')
+    const { db: _db } = await import('../db/client.js')
+    const { workspaces } = await import('../db/schema.js')
+    const rows = await _db.select({ id: workspaces.id }).from(workspaces).limit(50).catch(() => [])
+    let healthy = 0, investigating = 0, paused = 0
+    for (const r of rows) {
+      const verdict = await runAllImprovementHealthChecks(r.id).catch(() => null)
+      if (!verdict) continue
+      if (verdict.overallVerdict === 'healthy')                 healthy++
+      else if (verdict.overallVerdict === 'investigate')         investigating++
+      else if (verdict.overallVerdict === 'pause_self_improvement') {
+        paused++
+        // Emit an explicit alert so the policy engine + autonomous-mind
+        // see the pause signal in the event stream.
+        await emit('governance.stability_alert', {
+          workspaceId: r.id,
+          source:      'self_improvement_health_check',
+          verdict:     verdict.overallVerdict,
+          detail: {
+            capabilityNarrowing: verdict.capabilityNarrowing.narrowing,
+            coordinationDrift:   verdict.coordinationDrift.drifted,
+            compoundingErrors:   verdict.compoundingErrors.compounding,
+            rewardHackingCount:  verdict.rewardHacking.suspiciousCount,
+          },
+        })
+      }
+    }
+    await emit('cron.self_improvement_health', { workspacesScanned: rows.length, healthy, investigating, paused })
+  } catch (e) { await emit('cron.error', { task: 'self_improvement_health', error: (e as Error).message }) }
+}
+
+// Round 119 — SOC2 + AI drift (BO17 / BO19)
+
+async function runComplianceEvidence(): Promise<void> {
+  try {
+    const { runComplianceEvidenceCollection } = await import('./compliance-soc2.js')
+    const out = await runComplianceEvidenceCollection()
+    await emit('cron.compliance_evidence_completed', out)
+  } catch (e) { await emit('cron.error', { task: 'compliance_evidence', error: (e as Error).message }) }
+}
+
+async function runCveScan(): Promise<void> {
+  try {
+    const { runDependencyCveScan } = await import('./compliance-soc2.js')
+    const out = await runDependencyCveScan()
+    if (out) await emit('cron.cve_scan_completed', out)
+  } catch (e) { await emit('cron.error', { task: 'cve_scan', error: (e as Error).message }) }
+}
+
+async function runAccessReviewCheck(): Promise<void> {
+  try {
+    const { runQuarterlyAccessReviewCheck } = await import('./compliance-soc2.js')
+    const out = await runQuarterlyAccessReviewCheck()
+    if (out.due) await emit('cron.access_review_due', out)
+  } catch (e) { await emit('cron.error', { task: 'access_review_check', error: (e as Error).message }) }
+}
+
+async function runAiDrift(): Promise<void> {
+  try {
+    const { runAiDriftSample } = await import('./ai-drift.js')
+    const out = await runAiDriftSample()
+    await emit('cron.ai_drift_completed', out)
+  } catch (e) { await emit('cron.error', { task: 'ai_drift', error: (e as Error).message }) }
+}
+
+async function runLockIntegrity(): Promise<void> {
+  try {
+    const { runLockIntegrityCheck } = await import('./lock-integrity.js')
+    const out = await runLockIntegrityCheck()
+    await emit('cron.lock_integrity_completed', {
+      checked: out.checked, matches: out.matches,
+      tampered: out.tampered.length, bootstrapped: out.bootstrapped.length, missing: out.missing.length,
+    })
+  } catch (e) { await emit('cron.error', { task: 'lock_integrity', error: (e as Error).message }) }
+}
+
+async function runMediaVideoWorkerTick(): Promise<void> {
+  try {
+    const { runMediaVideoWorker } = await import('./media-video-worker.js')
+    const out = await runMediaVideoWorker()
+    if (out.processed > 0) await emit('cron.media_video_worker_completed', out)
+  } catch (e) { await emit('cron.error', { task: 'media_video_worker', error: (e as Error).message }) }
+}
+
+async function runRecoveryExecutorTick(): Promise<void> {
+  try {
+    const { runRecoveryExecutor } = await import('./recovery-executor.js')
+    const out = await runRecoveryExecutor()
+    if (out.examined > 0) await emit('cron.recovery_executor_completed', out)
+  } catch (e) { await emit('cron.error', { task: 'recovery_executor', error: (e as Error).message }) }
+}
+
+async function runSecretsRotationDrainTick(): Promise<void> {
+  try {
+    const { consumeSecretRotations } = await import('./secrets-provider.js')
+    const out = await consumeSecretRotations()
+    if (out.dropped.length > 0) await emit('cron.secrets_rotation_drained', out)
+  } catch (e) { await emit('cron.error', { task: 'secrets_rotation_drain', error: (e as Error).message }) }
+}
+
+async function runCartographerSnapshot(): Promise<void> {
+  try {
+    const { generateSnapshot } = await import('./codebase-cartographer.js')
+    const { db: _db } = await import('../db/client.js')
+    const { cartographerSnapshots } = await import('../db/schema.js')
+    const { v7: uuidv7 } = await import('uuid')
+    const snap = await generateSnapshot()
+    // Persist as a 'system' workspace snapshot — UI reads the most recent
+    // row to render the cartographer panel without re-scanning.
+    await _db.insert(cartographerSnapshots).values({
+      id:           uuidv7(),
+      workspaceId:  'system',
+      rootPath:     snap.rootPath,
+      fileCount:    snap.fileCount,
+      snapshot:     snap as unknown as Record<string, unknown>,
+      generatedAt:  snap.generatedAt,
+    }).catch(() => null)
+    await emit('cron.cartographer_snapshot', { fileCount: snap.fileCount })
+  } catch (e) { await emit('cron.error', { task: 'cartographer_snapshot', error: (e as Error).message }) }
 }
 
 export function startLearningCron(): void {
   if (process.env['DISABLE_LEARNING_CRON'] === '1') return
   if (handles.length > 0) return  // already started
 
-  handles.push(setInterval(() => void runIncidentScans(),    INTERVALS.incident))
-  handles.push(setInterval(() => void runImprovementScans(), INTERVALS.improvement))
-  handles.push(setInterval(() => void runSuspiciousScans(),  INTERVALS.suspicious))
-  handles.push(setInterval(() => void runOrchestratorSweep(),INTERVALS.orchestrator))
-  handles.push(setInterval(() => void runSecurityTeamScans(),INTERVALS.securityTeam))
-  handles.push(setInterval(() => void runBillingSweep(),     INTERVALS.billing))
-  handles.push(setInterval(() => void runFeedIngestion(),    INTERVALS.feeds))
-  handles.push(setInterval(() => void runStretchCachePurge(),INTERVALS.stretchPurge))
-  handles.push(setInterval(() => void runResearchScans(),    INTERVALS.research))
-  handles.push(setInterval(() => void runDailyReviews(),     INTERVALS.dailyReview))
-  handles.push(setInterval(() => void runResearchToAction(), INTERVALS.researchToAction))
-  handles.push(setInterval(() => void runStabilityScan(),    INTERVALS.stabilityScan))
-  handles.push(setInterval(() => void runWeeklyExecutiveBriefings(), INTERVALS.weeklyBriefing))
-  handles.push(setInterval(() => void runCrossDivisionScan(),        INTERVALS.crossDivision))
-  handles.push(setInterval(() => void runExecutiveHourly(),          INTERVALS.execHourly))
-  handles.push(setInterval(() => void runExecutiveSixHourly(),       INTERVALS.execSixHourly))
-  handles.push(setInterval(() => void runDailyCompressionAndPatterns(), INTERVALS.dailyCompression))
-  handles.push(setInterval(() => void runRealityVerification(),         INTERVALS.realityVerify))
-  handles.push(setInterval(() => void runEconomicLearning(),            INTERVALS.economicLearning))
-  handles.push(setInterval(() => void runHorizonReviewSweep(),          INTERVALS.horizonReview))
-  handles.push(setInterval(() => void runAutonomousMind(),              INTERVALS.autonomousMind))
-  handles.push(setInterval(() => void runMetaLearning(),                INTERVALS.metaLearning))
-  handles.push(setInterval(() => void runWatchdog(),                    INTERVALS.watchdog))
-  handles.push(setInterval(() => void runGitStateCapture(),             INTERVALS.gitState))
-  handles.push(setInterval(() => void runEmbeddingsBackfill(),          INTERVALS.embeddingsBackfill))
-  handles.push(setInterval(() => void runCommitLearning(),              INTERVALS.commitLearning))
-  handles.push(setInterval(() => void runCapabilityAutoRegister(),      INTERVALS.capabilityAutoReg))
-  handles.push(setInterval(() => void runTrustAutoDerive(),             INTERVALS.trustAutoDerive))
-  handles.push(setInterval(() => void runFabricSweep(),                 INTERVALS.fabricSweep))
-  handles.push(setInterval(() => void runDataRetention(),               INTERVALS.dataRetention))
-  handles.push(setInterval(() => void runCronHealthAlerts(),            INTERVALS.cronHealthAlerts))
+  handles.push(scheduleJittered(runIncidentScans,    INTERVALS.incident))
+  handles.push(scheduleJittered(runIssueAutoIngest,  INTERVALS.issueIngest))
+  handles.push(scheduleJittered(runIssueAutoLoop,    INTERVALS.issueAutoLoop))
+  handles.push(scheduleJittered(runImprovementScans, INTERVALS.improvement))
+  handles.push(scheduleJittered(runSuspiciousScans,  INTERVALS.suspicious))
+  handles.push(scheduleJittered(runOrchestratorSweep,INTERVALS.orchestrator))
+  handles.push(scheduleJittered(runSecurityTeamScans,INTERVALS.securityTeam))
+  handles.push(scheduleJittered(runBillingSweep,     INTERVALS.billing))
+  handles.push(scheduleJittered(runFeedIngestion,    INTERVALS.feeds))
+  handles.push(scheduleJittered(runStretchCachePurge,INTERVALS.stretchPurge))
+  handles.push(scheduleJittered(runResearchScans,    INTERVALS.research))
+  handles.push(scheduleJittered(runDailyReviews,     INTERVALS.dailyReview))
+  handles.push(scheduleJittered(runResearchToAction, INTERVALS.researchToAction))
+  handles.push(scheduleJittered(runStabilityScan,    INTERVALS.stabilityScan))
+  handles.push(scheduleJittered(runWeeklyExecutiveBriefings, INTERVALS.weeklyBriefing))
+  handles.push(scheduleJittered(runCrossDivisionScan,        INTERVALS.crossDivision))
+  handles.push(scheduleJittered(runExecutiveHourly,          INTERVALS.execHourly))
+  handles.push(scheduleJittered(runExecutiveSixHourly,       INTERVALS.execSixHourly))
+  handles.push(scheduleJittered(runDailyCompressionAndPatterns, INTERVALS.dailyCompression))
+  handles.push(scheduleJittered(runRealityVerification,         INTERVALS.realityVerify))
+  handles.push(scheduleJittered(runEconomicLearning,            INTERVALS.economicLearning))
+  handles.push(scheduleJittered(runHorizonReviewSweep,          INTERVALS.horizonReview))
+  handles.push(scheduleJittered(runAutonomousMind,              INTERVALS.autonomousMind))
+  handles.push(scheduleJittered(runCeoCycleCron,                INTERVALS.ceoCycle))
+  handles.push(scheduleJittered(runBrainBroadcastCron,          INTERVALS.brainBroadcast))
+  handles.push(scheduleJittered(runScheduledProductionTick,     INTERVALS.scheduledProduction))
+  handles.push(scheduleJittered(runTwinSnapshot,                INTERVALS.twinSnapshot))
+  handles.push(scheduleJittered(runEvolutionDiscover,           INTERVALS.evolutionDiscover))
+  handles.push(scheduleJittered(runDailyRecap,                  INTERVALS.recapDaily))
+  handles.push(scheduleJittered(runRiskScan,                    INTERVALS.riskScan))
+  handles.push(scheduleJittered(runEconomicHealth,              INTERVALS.economicHealth))
+  handles.push(scheduleJittered(runEmergentPatterns,            INTERVALS.emergentPatterns))
+  handles.push(scheduleJittered(runExecutionPhysics,            INTERVALS.executionPhysics))
+  handles.push(scheduleJittered(runPortfolioReview,             INTERVALS.portfolioReview))
+  handles.push(scheduleJittered(runPromptEvolutionTick,         INTERVALS.promptEvolution))
+  handles.push(scheduleJittered(runOpenJarvisMonitorsCron,      INTERVALS.openjarvisMonitors))
+  handles.push(scheduleJittered(runMetaLearning,                INTERVALS.metaLearning))
+  handles.push(scheduleJittered(runWatchdog,                    INTERVALS.watchdog))
+  handles.push(scheduleJittered(runGitStateCapture,             INTERVALS.gitState))
+  handles.push(scheduleJittered(runEmbeddingsBackfill,          INTERVALS.embeddingsBackfill))
+  handles.push(scheduleJittered(runCommitLearning,              INTERVALS.commitLearning))
+  handles.push(scheduleJittered(runCapabilityAutoRegister,      INTERVALS.capabilityAutoReg))
+  handles.push(scheduleJittered(runTrustAutoDerive,             INTERVALS.trustAutoDerive))
+  handles.push(scheduleJittered(runFabricSweep,                 INTERVALS.fabricSweep))
+  handles.push(scheduleJittered(runDataRetention,               INTERVALS.dataRetention))
+  handles.push(scheduleJittered(runCronHealthAlerts,            INTERVALS.cronHealthAlerts))
+  handles.push(scheduleJittered(runVoiceDryRunSweep,            INTERVALS.voiceDryRunSweep))
+  handles.push(scheduleJittered(runSelfHealScan,                INTERVALS.selfHealScan))
+  handles.push(scheduleJittered(runAnomalyScan,                 INTERVALS.anomalyScan))
+  handles.push(scheduleJittered(runChaosDrill,                  INTERVALS.chaosDrill))
+  handles.push(scheduleJittered(runFailoverProbe,               INTERVALS.failoverProbe))
+  handles.push(scheduleJittered(runPlatformSmokeAll,            INTERVALS.platformSmoke))
+  handles.push(scheduleJittered(runMemoryDecaySweep,            INTERVALS.memoryDecay))
+  handles.push(scheduleJittered(runKnowledgeCurate,             INTERVALS.knowledgeCurate))
+  handles.push(scheduleJittered(runCartographerSnapshot,        INTERVALS.cartographerSnapshot))
+  handles.push(scheduleJittered(runEvalDriftCheck,              INTERVALS.evalDriftCheck))
+  handles.push(scheduleJittered(runEvalProductionSample,        INTERVALS.evalProductionSample))
+  handles.push(scheduleJittered(runCuratorPeriodicReview,       INTERVALS.curatorPeriodicReview))
+  handles.push(scheduleJittered(runSelfImprovementHealthCheck,  INTERVALS.selfImprovementHealthCheck))
+  handles.push(scheduleJittered(runComplianceEvidence,          INTERVALS.complianceEvidence))
+  handles.push(scheduleJittered(runCveScan,                     INTERVALS.cveScan))
+  handles.push(scheduleJittered(runAccessReviewCheck,           INTERVALS.accessReviewCheck))
+  handles.push(scheduleJittered(runAiDrift,                     INTERVALS.aiDriftSample))
+  handles.push(scheduleJittered(runLockIntegrity,               INTERVALS.lockIntegrityCheck))
+  handles.push(scheduleJittered(runMediaVideoWorkerTick,        INTERVALS.mediaVideoWorker))
+  handles.push(scheduleJittered(runRecoveryExecutorTick,        INTERVALS.recoveryExecutor))
+  handles.push(scheduleJittered(runSecretsRotationDrainTick,    INTERVALS.secretsRotationDrain))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
@@ -586,8 +1451,20 @@ export function startLearningCron(): void {
 }
 
 export function stopLearningCron(): void {
-  for (const h of handles) clearInterval(h)
+  for (const h of handles) {
+    // Each handle is a setTimeout wrapper with __getCurrent() returning
+    // the currently-armed timer. clearTimeout works on both setInterval
+    // and setTimeout handles in Node, so we cover both paths.
+    const getter = (h as { __getCurrent?: () => NodeJS.Timeout | null }).__getCurrent
+    if (getter) {
+      const cur = getter()
+      if (cur) clearTimeout(cur)
+    }
+    clearTimeout(h)
+    clearInterval(h)
+  }
   handles.length = 0
+  _running.clear()
 }
 
 /** Number of active cron handles — used by runtime-heartbeat to detect drift. */
@@ -599,7 +1476,20 @@ export function learningCronHandleCount(): number {
  *  thinking immediately rather than waiting for the first interval tick. */
 export async function bootKick(): Promise<void> {
   // Fire each long-interval task once on boot so cold start isn't silent.
+  // Previously only 3 of 50 crons were kicked — daily/weekly jobs waited
+  // their full interval after boot (up to 24h of silence).
+  // Idempotency is enforced inside each runner (daily-recap/etc. check
+  // for prior emission within window) so re-kicking is safe.
   void runAutonomousMind()
   void runMetaLearning()
   void runHorizonReviewSweep()
+  // Daily-cadence jobs — kick on boot so a freshly-restarted pod doesn't
+  // wait up to 24h before producing its first recap/health/patterns.
+  void runDailyRecap()
+  void runEconomicHealth()
+  void runEmergentPatterns()
+  void runExecutionPhysics()
+  void runDailyReviews()
+  void runDailyCompressionAndPatterns()
+  void runWeeklyExecutiveBriefings()
 }

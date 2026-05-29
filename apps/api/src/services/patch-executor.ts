@@ -9,7 +9,7 @@
  *   - protected files are never modified
  */
 import { readFile, writeFile }    from 'node:fs/promises'
-import { resolve }               from 'node:path'
+import { resolve, sep }          from 'node:path'
 import { inArray }               from 'drizzle-orm'
 import { db }                           from '../db/client.js'
 import { patchRecords, events }         from '../db/schema.js'
@@ -73,7 +73,11 @@ function isProtected(filePath: string): boolean {
 function isWithinRoot(filePath: string, rootPath: string): boolean {
   const resolved = resolve(filePath)
   const root     = resolve(rootPath)
-  return resolved.startsWith(root)
+  // Add the separator so root="/repo" doesn't accidentally accept
+  // "/repo-evil/file" (prefix match without separator boundary).
+  // We allow equality with `root` itself in case a caller passes the
+  // root path as a write target (rare but legal).
+  return resolved === root || resolved.startsWith(root + sep)
 }
 
 /** Apply a list of patches atomically — all or nothing. */

@@ -10,7 +10,7 @@
  */
 import { db } from '../db/client.js'
 import { cronBudgets } from '../db/schema.js'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { v7 as uuidv7 } from 'uuid'
 
 export interface BudgetCheck {
@@ -96,17 +96,20 @@ export async function checkBudget(cronName: string, cfg: BudgetConfig = {}): Pro
   }
 }
 
-/** Record consumption after the cron runs. */
+/** Record consumption after the cron runs.
+ *  Atomic SQL increment — the previous read-modify-write pattern lost
+ *  one tick's consumption when two cron instances overlapped (slow exec
+ *  + next-tick fire). Postgres-level `col = col + N` is concurrency-safe. */
 export async function consume(cronName: string, used: { calls?: number; tokens?: number; costUsd?: number }): Promise<void> {
-  const row = await db.select().from(cronBudgets)
-    .where(eq(cronBudgets.cronName, cronName)).limit(1).then(r => r[0]).catch(() => null)
-  if (!row) return
+  const dCalls  = used.calls   ?? 1
+  const dTokens = used.tokens  ?? 0
+  const dCost   = used.costUsd ?? 0
   await db.update(cronBudgets).set({
-    callsUsed:   row.callsUsed   + (used.calls   ?? 1),
-    tokensUsed:  row.tokensUsed  + (used.tokens  ?? 0),
-    costUsdUsed: Number((row.costUsdUsed + (used.costUsd ?? 0)).toFixed(4)),
+    callsUsed:   sql`${cronBudgets.callsUsed}   + ${dCalls}`,
+    tokensUsed:  sql`${cronBudgets.tokensUsed}  + ${dTokens}`,
+    costUsdUsed: sql`ROUND((${cronBudgets.costUsdUsed} + ${dCost})::numeric, 4)`,
     updatedAt:   Date.now(),
-  }).where(eq(cronBudgets.id, row.id)).catch(() => null)
+  }).where(eq(cronBudgets.cronName, cronName)).catch(() => null)
 }
 
 export async function listBudgets() {

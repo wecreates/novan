@@ -11,10 +11,10 @@
 @layer base {
   :root, [data-theme='dark'] {
     /* ── Surfaces (charcoal scale) ──────────────────────────────── */
-    --void:         #050507;   /* deep background, universe layer */
-    --bg-primary:   #08090b;   /* page background */
-    --bg-surface:   #0d0e12;   /* panel base */
-    --bg-elevated:  #14161c;   /* dropdowns, drawers */
+    --void:         #000000;   /* deep background, universe layer (pure black) */
+    --bg-primary:   #060608;   /* page background */
+    --bg-surface:   #0A0A0E;   /* panel base */
+    --bg-elevated:  #131319;   /* dropdowns, drawers */
     --bg-glass:     rgba(20, 22, 28, 0.62);  /* glass overlay base */
     --bg-glass-strong: rgba(8, 9, 11, 0.80); /* modal backdrop */
     --surface:      var(--bg-surface);
@@ -34,11 +34,15 @@
 
     /* ── Accents (operational only, never decorative) ───────────── */
     --accent-healthy:  #34d399;   /* emerald — healthy */
-    --accent-active:   #67e8f9;   /* cyan — learning/active */
+    --accent-active:   #8B7CFF;   /* primary purple — selection, focus, brand */
     --accent-warning:  #f59e0b;   /* amber — warning/degraded */
     --accent-critical: #ef4444;   /* red — critical/down */
     --accent-paused:   #a78bfa;   /* lavender — paused (used sparingly) */
     --accent-info:     #94a3b8;   /* slate — neutral info */
+    /* Section accents used sparingly in chrome (mirrors Notion's calm dots) */
+    --accent-soft-blue:   #5BAFFF;
+    --accent-soft-amber:  #E6B86A;
+    --accent-soft-rose:   #D67BA6;
 
     /* ── Depth (shadows + glow) ─────────────────────────────────── */
     --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);

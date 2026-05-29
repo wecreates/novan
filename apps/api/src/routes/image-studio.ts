@@ -26,6 +26,8 @@ import {
 } from '../services/image-generator.js'
 import { selectProvider, providerScores } from '../services/image-router.js'
 import { rewritePrompt }           from '../services/prompt-rewriter.js'
+import { reviewGeneration, reviewBatch, creativeMetrics, improvePrompt, makePromptPremium, safetyCheck } from '../services/image-creative.js'
+import { scorePrompt } from '../services/image-quality.js'
 
 const VALID: ImageProvider[] = ['openai', 'stability', 'replicate', 'fal']
 
@@ -298,6 +300,81 @@ const studioRoutes: FastifyPluginAsync = async (fastify) => {
         })),
       },
     }
+  })
+
+  // ─── Reference uploads (sketches, mockups, screenshots) ─────────────
+  // Accepts a data URL or remote URL. We do NOT decode + persist binary
+  // here — the reference is stored as a URL on the generation row so the
+  // selected provider can pull it. Operators paste / drop images in the
+  // workspace; the canvas converts them to data URLs client-side.
+  fastify.post<{ Body: { workspace_id?: string; data_url?: string; url?: string; kind?: string } }>('/reference', async (req, reply) => {
+    const ws = req.body.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const src = req.body.data_url ?? req.body.url
+    if (!src) return reply.code(400).send({ success: false, error: 'data_url or url required' })
+    if (src.length > 4_500_000) return reply.code(413).send({ success: false, error: 'reference too large (max ~3 MB base64)' })
+    if (!/^data:image\/(png|jpe?g|webp|gif)/.test(src) && !/^https?:\/\//.test(src)) {
+      return reply.code(400).send({ success: false, error: 'must be a data:image/* URL or http(s) URL' })
+    }
+    // Audit the reference attachment but don't store the body server-side —
+    // the client passes the URL on the next generate call.
+    return { success: true, data: { ref: src, kind: req.body.kind ?? 'reference' } }
+  })
+
+  // ─── Creative graph (prompt clusters / remix trees / quality heat) ───
+  fastify.get<{ Querystring: { workspace_id?: string; window_days?: string; limit?: string } }>('/creative/graph', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const windowMs = req.query.window_days ? Number(req.query.window_days) * 86_400_000 : 30 * 86_400_000
+    const limit = req.query.limit ? Math.min(500, Number(req.query.limit)) : 200
+    const { buildCreativeGraph } = await import('../services/image-creative-graph.js')
+    return { success: true, data: await buildCreativeGraph(ws, { windowMs, limit }) }
+  })
+
+  // ─── Creative Director: scoring, anti-slop, originality ──────────────
+  fastify.post<{ Body: { prompt?: string } }>('/creative/score-prompt', async (req, reply) => {
+    const p = (req.body.prompt ?? '').toString()
+    if (!p.trim()) return reply.code(400).send({ success: false, error: 'prompt required' })
+    return { success: true, data: scorePrompt(p) }
+  })
+
+  fastify.post<{ Body: { prompt?: string } }>('/creative/safety', async (req, reply) => {
+    const p = (req.body.prompt ?? '').toString()
+    if (!p.trim()) return reply.code(400).send({ success: false, error: 'prompt required' })
+    return { success: true, data: safetyCheck(p) }
+  })
+
+  fastify.post<{ Body: { prompt?: string } }>('/creative/improve-prompt', async (req, reply) => {
+    const p = (req.body.prompt ?? '').toString()
+    if (!p.trim()) return reply.code(400).send({ success: false, error: 'prompt required' })
+    return { success: true, data: improvePrompt(p) }
+  })
+
+  fastify.post<{ Body: { prompt?: string } }>('/creative/make-premium', async (req, reply) => {
+    const p = (req.body.prompt ?? '').toString()
+    if (!p.trim()) return reply.code(400).send({ success: false, error: 'prompt required' })
+    return { success: true, data: makePromptPremium(p) }
+  })
+
+  fastify.post<{ Body: { workspace_id?: string; generation_id?: string; reviewer?: string } }>('/creative/review', async (req, reply) => {
+    const { workspace_id, generation_id, reviewer } = req.body
+    if (!workspace_id || !generation_id) return reply.code(400).send({ success: false, error: 'workspace_id, generation_id required' })
+    const v = await reviewGeneration(workspace_id, generation_id, reviewer)
+    if (!v) return reply.code(404).send({ success: false, error: 'generation not found' })
+    return { success: true, data: v }
+  })
+
+  fastify.post<{ Body: { workspace_id?: string; limit?: number } }>('/creative/review-batch', async (req, reply) => {
+    const { workspace_id, limit } = req.body
+    if (!workspace_id) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    return { success: true, data: await reviewBatch(workspace_id, limit ?? 50) }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string; window_days?: string } }>('/creative/metrics', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const windowMs = req.query.window_days ? Number(req.query.window_days) * 86_400_000 : 7 * 86_400_000
+    return { success: true, data: await creativeMetrics(ws, { windowMs }) }
   })
 }
 

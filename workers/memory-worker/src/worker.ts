@@ -12,8 +12,8 @@ import { Worker, Queue, type Job }             from 'bullmq'
 import { pino }                               from 'pino'
 import { eq, and, isNotNull, lt, inArray }   from 'drizzle-orm'
 import { sql }                                from 'drizzle-orm'
-import { createDb, memories, events } from '@ops/db'
-import { createRedisFromEnv, attachWorkerLifecycle } from '@ops/runtime-kernel'
+import { createDb, memories, events, startWorkerHeartbeat, deadLetterJobs } from '@ops/db'
+import { createRedisFromEnv, attachWorkerLifecycle, installProcessSafetyNet } from '@ops/runtime-kernel'
 import { EVENT_TYPES, EVENT_SCHEMA_VERSION }  from '@ops/event-contracts'
 import { v7 as uuidv7 }                       from 'uuid'
 import { generateEmbeddings, embedText }      from './embedder.js'
@@ -26,7 +26,8 @@ const log = pino({ name: 'memory-worker', level: process.env['LOG_LEVEL'] ?? 'in
 const connectionString = process.env['DATABASE_URL']
 if (!connectionString) throw new Error('DATABASE_URL is required')
 
-const db    = createDb(connectionString, 3)
+const db    = createDb(connectionString, 3, 'ops-memory-worker')
+startWorkerHeartbeat({ db, name: 'memory-worker', capabilities: ['memory-compression', 'embedding', 'stale-detection'] })
 const redis = createRedisFromEnv()
 
 // Wire the intelligence module to the same db instance
@@ -54,7 +55,7 @@ async function emitEvent(
       createdAt:     Date.now(),
     })
   } catch (err) {
-    log.warn({ err, type }, 'Failed to emit event')
+    log.warn({ err: (err as Error).message, type }, 'Failed to emit event')
   }
 }
 
@@ -359,12 +360,40 @@ async function registerScheduledJobs(): Promise<void> {
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 
 const workerId = `memory-worker-${process.pid}`
+
+// Dead-letter persistence — previously the lifecycle hook was attached WITHOUT
+// onDeadLetter, so jobs exhausted after retries vanished (only an event was
+// emitted). Persisting to dead_letter_jobs gives the operator a real audit
+// trail of failed embed-memory / analyze-memories / etc. jobs.
+async function persistDeadLetter(record: import('@ops/runtime-kernel').DeadLetterRecord): Promise<void> {
+  try {
+    await db.insert(deadLetterJobs).values({
+      id:             record.id,
+      queueName:      record.queueName,
+      jobId:          record.jobId,
+      jobName:        record.jobName,
+      workspaceId:    record.workspaceId,
+      payload:        record.payload,
+      error:          record.error,
+      attempts:       record.attempts,
+      workerId:       record.workerId,
+      traceId:        record.traceId ?? null,
+      firstFailedAt:  record.firstFailedAt,
+      deadLetteredAt: record.deadLetteredAt,
+    })
+    log.warn({ jobId: record.jobId, error: record.error }, 'memory-worker job dead-lettered')
+  } catch (e) {
+    log.error({ err: e, jobId: record.jobId }, 'failed to persist dead letter')
+  }
+}
+
 const cleanup  = attachWorkerLifecycle(worker, {
   workerName: 'memory-worker',
   queueName:  'memory',
   workerId,
   log,
   emitEvent,
+  onDeadLetter: persistDeadLetter,
 })
 
 async function shutdown(): Promise<void> {
@@ -376,7 +405,13 @@ async function shutdown(): Promise<void> {
 
 process.on('SIGTERM', () => { void shutdown() })
 process.on('SIGINT',  () => { void shutdown() })
+installProcessSafetyNet({ workerName: 'memory-worker', log })
 
-void registerScheduledJobs().catch((err) => log.error({ err }, 'Failed to register scheduled jobs'))
+// If registration fails, the worker has no scheduled jobs and silently
+// stops doing periodic work. Fail-fast so the orchestrator notices.
+void registerScheduledJobs().catch((err) => {
+  log.error({ err }, 'Failed to register scheduled jobs — exiting')
+  process.exit(1)
+})
 
 log.info('Memory worker started')

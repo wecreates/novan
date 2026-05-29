@@ -23,12 +23,13 @@ import * as schema                                     from '@ops/db'
 import { emitEvent }                                   from './events.js'
 import {
   attachWorkerLifecycle,
+  installProcessSafetyNet,
   createRedisFromEnv,
   QUEUE_NAMES,
   QUEUE_CONFIG,
   type DeadLetterRecord,
 } from '@ops/runtime-kernel'
-import { deadLetterJobs }                              from '@ops/db'
+import { deadLetterJobs, startWorkerHeartbeat }       from '@ops/db'
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 
@@ -44,6 +45,7 @@ const WORKER_ID = `${QUEUE_NAMES.RECOVERY}-worker-${process.pid}`
 
 const queryClient    = postgres(connectionString, { max: 3, idle_timeout: 30 })
 const db             = drizzle(queryClient)
+startWorkerHeartbeat({ db, name: 'recovery-worker', capabilities: ['self-healing', 'recovery', 'dead-letter-replay'] })
 const connection     = createRedisFromEnv()
 const workflowQueue  = new Queue(QUEUE_NAMES.WORKFLOW, { connection })
 
@@ -140,11 +142,16 @@ async function handleRetryRun(data: RetryRunJob): Promise<void> {
     })
     .where(eq(schema.workflowRuns.id, runId))
 
-  // Re-enqueue
+  // Re-enqueue with FULL payload — workflow-worker.ExecuteWorkflowJob
+  // requires workflowId + traceId, not just runId. Previously these were
+  // undefined → executor crashed deep in the call stack or produced
+  // empty traces.
   await workflowQueue.add('execute-workflow', {
     runId,
     workspaceId,
-    attempt: run.attempt + 1,
+    workflowId: run.workflowId,
+    traceId:    run.traceId ?? uuidv7(),
+    attempt:    run.attempt + 1,
   }, { priority: 2 })
 
   await db.insert(schema.recoveryLog).values({
@@ -272,27 +279,40 @@ async function handleExpireApprovals(data: ExpireApprovalsJob): Promise<{ expire
 async function detectStuckRuns(): Promise<{ stuckCount: number; fixed: number }> {
   const cutoff = Date.now() - 5 * 60 * 1_000  // 5 minutes ago
 
-  // Runs that started > 5min ago and are still 'running'
-  // Use startedAt for stuck detection (no updatedAt on workflowRuns)
+  // Runs that started > 5min ago and are still 'running'.
+  // FIX #1: previously `lte(startedAt, cutoff)` silently dropped rows
+  // where startedAt IS NULL (lock acquired but never persisted startedAt).
+  // SQL NULL <= cutoff is NULL, treated as false → ghost runs never time
+  // out. Now also catch rows where startedAt IS NULL but triggeredAt
+  // is older than cutoff.
   const stuck = await db
     .select({ id: schema.workflowRuns.id, workspaceId: schema.workflowRuns.workspaceId })
     .from(schema.workflowRuns)
     .where(
       and(
         eq(schema.workflowRuns.status, 'running'),
-        lte(schema.workflowRuns.startedAt, cutoff),
+        sql`(${schema.workflowRuns.startedAt} <= ${cutoff} OR (${schema.workflowRuns.startedAt} IS NULL AND ${schema.workflowRuns.triggeredAt} <= ${cutoff}))`,
       ),
     )
 
   let fixed = 0
   for (const run of stuck) {
-    await db
+    // FIX #2: compare-and-swap on status. Previously a stuck run that
+    // completed BETWEEN our SELECT and UPDATE got overwritten failed
+    // → 'completed' lost. Now only flip if still 'running'.
+    const r = await db
       .update(schema.workflowRuns)
       .set({ status: 'failed', failedAt: Date.now(), errorMessage: 'Timeout: run exceeded 5 minute limit' })
-      .where(eq(schema.workflowRuns.id, run.id))
+      .where(and(
+        eq(schema.workflowRuns.id, run.id),
+        eq(schema.workflowRuns.status, 'running'),
+      ))
+      .returning({ id: schema.workflowRuns.id })
 
-    await emitEvent('workflow.run.timeout', run.workspaceId, { runId: run.id })
-    fixed++
+    if (r.length > 0) {
+      await emitEvent('workflow.run.timeout', run.workspaceId, { runId: run.id })
+      fixed++
+    }
   }
 
   log.info({ stuckCount: stuck.length, fixed }, 'detect-stuck-runs complete')
@@ -303,8 +323,16 @@ async function retryFailedRuns(): Promise<{ retriedCount: number }> {
   const since = Date.now() - 24 * 60 * 60 * 1_000  // 24h ago
 
   // attempt starts at 1; < 3 means at most 2 prior attempts, allowing a 3rd
+  // FIX: previously this flipped status to 'pending' but NEVER enqueued
+  // the work — runs sat at 'pending' forever. Now we also enqueue.
   const eligible = await db
-    .select({ id: schema.workflowRuns.id, workspaceId: schema.workflowRuns.workspaceId, attempt: schema.workflowRuns.attempt })
+    .select({
+      id: schema.workflowRuns.id,
+      workspaceId: schema.workflowRuns.workspaceId,
+      workflowId: schema.workflowRuns.workflowId,
+      traceId: schema.workflowRuns.traceId,
+      attempt: schema.workflowRuns.attempt,
+    })
     .from(schema.workflowRuns)
     .where(
       and(
@@ -318,8 +346,20 @@ async function retryFailedRuns(): Promise<{ retriedCount: number }> {
   for (const run of eligible) {
     await db
       .update(schema.workflowRuns)
-      .set({ status: 'pending', attempt: run.attempt + 1, errorMessage: null })
+      .set({
+        status: 'pending', attempt: run.attempt + 1, errorMessage: null,
+        failedAt: null, startedAt: null, completedAt: null,
+      })
       .where(eq(schema.workflowRuns.id, run.id))
+
+    // Actually re-enqueue the work so the workflow-worker picks it up.
+    await workflowQueue.add('execute-workflow', {
+      runId:       run.id,
+      workspaceId: run.workspaceId,
+      workflowId:  run.workflowId,
+      traceId:     run.traceId ?? uuidv7(),
+      attempt:     run.attempt + 1,
+    }, { priority: 2 })
 
     await emitEvent('workflow.run.retry-scheduled', run.workspaceId, { runId: run.id, attempt: run.attempt + 1 })
     retriedCount++
@@ -473,6 +513,7 @@ const shutdown = async (signal: string): Promise<void> => {
 
 process.on('SIGTERM', () => { void shutdown('SIGTERM') })
 process.on('SIGINT',  () => { void shutdown('SIGINT') })
+installProcessSafetyNet({ workerName: 'recovery-worker', log })
 
 // ─── Startup ──────────────────────────────────────────────────────────────────
 

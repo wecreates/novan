@@ -127,6 +127,7 @@ export default function LaunchTonightPage() {
             </p>
           </div>
           <button onClick={() => { qc.invalidateQueries({ queryKey: ['lt-flags'] }); qc.invalidateQueries({ queryKey: ['lt-checklist'] }); qc.invalidateQueries({ queryKey: ['lt-runtime'] }) }}
+            aria-label="Refresh launch checks" title="Refresh"
             className="text-muted hover:text-secondary"><RefreshCcw className="w-4 h-4" /></button>
         </div>
 

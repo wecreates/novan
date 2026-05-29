@@ -53,11 +53,13 @@ export async function recoverStuckWorkflows(workspaceId: string): Promise<number
 
   const stuck = await db.update(workflowRuns)
     .set({
+      // workflowRuns has no `updatedAt` column — removing it removes the
+      // `as never` cast that was hiding the schema mismatch. Drizzle was
+      // silently dropping the field at runtime, so behavior is unchanged.
       status:       'failed',
       failedAt:     now,
       errorMessage: 'Automatically failed by disaster recovery (execution timeout)',
-      updatedAt:    now,
-    } as never)
+    })
     .where(and(
       eq(workflowRuns.workspaceId, workspaceId),
       inArray(workflowRuns.status, ['running', 'pending']),

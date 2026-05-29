@@ -15,8 +15,9 @@ import {
   QUEUE_NAMES,
   createRedisFromEnv,
   attachWorkerLifecycle,
+  installProcessSafetyNet,
 } from '@ops/runtime-kernel'
-import { browserSessions, browserActions }                         from '@ops/db'
+import { browserSessions, browserActions, startWorkerHeartbeat }  from '@ops/db'
 import { evaluatePolicy, AUTONOMY_LEVELS, extractActionCategory }  from '@ops/policy-engine'
 import type { AutonomyLevel }                                      from '@ops/policy-engine'
 import {
@@ -28,6 +29,20 @@ import {
 } from './session.js'
 import { emitEvent }        from './events.js'
 import { db, queryClient }  from './db.js'
+
+/** Strip the query string (and userinfo if present) from a URL before
+ *  logging. OAuth callbacks, signed S3 URLs, and pre-signed download
+ *  links all carry secrets there; logging the raw URL exposes them in
+ *  every captured-page log line. */
+function safeUrl(raw: string): string {
+  try {
+    const u = new URL(raw)
+    return `${u.protocol}//${u.host}${u.pathname}`
+  } catch {
+    const q = raw.indexOf('?')
+    return q >= 0 ? raw.slice(0, q) : raw
+  }
+}
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 
@@ -183,13 +198,13 @@ async function handleWebCapture(data: WebCaptureJob): Promise<{
 
   if (report.verdict === 'deny') {
     const reason = report.decidingPolicy.reason
-    log.warn({ url, reason }, 'Browser capture denied by policy')
+    log.warn({ url: safeUrl(url), reason }, 'Browser capture denied by policy')
     await emitEvent('browser.action.blocked', workspaceId, { jobId, url, reason }, traceId)
     return { success: false, sessionId: '', error: `Policy denied: ${reason}` }
   }
 
   if (report.verdict === 'require_approval') {
-    log.info({ url }, 'Browser capture requires approval — blocked in worker')
+    log.info({ url: safeUrl(url) }, 'Browser capture requires approval — blocked in worker')
     await emitEvent('browser.action.approval_required', workspaceId, {
       jobId, url, policyId: report.decidingPolicy.policyId,
     }, traceId)
@@ -317,7 +332,7 @@ async function handleWebCapture(data: WebCaptureJob): Promise<{
 
   } catch (err) {
     errorMessage = (err as Error).message
-    log.error({ sessionId, url, err: errorMessage }, 'Web capture failed')
+    log.error({ sessionId, url: safeUrl(url), err: errorMessage }, 'Web capture failed')
 
     const completedAt = Date.now()
     const durationMs  = completedAt - startedAt
@@ -350,6 +365,8 @@ async function handleWebCapture(data: WebCaptureJob): Promise<{
 // ─── Worker ───────────────────────────────────────────────────────────────────
 
 const redisConnection = createRedisFromEnv()
+
+startWorkerHeartbeat({ db, name: 'browser-worker', capabilities: ['playwright', 'browser-session', 'screenshot'] })
 
 const worker = new Worker(
   QUEUE_NAMES.BROWSER,
@@ -397,5 +414,6 @@ async function shutdown(): Promise<void> {
 
 process.on('SIGTERM', () => { void shutdown() })
 process.on('SIGINT',  () => { void shutdown() })
+installProcessSafetyNet({ workerName: 'browser-worker', log })
 
 log.info('Browser worker started')

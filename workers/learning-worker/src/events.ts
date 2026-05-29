@@ -34,6 +34,6 @@ export async function emitEvent(
     version:       EVENT_SCHEMA_VERSION,
     createdAt:     Date.now(),
   }).catch((err: unknown) => {
-    console.error('Failed to persist learning event:', type, err)
+    console.error('[learning-worker] Failed to persist event:', type, (err as Error).message)
   })
 }

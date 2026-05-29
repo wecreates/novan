@@ -216,6 +216,42 @@ const selfAwareRoutes: FastifyPluginAsync = async (fastify) => {
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     return { success: true, data: await autoRegister(ws) }
   })
+
+  // ── Platform self-check (the brain checks every public GET route) ──
+  // GET  /platform-smoke         → latest run summary
+  // GET  /platform-smoke/runs    → recent run history
+  // POST /platform-smoke         → trigger a sweep now
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/platform-smoke', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const { getLatestSmokeRun } = await import('../services/platform-smoke.js')
+    const latest = await getLatestSmokeRun(ws)
+    return { success: true, data: latest }
+  })
+
+  fastify.get<{ Querystring: { workspace_id?: string; limit?: string } }>('/platform-smoke/runs', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const { listRecentSmokeRuns } = await import('../services/platform-smoke.js')
+    const limit = Math.min(100, Number(req.query.limit ?? 20))
+    return { success: true, data: await listRecentSmokeRuns(ws, limit) }
+  })
+
+  fastify.post<{ Body: { workspace_id?: string } }>('/platform-smoke', async (req, reply) => {
+    const ws = req.body.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const { runPlatformSmoke } = await import('../services/platform-smoke.js')
+    const run = await runPlatformSmoke(ws, { source: 'on-demand' })
+    return { success: true, data: run }
+  })
+
+  // ── Team activity — what cyber/eng/orchestration/observability are doing ──
+  fastify.get<{ Querystring: { workspace_id?: string } }>('/teams', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const { getTeamActivity } = await import('../services/team-activity.js')
+    return { success: true, data: await getTeamActivity(ws) }
+  })
 }
 
 export default selfAwareRoutes

@@ -24,12 +24,15 @@ import { drizzle }                                         from 'drizzle-orm/pos
 import { v7 as uuidv7 }                                   from 'uuid'
 import postgres                                            from 'postgres'
 import * as schema                                         from '@ops/db'
+import { startWorkerHeartbeat }                            from '@ops/db'
 import { emitEvent }                                       from './events.js'
 import {
   attachWorkerLifecycle,
+  installProcessSafetyNet,
   createRedisFromEnv,
   QUEUE_NAMES,
   QUEUE_CONFIG,
+  QUEUE_LOCK_OVERRIDES,
   type DeadLetterRecord,
 } from '@ops/runtime-kernel'
 import { deadLetterJobs } from '@ops/db'
@@ -48,6 +51,7 @@ const WORKER_ID = `${QUEUE_NAMES.LEARNING}-worker-${process.pid}`
 
 const queryClient   = postgres(connectionString, { max: 4, idle_timeout: 30 })
 const db            = drizzle(queryClient)
+startWorkerHeartbeat({ db, name: 'learning-worker', capabilities: ['pattern-detection', 'signal-ingest', 'memory-scoring'] })
 const connection    = createRedisFromEnv()
 const learningQueue = new Queue(QUEUE_NAMES.LEARNING, { connection })
 
@@ -928,7 +932,7 @@ const worker = new Worker(
     concurrency:     2,
     stalledInterval: QUEUE_CONFIG.STALL_INTERVAL_MS,
     maxStalledCount: QUEUE_CONFIG.MAX_STALL_COUNT,
-    lockDuration:    QUEUE_CONFIG.LOCK_DURATION_MS,
+    lockDuration:    QUEUE_LOCK_OVERRIDES[QUEUE_NAMES.LEARNING] ?? QUEUE_CONFIG.LOCK_DURATION_MS,
   },
 )
 
@@ -973,6 +977,7 @@ const shutdown = async (signal: string): Promise<void> => {
 
 process.on('SIGTERM', () => { void shutdown('SIGTERM') })
 process.on('SIGINT',  () => { void shutdown('SIGINT') })
+installProcessSafetyNet({ workerName: 'learning-worker', log })
 
 // ─── Startup ──────────────────────────────────────────────────────────────────
 

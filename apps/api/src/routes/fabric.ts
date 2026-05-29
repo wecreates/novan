@@ -104,35 +104,10 @@ const fabricRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // ── Identity ─────────────────────────────────────────────────────────
-  fastify.get<{ Querystring: { workspace_id?: string } }>('/identity/profile', async (req, reply) => {
-    const ws = req.query.workspace_id
-    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
-    return { success: true, data: { profile: await getProfile(ws), defaults: CORE_TRAITS } }
-  })
+  // Moved to dedicated routes/identity.ts mounted at /api/v1/identity.
+  // The legacy duplicates here caused FST_ERR_DUPLICATED_ROUTE on boot.
 
-  fastify.post<{ Body: { workspace_id?: string; overrides?: Partial<Record<TraitKey, number>> } }>('/identity/traits', async (req, reply) => {
-    const ws = req.body.workspace_id
-    if (!ws || !req.body.overrides) return reply.code(400).send({ success: false, error: 'workspace_id, overrides required' })
-    await updateTraits(ws, req.body.overrides)
-    return { success: true }
-  })
-
-  fastify.post<{ Body: { text?: string; output_type?: string } }>('/identity/audit', async (req, reply) => {
-    if (!req.body.text || !req.body.output_type) return reply.code(400).send({ success: false, error: 'text, output_type required' })
-    return { success: true, data: audit(req.body.text, req.body.output_type as OutputType) }
-  })
-
-  fastify.post<{ Body: { workspace_id?: string; source?: string; output_type?: string; text?: string } }>('/identity/audit/record', async (req, reply) => {
-    const b = req.body
-    if (!b.workspace_id || !b.source || !b.output_type || !b.text) return reply.code(400).send({ success: false, error: 'workspace_id, source, output_type, text required' })
-    return { success: true, data: await recordAudit(b.workspace_id, b.source, b.output_type as OutputType, b.text) }
-  })
-
-  fastify.get<{ Querystring: { workspace_id?: string; hours?: string } }>('/identity/drift', async (req, reply) => {
-    const ws = req.query.workspace_id
-    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
-    return { success: true, data: await identityDriftReport(ws, req.query.hours ? Number(req.query.hours) : 24) }
-  })
+  // /identity/audit/record + /identity/drift moved to routes/identity.ts.
 
   // Format helpers (server-side templates any client/agent can call)
   fastify.post<{ Body: { kind?: string; opts?: Record<string, unknown> } }>('/identity/format', async (req, reply) => {
@@ -152,59 +127,9 @@ const fabricRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  // ── Simulation ───────────────────────────────────────────────────────
-  fastify.post<{ Body: { workspace_id?: string; kind?: string } }>('/sim/scenarios', async (req, reply) => {
-    const b = req.body
-    if (!b.workspace_id || !b.kind) return reply.code(400).send({ success: false, error: 'workspace_id, kind required' })
-    const r = await buildScenario(b.workspace_id, b.kind as ScenarioKind)
-    if ('error' in r) return reply.code(400).send({ success: false, error: r.error })
-    return reply.code(201).send({ success: true, data: r })
-  })
-
-  fastify.get<{ Querystring: { workspace_id?: string; kind?: string; limit?: string } }>('/sim/scenarios', async (req, reply) => {
-    const ws = req.query.workspace_id
-    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
-    return { success: true, data: await listScenarios(ws, {
-      ...(req.query.kind ? { kind: req.query.kind as ScenarioKind } : {}),
-      ...(req.query.limit ? { limit: Number(req.query.limit) } : {}),
-    }) }
-  })
-
-  fastify.post<{ Body: { workspace_id?: string; scenario_id?: string; observed?: Record<string, unknown>; matched_case?: 'best' | 'likely' | 'worst' | 'none'; delta?: Record<string, unknown> } }>('/sim/outcomes', async (req, reply) => {
-    const b = req.body
-    if (!b.workspace_id || !b.scenario_id || !b.observed) return reply.code(400).send({ success: false, error: 'workspace_id, scenario_id, observed required' })
-    const id = await recordObservedOutcome(b.workspace_id, b.scenario_id, b.observed, b.matched_case, b.delta)
-    return reply.code(201).send({ success: true, data: { id } })
-  })
-
-  fastify.get<{ Querystring: { workspace_id?: string } }>('/sim/accuracy', async (req, reply) => {
-    const ws = req.query.workspace_id
-    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
-    return { success: true, data: await simulationAccuracy(ws) }
-  })
-
-  fastify.get<{ Querystring: { workspace_id?: string } }>('/sim/war-room', async (req, reply) => {
-    const ws = req.query.workspace_id
-    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
-    return { success: true, data: await simulationWarRoom(ws) }
-  })
-
-  fastify.post<{ Body: { options?: DecisionOption[] } }>('/sim/compare', async (req, reply) => {
-    if (!Array.isArray(req.body.options) || req.body.options.length < 2) return reply.code(400).send({ success: false, error: 'options[] (≥2) required' })
-    return { success: true, data: compareDecisions(req.body.options) }
-  })
-
-  // ── Mission charter ──────────────────────────────────────────────────
-  fastify.get('/mission/charter', async () => ({
-    success: true,
-    data: { hash: CHARTER_HASH, totalPrinciples: CHARTER.length, principles: CHARTER },
-  }))
-
-  fastify.get<{ Querystring: { workspace_id?: string } }>('/mission/adherence', async (req, reply) => {
-    const ws = req.query.workspace_id
-    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
-    return { success: true, data: await adherenceReport(ws) }
-  })
+  // Simulation routes moved to routes/sim.ts.
+  // Mission routes moved to routes/mission.ts.
+  // Legacy duplicates here caused FST_ERR_DUPLICATED_ROUTE on boot.
 }
 
 export default fabricRoutes

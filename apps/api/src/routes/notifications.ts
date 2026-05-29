@@ -11,7 +11,7 @@ import { z }                       from 'zod'
 import { v7 as uuidv7 }            from 'uuid'
 import { desc, eq, and }           from 'drizzle-orm'
 import { db }                      from '../db/client.js'
-import { notifications }           from '../db/schema.js'
+import { notifications, events }   from '../db/schema.js'
 
 const createSchema = z.object({
   title:      z.string().min(1).max(255),
@@ -77,6 +77,28 @@ export const notificationsRoutes: FastifyPluginAsync = async (app) => {
 
   app.post('/read-all', async (req, reply) => {
     await db.update(notifications).set({ read: true }).where(and(eq(notifications.workspaceId, ws(req)), eq(notifications.read, false)))
+    // Mirror the ack into the events log so strategic-restraint's
+    // `msSinceLastAck` calculation has a real timestamp.
+    await db.insert(events).values({
+      id: uuidv7(), type: 'notification.acked',
+      workspaceId: ws(req),
+      payload: { source: 'read-all' },
+      traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
+      source: 'notifications-route', version: 1, createdAt: Date.now(),
+    }).catch(() => null)
+    return reply.send({ success: true })
+  })
+
+  // Explicit ack — UI can call this when the operator clears their tray
+  // even without marking everything read. Used by the restraint gate.
+  app.post('/ack', async (req, reply) => {
+    await db.insert(events).values({
+      id: uuidv7(), type: 'notification.acked',
+      workspaceId: ws(req),
+      payload: { source: 'explicit-ack' },
+      traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
+      source: 'notifications-route', version: 1, createdAt: Date.now(),
+    }).catch(() => null)
     return reply.send({ success: true })
   })
 }

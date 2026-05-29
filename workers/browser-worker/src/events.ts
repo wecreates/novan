@@ -27,6 +27,6 @@ export async function emitEvent(
     version:       EVENT_SCHEMA_VERSION,
     createdAt:     Date.now(),
   }).catch((err: unknown) => {
-    console.error('[browser-worker] Failed to persist event:', type, err)
+    console.error('[browser-worker] Failed to persist event:', type, (err as Error).message)
   })
 }

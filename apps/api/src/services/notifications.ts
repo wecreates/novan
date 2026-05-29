@@ -18,7 +18,10 @@
  */
 import { db }                          from '../db/client.js'
 import { events }                      from '../db/schema.js'
+import { fetchWithRetry }              from './provider-retry.js'
 import { v7 as uuidv7 }                from 'uuid'
+import { and, eq, gte, desc, sql }     from 'drizzle-orm'
+import { shouldNotifyOperator, type LoadMode } from './strategic-restraint.js'
 
 export type NotifySeverity = 'normal' | 'high' | 'critical'
 
@@ -32,11 +35,20 @@ export interface NotifyInput {
   link?:       string             // optional deep-link
 }
 
+export interface NotifyOptions {
+  /** Skip the strategic-restraint pre-flight gate (use when caller has
+   *  already evaluated load/deduping themselves). */
+  bypassRestraint?: boolean
+}
+
 export interface NotifyResult {
   sent:    string[]               // drivers that succeeded
   skipped: string[]               // drivers that fired but had no key
   failed:  Array<{ driver: string; error: string }>
   rateLimited: boolean
+  /** True when the restraint gate suppressed this notification. */
+  suppressed?:       boolean
+  suppressedReason?: string
 }
 
 const RATE_LIMIT_WINDOW_MS = 5 * 60_000
@@ -55,7 +67,7 @@ function checkRateLimit(workspaceId: string, type: string, signature: string): b
 async function sendWebhook(input: NotifyInput): Promise<void> {
   const url = process.env['NOTIFY_WEBHOOK_URL']
   if (!url) throw new Error('NOTIFY_WEBHOOK_URL not set')
-  const res = await fetch(url, {
+  const out = await fetchWithRetry('notify:webhook', url, {
     method:  'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -69,7 +81,7 @@ async function sendWebhook(input: NotifyInput): Promise<void> {
     }),
     signal: AbortSignal.timeout(10_000),
   })
-  if (!res.ok) throw new Error(`Webhook ${res.status}`)
+  if (!out.ok) throw new Error(`Webhook ${out.status}: ${out.statusText}`)
 }
 
 async function sendPushover(input: NotifyInput): Promise<void> {
@@ -83,13 +95,13 @@ async function sendPushover(input: NotifyInput): Promise<void> {
     priority: String(priority),
     ...(input.link ? { url: input.link } : {}),
   })
-  const res = await fetch('https://api.pushover.net/1/messages.json', {
+  const out = await fetchWithRetry('notify:pushover', 'https://api.pushover.net/1/messages.json', {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: form,
     signal: AbortSignal.timeout(10_000),
   })
-  if (!res.ok) throw new Error(`Pushover ${res.status}`)
+  if (!out.ok) throw new Error(`Pushover ${out.status}: ${out.statusText}`)
 }
 
 async function sendSlack(input: NotifyInput): Promise<void> {
@@ -97,7 +109,7 @@ async function sendSlack(input: NotifyInput): Promise<void> {
   if (!url) throw new Error('SLACK_WEBHOOK_URL not set')
   const icon = input.severity === 'critical' ? ':rotating_light:' :
                input.severity === 'high'     ? ':warning:' : ':information_source:'
-  const res = await fetch(url, {
+  const out = await fetchWithRetry('notify:slack', url, {
     method:  'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -105,7 +117,7 @@ async function sendSlack(input: NotifyInput): Promise<void> {
     }),
     signal: AbortSignal.timeout(10_000),
   })
-  if (!res.ok) throw new Error(`Slack ${res.status}`)
+  if (!out.ok) throw new Error(`Slack ${out.status}: ${out.statusText}`)
 }
 
 async function sendDiscord(input: NotifyInput): Promise<void> {
@@ -114,7 +126,7 @@ async function sendDiscord(input: NotifyInput): Promise<void> {
   const color = input.severity === 'critical' ? 15158332 :  // red
                 input.severity === 'high'     ? 16753920 :  // orange
                                                 3447003     // blue
-  const res = await fetch(url, {
+  const out = await fetchWithRetry('notify:discord', url, {
     method:  'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -128,7 +140,7 @@ async function sendDiscord(input: NotifyInput): Promise<void> {
     }),
     signal: AbortSignal.timeout(10_000),
   })
-  if (!res.ok) throw new Error(`Discord ${res.status}`)
+  if (!out.ok) throw new Error(`Discord ${out.status}: ${out.statusText}`)
 }
 
 // ─── Public dispatcher ───────────────────────────────────────────────────────
@@ -141,10 +153,80 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
   }).catch(() => null)
 }
 
-export async function notify(input: NotifyInput): Promise<NotifyResult> {
+/**
+ * Build the context shouldNotifyOperator needs. Returns conservative
+ * defaults on any DB miss so we never hard-fail the notification path.
+ */
+async function loadRestraintContext(workspaceId: string): Promise<{
+  loadScore: number; loadMode: LoadMode
+  recentNotifications: number; msSinceLastAck: number
+}> {
+  const windowMs = 30 * 60_000
+  const since    = Date.now() - windowMs
+
+  // Pull a fresh load snapshot (cheap — same query the dashboard uses).
+  // Fail open: if anything throws, treat as normal load.
+  let loadScore = 0.5
+  let loadMode: LoadMode = 'normal'
+  try {
+    const { snapshotOperatorLoad } = await import('./operator-cognitive-load.js')
+    const verdict = await snapshotOperatorLoad(workspaceId, { windowMs }).catch(() => null)
+    if (verdict) { loadScore = verdict.loadScore; loadMode = verdict.mode as LoadMode }
+  } catch { /* tolerated */ }
+
+  // Recent notifications dispatched in the window.
+  const recent = await db.select({ n: sql<number>`count(*)::int` }).from(events)
+    .where(and(
+      eq(events.workspaceId, workspaceId),
+      eq(events.type, 'notification.dispatched'),
+      gte(events.createdAt, since),
+    ))
+    .then(r => Number(r[0]?.n ?? 0)).catch(() => 0)
+
+  // Last operator-acked notification (UI fires `notification.acked`).
+  // If never acked, treat the start of the window as the last ack so the
+  // fatigue rule needs both volume + a full window of silence.
+  const lastAck = await db.select().from(events)
+    .where(and(
+      eq(events.workspaceId, workspaceId),
+      eq(events.type, 'notification.acked'),
+    ))
+    .orderBy(desc(events.createdAt)).limit(1)
+    .then(r => r[0]?.createdAt ?? null).catch(() => null)
+
+  const msSinceLastAck = lastAck === null
+    ? windowMs
+    : Math.max(0, Date.now() - Number(lastAck))
+
+  return { loadScore, loadMode, recentNotifications: recent, msSinceLastAck }
+}
+
+export async function notify(input: NotifyInput, opts: NotifyOptions = {}): Promise<NotifyResult> {
   const sig = input.signature ?? input.title
   if (checkRateLimit(input.workspaceId, input.type, sig)) {
     return { sent: [], skipped: [], failed: [], rateLimited: true }
+  }
+
+  // Strategic-restraint gate (#42). Critical alerts pass; everything else
+  // checks operator load, recent volume, and dedupe state first.
+  if (!opts.bypassRestraint) {
+    const ctx = await loadRestraintContext(input.workspaceId)
+    const decision = shouldNotifyOperator(input.severity, {
+      loadScore: ctx.loadScore,
+      loadMode:  ctx.loadMode,
+      recentNotifications: ctx.recentNotifications,
+      msSinceLastAck:      ctx.msSinceLastAck,
+      duplicateSignature:  false,            // already covered by rate-limit map above
+    })
+    if (!decision.allow) {
+      await emit(input.workspaceId, 'notification.suppressed', {
+        type: input.type, severity: input.severity,
+        signature: sig, reason: decision.reason,
+        retryAfterMs: decision.retryAfterMs,
+        loadMode: ctx.loadMode, loadScore: ctx.loadScore,
+      })
+      return { sent: [], skipped: [], failed: [], rateLimited: false, suppressed: true, suppressedReason: decision.reason }
+    }
   }
 
   type Driver = { name: string; fn: () => Promise<void>; gateSeverity: NotifySeverity }

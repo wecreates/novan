@@ -21,6 +21,9 @@ import { redisClient }       from './redis/client.js'
 import { registerQueues }    from './queues/index.js'
 import { healthRoutes }      from './routes/health.js'
 import { workflowRoutes }    from './routes/workflows.js'
+import { maintenanceRoutes } from './routes/maintenance.js'
+import { pushRoutes }        from './routes/push.js'
+import { quickLinkRoutes }   from './routes/quick-link.js'
 import { memoryRoutes }      from './routes/memory.js'
 import { eventRoutes }       from './routes/events.js'
 import { approvalRoutes }    from './routes/approvals.js'
@@ -93,18 +96,43 @@ import economyRoutes            from './routes/economy.js'
 import autonomyRoutes           from './routes/autonomy.js'
 import runtimeStatusRoutes      from './routes/runtime-status.js'
 import selfAwareRoutes          from './routes/self-aware.js'
+import issuesRoutes              from './routes/issues.js'
+import ideasRoutes               from './routes/ideas.js'
+import skillLibraryRoutes        from './routes/skill-library.js'
+import connectorsRoutes          from './routes/connectors.js'
+import recapRoutes               from './routes/recap.js'
+import identityRoutes            from './routes/identity.js'
+import missionRoutes              from './routes/mission.js'
+import simRoutes                  from './routes/sim.js'
+import { worldGraphRoutes, priorityRoutes } from './routes/world-graph.js'
 import commerceRoutes           from './routes/commerce.js'
 import fabricRoutes             from './routes/fabric.js'
 import chatRoutes               from './routes/chat.js'
 import brainRoutes              from './routes/brain.js'
 import platformRoutes           from './routes/platform.js'
+import voiceRoutes              from './routes/voice.js'
+import intelOpsRoutes           from './routes/intel-ops.js'
+import ttsRoutes                from './routes/tts.js'
+import agencyRoutes             from './routes/agency.js'
 import { validateEnvOrThrow }   from './services/secrets-vault.js'
 import { startLearningCron, bootKick } from './services/learning-cron.js'
 import { registerAutonomousWorker } from './services/autonomous-orchestrator.js'
+import { startAgentHeartbeatTicker, stopAgentHeartbeatTicker } from './services/agent-state-sync.js'
 import { startHeartbeat }          from './services/runtime-heartbeat.js'
 
-// Render/Heroku/Fly inject PORT; fall back to API_PORT for local dev
-const PORT = Number(process.env['PORT'] ?? process.env['API_PORT'] ?? 3001)
+// Render/Heroku/Fly inject PORT; fall back to API_PORT for local dev.
+// R143 — guard against non-numeric env values that would otherwise
+// produce NaN and cause Fastify.listen to fail with a misleading error.
+function _portNum(): number {
+  for (const v of [process.env['PORT'], process.env['API_PORT']]) {
+    if (v) {
+      const n = Number(v)
+      if (Number.isFinite(n) && n > 0) return n
+    }
+  }
+  return 3001
+}
+const PORT = _portNum()
 const HOST = process.env['API_HOST'] ?? '0.0.0.0'
 
 const app = Fastify({
@@ -113,6 +141,45 @@ const app = Fastify({
     ...(process.env['NODE_ENV'] === 'development'
       ? { transport: { target: 'pino-pretty' } }
       : {}),
+    // Pino redaction — strip credentials and PII fields from every log
+    // line before serialization. Without this, fastify's automatic
+    // request-logging dumps Authorization headers + Cookie values, and
+    // any code that logs `req.body` accidentally captures passwords and
+    // API keys.
+    redact: {
+      paths: [
+        'req.headers.authorization',
+        'req.headers.cookie',
+        'req.headers["x-api-key"]',
+        'req.headers["set-cookie"]',
+        'headers.authorization',
+        'headers.cookie',
+        'headers["x-api-key"]',
+        '*.headers.authorization',
+        '*.headers.cookie',
+        '*.body.password',
+        '*.body.token',
+        '*.body.api_key',
+        '*.body.apiKey',
+        '*.body.client_secret',
+        '*.body.refresh_token',
+        '*.body.access_token',
+        'body.password',
+        'body.token',
+        'body.api_key',
+        'body.apiKey',
+        'body.client_secret',
+        'body.refresh_token',
+        'body.access_token',
+        'password',
+        'token',
+        'apiKey',
+        'api_key',
+        'access_token',
+        'refresh_token',
+      ],
+      censor: '[REDACTED]',
+    },
   },
   requestIdHeader:        'x-request-id',
   requestIdLogLabel:      'requestId',
@@ -122,7 +189,39 @@ const app = Fastify({
 
 // ─── Register plugins ──────────────────────────────────────────────────────────
 
-await app.register(cors,        { origin: process.env['CORS_ORIGINS']?.split(',') ?? false })
+// CORS — when CORS_ORIGINS env is unset, default to localhost dev ports
+// (3000 web, 5173 vite) so OPTIONS preflight is handled and the browser
+// can actually fetch from the API. Previously this defaulted to `false`,
+// which disables CORS entirely → every preflight returned 404 → web UI
+// couldn't load any data.
+//
+// PRODUCTION ASSERTIONS — refuse to boot in NODE_ENV=production without
+// the explicit env vars that protect against credential leak + key
+// rotation drift.
+if (process.env['NODE_ENV'] === 'production') {
+  const required: Array<{ name: string; reason: string }> = [
+    { name: 'CORS_ORIGINS',          reason: 'CORS must allowlist real origins; localhost defaults are dev-only' },
+    { name: 'VAULT_MASTER_KEY',      reason: 'Without it, secrets-vault uses pid+epoch fallback (recoverable)' },
+    { name: 'CHANNEL_ENCRYPTION_KEY', reason: 'Without it, channel-manager uses hostname-derived key (recoverable)' },
+    { name: 'AUTH_SECRET',           reason: 'Required for JWT signing' },
+  ]
+  const missing = required.filter(r => !process.env[r.name])
+  if (missing.length > 0) {
+    console.error('FATAL: refusing to boot in production without required env vars:')
+    for (const m of missing) console.error(`  ${m.name} — ${m.reason}`)
+    process.exit(1)
+  }
+}
+
+const corsOrigin: string[] | boolean = process.env['CORS_ORIGINS']
+  ? process.env['CORS_ORIGINS'].split(',').map(s => s.trim()).filter(Boolean)
+  : ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173']
+await app.register(cors, {
+  origin: corsOrigin,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['content-type', 'authorization', 'x-workspace-id', 'x-trace-id'],
+})
 await app.register(helmet,      { contentSecurityPolicy: false })
 await app.register(rateLimit,   { max: 200, timeWindow: '1 minute' })
 
@@ -196,9 +295,17 @@ try {
 // ─── Register routes ───────────────────────────────────────────────────────────
 
 await app.register(healthRoutes,   { prefix: '/health' })
+// Alias under /api/v1/health so the web's useApiLiveness hook + any
+// `/api/v1/*` proxy can reach the liveness probe without a separate
+// Vite proxy rule for /health.
+await app.register(healthRoutes,   { prefix: '/api/v1/health' })
 // /healthz alias — k8s/UptimeRobot convention
 app.get('/healthz', async (_req, reply) => reply.send({ status: 'ok', timestamp: Date.now() }))
+// /metrics is registered by metricsRoutes plugin (queue depths + R119 registry).
 await app.register(workflowRoutes, { prefix: '/api/v1/workflows' })
+await app.register(maintenanceRoutes, { prefix: '/api/v1' })
+await app.register(pushRoutes,        { prefix: '/api/v1/push' })
+await app.register(quickLinkRoutes,   { prefix: '/api/v1/auth/quick-link' })
 await app.register(memoryRoutes,   { prefix: '/api/v1/memory' })
 await app.register(eventRoutes,    { prefix: '/api/v1/events' })
 await app.register(approvalRoutes,    { prefix: '/api/v1/approvals' })
@@ -269,11 +376,45 @@ await app.register(economyRoutes,          { prefix: '/api/v1/economy' })
 await app.register(autonomyRoutes,         { prefix: '/api/v1/autonomy' })
 await app.register(runtimeStatusRoutes,    { prefix: '/api/v1/runtime' })
 await app.register(selfAwareRoutes,        { prefix: '/api/v1/self' })
+await app.register(issuesRoutes,           { prefix: '/api/v1/issues' })
+await app.register(ideasRoutes,            { prefix: '/api/v1/ideas' })
+await app.register(skillLibraryRoutes,     { prefix: '/api/v1/skill-library' })
+await app.register(connectorsRoutes,       { prefix: '/api/v1/connectors' })
+await app.register(recapRoutes,            { prefix: '/api/v1/recap' })
+await app.register(identityRoutes,          { prefix: '/api/v1/identity' })
+await app.register(missionRoutes,           { prefix: '/api/v1/mission' })
+await app.register(simRoutes,               { prefix: '/api/v1/sim' })
+await app.register(worldGraphRoutes,       { prefix: '/api/v1/world-graph' })
+await app.register(priorityRoutes,         { prefix: '/api/v1/priority' })
+
+// Seed connector registry + register in-process action descriptors.
+// Runs in background — boot doesn't wait on DB write. Errors surface
+// in logs instead of silently disappearing.
+import('./services/connectors.js').then(async ({ seedConnectorRegistry }) => {
+  const { FIRST_CONNECTOR_DEFS, registerFirstConnectorDescriptors } =
+    await import('./services/connector-defs.js')
+  registerFirstConnectorDescriptors()
+  await seedConnectorRegistry(FIRST_CONNECTOR_DEFS)
+}).catch((e: unknown) => {
+  app.log.error({ err: (e as Error).message }, 'connector registry seed failed')
+})
 await app.register(commerceRoutes,         { prefix: '/api/v1/commerce' })
 await app.register(fabricRoutes,           { prefix: '/api/v1' })
 await app.register(chatRoutes,             { prefix: '/api/v1/chat' })
 await app.register(brainRoutes,            { prefix: '/api/v1/brain' })
 await app.register(platformRoutes,         { prefix: '/api/v1/platform' })
+await app.register(voiceRoutes,            { prefix: '/api/v1/voice' })
+await app.register(intelOpsRoutes,         { prefix: '/api/v1/intel-ops' })
+await app.register(ttsRoutes,              { prefix: '/api/v1/tts' })
+await app.register(agencyRoutes,           { prefix: '/api/v1/agency' })
+// MCP (Model Context Protocol) — exposes Novan ops as tools for external
+// agents (Claude Desktop, Cursor, Cline, custom GPTs). Mounted at /mcp
+// with no /api/v1 prefix so clients can use the natural MCP URL shape.
+const { default: mcpRoutes } = await import('./routes/mcp.js')
+await app.register(mcpRoutes,              { prefix: '/mcp' })
+// Blueprint persistence routes — cartographer/knowledge/evals/policy/portfolios/sim.
+const { default: blueprintRoutes } = await import('./routes/blueprint.js')
+await app.register(blueprintRoutes,        { prefix: '/api/v1/blueprint' })
 
 // Environment validation — fails fast in production if VAULT_MASTER_KEY missing/invalid
 validateEnvOrThrow()
@@ -282,8 +423,14 @@ validateEnvOrThrow()
 startLearningCron()
 // 24/7 self-monitoring + cron re-arm on drift
 startHeartbeat(60_000)
-// Kick the autonomous mind on boot so cold start isn't silent
-void bootKick()
+// Kick the autonomous mind on boot so cold start isn't silent. Errors
+// here are recoverable — if the cold-start research scan fails, the
+// next learning-cron tick will retry it.
+void (async () => {
+  try { await bootKick() } catch (e) {
+    app.log.error({ err: (e as Error).message }, 'bootKick failed')
+  }
+})()
 await app.register(docsRedirectRoute)
 
 // ─── Init infrastructure ───────────────────────────────────────────────────────
@@ -292,11 +439,63 @@ await app.register(docsRedirectRoute)
 await redisClient.ping()
 await registerQueues()
 registerAutonomousWorker()
+startAgentHeartbeatTicker('default', 60_000)   // bridge all agent registries
+
+// Boot-time workspace seed — fills the operator-baseline tables that
+// otherwise sit empty (provider_configs, kill_switches, runtime_nodes,
+// setup_state, notification_prefs). Idempotent.
+void (async () => {
+  try {
+    const { bootstrapWorkspace } = await import('./services/workspace-bootstrap.js')
+    const result = await bootstrapWorkspace('default')
+    app.log.info({ result }, 'workspace bootstrap complete')
+  } catch (e) {
+    app.log.warn({ err: (e as Error).message }, 'workspace bootstrap skipped')
+  }
+})()
+
+// Boot-time: sync the agency catalog (markdown agent definitions) into
+// the DB if the directory exists. Idempotent — re-running is a no-op
+// for unchanged files (checksum-based dedup inside syncAgentCatalog).
+void (async () => {
+  try {
+    const { existsSync } = await import('node:fs')
+    const root = process.env['AGENCY_CATALOG_ROOT']
+    if (!root || !existsSync(root)) return
+    const { syncAgentCatalog } = await import('./services/agency-catalog.js')
+    const result = await syncAgentCatalog('default', root)
+    app.log.info({ result }, 'agency catalog synced at boot')
+  } catch (e) {
+    app.log.warn({ err: (e as Error).message }, 'agency catalog sync skipped')
+  }
+})()
 
 // ─── Graceful shutdown ─────────────────────────────────────────────────────────
 
 const shutdown = async (signal: string) => {
   app.log.info({ signal }, 'Received shutdown signal')
+  stopAgentHeartbeatTicker()
+  // Stop the learning-cron interval cluster — 50+ self-rescheduling
+  // setTimeouts that would otherwise hold the event loop open past
+  // app.close() and force a SIGKILL after the grace period.
+  try {
+    const { stopLearningCron } = await import('./services/learning-cron.js')
+    stopLearningCron()
+  } catch { /* */ }
+  try {
+    const { stopConnectorOauthReaper } = await import('./services/connector-oauth.js')
+    stopConnectorOauthReaper()
+  } catch { /* */ }
+  // Close any open playwright sessions + the shared browser. Without
+  // this, restarts leak chrome processes on Windows.
+  try {
+    const { shutdownAllBrowserSessions } = await import('./services/brain-task-browser.js')
+    await shutdownAllBrowserSessions()
+  } catch { /* */ }
+  try {
+    const { shutdownFetcher } = await import('./services/playwright-fetcher.js')
+    await shutdownFetcher()
+  } catch { /* */ }
   await app.close()
   await redisClient.quit()
   process.exit(0)
@@ -305,12 +504,69 @@ const shutdown = async (signal: string) => {
 process.on('SIGTERM', () => void shutdown('SIGTERM'))
 process.on('SIGINT',  () => void shutdown('SIGINT'))
 
+// Process-level safety net. Without these, an unhandled promise rejection
+// or synchronous throw in any background task (cron, worker callback, SSE
+// generator) silently kills the API. Log + emit a brain.error event so
+// the operator sees it in /events, then keep running — Node will not
+// auto-exit on unhandledRejection but warns; we make it actionable.
+process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
+  const msg = (reason as Error)?.message ?? String(reason)
+  app.log.error({ err: msg, promise: String(promise) }, '[unhandledRejection]')
+  // Best-effort brain ingest so the autonomous repair loop can react.
+  void (async () => {
+    try {
+      const { reportError } = await import('./services/brain-error-ingest.js')
+      const stack = (reason as Error)?.stack
+      await reportError({
+        workspaceId:  'system',
+        source:       'api',
+        errorMessage: `unhandledRejection: ${msg}`,
+        errorName:    'UnhandledRejection',
+        ...(stack ? { stack } : {}),
+      })
+    } catch { /* tolerated */ }
+  })()
+})
+
+process.on('uncaughtException', (err: Error) => {
+  app.log.fatal({ err: err.message, stack: err.stack }, '[uncaughtException] — exiting')
+  // Best-effort log flush then exit. Cannot reliably recover from a
+  // synchronous throw outside any handler.
+  setTimeout(() => process.exit(1), 250).unref()
+})
+
 // ─── Start ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Port-clearing guard: on Windows, tsx watch's "kill child + spawn new"
+ * cycle can leave the old child's TCP listener hanging for tens of
+ * seconds, during which the new child fails to bind (EADDRINUSE) AND
+ * the operator sees intermittent request hangs. Before listening, we
+ * probe the port; if something else owns it, we wait up to 10s for it
+ * to free, then attempt to listen. Production (no watch) never hits
+ * this path.
+ */
+async function waitForPortFree(port: number, host: string): Promise<void> {
+  const net = await import('node:net')
+  const isFree = () => new Promise<boolean>((resolve) => {
+    const probe = net.default.createServer()
+    probe.once('error', () => resolve(false))
+    probe.once('listening', () => probe.close(() => resolve(true)))
+    probe.listen(port, host)
+  })
+  for (let i = 0; i < 20; i++) {       // 20 × 500ms = 10s budget
+    if (await isFree()) return
+    await new Promise(r => setTimeout(r, 500))
+  }
+  // Best-effort signal: if it's still busy, the listen() below will
+  // throw with a clear EADDRINUSE — better than silent hang.
+}
+
 try {
+  await waitForPortFree(PORT, HOST).catch(() => null)
   await app.listen({ port: PORT, host: HOST })
   app.log.info({ port: PORT, host: HOST, docs: `http://${HOST}:${PORT}/docs` }, 'API server started')
 } catch (err) {
-  app.log.error(err, 'Failed to start server')
+  app.log.error({ err: (err as Error).message, stack: (err as Error).stack }, 'Failed to start server')
   process.exit(1)
 }

@@ -46,13 +46,34 @@ const ListQuery = z.object({
 const REDIS_URL = process.env['REDIS_URL'] ?? 'redis://localhost:6379'
 const queueCache = new Map<string, Queue>()
 
+/** Canonical queue names — must match queues/index.ts. */
+const KNOWN_QUEUES = new Set([
+  'workflow', 'browser', 'memory', 'analytics', 'recovery',
+  'optimization', 'notifications', 'briefing', 'learning', 'autonomous',
+])
+
+/** Legacy queueName aliases that ended up in the dead_letter_jobs table
+ *  from old code. Map to current names so DLQ retry doesn't create a
+ *  phantom queue with no consumer (jobs sit forever). */
+const QUEUE_ALIASES: Record<string, string> = {
+  'workflow-runs': 'workflow',
+}
+
+function normalizeQueueName(name: string): string {
+  return QUEUE_ALIASES[name] ?? name
+}
+
 function getQueue(name: string): Queue {
-  let q = queueCache.get(name)
+  const canonical = normalizeQueueName(name)
+  if (!KNOWN_QUEUES.has(canonical)) {
+    throw new Error(`unknown queue "${name}" — refusing to create phantom queue with no consumer`)
+  }
+  let q = queueCache.get(canonical)
   if (!q) {
-    q = new Queue(name, {
+    q = new Queue(canonical, {
       connection: { url: REDIS_URL },
     })
-    queueCache.set(name, q)
+    queueCache.set(canonical, q)
   }
   return q
 }

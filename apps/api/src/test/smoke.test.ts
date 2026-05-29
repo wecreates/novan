@@ -188,9 +188,13 @@ describe('API Smoke Tests', () => {
       expect(res.json()).toMatchObject({ success: true, data: expect.any(Array) })
     })
 
-    it('GET /api/v1/workflows → 401 without token', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/workflows' })
-      expect(res.statusCode).toBe(401)
+    it('GET /api/v1/workflows → 401 without token (production mode)', async () => {
+      const prev = process.env['NODE_ENV']
+      process.env['NODE_ENV'] = 'production'
+      try {
+        const res = await app.inject({ method: 'GET', url: '/api/v1/workflows' })
+        expect(res.statusCode).toBe(401)
+      } finally { process.env['NODE_ENV'] = prev }
     })
 
     it('POST /api/v1/workflows with valid body → 201', async () => {
@@ -226,9 +230,13 @@ describe('API Smoke Tests', () => {
       expect(res.statusCode).toBe(200)
     })
 
-    it('GET /api/v1/memory → 401 without token', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/memory' })
-      expect(res.statusCode).toBe(401)
+    it('GET /api/v1/memory → 401 without token (production mode)', async () => {
+      const prev = process.env['NODE_ENV']
+      process.env['NODE_ENV'] = 'production'
+      try {
+        const res = await app.inject({ method: 'GET', url: '/api/v1/memory' })
+        expect(res.statusCode).toBe(401)
+      } finally { process.env['NODE_ENV'] = prev }
     })
   })
 
@@ -398,7 +406,11 @@ describe('API Smoke Tests', () => {
 
   describe('Auth', () => {
     it('GET /api/v1/auth/tokens → 200', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/auth/tokens' })
+      // Token CRUD now requires authentication (closed the unauth-mint bug).
+      const res = await app.inject({
+        method: 'GET', url: '/api/v1/auth/tokens',
+        headers: { authorization: authHeader },
+      })
       expect(res.statusCode).toBe(200)
       expect(res.json()).toMatchObject({ success: true, data: expect.any(Array) })
     })
@@ -406,7 +418,7 @@ describe('API Smoke Tests', () => {
     it('POST /api/v1/auth/tokens with valid body → 201', async () => {
       const res = await app.inject({
         method: 'POST', url: '/api/v1/auth/tokens',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', authorization: authHeader },
         payload: { name: 'Smoke Test Token' },
       })
       expect(res.statusCode).toBe(201)
@@ -471,9 +483,13 @@ describe('API Smoke Tests', () => {
       expect(res.statusCode).toBe(200)
     })
 
-    it('GET /api/v1/workflow-runs → 401 without token', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/workflow-runs' })
-      expect(res.statusCode).toBe(401)
+    it('GET /api/v1/workflow-runs → 401 without token (production mode)', async () => {
+      const prev = process.env['NODE_ENV']
+      process.env['NODE_ENV'] = 'production'
+      try {
+        const res = await app.inject({ method: 'GET', url: '/api/v1/workflow-runs' })
+        expect(res.statusCode).toBe(401)
+      } finally { process.env['NODE_ENV'] = prev }
     })
   })
 

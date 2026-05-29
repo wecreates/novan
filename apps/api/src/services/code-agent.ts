@@ -65,20 +65,31 @@ export async function buildPatchFromProposal(workspaceId: string, proposalId: st
     createdAt: now, updatedAt: now,
   }).catch(() => null)
 
-  // Generate files
-  const useLlm = Boolean(process.env['GROQ_API_KEY'])
+  // Generate files via multi-provider LLM fallback. Template-stub mode
+  // is now ONLY used when no LLM provider key is configured at all — and
+  // even then, stubs are tagged so the patch-executor can refuse to
+  // auto-apply them (operator-review only). Previously: Groq-only with
+  // silent fallback to stubs → brain wrote `// TODO[code-agent]: implement.`
+  // to disk and marked issues "shipped". False-completion violation.
+  const hasAnyLlmKey = !!(process.env['GROQ_API_KEY'] || process.env['GEMINI_API_KEY'] || process.env['OPENAI_API_KEY'] || process.env['ANTHROPIC_API_KEY'])
   let files: PatchFile[]
   let agent: 'groq' | 'template'
   let tokensUsed = 0
   let costUsdUsed = 0
-  if (useLlm) {
-    const r = await generateWithGroq(proposal)
+  if (hasAnyLlmKey) {
+    const r = await generateWithLlmFallback(proposal)
     files = r.files
-    agent = 'groq'
+    agent = r.providerUsed === 'template' ? 'template' : 'groq'
     tokensUsed = r.tokensUsed
     costUsdUsed = r.costUsdUsed
+    // If ALL LLM providers failed and we'd otherwise fall through to
+    // stubs, tag each file's contents with a STUB_SENTINEL the patch-
+    // executor inspects to refuse auto-apply.
+    if (r.providerUsed === 'template') {
+      files = files.map(f => ({ ...f, contents: `// STUB_NOT_FOR_AUTO_APPLY: all LLM providers unavailable\n${f.contents}` }))
+    }
   } else {
-    files = generateTemplate(proposal)
+    files = generateTemplate(proposal).map(f => ({ ...f, contents: `// STUB_NOT_FOR_AUTO_APPLY: no LLM key configured\n${f.contents}` }))
     agent = 'template'
   }
 
@@ -114,14 +125,45 @@ export async function buildPatchFromProposal(workspaceId: string, proposalId: st
 
   // Sandbox validation
   const sandbox = await applyAndValidate(files)
-  const status: 'validated' | 'sandbox_failed' = sandbox.ok ? 'validated' : 'sandbox_failed'
+  let status: 'validated' | 'sandbox_failed' = sandbox.ok ? 'validated' : 'sandbox_failed'
+
+  // Adversarial review — round 124 coordination guard. If the patch
+  // passed safety + sandbox, run a different-family reviewer to look
+  // for hallucinations, spec drift, and over-claims the producer might
+  // have missed. CRITICAL findings demote status to sandbox_failed so
+  // the patch can't auto-apply; HIGH findings annotate the chain.
+  let adversarialFindings: Array<{ category: string; severity: string; description: string }> = []
+  if (status === 'validated' && files.length > 0) {
+    try {
+      const { adversarialReview } = await import('./agent-coordination.js')
+      const concatenatedOutput = files.map(f => `--- ${f.path} ---\n${(f.contents ?? '').slice(0, 4_000)}`).join('\n\n')
+      const review = await adversarialReview({
+        workspaceId,
+        producerOutput: concatenatedOutput,
+        originalSpec:   `${proposal.title}\n\n${proposal.summary ?? ''}`,
+        // Code-agent typically runs on groq; bias review to anthropic
+        // so we get cross-family judgment. Falls back to default chain
+        // if anthropic isn't configured.
+        reviewerProvider: 'anthropic',
+        checkCategories: ['fact_check', 'spec_drift', 'hallucination', 'incomplete', 'security', 'over_claim'],
+      })
+      adversarialFindings = review.findings.map(f => ({
+        category: f.category, severity: f.severity, description: f.description,
+      }))
+      if (review.recommendation === 'reject') {
+        status = 'sandbox_failed'
+      }
+    } catch { /* tolerated — review is best-effort */ }
+  }
 
   await db.update(codePatches).set({
     status, agent,
     files,
-    safetyReport: safety as unknown as Record<string, unknown>,
-    sandboxReport: sandbox as unknown as Record<string, unknown>,
-    blockReason: sandbox.ok ? null : `sandbox: ${sandbox.errors.slice(0, 3).join('; ')}`,
+    safetyReport:  safety as unknown as Record<string, unknown>,
+    sandboxReport: { ...sandbox, adversarialFindings } as unknown as Record<string, unknown>,
+    blockReason: status === 'validated' ? null
+      : sandbox.ok ? `adversarial review rejected: ${adversarialFindings.filter(f => f.severity === 'critical').map(f => f.description).slice(0, 2).join('; ')}`
+      : `sandbox: ${sandbox.errors.slice(0, 3).join('; ')}`,
     tokensUsed, costUsdUsed,
     completedAt: Date.now(), updatedAt: Date.now(),
   }).where(eq(codePatches.id, patchId)).catch(() => null)
@@ -224,12 +266,50 @@ function pascal(s: string): string {
   return s.split(/[-_]/).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('')
 }
 
-// ─── LLM mode (Groq, OpenAI-compatible) ──────────────────────────────────
+// ─── LLM mode: multi-provider fallback ──────────────────────────────────
+// Tries Groq → Gemini → OpenAI → Anthropic in order. Each producer
+// returns either real files or null (so we try the next). Only falls
+// back to template stubs if EVERY provider failed — and those stubs
+// get tagged STUB_NOT_FOR_AUTO_APPLY so they can't ship to disk.
 
-async function generateWithGroq(p: Proposal): Promise<{ files: PatchFile[]; tokensUsed: number; costUsdUsed: number }> {
-  const apiKey = process.env['GROQ_API_KEY']
-  if (!apiKey) return { files: generateTemplate(p), tokensUsed: 0, costUsdUsed: 0 }
+interface LlmResult { files: PatchFile[]; tokensUsed: number; costUsdUsed: number; providerUsed: 'groq' | 'gemini' | 'openai' | 'anthropic' | 'template' }
 
+async function generateWithLlmFallback(p: Proposal): Promise<LlmResult> {
+  const errors: string[] = []
+  // Try Groq first (cheapest + fastest)
+  if (process.env['GROQ_API_KEY']) {
+    try {
+      const r = await callGroq(p)
+      if (r && r.files.length > 0) return { ...r, providerUsed: 'groq' }
+    } catch (e) { errors.push(`groq: ${(e as Error).message}`) }
+  }
+  // Gemini 2.5 Pro
+  if (process.env['GEMINI_API_KEY']) {
+    try {
+      const r = await callGemini(p)
+      if (r && r.files.length > 0) return { ...r, providerUsed: 'gemini' }
+    } catch (e) { errors.push(`gemini: ${(e as Error).message}`) }
+  }
+  // OpenAI gpt-4o
+  if (process.env['OPENAI_API_KEY']) {
+    try {
+      const r = await callOpenAI(p)
+      if (r && r.files.length > 0) return { ...r, providerUsed: 'openai' }
+    } catch (e) { errors.push(`openai: ${(e as Error).message}`) }
+  }
+  // Anthropic Claude
+  if (process.env['ANTHROPIC_API_KEY']) {
+    try {
+      const r = await callAnthropic(p)
+      if (r && r.files.length > 0) return { ...r, providerUsed: 'anthropic' }
+    } catch (e) { errors.push(`anthropic: ${(e as Error).message}`) }
+  }
+  // All providers exhausted → tagged-stub fallback (won't auto-apply)
+  void errors
+  return { files: generateTemplate(p), tokensUsed: 0, costUsdUsed: 0, providerUsed: 'template' }
+}
+
+function buildLlmMessages(p: Proposal): { system: string; user: string } {
   const system = [
     'You are a code-generation agent for the Novan TypeScript monorepo.',
     'STRICT RULES:',
@@ -240,84 +320,157 @@ async function generateWithGroq(p: Proposal): Promise<{ files: PatchFile[]; toke
     '5. NEVER write code that hacks, exploits, phishes, surveils, or otherwise harms users.',
     '6. For modify operations: produce the FULL file contents (we will apply, not patch).',
     '7. Keep each file under 600 lines.',
+    '8. Refuse if you cannot produce real, working code. Do NOT output TODO stubs.',
   ].join('\n')
 
+  const contextSnippets: string[] = []
+  for (const f of p.filesToModify.slice(0, 3)) {
+    const existing = readRepoFile(f.path)
+    if (existing && existing.length < 8000) {
+      contextSnippets.push(`\n\nExisting ${f.path}:\n\`\`\`\n${existing}\n\`\`\``)
+    }
+  }
   const user = [
     `Title: ${p.title}`,
     `Summary: ${p.summary}`,
     `Capability: ${p.capabilityId ?? 'n/a'}`,
     `Risk: ${p.riskLevel}`,
-    '',
-    'Files to create:',
+    '', 'Files to create:',
     ...p.filesToCreate.map(f => `  - ${f.path}  (~${f.estLoc} LOC) :: ${f.purpose}`),
-    '',
-    'Files to modify:',
+    '', 'Files to modify:',
     ...p.filesToModify.map(f => `  - ${f.path} :: ${f.purpose}`),
-    '',
-    'Tests required:',
+    '', 'Tests required:',
     ...p.testsRequired.map(t => `  - ${t.description}`),
-    '',
-    'Reasoning context:',
+    '', 'Reasoning context:',
     ...p.reasoning.map(r => `  - ${r}`),
-    '',
-    'Return JSON only.',
+    contextSnippets.join(''),
+    '', 'Return JSON only.',
   ].join('\n')
 
-  // Read the small set of files we're modifying so the agent has context
-  for (const f of p.filesToModify.slice(0, 3)) {
-    const existing = readRepoFile(f.path)
-    if (existing && existing.length < 8000) {
-      user.concat(`\n\nExisting ${f.path}:\n\`\`\`\n${existing}\n\`\`\``)
-    }
-  }
-
-  try {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user',   content: user },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.2,
-        max_tokens: 8000,
-      }),
-      signal: AbortSignal.timeout(45_000),
-    })
-    if (!res.ok) {
-      return { files: generateTemplate(p), tokensUsed: 0, costUsdUsed: 0 }
-    }
-    const body = await res.json() as {
-      choices?: Array<{ message?: { content?: string } }>
-      usage?: { total_tokens?: number }
-    }
-    const content = body.choices?.[0]?.message?.content ?? '{}'
-    let parsed: { files?: Array<{ path?: string; op?: string; contents?: string }> } = {}
-    try { parsed = JSON.parse(content) } catch { /* fall through */ }
-    const files = (parsed.files ?? [])
-      .filter(f => typeof f.path === 'string' && typeof f.contents === 'string')
-      .map(f => ({
-        path: f.path!,
-        op: (f.op === 'modify' ? 'modify' : 'create') as 'create' | 'modify',
-        contents: f.contents!,
-      }))
-    if (files.length === 0) {
-      // Fall back to template if LLM produced nothing usable
-      return { files: generateTemplate(p), tokensUsed: body.usage?.total_tokens ?? 0, costUsdUsed: 0 }
-    }
-    return {
-      files,
-      tokensUsed: body.usage?.total_tokens ?? 0,
-      // Groq pricing varies — estimate $0.59 / 1M tokens for llama-3.3-70b
-      costUsdUsed: Number(((body.usage?.total_tokens ?? 0) * 0.59 / 1_000_000).toFixed(6)),
-    }
-  } catch {
-    return { files: generateTemplate(p), tokensUsed: 0, costUsdUsed: 0 }
-  }
+  return { system, user }
 }
+
+function parseFilesFromJson(content: string): PatchFile[] {
+  let parsed: { files?: Array<{ path?: string; op?: string; contents?: string }> } = {}
+  let primaryErr: string | null = null
+  let fallbackErr: string | null = null
+  try {
+    parsed = JSON.parse(content)
+  } catch (e) {
+    primaryErr = (e as Error).message
+    // Extract first {...} block in case the model wrapped in prose
+    const m = content.match(/\{[\s\S]*\}/)
+    if (m) {
+      try { parsed = JSON.parse(m[0]) }
+      catch (e2) { fallbackErr = (e2 as Error).message }
+    } else {
+      fallbackErr = 'no JSON block found in LLM output'
+    }
+  }
+  const files = (parsed.files ?? [])
+    .filter(f => typeof f.path === 'string' && typeof f.contents === 'string' && (f.contents as string).trim().length > 20)
+    .map(f => ({
+      path: f.path!,
+      op: (f.op === 'modify' ? 'modify' : 'create') as 'create' | 'modify',
+      contents: f.contents!,
+    }))
+  // If we couldn't parse anything AND there were no files, surface the
+  // parse failure so callers don't silently treat an LLM hallucination as
+  // a successful empty patch. Output guard / executor will mark the job
+  // failed instead of "applied with zero files".
+  if (files.length === 0 && primaryErr !== null) {
+    console.error('[code-agent] parseFilesFromJson: primary=%s fallback=%s — content head=%s',
+      primaryErr, fallbackErr ?? 'n/a', content.slice(0, 200))
+  }
+  return files
+}
+
+async function callGroq(p: Proposal): Promise<{ files: PatchFile[]; tokensUsed: number; costUsdUsed: number } | null> {
+  const { system, user } = buildLlmMessages(p)
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env['GROQ_API_KEY']}` },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      response_format: { type: 'json_object' }, temperature: 0.2, max_tokens: 8000,
+    }),
+    signal: AbortSignal.timeout(45_000),
+  })
+  if (!res.ok) return null
+  const body = await res.json() as { choices?: Array<{ message?: { content?: string } }>; usage?: { total_tokens?: number } }
+  const files = parseFilesFromJson(body.choices?.[0]?.message?.content ?? '{}')
+  if (files.length === 0) return null
+  const tok = body.usage?.total_tokens ?? 0
+  return { files, tokensUsed: tok, costUsdUsed: Number((tok * 0.59 / 1_000_000).toFixed(6)) }
+}
+
+async function callGemini(p: Proposal): Promise<{ files: PatchFile[]; tokensUsed: number; costUsdUsed: number } | null> {
+  const { system, user } = buildLlmMessages(p)
+  const model = process.env['GEMINI_CODE_MODEL'] ?? 'gemini-2.5-pro'
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env['GEMINI_API_KEY']}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: 'user', parts: [{ text: user }] }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 12000, responseMimeType: 'application/json' },
+    }),
+    signal: AbortSignal.timeout(120_000),
+  })
+  if (!res.ok) return null
+  const body = await res.json() as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+    usageMetadata?: { totalTokenCount?: number }
+  }
+  const text = body.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}'
+  const files = parseFilesFromJson(text)
+  if (files.length === 0) return null
+  const tok = body.usageMetadata?.totalTokenCount ?? 0
+  return { files, tokensUsed: tok, costUsdUsed: Number((tok * 1.25 / 1_000_000).toFixed(6)) }
+}
+
+async function callOpenAI(p: Proposal): Promise<{ files: PatchFile[]; tokensUsed: number; costUsdUsed: number } | null> {
+  const { system, user } = buildLlmMessages(p)
+  const model = process.env['OPENAI_CODE_MODEL'] ?? 'gpt-4o'
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env['OPENAI_API_KEY']}` },
+    body: JSON.stringify({
+      model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      response_format: { type: 'json_object' }, temperature: 0.2, max_tokens: 8000,
+    }),
+    signal: AbortSignal.timeout(120_000),
+  })
+  if (!res.ok) return null
+  const body = await res.json() as { choices?: Array<{ message?: { content?: string } }>; usage?: { total_tokens?: number } }
+  const files = parseFilesFromJson(body.choices?.[0]?.message?.content ?? '{}')
+  if (files.length === 0) return null
+  const tok = body.usage?.total_tokens ?? 0
+  return { files, tokensUsed: tok, costUsdUsed: Number((tok * 5.0 / 1_000_000).toFixed(6)) }
+}
+
+async function callAnthropic(p: Proposal): Promise<{ files: PatchFile[]; tokensUsed: number; costUsdUsed: number } | null> {
+  const { system, user } = buildLlmMessages(p)
+  const model = process.env['ANTHROPIC_CODE_MODEL'] ?? 'claude-opus-4-5'
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': process.env['ANTHROPIC_API_KEY']!, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model, max_tokens: 8000, temperature: 0.2, system,
+      messages: [{ role: 'user', content: user + '\n\nReturn ONLY a JSON object {"files":[...]}—no prose.' }],
+    }),
+    signal: AbortSignal.timeout(120_000),
+  })
+  if (!res.ok) return null
+  const body = await res.json() as { content?: Array<{ text?: string }>; usage?: { input_tokens?: number; output_tokens?: number } }
+  const text = body.content?.[0]?.text ?? '{}'
+  const files = parseFilesFromJson(text)
+  if (files.length === 0) return null
+  const tok = (body.usage?.input_tokens ?? 0) + (body.usage?.output_tokens ?? 0)
+  return { files, tokensUsed: tok, costUsdUsed: Number((tok * 15.0 / 1_000_000).toFixed(6)) }
+}
+
+// Legacy `generateWithGroq` (single-provider path with `user.concat()`
+// no-op bug at the existing-file-context block) was removed — replaced
+// by `generateWithLlmFallback` above which has working multi-provider
+// chain. Kept this comment as a tombstone so anyone grepping for the
+// old function understands the migration.

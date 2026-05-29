@@ -1,11 +1,15 @@
 {
   "name": "Novan",
   "short_name": "Novan",
-  "description": "Autonomous operational intelligence platform",
-  "start_url": "/",
+  "description": "Autonomous operational intelligence platform — chat with the brain from your phone.",
+  "start_url": "/m/chat",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "portrait-primary",
   "background_color": "#000000",
   "theme_color": "#000000",
+  "categories": ["productivity", "business", "utilities"],
   "icons": [
     {
       "src": "/icon.svg",
@@ -18,6 +22,20 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New chat",
+      "short_name": "Chat",
+      "url": "/m/chat",
+      "icons": [{ "src": "/icon.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Approvals",
+      "short_name": "Approve",
+      "url": "/approvals",
+      "icons": [{ "src": "/icon.png", "sizes": "192x192" }]
     }
   ]
 }

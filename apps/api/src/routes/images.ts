@@ -55,7 +55,11 @@ const imageRoutes: FastifyPluginAsync = async (fastify) => {
       budget_cap_usd?:   number
       created_by?:       string
     }
-  }>('/generate', async (req, reply) => {
+  }>('/generate', {
+    // Image generation costs $0.02-$0.15 per call across providers.
+    // Cap at 20/min/IP — operator can lift via worker bulk endpoints.
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     const b = req.body
     if (!b.workspace_id || !b.prompt || !b.provider) {
       return reply.code(400).send({ success: false, error: 'workspace_id, prompt, provider required' })

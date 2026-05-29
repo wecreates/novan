@@ -138,12 +138,31 @@ export const memoryRoutes: FastifyPluginAsync = async (app) => {
       updatedAt:  now,
     }).returning()
 
-    // Enqueue embedding generation
-    await queues.memory.add('embed-memory', {
-      memoryId:    id,
-      content:     body.content,
-      workspaceId,
-    }, { priority: 3 })
+    // Embed inline (the memory queue has no consumer; queueing leaks
+    // jobs forever). Tolerates null when no embedding provider is
+    // configured — memory still stored, just without vector for
+    // semantic search. Fire-and-forget so the POST doesn't wait on
+    // the network call. Failure is non-fatal.
+    void (async () => {
+      try {
+        const { embedWithReason } = await import('../services/embeddings.js')
+        const { memoryEmbeddings } = await import('../db/schema.js')
+        const r = await embedWithReason(body.content)
+        if (r.vector) {
+          await db.insert(memoryEmbeddings).values({
+            id:             id + ':0',
+            workspaceId,
+            memoryId:       id,
+            chunkIndex:     0,
+            chunkText:      body.content.slice(0, 8192),
+            embedding:      r.vector,
+            embeddingModel: 'auto',
+            isStale:        false,
+            createdAt:      Date.now(),
+          } as never).catch(() => null)
+        }
+      } catch { /* tolerated — memory still stored without embedding */ }
+    })()
 
     // Emit event
     void emitEvent(EVENT_TYPES.MEMORY_CREATED, workspaceId, {

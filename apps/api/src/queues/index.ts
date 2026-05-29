@@ -10,7 +10,7 @@
  *   - recovery: dedicated, highest priority after workflow
  *   - optimization: background, lowest priority
  */
-import { Queue }              from 'bullmq'
+import { Queue, Worker }      from 'bullmq'
 import type { QueueEvents }  from 'bullmq'
 import { redisClient }        from '../redis/client.js'
 import type { QueueName }     from '@ops/shared-types'
@@ -43,11 +43,26 @@ export const queues: Record<QueueName, Queue> = {
 
 export const queueEvents: Partial<Record<QueueName, QueueEvents>> = {}
 
+// Passive drain worker for the `notifications` queue.
+// CONTEXT: notifications has no dedicated worker package. Notifications
+// are currently handled synchronously via services/notifications.ts (DB
+// write + cron broadcast). If anyone ever calls `queues.notifications.add(...)`,
+// jobs would accumulate forever without this. Attach a no-op consumer
+// that drains + emits an event so the operator sees the misuse.
+let _notificationsDrain: Worker | null = null
+
 export async function registerQueues(): Promise<void> {
   // Await queue initialization (validates Redis connection)
   for (const [name, queue] of Object.entries(queues)) {
     await queue.waitUntilReady()
     console.info(`Queue ready: ${name}`)
+  }
+  // Attach passive drain on notifications queue
+  if (!_notificationsDrain) {
+    _notificationsDrain = new Worker('notifications', async (job) => {
+      console.warn(`[notifications-queue] unexpected job ${job.name} (id=${job.id}) — notifications are handled inline via services/notifications.ts, not via this queue. Draining without action.`)
+      return { drained: true }
+    }, { connection: redisClient, concurrency: 1 })
   }
 }
 

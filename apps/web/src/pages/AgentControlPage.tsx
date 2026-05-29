@@ -43,8 +43,16 @@ async function api<T>(path: string, opts?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json', ...opts?.headers },
     ...opts,
   })
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-  return res.json() as Promise<T>
+  const json = await res.json().catch(() => null) as
+    | { success: true; data: T }
+    | { success: false; error: string }
+    | null
+  if (!res.ok || !json || json.success === false) {
+    const msg = json && json.success === false ? json.error : `${res.status} ${res.statusText}`
+    throw new Error(msg)
+  }
+  // All eng-agents routes return the { success, data } envelope — unwrap it.
+  return json.data
 }
 
 function post<T>(path: string, body?: unknown): Promise<T> {
