@@ -27,10 +27,22 @@ export interface EconomicScore {
   evidence:   string[]
 }
 
+// R146.5 — rates were stale relative to chat-providers.ts KNOWN_PROVIDERS
+// (openai 33x too high, gemini 5x too high, groq 3x too low) which made
+// `scorePublishedVideo` estimate production cost at ~$34/video when the
+// real LLM spend is closer to $0.01. ROI rankings inverted: every video
+// looked unprofitable, learning-cron's workspaceHealth surfaced wrong
+// "biggest wastes", portfolio.improve picked wrong strategies.
+// These match the input-rate side of KNOWN_PROVIDERS as of R146.4 — keep
+// them in sync if pricing changes again (or factor into a shared module).
 const TOKEN_COST = {
-  // ~$/1k input tokens, rough per-provider average
-  openai: 0.005, anthropic: 0.003, gemini: 0.0015, groq: 0.0002,
-  elevenlabs: 0.30 / 1000,    // per char
+  // USD per 1k input tokens — input side only; production-cost estimate
+  // for planning LLM calls (which are mostly input-bound prompts).
+  openai:    0.000150,    // gpt-4o-mini  $0.15/MTok in
+  anthropic: 0.003,       // sonnet-4-6   $3/MTok in
+  gemini:    0.0003,      // 2.5-flash    $0.30/MTok in
+  groq:      0.00059,     // llama-3.3-70b $0.59/MTok in
+  elevenlabs: 0.30 / 1000,    // per char (PAYG tier rate)
 } as const
 
 function clamp01(n: number): number { return Math.max(0, Math.min(1, n)) }
