@@ -375,7 +375,9 @@ export async function dispatchPersona(input: DispatchInput): Promise<DispatchOut
   let costUsd = 0
   let provider = 'unknown'
   let model = 'unknown'
-  const opts = input.think ? { think: true, thinkingBudget: 4096 } : {}
+  // R146.10 — opt out of streamChat's auto ai_usage tracking; this file
+  // records its own row with persona/agent metadata below.
+  const opts = input.think ? { think: true, thinkingBudget: 4096, skipUsageTracking: true } : { skipUsageTracking: true }
   const stream = streamChat(input.workspaceId, msgs, opts)
   // Iterate until done; the generator's return value carries final stats.
   // We don't yield deltas to the caller — personas are call-and-return.

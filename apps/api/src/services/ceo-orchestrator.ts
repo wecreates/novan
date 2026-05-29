@@ -170,7 +170,9 @@ export async function delegateToAgent(i: DelegateInput): Promise<DelegateResult 
   let final = { content: '', tokens: 0, costUsd: 0, provider: 'none', model: 'none' }
   const t0 = Date.now()
   try {
-    const stream = streamChat(i.workspaceId, msgs)
+    // R146.10 — opt out of streamChat's auto ai_usage tracking; we
+    // record a richer row below with delegation metadata.
+    const stream = streamChat(i.workspaceId, msgs, { skipUsageTracking: true })
     let next: IteratorResult<{ delta: string; done: boolean }, typeof final>
     while (!(next = await stream.next()).done) { /* drain — we only want the final summary */ }
     final = next.value as typeof final

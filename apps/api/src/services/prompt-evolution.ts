@@ -240,7 +240,7 @@ export async function evolvePrompt(workspaceId: string, slot: string): Promise<{
         role: 'user',
         content: `Original prompt for slot "${slot}":\n\n${winner.body}\n\nDirective: ${directive}\n\nReturn only the rewritten prompt.`,
       },
-    ])
+    ], { skipUsageTracking: true })   // R146.10 — caller records its own ai_usage row below
     let next: IteratorResult<{ delta: string; done: boolean }, typeof final>
     while (!(next = await stream.next()).done) {
       if (next.value.delta) mutated += next.value.delta

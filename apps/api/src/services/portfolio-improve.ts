@@ -201,7 +201,7 @@ Output ONLY the JSON array — no preamble, no markdown fence.`
     const stream = streamChat(workspaceId, [
       { role: 'system', content: system },
       { role: 'user',   content: context },
-    ])
+    ], { skipUsageTracking: true })   // R146.10 — caller records its own ai_usage row below
     // We need the StreamResult (provider/model/tokens/costUsd) for cost
     // tracking, which only the generator-return value carries. Iterate
     // manually so we can capture the return.

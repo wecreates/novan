@@ -498,12 +498,24 @@ export interface StreamOpts {
   signal?:         AbortSignal
   think?:          boolean
   thinkingBudget?: number
+  // R146.10 — ai_usage attribution. streamChat fire-and-forgets a
+  // recordAiUsage call on every successful return so callers don't
+  // need to track manually. Override `taskType` when the call isn't
+  // operator-chat (codegen, embedding, vision, etc). Set
+  // `skipUsageTracking: true` when the caller already records its own
+  // row (ceo-orchestrator, novan-chat, agent-team, prompt-evolution,
+  // portfolio-improve all opt out to avoid double-counting).
+  taskType?:       'chat' | 'codegen' | 'tts' | 'whisper' | 'vision' | 'image-gen' | 'video-gen' | 'embedding' | 'other'
+  traceId?:        string
+  workflowRunId?:  string
+  skipUsageTracking?: boolean
 }
 
 /** Stream with automatic fallback across configured providers. */
 export async function* streamChat(workspaceId: string, msgs: ChatMsg[], opts?: StreamOpts): AsyncGenerator<StreamChunk, StreamResult> {
   // Heartbeat the llm agent — every chat call is real AI activity.
   void import('./agent-state-sync.js').then(m => m.recordAgentActivity(workspaceId, 'llm', { status: 'running' })).catch(() => null)
+  const streamStartedAt = Date.now()      // R146.10 — for ai_usage.latencyMs
   const tried: string[] = []
   // R146 — accumulate every provider's error-marker delta across the
   // fallback chain. Without this, when both groq AND gemini fail the
@@ -566,6 +578,24 @@ export async function* streamChat(workspaceId: string, msgs: ChatMsg[], opts?: S
     if (result.content.length > 0) {
       // Real content arrived — flush any remaining buffer + return.
       if (!flushed) for (const ev of bufferedDeltas) yield ev
+      // R146.10 — fire-and-forget ai_usage attribution for every successful
+      // streamChat call. Callers can opt out by passing
+      // skipUsageTracking:true (used when they record their own row with
+      // richer metadata like agent name or delegation id).
+      if (!opts?.skipUsageTracking) {
+        void import('./ai-cost-tracker.js').then(m => m.recordAiUsage({
+          workspaceId,
+          provider:     result.provider,
+          model:        result.model,
+          promptTokens: 0,
+          outputTokens: result.tokens,
+          costUsd:      result.costUsd,
+          latencyMs:    Date.now() - streamStartedAt,
+          taskType:     opts?.taskType ?? 'chat',
+          ...(opts?.traceId      ? { traceId:       opts.traceId } : {}),
+          ...(opts?.workflowRunId ? { workflowRunId: opts.workflowRunId } : {}),
+        })).catch(() => null)
+      }
       return result
     }
     // Provider returned no content (key missing / error). Capture its

@@ -775,6 +775,10 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
   const stream = multiStreamChat(i.workspaceId, msgs, {
     ...(i.preferProvider ? { preferProvider: i.preferProvider } : {}),
     signal: abortCtl.signal,
+    // R146.10 — opt out of streamChat's auto ai_usage tracking; we
+    // record our own row at the end of the turn (line 826 onwards) with
+    // the same data + room for richer chat-specific metadata.
+    skipUsageTracking: true,
   })
   let final = { content: '', tokens: 0, costUsd: 0, provider: 'none', model: 'none' }
   let accumulated = ''
