@@ -62,13 +62,27 @@ interface ProviderDef {
   baseUrl:  string
   defaultModel: string
   envVar:   string                          // env var name for API key
-  costPer1kTokens?: number                  // rough cost estimate for token accounting
+  // R146.4 — split input vs output rates. Frontier providers price
+  // output 4-8x higher than input (Anthropic 5x, OpenAI/Gemini ~4x).
+  // Using one rate for both undercounts output cost by that multiplier
+  // — which silently understated ai_usage totals, dashboard spend, and
+  // portfolio ROI by 3-7x for every chat turn. When `outputCostPer1kTokens`
+  // is omitted, the stream handlers fall back to `costPer1kTokens` to
+  // preserve legacy behavior for providers where rates are unverified.
+  costPer1kTokens?:       number            // input rate, USD per 1k tokens
+  outputCostPer1kTokens?: number            // output rate, USD per 1k tokens
 }
 
 // Hard-coded defaults; operator may override via provider_configs row.
+// R146.4 — input/output rates verified against each provider's public
+// pricing page as of 2026-05. Where output rate is unverified the field
+// is omitted and the handler falls back to the input rate (preserving
+// the pre-R146.4 behavior for that provider).
 export const KNOWN_PROVIDERS: ProviderDef[] = [
-  { id: 'groq',         family: 'openai',   baseUrl: 'https://api.groq.com/openai/v1',                  defaultModel: 'llama-3.3-70b-versatile', envVar: 'GROQ_API_KEY',         costPer1kTokens: 0.00059 },
-  { id: 'openai',       family: 'openai',   baseUrl: 'https://api.openai.com/v1',                       defaultModel: 'gpt-4o-mini',             envVar: 'OPENAI_API_KEY',       costPer1kTokens: 0.000150 },
+  // Groq verified: $0.59 in / $0.79 out per MTok
+  { id: 'groq',         family: 'openai',   baseUrl: 'https://api.groq.com/openai/v1',                  defaultModel: 'llama-3.3-70b-versatile', envVar: 'GROQ_API_KEY',         costPer1kTokens: 0.00059,  outputCostPer1kTokens: 0.00079 },
+  // OpenAI gpt-4o-mini: $0.15 in / $0.60 out per MTok
+  { id: 'openai',       family: 'openai',   baseUrl: 'https://api.openai.com/v1',                       defaultModel: 'gpt-4o-mini',             envVar: 'OPENAI_API_KEY',       costPer1kTokens: 0.000150, outputCostPer1kTokens: 0.000600 },
   { id: 'openrouter',   family: 'openai',   baseUrl: 'https://openrouter.ai/api/v1',                    defaultModel: 'meta-llama/llama-3.3-70b-instruct', envVar: 'OPENROUTER_API_KEY', costPer1kTokens: 0.00059 },
   { id: 'together',     family: 'openai',   baseUrl: 'https://api.together.xyz/v1',                     defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', envVar: 'TOGETHER_API_KEY', costPer1kTokens: 0.00088 },
   { id: 'mistral',      family: 'openai',   baseUrl: 'https://api.mistral.ai/v1',                       defaultModel: 'mistral-large-latest',    envVar: 'MISTRAL_API_KEY',      costPer1kTokens: 0.002 },
@@ -78,13 +92,14 @@ export const KNOWN_PROVIDERS: ProviderDef[] = [
   // R146 — Claude Sonnet 3.5 was retired Jan 2026 and the `-latest`
   // suffix convention was dropped at the 4.6 generation (model IDs are
   // now pinned snapshots, no evergreen pointer). `claude-sonnet-4-6` is
-  // the current GA Sonnet ($3/$15 MTok, supports prompt-cache + extended
-  // thinking, matches what streamAnthropic already negotiates).
-  { id: 'anthropic',    family: 'anthropic', baseUrl: 'https://api.anthropic.com/v1',                   defaultModel: 'claude-sonnet-4-6',        envVar: 'ANTHROPIC_API_KEY',   costPer1kTokens: 0.003 },
+  // the current GA Sonnet ($3 in / $15 out per MTok).
+  { id: 'anthropic',    family: 'anthropic', baseUrl: 'https://api.anthropic.com/v1',                   defaultModel: 'claude-sonnet-4-6',        envVar: 'ANTHROPIC_API_KEY',   costPer1kTokens: 0.003,    outputCostPer1kTokens: 0.015 },
   // R146 — gemini-2.0-flash listed in :listModels but returns 404 from
   // :streamGenerateContent for newer API keys; gemini-2.5-flash is the
   // current generally-available flash tier and works for both endpoints.
-  { id: 'gemini',       family: 'gemini',    baseUrl: 'https://generativelanguage.googleapis.com/v1beta', defaultModel: 'gemini-2.5-flash',    envVar: 'GEMINI_API_KEY',       costPer1kTokens: 0.000075 },
+  // R146.4 — input rate corrected from 0.000075 (2.0-flash legacy) to
+  // 0.0003 (2.5-flash GA). Output: $2.50/MTok = 0.0025/1k.
+  { id: 'gemini',       family: 'gemini',    baseUrl: 'https://generativelanguage.googleapis.com/v1beta', defaultModel: 'gemini-2.5-flash',    envVar: 'GEMINI_API_KEY',       costPer1kTokens: 0.0003,   outputCostPer1kTokens: 0.0025 },
 ]
 
 export interface AvailableProvider {
@@ -217,11 +232,15 @@ async function* streamOpenAI(p: ProviderDef, msgs: ChatMsg[], abort?: AbortSigna
   // cache_control header needed). Cached tokens are billed at 50% of the
   // base input rate; account for the savings so the dashboard reflects
   // real spend, not nominal token count.
-  const baseRate = p.costPer1kTokens ?? 0
+  const baseRate   = p.costPer1kTokens ?? 0
+  // R146.4 — output is billed at a different rate (4x for gpt-4o-mini,
+  // ~1.3x for groq llama-3.3-70b). Fall back to input rate when unset
+  // so unverified providers preserve their pre-R146.4 cost numbers.
+  const outputRate = p.outputCostPer1kTokens ?? baseRate
   const nonCachedInput = Math.max(0, promptTok - cachedTok)
   const inputCost  = ((nonCachedInput / 1000) * baseRate)
                    + ((cachedTok      / 1000) * baseRate * 0.5)
-  const outputCost = (completionTok   / 1000) * baseRate
+  const outputCost = (completionTok   / 1000) * outputRate
   const effectiveCost = (promptTok > 0 || completionTok > 0)
     ? Number((inputCost + outputCost).toFixed(6))
     : Number(((tokens / 1000) * baseRate).toFixed(6))
@@ -352,11 +371,14 @@ async function* streamAnthropic(p: ProviderDef, msgs: ChatMsg[], abort?: AbortSi
   // Anthropic prompt-caching cost model: cache_read at 10% of input rate,
   // cache_creation at 125%. Approximate effective cost so the dashboard
   // reflects real spend rather than nominal token count.
-  const baseRate = p.costPer1kTokens ?? 0
+  // R146.4 — Sonnet 4.6 output is 5x input ($15 vs $3 per MTok). Using
+  // baseRate for both undercounted output cost by 5x.
+  const baseRate   = p.costPer1kTokens ?? 0
+  const outputRate = p.outputCostPer1kTokens ?? baseRate
   const inputCost  = ((inTok       / 1000) * baseRate)
                    + ((cacheRead   / 1000) * baseRate * 0.1)
                    + ((cacheCreate / 1000) * baseRate * 1.25)
-  const outputCost = (outTok / 1000) * baseRate
+  const outputCost = (outTok / 1000) * outputRate
   const out: StreamResult = {
     content: full, tokens,
     costUsd: Number((inputCost + outputCost).toFixed(6)),
@@ -406,6 +428,7 @@ async function* streamGemini(p: ProviderDef, msgs: ChatMsg[], abort?: AbortSigna
   const reader = (res.body as ReadableStream<Uint8Array>).getReader()
   const decoder = new TextDecoder()
   let buf = '', full = '', tokens = 0, cachedTok = 0
+  let promptTok = 0, outTok = 0
   try {
     while (true) {
       if (abort?.aborted) { await reader.cancel().catch(() => null); break }
@@ -420,12 +443,19 @@ async function* streamGemini(p: ProviderDef, msgs: ChatMsg[], abort?: AbortSigna
         try {
           const obj = JSON.parse(payload) as {
             candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
-            usageMetadata?: { totalTokenCount?: number; cachedContentTokenCount?: number }
+            usageMetadata?: {
+              totalTokenCount?: number
+              promptTokenCount?: number
+              candidatesTokenCount?: number
+              cachedContentTokenCount?: number
+            }
           }
           const text = obj.candidates?.[0]?.content?.parts?.[0]?.text
           if (text) { full += text; yield { delta: text, done: false } }
-          if (obj.usageMetadata?.totalTokenCount)         tokens    = obj.usageMetadata.totalTokenCount
-          if (obj.usageMetadata?.cachedContentTokenCount) cachedTok = obj.usageMetadata.cachedContentTokenCount
+          if (obj.usageMetadata?.totalTokenCount)         tokens     = obj.usageMetadata.totalTokenCount
+          if (obj.usageMetadata?.promptTokenCount)        promptTok  = obj.usageMetadata.promptTokenCount
+          if (obj.usageMetadata?.candidatesTokenCount)    outTok     = obj.usageMetadata.candidatesTokenCount
+          if (obj.usageMetadata?.cachedContentTokenCount) cachedTok  = obj.usageMetadata.cachedContentTokenCount
         } catch { /* ignore */ }
       }
     }
@@ -436,9 +466,21 @@ async function* streamGemini(p: ProviderDef, msgs: ChatMsg[], abort?: AbortSigna
   // Gemini implicit context caching reports cached tokens via
   // cachedContentTokenCount on usageMetadata. Cached tokens are billed
   // at 25% of the base input rate; surface the savings honestly.
-  const baseRate = p.costPer1kTokens ?? 0
-  const nonCached = Math.max(0, tokens - cachedTok)
-  const cost = ((nonCached / 1000) * baseRate) + ((cachedTok / 1000) * baseRate * 0.25)
+  // R146.4 — gemini-2.5-flash output is 8.3x input ($2.50 vs $0.30
+  // per MTok). Previously this used totalTokenCount * inputRate which
+  // undercounted output by ~5x on average. Now we track prompt + output
+  // tokens separately and apply rates per side.
+  const baseRate   = p.costPer1kTokens ?? 0
+  const outputRate = p.outputCostPer1kTokens ?? baseRate
+  const nonCachedInput = Math.max(0, promptTok - cachedTok)
+  const inputCost  = ((nonCachedInput / 1000) * baseRate)
+                   + ((cachedTok      / 1000) * baseRate * 0.25)
+  const outputCost = (outTok / 1000) * outputRate
+  // Fallback: if usageMetadata didn't split prompt/output, charge
+  // totalTokenCount at the input rate to preserve the legacy behavior.
+  const cost = (promptTok > 0 || outTok > 0)
+    ? inputCost + outputCost
+    : ((Math.max(0, tokens - cachedTok) / 1000) * baseRate) + ((cachedTok / 1000) * baseRate * 0.25)
   const out: StreamResult = {
     content: full, tokens,
     costUsd: Number(cost.toFixed(6)),
