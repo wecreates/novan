@@ -150,12 +150,25 @@ async function runOrchestratorSweep() {
 async function runSecurityTeamScans() {
   try {
     const ids = await listWorkspaceIds()
-    let findings = 0, blocking = 0
+    let findings = 0, blocking = 0, failedWorkspaces = 0
     for (const ws of ids) {
-      const r = await runSecurityScan(ws).catch(() => ({ findingsCreated: 0, blockingCount: 0 }))
-      findings += r.findingsCreated; blocking += r.blockingCount
+      // R146.13 — per-workspace error isolation. The inner runSecurityScan
+      // calls persistFinding + emitEvent which can throw on pool exhaustion
+      // / constraint violation. Previously the .catch(() => zero-counts)
+      // silently swallowed which ws failed; after R146.12 surfacing, the
+      // failure WILL now log loudly but we still need to record WHICH
+      // workspace failed so the operator can correlate.
+      try {
+        const r = await runSecurityScan(ws)
+        findings += r.findingsCreated; blocking += r.blockingCount
+      } catch (e) {
+        failedWorkspaces++
+        await emit('cron.security_team_workspace_failed', {
+          workspaceId: ws, error: (e as Error).message.slice(0, 500),
+        })
+      }
     }
-    await emit('cron.security_team_scan_completed', { workspaces: ids.length, findings, blocking })
+    await emit('cron.security_team_scan_completed', { workspaces: ids.length, findings, blocking, failedWorkspaces })
   } catch (e) { await emit('cron.error', { task: 'security_team', error: (e as Error).message }) }
 }
 

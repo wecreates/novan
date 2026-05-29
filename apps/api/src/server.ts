@@ -486,6 +486,14 @@ const shutdown = async (signal: string) => {
     const { stopConnectorOauthReaper } = await import('./services/connector-oauth.js')
     stopConnectorOauthReaper()
   } catch { /* */ }
+  // R146.13 — runtime-heartbeat fires a DB write every 60s. The timer
+  // was .unref()'d so it doesn't block exit, but during the SIGTERM
+  // drain it keeps firing inserts against a closing pool. Stop it
+  // explicitly before app.close() runs.
+  try {
+    const { stopHeartbeat } = await import('./services/runtime-heartbeat.js')
+    stopHeartbeat()
+  } catch { /* */ }
   // Close any open playwright sessions + the shared browser. Without
   // this, restarts leak chrome processes on Windows.
   try {

@@ -121,10 +121,13 @@ export async function forkConversation(i: ForkConversationInput): Promise<ForkCo
     .catch(() => [])
 
   // Stable order; re-mint ids so editing the branch won't mutate parent.
+  // R146.13 — bulk insert instead of one round-trip per message. A
+  // 200-turn conversation branch went from 200 sequential awaits to a
+  // single statement; latency was linear in history length.
   const ordered = [...historyRows].sort((a, b) => a.createdAt - b.createdAt)
   let copied = 0
-  for (const m of ordered) {
-    await db.insert(messages).values({
+  if (ordered.length > 0) {
+    const rows = ordered.map(m => ({
       id: uuidv7(),
       conversationId:  newId,
       workspaceId:     i.workspaceId,
@@ -138,15 +141,17 @@ export async function forkConversation(i: ForkConversationInput): Promise<ForkCo
       model:           m.model ?? null,
       streamComplete:  m.streamComplete,
       error:           m.error ?? null,
-      // The new branch starts fresh — no carry-over of supersede / cancel
       supersededAt:    null,
       supersededBy:    null,
       regeneratedFrom: null,
       cancelled:       false,
       attachments:     m.attachments ?? [],
       createdAt:       m.createdAt,
-    }).catch((e: Error) => { console.error('[conversation-branching]', e.message); return null })
-    copied++
+    }))
+    const inserted = await db.insert(messages).values(rows)
+      .then(() => true)
+      .catch((e: Error) => { console.error('[conversation-branching] bulk insert failed:', e.message, 'count=', rows.length); return false })
+    if (inserted) copied = rows.length
   }
 
   await db.update(conversations)

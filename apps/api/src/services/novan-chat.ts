@@ -870,20 +870,30 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
   // 10. Detect action intents in the user's message → persist as chat_actions
   const intents = detectIntents(i.userMessage)
   const suggestedActions: Array<{ id: string; actionType: string; title: string; summary: string; riskLevel: string }> = []
-  for (const intent of intents) {
-    const aid = uuidv7()
-    await db.insert(chatActions).values({
-      id: aid, messageId: asstMsgId, conversationId: i.conversationId,
-      workspaceId: i.workspaceId,
+  // R146.13 — batch insert all detected intents in one round-trip
+  // instead of one INSERT per intent. Per chat turn we typically detect
+  // 0-3 intents, but the loop's awaited round-trips added 30-90ms of
+  // wall-clock for nothing. Same data shape per row, trivially batched.
+  if (intents.length > 0) {
+    const now = Date.now()
+    const rows = intents.map(intent => ({
+      id: uuidv7(),
+      messageId: asstMsgId, conversationId: i.conversationId, workspaceId: i.workspaceId,
       actionType: intent.actionType, title: intent.title,
       summary: intent.summary, payload: intent.payload,
       riskLevel: intent.riskLevel, status: 'suggested',
-      createdAt: Date.now(),
-    }).catch((e: Error) => { console.error('[novan-chat] chatActions insert failed:', e.message, 'intent=', intent.actionType); return null })
-    suggestedActions.push({
-      id: aid, actionType: intent.actionType, title: intent.title,
-      summary: intent.summary, riskLevel: intent.riskLevel,
-    })
+      createdAt: now,
+    }))
+    await db.insert(chatActions).values(rows)
+      .catch((e: Error) => { console.error('[novan-chat] chatActions bulk insert failed:', e.message, 'count=', rows.length); return null })
+    for (let k = 0; k < intents.length; k++) {
+      const intent = intents[k]!
+      const row = rows[k]!
+      suggestedActions.push({
+        id: row.id, actionType: intent.actionType, title: intent.title,
+        summary: intent.summary, riskLevel: intent.riskLevel,
+      })
+    }
   }
   if (suggestedActions.length > 0) {
     yield { event: 'actions_suggested', data: { actions: suggestedActions } }

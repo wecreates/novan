@@ -23,6 +23,15 @@ export function claimTask(workspaceId: string, agentType: string, taskSignature:
   const existing = CLAIMS.get(key)
   if (existing && existing > now) return false
   CLAIMS.set(key, now + CLAIM_TTL_MS)
+  // R146.13 — mirror RECENT_EVENTS' light-GC. Without it, every caller
+  // that crashes between claimTask + releaseTask leaks an entry
+  // forever. Cardinality is workspaces × agent types × task signatures
+  // — bounded in theory, unbounded in a runaway-loop / crash-loop.
+  if (CLAIMS.size > 1000) {
+    for (const [k, exp] of CLAIMS) {
+      if (exp <= now) CLAIMS.delete(k)
+    }
+  }
   return true
 }
 

@@ -87,6 +87,22 @@ async function writeState(workspaceId: string, patch: {
 // ─── Cycle implementations ──────────────────────────────────────────────────
 
 export async function runHourlyHealthReview(workspaceId: string): Promise<ReviewResult> {
+  // R146.13 — idempotency guard. The hourly tick was double-firing on
+  // clock drift / restart-mid-tick / cold-start: persistReview INSERTs
+  // a new row every call and writeState bumps reviewCount, so duplicate
+  // ticks inflated both. Bail out if we already reviewed within the
+  // last 55 minutes for this workspace.
+  const recent = await db.select({ id: executiveReviewLog.id }).from(executiveReviewLog)
+    .where(and(
+      eq(executiveReviewLog.workspaceId, workspaceId),
+      eq(executiveReviewLog.cycle, 'hourly'),
+      sql`${executiveReviewLog.createdAt} > ${Date.now() - 55 * 60_000}`,
+    ))
+    .limit(1)
+    .catch((e: Error) => { console.error('[executive-loop] hourly idempotency check failed:', e.message); return [] as { id: string }[] })
+  if (recent.length > 0) {
+    return { workspaceId, cycle: 'hourly', reviewedAt: Date.now(), signalsAnalyzed: { skipped: 'already-ran-this-window' }, prioritiesBefore: [], prioritiesAfter: [], actionsRecommended: [], chainId: null }
+  }
   const { recordAgentActivityAsync } = await import('./agent-state-sync.js')
   recordAgentActivityAsync(workspaceId, 'research_planner', { status: 'running' })
   const stab = await stabilitySnapshot(workspaceId).catch((e: Error) => { console.error('[executive-loop]', e.message); return null })
@@ -107,6 +123,18 @@ export async function runHourlyHealthReview(workspaceId: string): Promise<Review
 }
 
 export async function runSixHourlyOperationalReview(workspaceId: string): Promise<ReviewResult> {
+  // R146.13 — same idempotency guard, 5h window for the 6h cadence.
+  const recent = await db.select({ id: executiveReviewLog.id }).from(executiveReviewLog)
+    .where(and(
+      eq(executiveReviewLog.workspaceId, workspaceId),
+      eq(executiveReviewLog.cycle, 'six_hourly'),
+      sql`${executiveReviewLog.createdAt} > ${Date.now() - 5 * 60 * 60_000}`,
+    ))
+    .limit(1)
+    .catch((e: Error) => { console.error('[executive-loop] six_hourly idempotency check failed:', e.message); return [] as { id: string }[] })
+  if (recent.length > 0) {
+    return { workspaceId, cycle: 'six_hourly', reviewedAt: Date.now(), signalsAnalyzed: { skipped: 'already-ran-this-window' }, prioritiesBefore: [], prioritiesAfter: [], actionsRecommended: [], chainId: null }
+  }
   const recs = await topRecommendations(workspaceId, 5).catch(() => [])
   const forecasts = await generateForecasts(workspaceId).catch((e: Error) => { console.error('[executive-loop]', e.message); return null })
 

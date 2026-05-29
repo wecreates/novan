@@ -14,8 +14,14 @@ import { events } from '../db/schema.js'
 import { and, eq, gte, desc } from 'drizzle-orm'
 
 // Short in-memory cache per workspace+template (5 s)
+// R146.13 — bounded LRU. Without eviction the map grew once per unique
+// `${ws}:${template}:${lod}:${focus}` combination — `focus` is a free
+// user-controlled node id so a GET-spam attacker (or normal exploration
+// across thousands of brain nodes) could grow this map without bound.
+// Now: stale-on-read deletion + hard 500-entry FIFO cap on insert.
 const cache = new Map<string, { at: number; data: unknown }>()
 const CACHE_MS = 5_000
+const CACHE_MAX = 500
 
 const brainRoutes: FastifyPluginAsync = async (fastify) => {
 
@@ -30,7 +36,14 @@ const brainRoutes: FastifyPluginAsync = async (fastify) => {
     if (cached && Date.now() - cached.at < CACHE_MS) {
       return { success: true, data: cached.data, cached: true }
     }
+    if (cached) cache.delete(key)   // stale → drop instead of overwrite
     const graph = await buildGraph(ws, template, { lod, ...(focus ? { focusSystem: focus } : {}) })
+    // FIFO drop oldest entry when at the size cap. Map iteration order is
+    // insertion order in JS, so .keys().next() yields the oldest.
+    if (cache.size >= CACHE_MAX) {
+      const oldest = cache.keys().next().value
+      if (oldest !== undefined) cache.delete(oldest)
+    }
     cache.set(key, { at: Date.now(), data: graph })
     return { success: true, data: graph, cached: false }
   })
