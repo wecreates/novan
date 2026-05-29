@@ -54,7 +54,7 @@ export async function createConversation(workspaceId: string, title?: string): P
     id, workspaceId, title: (title ?? 'New conversation').slice(0, 200),
     messageCount: 0, totalTokens: 0, totalCostUsd: 0, archived: false,
     createdAt: now, updatedAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[novan-chat] createConversation failed:', e.message); return null })
   return id
 }
 
@@ -91,7 +91,7 @@ export async function listMessages(
 export async function archiveConversation(workspaceId: string, conversationId: string): Promise<void> {
   await db.update(conversations).set({ archived: true, updatedAt: Date.now() })
     .where(and(eq(conversations.workspaceId, workspaceId), eq(conversations.id, conversationId)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[novan-chat] archiveConversation failed:', e.message); return null })
 }
 
 /**
@@ -836,7 +836,7 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
     totalTokens: final.tokens,
     totalCostUsd: final.costUsd,
     updatedAt: Date.now(),
-  }).where(eq(conversations.id, i.conversationId)).catch(() => null)
+  }).where(eq(conversations.id, i.conversationId)).catch((e: Error) => { console.error('[novan-chat] conversation stats update failed:', e.message); return null })
 
   // 9. Consume budget
   await consume('novan_chat', { calls: 1, tokens: final.tokens, costUsd: final.costUsd })
@@ -853,7 +853,7 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
       summary: intent.summary, payload: intent.payload,
       riskLevel: intent.riskLevel, status: 'suggested',
       createdAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[novan-chat] chatActions insert failed:', e.message, 'intent=', intent.actionType); return null })
     suggestedActions.push({
       id: aid, actionType: intent.actionType, title: intent.title,
       summary: intent.summary, riskLevel: intent.riskLevel,
@@ -898,8 +898,8 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
     evidence: ctx.citations.map(c => ({ type: c.kind, id: c.id, extract: c.extract })),
     confidence: auditResult.passed ? 0.7 : 0.4,
     source: 'novan-chat',
-  }).catch(() => null)
-  await indexChain(i.workspaceId, asstMsgId, final.content.slice(0, 1000), 'chat').catch(() => null)
+  }).catch((e: Error) => { console.error('[novan-chat] recordChain failed:', e.message); return null })
+  await indexChain(i.workspaceId, asstMsgId, final.content.slice(0, 1000), 'chat').catch((e: Error) => { console.error('[novan-chat] indexChain failed:', e.message); return null })
 
   yield { event: 'done', data: {
     messageId: asstMsgId, tokens: final.tokens, costUsd: final.costUsd,
