@@ -7,7 +7,16 @@
  * POST   /api/v1/auth/verify       — verify a token
  * GET    /api/v1/auth/me           — get current workspace from token
  */
-import { createHash, randomBytes }  from 'node:crypto'
+import { createHash, randomBytes, timingSafeEqual as bufTimingSafeEqual }  from 'node:crypto'
+
+/** Constant-time string comparison to prevent timing attacks on the
+ *  bootstrap secret. Node's built-in requires Buffer args of equal length. */
+function timingSafeEqual(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a, 'utf8')
+  const bBuf = Buffer.from(b, 'utf8')
+  if (aBuf.length !== bBuf.length) return false
+  return bufTimingSafeEqual(aBuf, bBuf)
+}
 import type { FastifyPluginAsync }  from 'fastify'
 import { z }                        from 'zod'
 import { eq, and, isNull }          from 'drizzle-orm'
@@ -50,6 +59,48 @@ const verifySchema = z.object({
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
+
+  // R146.24 — POST /bootstrap — operator-only initial token mint.
+  // Gated by OPERATOR_BOOTSTRAP_SECRET env var (set in the deploy
+  // .env). The bootstrap flow exists because every OTHER token-mint
+  // endpoint requires existing auth (chicken-and-egg). The operator
+  // sets the secret in .env once, hits /bootstrap with it on first
+  // visit, gets back a long-lived API token to paste into the PWA's
+  // localStorage. Subsequent logins use the standard /tokens flow.
+  //
+  // Path is in the planned public-prefix allowlist for R146.23. The
+  // secret is single-purpose: an attacker who has it can mint tokens
+  // for `default` workspace, so it must be treated as equivalent to
+  // root access on the box (same trust level as `.env` itself).
+  // Tight rate limit (3/min/IP) caps brute-force on a weak secret.
+  app.post('/bootstrap', {
+    config: { rateLimit: { max: 3, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const expected = process.env['OPERATOR_BOOTSTRAP_SECRET']
+    if (!expected) {
+      return reply.status(503).send({ success: false, error: 'bootstrap not configured — set OPERATOR_BOOTSTRAP_SECRET' })
+    }
+    const body = req.body as { secret?: unknown; workspace_id?: unknown; name?: unknown } | null
+    const supplied = typeof body?.secret === 'string' ? body.secret : ''
+    if (supplied.length === 0 || !timingSafeEqual(supplied, expected)) {
+      return reply.status(401).send({ success: false, error: 'invalid bootstrap secret' })
+    }
+    const workspaceId = typeof body?.workspace_id === 'string' ? body.workspace_id : 'default'
+    const name        = typeof body?.name === 'string' ? body.name.slice(0, 100) : 'operator-bootstrap'
+    const rawToken    = generateToken()
+    const tokenHash   = sha256(rawToken)
+    const prefix      = rawToken.slice(0, 12)
+    const now         = Date.now()
+    const id          = crypto.randomUUID()
+    await db.insert(apiTokens).values({
+      id, workspaceId, name, tokenHash, prefix,
+      scopes: ['read', 'write'], createdAt: now,
+    })
+    return reply.status(201).send({
+      success: true,
+      data: { token: rawToken, id, prefix, workspaceId },
+    })
+  })
 
   // POST /tokens — create a new API token. Requires existing
   // authentication: an attacker reaching this endpoint anonymously

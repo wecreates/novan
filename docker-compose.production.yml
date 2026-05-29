@@ -59,6 +59,12 @@ services:
       # CHANNEL_ENCRYPTION_KEY the API refuses to boot with a FATAL.
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
       RUNTIME_MODE:           ${RUNTIME_MODE:-cloud-api-only}
+      # R146.24 — operator bootstrap secret. When set, enables
+      # POST /api/v1/auth/bootstrap to mint a long-lived API token
+      # for the operator's PWA. Leave UNSET to keep the endpoint
+      # returning 503 (default-deny). Generate via:
+      #   openssl rand -base64 32 >> .env line `OPERATOR_BOOTSTRAP_SECRET=...`
+      OPERATOR_BOOTSTRAP_SECRET: ${OPERATOR_BOOTSTRAP_SECRET:-}
       CORS_ORIGINS:       ${CORS_ORIGINS}
       # Provider keys (optional — only set what you have)
       OPENAI_API_KEY:     ${OPENAI_API_KEY:-}

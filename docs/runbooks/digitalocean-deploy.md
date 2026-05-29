@@ -197,6 +197,16 @@ These are all fixed in the repo now; documented for next time.
 
     Mark this as the next major hardening step. Until then: keep ports bound to `100.116.59.64` (Tailscale IP), do NOT add the public-IP listener in docker-compose, do NOT expose via Cloudflare Tunnel to the open internet.
 
+    **R146.24 — bootstrap endpoint shipped.** Frontend now has `/setup` page. Backend has `POST /api/v1/auth/bootstrap` (rate-limited 3/min, requires `OPERATOR_BOOTSTRAP_SECRET` env match). To mint the first operator token:
+    1. Generate a strong secret: `openssl rand -base64 48`
+    2. Add to `/root/novan/.env`: `OPERATOR_BOOTSTRAP_SECRET=<that-value>`
+    3. Restart the api: `docker compose -f docker-compose.production.yml --env-file .env up -d --force-recreate api`
+    4. From the laptop/phone on Tailnet, open `http://novan.tail0a7ab4.ts.net:3000/setup` and paste the secret + workspace_id (default = `default`)
+    5. Token lands in browser `localStorage['ops_auth_token']`; `api.ts` already attaches `Authorization: Bearer <token>` on every fetch
+    6. Once you have a token in the PWA, you can re-enable R146.23 global auth (uncomment the `app.addHook('onRequest', ...)` block in server.ts) without breaking chat
+
+    The bootstrap secret is single-purpose: anyone with it can mint a `default`-workspace token, so it's equivalent in trust to `.env` itself. Rotate it after first use by setting a new value + restarting.
+
 ---
 
 ## Why DigitalOcean over Oracle Always Free
