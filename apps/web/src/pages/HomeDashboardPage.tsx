@@ -9,9 +9,24 @@ import { useQuery } from '@tanstack/react-query'
 import { NavLink } from 'react-router-dom'
 import {
   Heart, AlertOctagon, Code2, Coins, Brain, Activity, Target, ChevronRight,
+  DollarSign, Gauge, AlertTriangle,
 } from 'lucide-react'
 import { api } from '../api.js'
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
+
+// R146.17 — payload shape matches home-dashboard.ts post-R146.16. The
+// spend / budgetCaps / cronFailures fields surface the previous
+// session's observability fixes; without them the page looked
+// identical regardless of what was happening under the hood.
+interface SpendBreakdown { taskType: string; costUsd: number; tokens: number; calls: number }
+interface BudgetCapView {
+  scope: string
+  dailyUsd:   { current: number; max: number }
+  monthlyUsd: { current: number; max: number }
+  dailyPct:   number | null
+  monthlyPct: number | null
+}
+interface CronFailureView { type: string; createdAt: number; payload?: Record<string, unknown> }
 
 interface HomePayload {
   generatedAt: number
@@ -20,7 +35,11 @@ interface HomePayload {
   counts: {
     openDriftWarnings: number; pendingProposals: number; pendingPrefs: number
     activeHorizons: number; recentRejections24h: number
+    cronFailures24h: number; persistFailures24h: number
   }
+  spend24h: { totalCostUsd: number; totalTokens: number; totalCalls: number; byTaskType: SpendBreakdown[] }
+  budgetCaps: BudgetCapView[]
+  cronFailures24h: CronFailureView[]
   activeHorizons: Array<{ id: string; title: string; horizon: string }>
   recentMindDecisions: Array<{ id: string; decision: string; createdAt: number }>
   recentEvents: Array<{ type: string; createdAt: number }>
@@ -39,6 +58,15 @@ const KIND_LINK: Record<string, string> = {
   code_proposal:       '/proposals',
   provider_preference: '/economy',
   runtime_stale:       '/runtime',
+  budget_near_cap:     '/economy/budgets',
+  cron_failure:        '/runtime',
+  persistence_errors:  '/runtime',
+}
+
+function fmtUsd(n: number): string {
+  if (n >= 1) return `$${n.toFixed(2)}`
+  if (n >= 0.01) return `$${n.toFixed(4)}`
+  return `$${n.toFixed(6)}`
 }
 
 export default function HomeDashboardPage() {
@@ -83,15 +111,91 @@ export default function HomeDashboardPage() {
         </Section>
       )}
 
-      {/* Counts strip */}
+      {/* Counts strip — 7 wide on md+ to fit the two new R146.16 counts */}
       {d && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
           <Count label="Drift open"        value={d.counts.openDriftWarnings} link="/truth" />
           <Count label="Code proposals"    value={d.counts.pendingProposals} link="/proposals" />
           <Count label="Pending swaps"     value={d.counts.pendingPrefs} link="/economy" />
           <Count label="Active horizons"   value={d.counts.activeHorizons} />
           <Count label="Rejections (24h)"  value={d.counts.recentRejections24h} />
+          <Count label="Cron fails (24h)"  value={d.counts.cronFailures24h ?? 0} link="/runtime" />
+          <Count label="Persist err (24h)" value={d.counts.persistFailures24h ?? 0} link="/runtime" />
         </div>
+      )}
+
+      {/* R146.17 — LLM spend last 24h */}
+      {d && d.spend24h && (
+        <Section title="LLM spend — last 24 hours" icon={<DollarSign className="w-4 h-4 text-emerald-400" />}>
+          <div className="px-4 py-3">
+            <div className="flex items-baseline gap-4 mb-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted">Total cost</div>
+                <div className="text-xl font-mono">{fmtUsd(d.spend24h.totalCostUsd)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted">Calls</div>
+                <div className="text-xl font-mono">{d.spend24h.totalCalls.toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted">Tokens</div>
+                <div className="text-xl font-mono">{d.spend24h.totalTokens.toLocaleString()}</div>
+              </div>
+            </div>
+            {d.spend24h.byTaskType.length === 0 ? (
+              <div className="text-xs text-muted italic">No LLM activity recorded in last 24h.</div>
+            ) : (
+              <div className="space-y-1">
+                {d.spend24h.byTaskType.map(t => {
+                  const pct = d.spend24h.totalCostUsd > 0 ? (t.costUsd / d.spend24h.totalCostUsd) * 100 : 0
+                  return (
+                    <div key={t.taskType} className="text-xs">
+                      <div className="flex justify-between">
+                        <span className="font-mono">{t.taskType}</span>
+                        <span className="text-muted">{fmtUsd(t.costUsd)} · {t.calls} calls · {t.tokens.toLocaleString()} tok</span>
+                      </div>
+                      <div className="h-1 mt-0.5 rounded bg-[var(--surface-hover)] overflow-hidden">
+                        <div className="h-full bg-emerald-500/60" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </Section>
+      )}
+
+      {/* R146.17 — Budget caps */}
+      {d && d.budgetCaps && d.budgetCaps.length > 0 && (
+        <Section title="Budget caps" icon={<Gauge className="w-4 h-4 text-amber-400" />}>
+          <div className="px-4 py-3 space-y-3">
+            {d.budgetCaps.map(c => (
+              <div key={c.scope}>
+                <div className="text-xs font-mono mb-1">{c.scope}</div>
+                <div className="grid grid-cols-2 gap-3 text-[11px]">
+                  <CapBar label="Daily"   current={c.dailyUsd.current}   max={c.dailyUsd.max}   pct={c.dailyPct} />
+                  <CapBar label="Monthly" current={c.monthlyUsd.current} max={c.monthlyUsd.max} pct={c.monthlyPct} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* R146.17 — Recent cron failures */}
+      {d && d.cronFailures24h && d.cronFailures24h.length > 0 && (
+        <Section title={`Cron failures (${d.cronFailures24h.length})`} icon={<AlertTriangle className="w-4 h-4 text-red-400" />}>
+          <ul className="divide-y divide-[var(--border)]">
+            {d.cronFailures24h.slice(0, 8).map((f, i) => (
+              <li key={i} className="px-4 py-2 text-xs flex items-center gap-3">
+                <span className="font-mono text-muted shrink-0">{new Date(f.createdAt).toLocaleTimeString()}</span>
+                <span className="font-mono">{f.type}</span>
+                {f.payload?.error ? <span className="text-muted truncate flex-1">{String(f.payload.error).slice(0, 120)}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </Section>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -164,4 +268,24 @@ function Count({ label, value, link }: { label: string; value: number; link?: st
 
 function Empty({ msg }: { msg: string }) {
   return <div className="px-4 py-3 text-xs text-muted italic">{msg}</div>
+}
+
+function CapBar({ label, current, max, pct }: { label: string; current: number; max: number; pct: number | null }) {
+  const fill = pct === null ? 0 : Math.min(100, pct)
+  const tone = pct === null ? 'bg-slate-500/40'
+             : pct >= 100   ? 'bg-red-500'
+             : pct >= 90    ? 'bg-amber-500'
+             : pct >= 50    ? 'bg-sky-500'
+             :                'bg-emerald-500'
+  return (
+    <div>
+      <div className="flex justify-between">
+        <span className="text-muted">{label}</span>
+        <span className="font-mono">{fmtUsd(current)} / {fmtUsd(max)}{pct !== null ? ` (${pct.toFixed(0)}%)` : ''}</span>
+      </div>
+      <div className="h-1.5 mt-0.5 rounded bg-[var(--surface-hover)] overflow-hidden">
+        <div className={`h-full ${tone}`} style={{ width: `${fill}%` }} />
+      </div>
+    </div>
+  )
 }
