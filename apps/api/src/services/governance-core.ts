@@ -112,7 +112,7 @@ export async function emitGovernance(workspaceId: string, type: string, payload:
     id: uuidv7(), type: `governance.${type}`, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'governance-core', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[governance-core]', e.message); return null })
 }
 
 /** Wrap an autonomous attempt — emits event + returns decision. */
@@ -327,18 +327,18 @@ export async function autoEngageThrottle(workspaceId: string, reason: string): P
   for (const switchType of ['research', 'image'] as const) {
     const existing = await db.select().from(killSwitches)
       .where(and(eq(killSwitches.workspaceId, workspaceId), eq(killSwitches.switchType, switchType)))
-      .limit(1).then(r => r[0]).catch(() => null)
+      .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[governance-core]', e.message); return null })
     if (existing?.enabled) continue
     if (existing) {
       await db.update(killSwitches).set({
         enabled: true, reason, enabledBy: 'governance-core', enabledAt: now, updatedAt: now,
-      }).where(eq(killSwitches.id, existing.id)).catch(() => null)
+      }).where(eq(killSwitches.id, existing.id)).catch((e: Error) => { console.error('[governance-core]', e.message); return null })
     } else {
       await db.insert(killSwitches).values({
         id: uuidv7(), workspaceId, switchType, enabled: true,
         reason, enabledBy: 'governance-core', enabledAt: now,
         createdAt: now, updatedAt: now,
-      }).onConflictDoNothing().catch(() => null)
+      }).onConflictDoNothing().catch((e: Error) => { console.error('[governance-core]', e.message); return null })
     }
     engaged.push(switchType)
   }
@@ -350,7 +350,7 @@ export async function autoEngageThrottle(workspaceId: string, reason: string): P
       body:  `Reason: ${reason}. Kill switches enabled for: ${engaged.join(', ')}. Disable via /api/v1/kill-switches when stability returns.`,
       severity: 'high',
       signature: `auto_throttle:${engaged.sort().join(',')}`,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[governance-core]', e.message); return null })
   }
   return { engaged }
 }
@@ -366,7 +366,7 @@ const STREAK_NEEDED = 2
 async function readStreak(workspaceId: string): Promise<number> {
   const row = await db.select().from(stabilityStreaks)
     .where(eq(stabilityStreaks.workspaceId, workspaceId)).limit(1)
-    .then(r => r[0]).catch(() => null)
+    .then(r => r[0]).catch((e: Error) => { console.error('[governance-core]', e.message); return null })
   return row ? Number(row.consecutiveStable ?? 0) : 0
 }
 
@@ -377,7 +377,7 @@ async function writeStreak(workspaceId: string, value: number): Promise<void> {
     .onConflictDoUpdate({
       target: stabilityStreaks.workspaceId,
       set: { consecutiveStable: value, lastUpdatedAt: now },
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[governance-core]', e.message); return null })
 }
 
 export async function autoDisengageThrottleIfStable(workspaceId: string, stableNow: boolean): Promise<{ disengaged: string[] }> {
@@ -395,12 +395,12 @@ export async function autoDisengageThrottleIfStable(workspaceId: string, stableN
   for (const switchType of ['research', 'image'] as const) {
     const row = await db.select().from(killSwitches)
       .where(and(eq(killSwitches.workspaceId, workspaceId), eq(killSwitches.switchType, switchType)))
-      .limit(1).then(r => r[0]).catch(() => null)
+      .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[governance-core]', e.message); return null })
     if (!row?.enabled) continue
     if (row.enabledBy !== 'governance-core') continue   // respect manual operator overrides
     await db.update(killSwitches).set({
       enabled: false, disabledAt: now, updatedAt: now, reason: 'auto-disengage: stability returned',
-    }).where(eq(killSwitches.id, row.id)).catch(() => null)
+    }).where(eq(killSwitches.id, row.id)).catch((e: Error) => { console.error('[governance-core]', e.message); return null })
     disengaged.push(switchType)
   }
   if (disengaged.length > 0) {
@@ -412,7 +412,7 @@ export async function autoDisengageThrottleIfStable(workspaceId: string, stableN
       body:  `Stability returned for ${streak} consecutive scans. Kill switches lifted for: ${disengaged.join(', ')}.`,
       severity: 'normal',
       signature: `auto_disengage:${disengaged.sort().join(',')}`,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[governance-core]', e.message); return null })
   }
   return { disengaged }
 }
@@ -468,7 +468,7 @@ export async function pauseUnstableAgents(workspaceId: string): Promise<{ paused
       body:  `Agents flagged for repeated failures (>=5 in 1h): ${paused.join(', ')}. Inspect via /agents and resume manually after fixing.`,
       severity: 'high',
       signature: `agent_paused:${paused.sort().join(',')}`,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[governance-core]', e.message); return null })
   }
   return { paused }
 }

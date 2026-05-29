@@ -71,7 +71,7 @@ export async function seedWorkspaceOnFirstInstall(
     },
     traceId: uuidv7(), correlationId: workspaceId, causationId: null,
     source: 'workspace-seed', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[workspace-seed]', e.message); return null })
 
   return {
     workspaceId,

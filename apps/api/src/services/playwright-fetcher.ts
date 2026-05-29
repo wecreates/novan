@@ -108,12 +108,12 @@ export async function renderFetch(url: string, opts: { waitForSelector?: string 
     const page = await ctx.newPage()
     page.setDefaultNavigationTimeout(FETCH_TIMEOUT_MS)
     page.setDefaultTimeout(FETCH_TIMEOUT_MS)
-    const res = await page.goto(url, { waitUntil: 'networkidle' }).catch(() => null)
+    const res = await page.goto(url, { waitUntil: 'networkidle' }).catch((e: Error) => { console.error('[playwright-fetcher]', e.message); return null })
     if (!res) {
       return { ok: false, url, reason: 'navigation failed/timeout', status: 0, durationMs: Date.now() - start }
     }
     if (opts.waitForSelector) {
-      await page.waitForSelector(opts.waitForSelector, { timeout: 5_000 }).catch(() => null)
+      await page.waitForSelector(opts.waitForSelector, { timeout: 5_000 }).catch((e: Error) => { console.error('[playwright-fetcher]', e.message); return null })
     }
     const status = res.status()
     const finalUrl = page.url()
@@ -130,7 +130,7 @@ export async function renderFetch(url: string, opts: { waitForSelector?: string 
       durationMs: Date.now() - start,
     }
   } finally {
-    await ctx.close().catch(() => null)
+    await ctx.close().catch((e: Error) => { console.error('[playwright-fetcher]', e.message); return null })
   }
 }
 

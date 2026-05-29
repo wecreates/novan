@@ -72,7 +72,7 @@ export async function check(opts: {
     payload: { decisionId: opts.decisionId, criticality: opts.criticality, requiredSources, distinctSources: distinct, reason: result.reason },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'ground-truth-engine', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[ground-truth-engine]', e.message); return null })
 
   return result
 }

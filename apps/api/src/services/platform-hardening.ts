@@ -45,7 +45,7 @@ async function archiveTable(workspaceId: string, tableName: string, deleteFn: (c
       rowsArchived: deleted, archivedThroughTs: cutoff,
       elapsedMs: Date.now() - start,
       createdAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[platform-hardening]', e.message); return null })
   }
   return { table: tableName, deleted, through: cutoff, elapsedMs: Date.now() - start }
 }
@@ -169,7 +169,7 @@ export async function notifyCronAlerts(): Promise<{ alerted: number }> {
       body: a.reason,
       severity: 'high',
       signature: `cron-alert:${a.task}:${Math.floor(Date.now() / 3_600_000)}`,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[platform-hardening]', e.message); return null })
     alerted++
   }
   return { alerted }
@@ -183,7 +183,7 @@ export async function registerWebhookSecret(workspaceId: string, channel: string
   await db.insert(webhookSecrets).values({
     id, workspaceId, channel, secretHash,
     active: true, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[platform-hardening]', e.message); return null })
   return id
 }
 
@@ -227,7 +227,7 @@ export async function verifyWebhookSignature(
           eq(webhookSecrets.workspaceId, workspaceId),
           eq(webhookSecrets.channel, channel),
           eq(webhookSecrets.secretHash, hash),
-        )).catch(() => null)
+        )).catch((e: Error) => { console.error('[platform-hardening]', e.message); return null })
     }
     return ok ? { ok: true } : { ok: false, reason: 'signature mismatch' }
   } catch (e) {
@@ -249,25 +249,25 @@ export async function ensureSetupRow(workspaceId: string): Promise<void> {
   const now = Date.now()
   await db.insert(setupState).values({
     workspaceId, firstRunAt: now, updatedAt: now,
-  }).onConflictDoNothing().catch(() => null)
+  }).onConflictDoNothing().catch((e: Error) => { console.error('[platform-hardening]', e.message); return null })
 }
 
 export async function markSetupStep(workspaceId: string, step: 'firstProviderAt' | 'firstChatAt' | 'firstActionAt' | 'firstHorizonAt' | 'firstProposalAt' | 'firstRevenueAt'): Promise<void> {
   await ensureSetupRow(workspaceId)
   const existing = await db.select().from(setupState)
-    .where(eq(setupState.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch(() => null)
+    .where(eq(setupState.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[platform-hardening]', e.message); return null })
   if (!existing) return
   // Only mark once (idempotent)
   if (existing[step]) return
   await db.update(setupState).set({
     [step]: Date.now(), updatedAt: Date.now(),
-  }).where(eq(setupState.workspaceId, workspaceId)).catch(() => null)
+  }).where(eq(setupState.workspaceId, workspaceId)).catch((e: Error) => { console.error('[platform-hardening]', e.message); return null })
 }
 
 export async function getSetupSnapshot(workspaceId: string): Promise<SetupSnapshot> {
   await ensureSetupRow(workspaceId)
   const row = await db.select().from(setupState)
-    .where(eq(setupState.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch(() => null)
+    .where(eq(setupState.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[platform-hardening]', e.message); return null })
   const firstRunAt = row?.firstRunAt ?? Date.now()
   const steps: SetupSnapshot['steps'] = [
     { id: 'provider', label: 'Enable at least one LLM provider', doneAt: row?.firstProviderAt ?? null, required: true },
@@ -283,7 +283,7 @@ export async function getSetupSnapshot(workspaceId: string): Promise<SetupSnapsh
   // Auto-mark completed when threshold hit
   if (!row?.completedOnboarding && done >= 3) {
     await db.update(setupState).set({ completedOnboarding: true, updatedAt: Date.now() })
-      .where(eq(setupState.workspaceId, workspaceId)).catch(() => null)
+      .where(eq(setupState.workspaceId, workspaceId)).catch((e: Error) => { console.error('[platform-hardening]', e.message); return null })
   }
 
   return {

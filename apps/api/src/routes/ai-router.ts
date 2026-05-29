@@ -47,7 +47,7 @@ async function emit(type: string, workspaceId: string, payload: unknown): Promis
     payload: payload as Record<string, unknown>,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/ai-router', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[ai-router]', e.message); return null })
 }
 
 /** Build a RemoteEndpointConfig from a DB row, decrypting credentials. */
@@ -88,7 +88,7 @@ async function logEndpointUsage(row: {
   await db.insert(endpointUsageLogs).values({
     id: uuidv7(), ...row,
     createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[ai-router]', e.message); return null })
 }
 
 /** Upsert workspace budget row; create with defaults on first access. */
@@ -933,7 +933,7 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
         errorMessage: msg.substring(0, 1000),
         fallbackUsed: isFallback,
         costUsd: 0, createdAt: Date.now(),
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[ai-router]', e.message); return null })
 
       return reply.status(503).send({ success: false, error: msg })
     }

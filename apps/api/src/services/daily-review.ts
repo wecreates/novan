@@ -45,7 +45,7 @@ export async function alreadyEmittedToday(workspaceId: string): Promise<boolean>
       eq(events.type, 'daily.review'),
       gte(events.createdAt, since),
     ))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[daily-review]', e.message); return null })
   return !!row
 }
 
@@ -115,7 +115,7 @@ export async function generateDailyReview(workspaceId: string): Promise<DailyRev
       .limit(5).catch(() => []),
 
     db.select().from(providerBudgets)
-      .where(eq(providerBudgets.workspaceId, workspaceId)).limit(1).then(r => r[0] ?? null).catch(() => null),
+      .where(eq(providerBudgets.workspaceId, workspaceId)).limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[daily-review]', e.message); return null }),
 
     db.select({ c: sql<number>`count(*)::int` }).from(events)
       .where(and(eq(events.workspaceId, workspaceId), eq(events.type, 'patch.rolled_back'), gte(events.createdAt, dayAgo)))
@@ -198,6 +198,6 @@ export async function runDailyReview(workspaceId: string, opts?: { force?: boole
     payload: review as unknown as Record<string, unknown>,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'daily-review', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[daily-review]', e.message); return null })
   return review
 }

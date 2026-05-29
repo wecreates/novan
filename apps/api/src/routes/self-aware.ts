@@ -192,7 +192,7 @@ const selfAwareRoutes: FastifyPluginAsync = async (fastify) => {
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     const row = await db.select().from(codePatches)
       .where(and(eq(codePatches.workspaceId, ws), eq(codePatches.id, req.params.id)))
-      .limit(1).then(r => r[0]).catch(() => null)
+      .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[self-aware]', e.message); return null })
     if (!row) return reply.code(404).send({ success: false, error: 'not found' })
     return { success: true, data: row }
   })

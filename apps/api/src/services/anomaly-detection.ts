@@ -124,14 +124,14 @@ export async function scanAnomalies(workspaceId: string, opts: { windowMs?: numb
         eq(anomalySignals.workspaceId, workspaceId),
         eq(anomalySignals.kind, v.kind),
         gte(anomalySignals.lastSeenAt, Date.now() - DEDUPE_MS),
-      )).limit(1).then(r => r[0]).catch(() => null)
+      )).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[anomaly-detection]', e.message); return null })
     if (existing) {
       await db.update(anomalySignals).set({
         lastSeenAt: Date.now(),
         occurrences: existing.occurrences + 1,
         score: Math.max(existing.score, v.score),
         evidence: v.evidence,
-      }).where(eq(anomalySignals.id, existing.id)).catch(() => null)
+      }).where(eq(anomalySignals.id, existing.id)).catch((e: Error) => { console.error('[anomaly-detection]', e.message); return null })
       updated++
     } else {
       await db.insert(anomalySignals).values({
@@ -140,7 +140,7 @@ export async function scanAnomalies(workspaceId: string, opts: { windowMs?: numb
         subject: v.subject, evidence: v.evidence,
         firstSeenAt: Date.now(), lastSeenAt: Date.now(),
         occurrences: 1, createdAt: Date.now(),
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[anomaly-detection]', e.message); return null })
       raised++
     }
   }
@@ -156,5 +156,5 @@ export async function listAnomalies(workspaceId: string, limit = 50) {
 
 export async function ackAnomaly(id: string, workspaceId: string): Promise<void> {
   await db.update(anomalySignals).set({ ackedAt: Date.now() })
-    .where(and(eq(anomalySignals.id, id), eq(anomalySignals.workspaceId, workspaceId))).catch(() => null)
+    .where(and(eq(anomalySignals.id, id), eq(anomalySignals.workspaceId, workspaceId))).catch((e: Error) => { console.error('[anomaly-detection]', e.message); return null })
 }

@@ -34,7 +34,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId,
     payload, traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/runtime-registry', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[runtime-registry]', e.message); return null })
 }
 
 const STALE_THRESHOLD_MS = 90_000   // worker is stale if no heartbeat for 90s
@@ -559,7 +559,7 @@ const runtimeRegistryRoutes: FastifyPluginAsync = async (app) => {
     async (req, reply) => {
       const lease = await db.select().from(executionLeases)
         .where(eq(executionLeases.id, req.params.id))
-        .limit(1).then(r => r[0]).catch(() => null)
+        .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[runtime-registry]', e.message); return null })
       if (!lease) return reply.code(404).send({ success: false, error: 'lease not found' })
 
       const lines = req.body.lines ?? []
@@ -578,7 +578,7 @@ const runtimeRegistryRoutes: FastifyPluginAsync = async (app) => {
         traceId: uuidv7(), correlationId: lease.id, causationId: null,
         source: 'remote-worker', version: 1, createdAt: l.at ?? now,
       }))
-      await db.insert(events).values(rows).catch(() => null)
+      await db.insert(events).values(rows).catch((e: Error) => { console.error('[runtime-registry]', e.message); return null })
       return { success: true, data: { written: rows.length } }
     },
   )
@@ -589,7 +589,7 @@ const runtimeRegistryRoutes: FastifyPluginAsync = async (app) => {
     async (req, reply) => {
       const lease = await db.select().from(executionLeases)
         .where(eq(executionLeases.id, req.params.id))
-        .limit(1).then(r => r[0]).catch(() => null)
+        .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[runtime-registry]', e.message); return null })
       if (!lease) return reply.code(404).send({ success: false, error: 'lease not found' })
 
       const ok      = req.body.ok ?? true
@@ -616,7 +616,7 @@ const runtimeRegistryRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { id: string } }>('/leases/:id/stream', async (req, reply) => {
     const lease = await db.select().from(executionLeases)
       .where(eq(executionLeases.id, req.params.id))
-      .limit(1).then(r => r[0]).catch(() => null)
+      .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[runtime-registry]', e.message); return null })
     if (!lease) return reply.code(404).send({ success: false, error: 'lease not found' })
 
     reply.raw.writeHead(200, {

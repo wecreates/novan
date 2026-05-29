@@ -88,7 +88,7 @@ const ttsRoutes: FastifyPluginAsync = async (fastify) => {
       isActive: false,
       notes: (b.notes ?? '').slice(0, 500) || null,
       createdAt: now, updatedAt: now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[tts]', e.message); return null })
 
     return reply.code(201).send({ success: true, data: { id } })
   })
@@ -100,7 +100,7 @@ const ttsRoutes: FastifyPluginAsync = async (fastify) => {
 
     const row = await db.select().from(voiceProfiles)
       .where(and(eq(voiceProfiles.workspaceId, ws), eq(voiceProfiles.id, req.params.id)))
-      .limit(1).then(r => r[0] ?? null).catch(() => null)
+      .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[tts]', e.message); return null })
     if (!row) return reply.code(404).send({ success: false, error: 'profile not found' })
     if (!row.consentAttested) {
       return reply.code(400).send({ success: false, error: 'consent must be attested before activation' })
@@ -109,10 +109,10 @@ const ttsRoutes: FastifyPluginAsync = async (fastify) => {
     // Single-active-per-workspace invariant
     await db.update(voiceProfiles)
       .set({ isActive: false, updatedAt: Date.now() })
-      .where(eq(voiceProfiles.workspaceId, ws)).catch(() => null)
+      .where(eq(voiceProfiles.workspaceId, ws)).catch((e: Error) => { console.error('[tts]', e.message); return null })
     await db.update(voiceProfiles)
       .set({ isActive: true, updatedAt: Date.now() })
-      .where(eq(voiceProfiles.id, req.params.id)).catch(() => null)
+      .where(eq(voiceProfiles.id, req.params.id)).catch((e: Error) => { console.error('[tts]', e.message); return null })
 
     return { success: true }
   })
@@ -124,7 +124,7 @@ const ttsRoutes: FastifyPluginAsync = async (fastify) => {
     await db.update(voiceProfiles)
       .set({ consentAttested: req.body.attested !== false, updatedAt: Date.now() })
       .where(and(eq(voiceProfiles.workspaceId, ws), eq(voiceProfiles.id, req.params.id)))
-      .catch(() => null)
+      .catch((e: Error) => { console.error('[tts]', e.message); return null })
     return { success: true }
   })
 
@@ -134,7 +134,7 @@ const ttsRoutes: FastifyPluginAsync = async (fastify) => {
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     await db.delete(voiceProfiles)
       .where(and(eq(voiceProfiles.workspaceId, ws), eq(voiceProfiles.id, req.params.id)))
-      .catch(() => null)
+      .catch((e: Error) => { console.error('[tts]', e.message); return null })
     return { success: true }
   })
 
@@ -167,7 +167,7 @@ const ttsRoutes: FastifyPluginAsync = async (fastify) => {
     if (b.profile_id) {
       const row = await db.select().from(voiceProfiles)
         .where(and(eq(voiceProfiles.workspaceId, b.workspace_id), eq(voiceProfiles.id, b.profile_id)))
-        .limit(1).then(r => r[0] ?? null).catch(() => null)
+        .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[tts]', e.message); return null })
       if (!row) return reply.code(404).send({ success: false, error: 'profile not found' })
       if (!row.consentAttested) {
         return reply.code(400).send({ success: false, error: 'profile consent not attested' })
@@ -177,7 +177,7 @@ const ttsRoutes: FastifyPluginAsync = async (fastify) => {
     } else {
       const row = await db.select().from(voiceProfiles)
         .where(and(eq(voiceProfiles.workspaceId, b.workspace_id), eq(voiceProfiles.isActive, true)))
-        .limit(1).then(r => r[0] ?? null).catch(() => null)
+        .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[tts]', e.message); return null })
       if (row) {
         speakerWav = row.refAudioPath
         if (!b.language) language = row.language

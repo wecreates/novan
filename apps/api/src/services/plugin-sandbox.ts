@@ -206,7 +206,7 @@ export async function loadPlugin(absoluteEntry: string, manifest: PluginManifest
     const timer = setTimeout(() => {
       if (settled) return
       settled = true
-      worker.terminate().catch(() => null)
+      worker.terminate().catch((e: Error) => { console.error('[plugin-sandbox]', e.message); return null })
       resolve({ ok: false, output: null, error: `timeout after ${manifest.maxRuntimeMs}ms`, durationMs: Date.now() - start, exitCode: null })
     }, manifest.maxRuntimeMs ?? 5_000)
 
@@ -217,7 +217,7 @@ export async function loadPlugin(absoluteEntry: string, manifest: PluginManifest
         settled = true
         clearTimeout(timer)
         resolve({ ok: true, output: (msg as { output: unknown }).output, error: null, durationMs: Date.now() - start, exitCode: 0 })
-        worker.terminate().catch(() => null)
+        worker.terminate().catch((e: Error) => { console.error('[plugin-sandbox]', e.message); return null })
       }
     })
     worker.on('error', (err) => {

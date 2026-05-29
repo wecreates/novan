@@ -101,7 +101,7 @@ export async function registerStation(input: {
     createdAt:    Date.now(),
     updatedAt:    Date.now(),
     expiresAt:    null,
-  } as never).catch(() => null)
+  } as never).catch((e: Error) => { console.error('[hil-orchestrator]', e.message); return null })
   await emit(input.workspaceId, 'hil.station_registered', { stationId: id, label: input.label })
   return station
 }
@@ -167,7 +167,7 @@ export async function submitJob(input: Omit<HilJob, 'id' | 'submittedAt' | 'resu
     payload: { jobId: job.id, category: job.category, risk: job.risk, requirements: job.requirements, firmwareSha: job.firmwareSha },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'hil-orchestrator', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[hil-orchestrator]', e.message); return null })
   return job
 }
 
@@ -308,7 +308,7 @@ export async function archiveComplianceEvidence(input: {
     createdAt:    Date.now(),
     updatedAt:    Date.now(),
     expiresAt:    null,
-  } as never).catch(() => null)
+  } as never).catch((e: Error) => { console.error('[hil-orchestrator]', e.message); return null })
   return id
 }
 
@@ -370,5 +370,5 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'hil-orchestrator', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[hil-orchestrator]', e.message); return null })
 }

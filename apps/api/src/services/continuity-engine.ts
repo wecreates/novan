@@ -154,7 +154,7 @@ export async function findPastFix(workspaceId: string, currentSignature: string)
       sql`${successfulFixes.failureSignature} like ${'%' + probe + '%'}`,
     ))
     .orderBy(desc(successfulFixes.successCount))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[continuity-engine]', e.message); return null })
   if (!row) return null
   return {
     signature: String(row.failureSignature ?? ''),

@@ -27,7 +27,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'feedback', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[feedback]', e.message); return null })
 }
 
 export async function submitFeedback(i: SubmitInput): Promise<string> {

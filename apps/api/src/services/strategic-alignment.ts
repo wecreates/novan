@@ -26,7 +26,7 @@ export interface AlignmentDecision {
 
 /** Strict mode requires at least one tag match. Permissive always allows. */
 export async function checkAlignment(workspaceId: string, actionTags: string[]): Promise<AlignmentDecision> {
-  const prefs = await getPreferences(workspaceId).catch(() => null)
+  const prefs = await getPreferences(workspaceId).catch((e: Error) => { console.error('[strategic-alignment]', e.message); return null })
   const strict = !!(prefs?.metadata && typeof prefs.metadata === 'object'
     && (prefs.metadata as Record<string, unknown>)['strictAlignment'] === true)
   const policy: AlignmentDecision['policy'] = strict ? 'strict' : 'permissive'
@@ -80,5 +80,5 @@ export async function emitAlignmentDecision(workspaceId: string, intent: string,
     payload: { intent, policy: decision.policy, aligned: decision.aligned, matchedTags: decision.matchedTags, reason: decision.reason },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'strategic-alignment', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[strategic-alignment]', e.message); return null })
 }

@@ -78,7 +78,7 @@ export async function runMonitorCycle(workspaceId: string): Promise<MonitorCycle
       hint: m.slug,
       requestedBy: 'openjarvis-monitor',
       context: { monitorSlug: m.slug, lastFiredAt: last, intervalSec: m.intervalSec },
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[openjarvis-monitors]', e.message); return null })
 
     if (r && r.ok) {
       // Stamp a chain so the next cycle knows the last-fired time
@@ -93,7 +93,7 @@ export async function runMonitorCycle(workspaceId: string): Promise<MonitorCycle
         source: `openjarvis-monitor:${m.slug}`,
         indexedForSearch: false,
         createdAt: now,
-      } as typeof reasoningChains.$inferInsert).catch(() => null)
+      } as typeof reasoningChains.$inferInsert).catch((e: Error) => { console.error('[openjarvis-monitors]', e.message); return null })
       result.fired++
       result.notes.push(`fired ${m.slug}`)
     } else {

@@ -85,7 +85,7 @@ async function ensurePlansSeeded(): Promise<void> {
       featureFlags:         p.features as unknown as Record<string, unknown>,
       isActive:             true,
       createdAt:            now,
-    }).onConflictDoNothing().catch(() => null)
+    }).onConflictDoNothing().catch((e: Error) => { console.error('[plan-features]', e.message); return null })
   }
   SEEDED = true
 }

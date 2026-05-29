@@ -233,7 +233,7 @@ export async function runComplianceEvidenceCollection(): Promise<{
   let totalEvents = 0
   const perControl: Array<{ id: string; events: number }> = []
   for (const c of SOC2_CONTROLS) {
-    const out = await collectEvidenceForControl(c.id).catch(() => null)
+    const out = await collectEvidenceForControl(c.id).catch((e: Error) => { console.error('[compliance-soc2]', e.message); return null })
     if (!out) continue
     const n = Object.values(out.eventCounts).reduce((a, b) => a + b, 0)
     totalEvents += n
@@ -248,7 +248,7 @@ export async function runComplianceEvidenceCollection(): Promise<{
       payload: { perControl, totalEvents, summary: controlSummary() },
       traceId: uuidv7(), correlationId: null, causationId: null,
       source: 'compliance-soc2', version: 1, createdAt: Date.now(),
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[compliance-soc2]', e.message); return null })
   } catch { /* DB unavailable — non-fatal */ }
   return { controlsCollected: perControl.length, totalEvents }
 }
@@ -292,7 +292,7 @@ export async function runDependencyCveScan(): Promise<{
       payload: result,
       traceId: uuidv7(), correlationId: null, causationId: null,
       source: 'compliance-soc2', version: 1, createdAt: Date.now(),
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[compliance-soc2]', e.message); return null })
   } catch { /* tolerated */ }
   return result
 }
@@ -321,7 +321,7 @@ export async function runQuarterlyAccessReviewCheck(): Promise<{ due: boolean }>
         payload: { lastCompleted: null, daysSince: '>95' },
         traceId: uuidv7(), correlationId: null, causationId: null,
         source: 'compliance-soc2', version: 1, createdAt: Date.now(),
-      } as never).catch(() => null)
+      } as never).catch((e: Error) => { console.error('[compliance-soc2]', e.message); return null })
     }
   } catch { /* DB unavailable */ }
   return { due }

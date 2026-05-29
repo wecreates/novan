@@ -109,7 +109,7 @@ async function generateRecommendationsImpl(workspaceId: string): Promise<Recomme
       .limit(10).catch(() => []),
 
     db.select().from(providerBudgets)
-      .where(eq(providerBudgets.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch(() => null),
+      .where(eq(providerBudgets.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[recommendation-engine]', e.message); return null }),
 
     db.select({
       id: workflowRuns.id, errorMessage: workflowRuns.errorMessage,
@@ -291,7 +291,7 @@ async function generateRecommendationsImpl(workspaceId: string): Promise<Recomme
                 ?? (r.evidence['incidentId'] as string | undefined)
                 ?? r.title
     if (sig && (r.kind === 'reliability_improvement' || r.kind === 'critical_runtime_fix')) {
-      const past = await findPastFix(workspaceId, sig).catch(() => null)
+      const past = await findPastFix(workspaceId, sig).catch((e: Error) => { console.error('[recommendation-engine]', e.message); return null })
       if (past && past.appliedCount > 0) {
         ctx.pastFix = past
         contextScore *= 1.2  // we've fixed this before → higher confidence
@@ -333,7 +333,7 @@ async function generateRecommendationsImpl(workspaceId: string): Promise<Recomme
     }))
     const gt = await groundTruthCheck({
       workspaceId, decisionId: r.id, criticality: 'critical', evidence: evidenceForGate,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[recommendation-engine]', e.message); return null })
     if (gt && !gt.passed) {
       r.decision = { ...r.decision, autoApplyOk: false, warnings: [...r.decision.warnings, `ground-truth gate: ${gt.reason}`] }
     }
@@ -356,7 +356,7 @@ async function generateRecommendationsImpl(workspaceId: string): Promise<Recomme
         confidence: r.decision.score,
         prediction: { bucket: r.decision.bucket, estimatedImpact: r.estimatedImpact, autoApplyOk: r.decision.autoApplyOk },
         source: 'recommendation-engine',
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[recommendation-engine]', e.message); return null })
 
       // Implicit assumption: this rec's evidence remains valid for the action window.
       // Declared so drift-detector can flag if evidence ages out without re-verification.
@@ -368,7 +368,7 @@ async function generateRecommendationsImpl(workspaceId: string): Promise<Recomme
         })),
         confidence: r.decision.score,
         source: 'recommendation-engine',
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[recommendation-engine]', e.message); return null })
     }
   })()
 

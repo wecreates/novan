@@ -419,7 +419,7 @@ export async function dispatchPersona(input: DispatchInput): Promise<DispatchOut
     decision: `${spec.name}: ${input.task.slice(0, 200)}`,
     confidence: parsed ? 0.85 : 0.5,
     source: `agent-team:${input.persona}`,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[agent-team]', e.message); return null })
 
   return {
     persona:    input.persona,

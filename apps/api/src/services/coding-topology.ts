@@ -265,7 +265,7 @@ export async function runWave(input: {
     decision:    `Wave ${input.wave}: ${taskOutcomes.filter(t => t.status === 'completed').length}/${taskOutcomes.length} completed`,
     confidence:  0.7,
     source:      'coding-topology/Wave',
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[coding-topology]', e.message); return null })
 
   return { wave: input.wave, taskOutcomes }
 }

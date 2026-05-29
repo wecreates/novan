@@ -100,6 +100,6 @@ export async function snapshotOperatorLoad(workspaceId: string, opts: { windowMs
     mode:             verdict.mode,
     recommendation:   verdict.recommendation,
     createdAt:        Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[operator-cognitive-load]', e.message); return null })
   return { id, inputs, ...verdict }
 }

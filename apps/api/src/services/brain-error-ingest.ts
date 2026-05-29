@@ -149,7 +149,7 @@ async function recordChain(workspaceId: string, subjectId: string, decision: str
     source: 'brain-error-ingest',
     indexedForSearch: false,
     createdAt: Date.now(),
-  } as typeof reasoningChains.$inferInsert).catch(() => null)
+  } as typeof reasoningChains.$inferInsert).catch((e: Error) => { console.error('[brain-error-ingest]', e.message); return null })
 }
 
 async function emit(workspaceId: string, type: string, payload: Record<string, unknown>): Promise<void> {
@@ -157,7 +157,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'brain-error-ingest', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[brain-error-ingest]', e.message); return null })
 }
 
 /**
@@ -208,7 +208,7 @@ export async function reportError(r: ErrorReport): Promise<ErrorReportResult> {
       ...((existing.evidence as Array<{ type: string; ref: string; summary: string; at: number }>) ?? []),
       ...evidenceItems,
     ].slice(-50)
-    // FIX: previously .catch(() => null) — failed update meant the error
+    // FIX: previously .catch((e: Error) => { console.error('[brain-error-ingest]', e.message); return null }) — failed update meant the error
     // ingester silently dropped the evidence append. Operator never saw
     // why their issue evidence wasn't growing. Now propagate (the outer
     // function returns { ok: false, reason } if anything throws).

@@ -85,7 +85,7 @@ export const notificationsRoutes: FastifyPluginAsync = async (app) => {
       payload: { source: 'read-all' },
       traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'notifications-route', version: 1, createdAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[notifications]', e.message); return null })
     return reply.send({ success: true })
   })
 
@@ -98,7 +98,7 @@ export const notificationsRoutes: FastifyPluginAsync = async (app) => {
       payload: { source: 'explicit-ack' },
       traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'notifications-route', version: 1, createdAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[notifications]', e.message); return null })
     return reply.send({ success: true })
   })
 }

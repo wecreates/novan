@@ -71,7 +71,7 @@ async function emit(type: string, payload: Record<string, unknown>) {
     id: uuidv7(), type, workspaceId: 'global', payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'learning-cron', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
 }
 
 async function runIncidentScans() {
@@ -105,7 +105,7 @@ async function runIssueAutoLoop() {
     const ids = await listWorkspaceIds()
     let promoted = 0, verified = 0
     for (const ws of ids) {
-      const r = await runAutoLoopFor(ws).catch(() => null)
+      const r = await runAutoLoopFor(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (r) { promoted += r.promote.promoted; verified += r.reconcile.verified }
     }
     await emit('cron.issue_auto_loop_completed', { workspaces: ids.length, promoted, verified })
@@ -127,7 +127,7 @@ async function runImprovementScans() {
 async function runSuspiciousScans() {
   try {
     const ids = await listWorkspaceIds()
-    for (const ws of ids) await detectSuspiciousActivity(ws).catch(() => null)
+    for (const ws of ids) await detectSuspiciousActivity(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
     await emit('cron.suspicious_scan_completed', { workspaces: ids.length })
   } catch (e) { await emit('cron.error', { task: 'suspicious', error: (e as Error).message }) }
 }
@@ -170,7 +170,7 @@ async function runExecutiveHourly() {
   try {
     const ids = await listWorkspaceIds()
     for (const ws of ids) {
-      await runHourlyHealthReview(ws).catch(() => null)
+      await runHourlyHealthReview(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
     }
   } catch (e) { await emit('cron.error', { task: 'executive_hourly', error: (e as Error).message }) }
 }
@@ -180,12 +180,12 @@ async function runExecutiveSixHourly() {
     const ids = await listWorkspaceIds()
     let totalActions = 0
     for (const ws of ids) {
-      const r = await runSixHourlyOperationalReview(ws).catch(() => null)
+      const r = await runSixHourlyOperationalReview(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (r) totalActions += r.actionsRecommended.length
       // Also reconcile recommendation outcomes while we're at it
-      await reconcileRecommendationOutcomes(ws).catch(() => null)
+      await reconcileRecommendationOutcomes(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       // Multi-source outcome evaluator (incident resolution, forecast horizons, rollbacks)
-      await evaluateOutcomes(ws).catch(() => null)
+      await evaluateOutcomes(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
     }
     if (totalActions > 0) await emit('cron.executive_six_hourly_completed', { totalActions })
   } catch (e) { await emit('cron.error', { task: 'executive_six_hourly', error: (e as Error).message }) }
@@ -207,7 +207,7 @@ async function runCrossDivisionScan() {
             body:        b.title,
             severity:    b.severity === 'critical' ? 'critical' : 'high',
             signature:   `xdiv:${b.blockerId}`,
-          }).catch(() => null)
+          }).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
         }
       }
     }
@@ -219,10 +219,10 @@ async function runRealityVerification() {
     const ids = await listWorkspaceIds()
     let totalWarnings = 0, totalCorrections = 0
     for (const ws of ids) {
-      await sweepStale(ws).catch(() => null)
-      const drift = await scanDrift(ws).catch(() => null)
+      await sweepStale(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
+      const drift = await scanDrift(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (drift) totalWarnings += drift.totalCreated
-      const corr = await applyCorrections(ws).catch(() => null)
+      const corr = await applyCorrections(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (corr) totalCorrections += corr.warningsHandled
     }
     if (totalWarnings + totalCorrections > 0) {
@@ -244,9 +244,9 @@ async function runEconomicLearning() {
     const ids = await listWorkspaceIds()
     let totalEvaluated = 0, totalMatched = 0, totalRecs = 0, calls = 0
     for (const ws of ids) {
-      const evald = await evaluateEconomicOutcomes(ws).catch(() => null)
+      const evald = await evaluateEconomicOutcomes(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (evald) { totalEvaluated += evald.evaluated; totalMatched += evald.matched }
-      const rec   = await generateEconomicRecommendations(ws).catch(() => null)
+      const rec   = await generateEconomicRecommendations(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (rec)   totalRecs += rec.chainsRecorded
       calls += 2
     }
@@ -269,7 +269,7 @@ async function runAutonomousMind() {
     const ids = await listWorkspaceIds()
     let totalGaps = 0, totalPlans = 0, totalChains = 0
     for (const ws of ids) {
-      const r = await runMindCycle(ws).catch(() => null)
+      const r = await runMindCycle(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (r) {
         totalGaps   += r.gapsDetected
         totalPlans  += r.buildPlansCreated
@@ -289,7 +289,7 @@ async function runCeoCycleCron() {
     const ids = await listWorkspaceIds()
     let totalDelegations = 0, totalChains = 0, totalRed = 0, totalYellow = 0
     for (const ws of ids) {
-      const r = await runCeoCycle(ws).catch(() => null)
+      const r = await runCeoCycle(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (r) {
         totalDelegations += r.delegationsCreated
         totalChains      += r.chainsRecorded
@@ -309,7 +309,7 @@ async function runOpenJarvisMonitorsCron() {
     const ids = await listWorkspaceIds()
     let totalFired = 0, totalSkipped = 0
     for (const ws of ids) {
-      const r = await runMonitorCycle(ws).catch(() => null)
+      const r = await runMonitorCycle(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (r) {
         totalFired   += r.fired
         totalSkipped += r.skipped
@@ -326,7 +326,7 @@ async function runBrainBroadcastCron() {
     const { runBroadcastCycle } = await import('./brain-broadcast.js')
     const ids = await listWorkspaceIds()
     for (const ws of ids) {
-      const r = await runBroadcastCycle(ws).catch(() => null)
+      const r = await runBroadcastCycle(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (r?.broadcasted) {
         await emit('brain.broadcast_posted', { workspace_id: ws, messageId: r.messageId, conversationId: r.conversationId })
       }
@@ -360,7 +360,7 @@ async function runEconomicHealth() {
     const { workspaceHealth } = await import('./economic-engine.js')
     const ids = await listWorkspaceIds()
     for (const ws of ids) {
-      const h = await workspaceHealth(ws, 30).catch(() => null)
+      const h = await workspaceHealth(ws, 30).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (h && h.totalProductions > 0) {
         await emit('civilization.economic_health', {
           workspace_id: ws, productions: h.totalProductions,
@@ -391,7 +391,7 @@ async function runExecutionPhysics() {
     const { execPhysics } = await import('./civilization-core.js')
     const ids = await listWorkspaceIds()
     for (const ws of ids) {
-      const phys = await execPhysics(ws).catch(() => null)
+      const phys = await execPhysics(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (phys) await emit('civilization.execution_physics', {
         workspace_id: ws,
         velocity: Number(phys.velocity.toFixed(2)),
@@ -449,7 +449,7 @@ async function runDailyRecap() {
     const { v7 } = await import('uuid')
     const ids = await listWorkspaceIds()
     for (const ws of ids) {
-      const recap = await generateRecap(ws, 24).catch(() => null)
+      const recap = await generateRecap(ws, 24).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (!recap) continue
       // Persist as a memory tagged 'executive-recap' so the chat session-
       // start surface can pull it on the next operator return.
@@ -499,7 +499,7 @@ async function runMetaLearning() {
     const ids = await listWorkspaceIds()
     let totalRecorded = 0
     for (const ws of ids) {
-      const r = await recordCalibrationFindings(ws).catch(() => null)
+      const r = await recordCalibrationFindings(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (r) totalRecorded += r.recorded
     }
     if (totalRecorded > 0) await emit('cron.meta_learning', { findingsRecorded: totalRecorded })
@@ -516,7 +516,7 @@ async function runGitStateCapture() {
     const ids = await listWorkspaceIds()
     let totalCaptured = 0
     for (const ws of ids) {
-      const r = await captureGitState(ws).catch(() => null)
+      const r = await captureGitState(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (r) totalCaptured += r.captured
     }
     if (totalCaptured > 0) await emit('cron.git_state_captured', { snapshots: totalCaptured })
@@ -528,7 +528,7 @@ async function runEmbeddingsBackfill() {
     const ids = await listWorkspaceIds()
     let totalIndexed = 0
     for (const ws of ids) {
-      const r = await backfillEmbeddings(ws, 14).catch(() => null)
+      const r = await backfillEmbeddings(ws, 14).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (r) totalIndexed += r.indexed
     }
     if (totalIndexed > 0) await emit('cron.embeddings_indexed', { indexed: totalIndexed })
@@ -540,7 +540,7 @@ async function runCommitLearning() {
     const ids = await listWorkspaceIds()
     let totals = { evaluated: 0, regressions: 0, positives: 0 }
     for (const ws of ids) {
-      const r = await linkCommitsToOutcomes(ws).catch(() => null)
+      const r = await linkCommitsToOutcomes(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (r) {
         totals.evaluated += r.evaluated
         totals.regressions += r.regressions
@@ -556,7 +556,7 @@ async function runCapabilityAutoRegister() {
     const ids = await listWorkspaceIds()
     let added = 0
     for (const ws of ids) {
-      const r = await autoRegisterCapabilities(ws).catch(() => null)
+      const r = await autoRegisterCapabilities(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (r) added += r.added
     }
     if (added > 0) await emit('cron.capability_auto_register', { added })
@@ -568,7 +568,7 @@ async function runDataRetention() {
     const ids = await listWorkspaceIds()
     let totalDeleted = 0
     for (const ws of ids) {
-      const r = await runRetention(ws).catch(() => null)
+      const r = await runRetention(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (r) totalDeleted += r.reduce((s, x) => s + x.deleted, 0)
     }
     if (totalDeleted > 0) await emit('cron.retention', { totalDeleted })
@@ -577,7 +577,7 @@ async function runDataRetention() {
 
 async function runCronHealthAlerts() {
   try {
-    const r = await notifyCronAlerts().catch(() => null)
+    const r = await notifyCronAlerts().catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
     if (r && r.alerted > 0) await emit('cron.health_alerts', { alerted: r.alerted })
   } catch (e) { await emit('cron.error', { task: 'cron_health_alerts', error: (e as Error).message }) }
 }
@@ -585,7 +585,7 @@ async function runCronHealthAlerts() {
 async function runVoiceDryRunSweep() {
   try {
     const { sweepExpiredDryRuns } = await import('./voice-dry-run.js')
-    const r = await sweepExpiredDryRuns().catch(() => null)
+    const r = await sweepExpiredDryRuns().catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
     if (r && r.expired > 0) await emit('cron.voice_dry_run_sweep', { expired: r.expired })
   } catch (e) { await emit('cron.error', { task: 'voice_dry_run_sweep', error: (e as Error).message }) }
 }
@@ -593,7 +593,7 @@ async function runVoiceDryRunSweep() {
 async function runSelfHealScan() {
   try {
     const { scanAndHeal } = await import('./self-healing.js')
-    const r = await scanAndHeal().catch(() => null)
+    const r = await scanAndHeal().catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
     if (r && r.applied > 0) await emit('cron.self_heal', { applied: r.applied, byKind: r.byKind })
   } catch (e) { await emit('cron.error', { task: 'self_heal_scan', error: (e as Error).message }) }
 }
@@ -649,7 +649,7 @@ async function runChaosDrill() {
   if (!target || target === 'global' || target === 'production') return
   try {
     const { drDrill } = await import('./dr-drill.js')
-    const r = await drDrill(target).catch(() => null)
+    const r = await drDrill(target).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
     if (r) await emit('cron.chaos_drill', { workspace: target, result: 'ok' })
   } catch (e) { await emit('cron.error', { task: 'chaos_drill', error: (e as Error).message }) }
 }
@@ -663,7 +663,7 @@ async function runAnomalyScan() {
     const ids = await listWorkspaceIds()
     let raised = 0, updated = 0
     for (const ws of ids) {
-      const r = await scanAnomalies(ws).catch(() => null)
+      const r = await scanAnomalies(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (r) { raised += r.raised; updated += r.updated }
     }
     if (raised + updated > 0) await emit('cron.anomaly_scan', { raised, updated })
@@ -675,9 +675,9 @@ async function runFabricSweep() {
     const ids = await listWorkspaceIds()
     let marked = 0, scaled = 0
     for (const ws of ids) {
-      const sweep = await sweepStaleNodes(ws).catch(() => null)
+      const sweep = await sweepStaleNodes(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (sweep) marked += sweep.marked
-      const cyc = await runScalingCycle(ws).catch(() => null)
+      const cyc = await runScalingCycle(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (cyc) scaled += cyc.recorded
     }
     if (marked + scaled > 0) await emit('cron.fabric_sweep', { staleNodes: marked, scalingEvents: scaled })
@@ -689,7 +689,7 @@ async function runTrustAutoDerive() {
     const ids = await listWorkspaceIds()
     let totalAdjustments = 0
     for (const ws of ids) {
-      const r = await autoDeriveTrust(ws).catch(() => null)
+      const r = await autoDeriveTrust(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (r) totalAdjustments += r.adjustments
     }
     if (totalAdjustments > 0) await emit('cron.trust_derived', { adjustments: totalAdjustments })
@@ -701,7 +701,7 @@ async function runHorizonReviewSweep() {
     const ids = await listWorkspaceIds()
     let totalNotified = 0
     for (const ws of ids) {
-      const r = await sweepDueReviews(ws).catch(() => null)
+      const r = await sweepDueReviews(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (r) totalNotified += r.notified
     }
     if (totalNotified > 0) await emit('cron.horizon_reviews', { notified: totalNotified })
@@ -713,9 +713,9 @@ async function runDailyCompressionAndPatterns() {
     const ids = await listWorkspaceIds()
     let totalLessons = 0, totalPatterns = 0
     for (const ws of ids) {
-      const c = await runCompression(ws).catch(() => null)
+      const c = await runCompression(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (c) totalLessons += c.totalCreated
-      const p = await extractPatterns(ws).catch(() => null)
+      const p = await extractPatterns(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (p) totalPatterns += p.preventiveRecsCreated
     }
     if (totalLessons + totalPatterns > 0) {
@@ -733,16 +733,16 @@ async function runWeeklyExecutiveBriefings() {
       const day6 = Date.now() - 6 * 24 * 60 * 60_000
       const recent = await db.select({ id: events.id }).from(events)
         .where(and(eq(events.workspaceId, ws), eq(events.type, 'briefing.weekly_executive'), gte(events.createdAt, day6)))
-        .limit(1).then(r => r[0]).catch(() => null)
+        .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (recent) continue
-      const report = await weeklyOperationalReport(ws).catch(() => null)
+      const report = await weeklyOperationalReport(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (!report) continue
       await db.insert(events).values({
         id: uuidv7(), type: 'briefing.weekly_executive', workspaceId: ws,
         payload: report as unknown as Record<string, unknown>,
         traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
         source: 'learning-cron', version: 1, createdAt: Date.now(),
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       generated++
     }
     if (generated > 0) await emit('cron.weekly_briefings_generated', { count: generated })
@@ -753,7 +753,7 @@ async function runStabilityScan() {
   try {
     const ids = await listWorkspaceIds()
     for (const ws of ids) {
-      const snap = await stabilitySnapshot(ws).catch(() => null)
+      const snap = await stabilitySnapshot(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (!snap) continue
       const stableNow = snap.overall === 'stable' && !snap.recommendedThrottle
 
@@ -768,13 +768,13 @@ async function runStabilityScan() {
         // Enforce when severe — engage kill switches + pause unstable agents.
         if (snap.recommendedThrottle) {
           const reason = `auto-throttle: ${unstableIndicators.map(i => i.name).join(', ')}`
-          await autoEngageThrottle(ws, reason).catch(() => null)
+          await autoEngageThrottle(ws, reason).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
         }
-        await pauseUnstableAgents(ws).catch(() => null)
+        await pauseUnstableAgents(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       }
 
       // Auto-disengage: requires >=2 consecutive stable scans (≈10 min)
-      await autoDisengageThrottleIfStable(ws, stableNow).catch(() => null)
+      await autoDisengageThrottleIfStable(ws, stableNow).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
     }
   } catch (e) { await emit('cron.error', { task: 'stability_scan', error: (e as Error).message }) }
 }
@@ -796,7 +796,7 @@ async function runDailyReviews() {
     const ids = await listWorkspaceIds()
     let generated = 0
     for (const ws of ids) {
-      const r = await runDailyReview(ws).catch(() => null)
+      const r = await runDailyReview(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (r) generated++
     }
     if (generated > 0) await emit('cron.daily_reviews_generated', { count: generated })
@@ -809,7 +809,7 @@ async function runResearchScans() {
     let totalRuns = 0, totalFindings = 0
     for (const ws of ids) {
       // Seed research agents on first run (idempotent)
-      await seedResearchAgents(ws).catch(() => null)
+      await seedResearchAgents(ws).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       const r = await runDueTopics(ws).catch(() => ({ ran: 0, results: [] as Array<{ findingsAdded: number }> }))
       totalRuns += r.ran
       totalFindings += r.results.reduce((n, x) => n + (x.findingsAdded ?? 0), 0)
@@ -917,7 +917,7 @@ async function runMondayBriefing(workspaceIds: string[]): Promise<void> {
         role: 'assistant',
         content: body,
         createdAt: Date.now(),
-      } as never).catch(() => null)
+      } as never).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
 
       await _db.insert(_events).values({
         id: _uuidv7(),
@@ -926,11 +926,11 @@ async function runMondayBriefing(workspaceIds: string[]): Promise<void> {
         payload: { conversationId, messageId, businessCount: plan.reviewSummary.businessCount, gapUsd: plan.reviewSummary.gapUsd },
         traceId: _uuidv7(), correlationId: _uuidv7(), causationId: null,
         source: 'learning-cron', version: 1, createdAt: Date.now(),
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       } finally {
         // Always release the advisory lock — Postgres holds it for the
         // session lifetime otherwise, blocking the next Monday cycle.
-        await _db.execute(_sql`SELECT pg_advisory_unlock(hashtext(${lockKey}))`).catch(() => null)
+        await _db.execute(_sql`SELECT pg_advisory_unlock(hashtext(${lockKey}))`).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       }
     } catch (e) {
       await emit('cron.monday_briefing_workspace_failed', { workspaceId: ws, error: (e as Error).message })
@@ -1205,7 +1205,7 @@ async function runEvalDriftCheck(): Promise<void> {
     const rows = await _db.select({ id: workspaces.id }).from(workspaces).limit(50).catch(() => [])
     let drifted = 0
     for (const r of rows) {
-      const d = await detectDrift({ workspaceId: r.id }).catch(() => null)
+      const d = await detectDrift({ workspaceId: r.id }).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (d?.drifted) drifted++
     }
     await emit('cron.eval_drift', { workspacesScanned: rows.length, drifted })
@@ -1223,7 +1223,7 @@ async function runEvalProductionSample(): Promise<void> {
       const out = await sampleProductionTraffic({
         workspaceId: r.id,
         rubric:      { expectedBehavior: 'helpful, grounded in playbooks or operator data, citation when claiming facts, refusal when policy demands' },
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (out) totalConcerning += out.concerning.length
     }
     await emit('cron.eval_production_sample', { workspacesScanned: rows.length, totalConcerning })
@@ -1238,7 +1238,7 @@ async function runCuratorPeriodicReview(): Promise<void> {
     const rows = await _db.select({ id: workspaces.id }).from(workspaces).limit(50).catch(() => [])
     let totalProposals = 0, totalDeprecated = 0
     for (const r of rows) {
-      const out = await runPeriodicReview(r.id).catch(() => null)
+      const out = await runPeriodicReview(r.id).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (out) { totalProposals += out.newProposals; totalDeprecated += out.autoDeprecated }
     }
     await emit('cron.curator_periodic', { workspacesScanned: rows.length, totalProposals, totalDeprecated })
@@ -1257,7 +1257,7 @@ async function runSelfImprovementHealthCheck(): Promise<void> {
     const rows = await _db.select({ id: workspaces.id }).from(workspaces).limit(50).catch(() => [])
     let healthy = 0, investigating = 0, paused = 0
     for (const r of rows) {
-      const verdict = await runAllImprovementHealthChecks(r.id).catch(() => null)
+      const verdict = await runAllImprovementHealthChecks(r.id).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
       if (!verdict) continue
       if (verdict.overallVerdict === 'healthy')                 healthy++
       else if (verdict.overallVerdict === 'investigate')         investigating++
@@ -1367,7 +1367,7 @@ async function runCartographerSnapshot(): Promise<void> {
       fileCount:    snap.fileCount,
       snapshot:     snap as unknown as Record<string, unknown>,
       generatedAt:  snap.generatedAt,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
     await emit('cron.cartographer_snapshot', { fileCount: snap.fileCount })
   } catch (e) { await emit('cron.error', { task: 'cartographer_snapshot', error: (e as Error).message }) }
 }

@@ -215,7 +215,7 @@ export async function seedChatEvals(workspaceId: string): Promise<{
       archived:           false,
       createdAt:          now,
       updatedAt:          now,
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[eval-seed-chat]', e.message); return null })
     setsCreated++
 
     for (const c of set.cases) {
@@ -228,7 +228,7 @@ export async function seedChatEvals(workspaceId: string): Promise<{
         knownFailure:       c.knownFailure ?? false,
         notes:              c.notes ?? null,
         createdAt:          now,
-      } as never).catch(() => null)
+      } as never).catch((e: Error) => { console.error('[eval-seed-chat]', e.message); return null })
       casesCreated++
     }
   }

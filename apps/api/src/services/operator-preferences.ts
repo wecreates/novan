@@ -44,7 +44,7 @@ const DEFAULTS: Omit<OperatorPreferences, 'workspaceId' | 'createdAt' | 'updated
 export async function getPreferences(workspaceId: string): Promise<OperatorPreferences> {
   const row = await db.select().from(operatorPreferences)
     .where(eq(operatorPreferences.workspaceId, workspaceId)).limit(1)
-    .then(r => r[0]).catch(() => null)
+    .then(r => r[0]).catch((e: Error) => { console.error('[operator-preferences]', e.message); return null })
   if (!row) {
     const now = Date.now()
     return { workspaceId, ...DEFAULTS, createdAt: now, updatedAt: now }
@@ -72,7 +72,7 @@ export type Patch = Partial<Omit<OperatorPreferences, 'workspaceId' | 'createdAt
 export async function setPreferences(workspaceId: string, patch: Patch): Promise<OperatorPreferences> {
   const existing = await db.select().from(operatorPreferences)
     .where(eq(operatorPreferences.workspaceId, workspaceId)).limit(1)
-    .then(r => r[0]).catch(() => null)
+    .then(r => r[0]).catch((e: Error) => { console.error('[operator-preferences]', e.message); return null })
 
   const now = Date.now()
   if (!existing) {
@@ -90,7 +90,7 @@ export async function setPreferences(workspaceId: string, patch: Patch): Promise
       driftCorrectionPolicy:          patch.driftCorrectionPolicy      ?? DEFAULTS.driftCorrectionPolicy,
       metadata:                       patch.metadata                   ?? {},
       createdAt: now, updatedAt: now,
-    }).onConflictDoNothing().catch(() => null)
+    }).onConflictDoNothing().catch((e: Error) => { console.error('[operator-preferences]', e.message); return null })
   } else {
     const update: Record<string, unknown> = { updatedAt: now }
     if (patch.theme        !== undefined) update['theme']        = patch.theme
@@ -105,7 +105,7 @@ export async function setPreferences(workspaceId: string, patch: Patch): Promise
     if (patch.driftCorrectionPolicy !== undefined) update['driftCorrectionPolicy'] = patch.driftCorrectionPolicy
     if (patch.metadata      !== undefined) update['metadata']      = patch.metadata
     await db.update(operatorPreferences).set(update)
-      .where(eq(operatorPreferences.workspaceId, workspaceId)).catch(() => null)
+      .where(eq(operatorPreferences.workspaceId, workspaceId)).catch((e: Error) => { console.error('[operator-preferences]', e.message); return null })
   }
   return getPreferences(workspaceId)
 }

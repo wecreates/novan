@@ -50,7 +50,7 @@ export async function issueQuickLink(workspaceId: string, issuedBy: string): Pro
       payload: { token, expiresAt, issuedBy },
       traceId: uuidv7(), correlationId: token, causationId: null,
       source: 'quick-link-auth', version: 1, createdAt: Date.now(),
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[quick-link-auth]', e.message); return null })
   } catch { /* tolerated — token is still usable per-process */ }
   return { token, expiresAt }
 }
@@ -89,7 +89,7 @@ export async function redeemQuickLink(token: string): Promise<RedeemResult> {
       payload: { token, redeemedAt: Date.now() },
       traceId: uuidv7(), correlationId: token, causationId: null,
       source: 'quick-link-auth', version: 1, createdAt: Date.now(),
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[quick-link-auth]', e.message); return null })
     return { ok: true, workspaceId }
   } catch {
     return { ok: false, reason: 'error' }

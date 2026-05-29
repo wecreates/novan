@@ -77,7 +77,7 @@ async function emit(
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/eng-agents', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[agent-registry]', e.message); return null })
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ export function recordAgentFailure(workspaceId: string, type: AgentType): AgentR
   agent.updatedAt = Date.now()
   // Bridge: mirror the in-memory state to the agents table so it's
   // visible in the brain graph + activity dashboards.
-  void import('./agent-state-sync.js').then(m => m.recordAgentActivity(workspaceId, type, { status: 'error' })).catch(() => null)
+  void import('./agent-state-sync.js').then(m => m.recordAgentActivity(workspaceId, type, { status: 'error' })).catch((e: Error) => { console.error('[agent-registry]', e.message); return null })
   return agent
 }
 
@@ -158,6 +158,6 @@ export function recordAgentSuccess(
   if (patchApplied) agent.totalPatchesApplied++
   agent.updatedAt = Date.now()
   // Bridge to the agents table (same as failure path).
-  void import('./agent-state-sync.js').then(m => m.recordAgentActivity(workspaceId, type, { status: 'idle' })).catch(() => null)
+  void import('./agent-state-sync.js').then(m => m.recordAgentActivity(workspaceId, type, { status: 'idle' })).catch((e: Error) => { console.error('[agent-registry]', e.message); return null })
   return agent
 }

@@ -264,7 +264,7 @@ export async function tick(): Promise<TickResult> {
             },
             traceId: _uuidv7(), correlationId: _uuidv7(), causationId: null,
             source: 'scheduled-production', version: 1, createdAt: Date.now(),
-          }).catch(() => null)
+          }).catch((e: Error) => { console.error('[scheduled-production]', e.message); return null })
         }
       } catch { /* tolerated */ }
     }

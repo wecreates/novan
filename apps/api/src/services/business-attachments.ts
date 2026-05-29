@@ -164,7 +164,7 @@ export async function findOwningBusiness(workspaceId: string, source: Attachment
 export async function markSynced(attachmentId: string): Promise<void> {
   await db.update(businessAttachments).set({
     lastSyncedAt: Date.now(), updatedAt: Date.now(),
-  }).where(eq(businessAttachments.id, attachmentId)).catch(() => null)
+  }).where(eq(businessAttachments.id, attachmentId)).catch((e: Error) => { console.error('[business-attachments]', e.message); return null })
 }
 
 async function emit(workspaceId: string, type: string, payload: Record<string, unknown>): Promise<void> {
@@ -172,5 +172,5 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'business-attachments', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[business-attachments]', e.message); return null })
 }

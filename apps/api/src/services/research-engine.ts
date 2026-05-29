@@ -34,7 +34,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'research-engine', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[research-engine]', e.message); return null })
 }
 
 // ─── Topic CRUD ───────────────────────────────────────────────────────────────
@@ -147,7 +147,7 @@ Rules:
       const choices = body['choices'] as Array<{ message?: { content?: string } }> | undefined
       return { content: choices?.[0]?.message?.content ?? '' }
     },
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[research-engine]', e.message); return null })
 
   if (!result) return { summary: body.slice(0, 400), facts: [], confidence: 0.2 }
 
@@ -287,7 +287,7 @@ export async function runTopic(topicId: string, agentId?: string): Promise<RunRe
     const now = Date.now()
     // Compute embedding if a provider is configured — degrades gracefully to null
     const embedText = `${fetched.title ?? ''}\n${extracted.summary}`
-    const embedding = await embed(embedText).catch(() => null)
+    const embedding = await embed(embedText).catch((e: Error) => { console.error('[research-engine]', e.message); return null })
 
     await db.insert(researchFindings).values({
       id:           uuidv7(),
@@ -399,7 +399,7 @@ export async function seedResearchAgents(workspaceId: string): Promise<{ created
       capabilities: [...def.capabilities],
       config: {}, status: 'idle',
       createdAt: now, updatedAt: now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[research-engine]', e.message); return null })
     created++
   }
   if (created > 0) await emitLearningEvent(workspaceId, 'research.agents_seeded', { count: created })

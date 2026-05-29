@@ -27,7 +27,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'feed-ingester', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[feed-ingester]', e.message); return null })
 }
 
 // ─── Parsing ──────────────────────────────────────────────────────────────────
@@ -190,7 +190,7 @@ export async function pollFeed(feedId: string): Promise<PollResult> {
         // alongside under a distinct cache key (different tags). This
         // gives downstream readers a real-content view.
         if (looksLikeSpaShell(r.contentRedacted)) {
-          const js = await renderFetch(item.url).catch(() => null)
+          const js = await renderFetch(item.url).catch((e: Error) => { console.error('[feed-ingester]', e.message); return null })
           if (js && js.ok && js.text && js.text.length > r.contentRedacted.length) {
             await webFetch({
               workspaceId: feed.workspaceId,
@@ -203,7 +203,7 @@ export async function pollFeed(feedId: string): Promise<PollResult> {
               // recorded the JS-rendered version as a fact in the audit
               // log via the emit below. Future: extend web-fetch to
               // accept pre-fetched content directly.
-            }).catch(() => null)
+            }).catch((e: Error) => { console.error('[feed-ingester]', e.message); return null })
             await emit(feed.workspaceId, 'feed.js_rendered_fallback', {
               feedId, url: item.url, plainBytes: r.contentRedacted.length, jsBytes: js.text.length,
             })

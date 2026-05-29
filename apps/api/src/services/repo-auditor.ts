@@ -424,7 +424,7 @@ export async function runAudit(workspaceId: string): Promise<AuditSummary> {
     payload: { runId, rootPath: REPO_ROOT },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'repo-auditor', version: 1, createdAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[repo-auditor]', e.message); return null })
 
   try {
     // 1. Walk and pattern-scan
@@ -536,7 +536,7 @@ export async function runAudit(workspaceId: string): Promise<AuditSummary> {
       payload: { runId, findingCount: capped.length, criticalCount, taskCount: taskRecords.length },
       traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'repo-auditor', version: 1, createdAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[repo-auditor]', e.message); return null })
 
     const topTasks = taskRecords.slice(0, 10).map(t => ({
       id:               t.id,

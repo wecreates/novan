@@ -48,7 +48,7 @@ async function emitEvent(
     id: uuidv7(), type, workspaceId,
     payload, traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/runtime-mode', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[runtime-mode]', e.message); return null })
 }
 
 // ─── CRUD ─────────────────────────────────────────────────────────────────────

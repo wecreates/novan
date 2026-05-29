@@ -167,7 +167,7 @@ export const workflowRoutes: FastifyPluginAsync = async (app) => {
       ))
 
     // Remove from queue if still pending
-    await queues.workflow.remove(id).catch(() => null)
+    await queues.workflow.remove(id).catch((e: Error) => { console.error('[workflows]', e.message); return null })
 
     return reply.send({ success: true, data: { cancelled: true } })
   })

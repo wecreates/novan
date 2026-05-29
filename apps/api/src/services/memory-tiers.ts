@@ -94,10 +94,10 @@ export async function decaySweep(workspaceId: string, cfg: DecayConfig = DEFAULT
     const baseConf = Number(r.confidence ?? 1.0)
     const newConf = decayedConfidence(baseConf, ageDays, cfg)
     if (newConf < cfg.pruneThreshold) {
-      await db.delete(memories).where(eq(memories.id, r.id)).catch(() => null)
+      await db.delete(memories).where(eq(memories.id, r.id)).catch((e: Error) => { console.error('[memory-tiers]', e.message); return null })
       pruned++
     } else if (Math.abs(newConf - baseConf) > 0.01) {
-      await db.update(memories).set({ confidence: newConf }).where(eq(memories.id, r.id)).catch(() => null)
+      await db.update(memories).set({ confidence: newConf }).where(eq(memories.id, r.id)).catch((e: Error) => { console.error('[memory-tiers]', e.message); return null })
       decayed++
     } else {
       kept++
@@ -119,7 +119,7 @@ export async function decaySweep(workspaceId: string, cfg: DecayConfig = DEFAULT
     for (const r of toPrune) {
       const tags = (r.tags as string[] | null) ?? []
       if (tags.includes('pinned')) continue
-      await db.delete(memories).where(eq(memories.id, r.id)).catch(() => null)
+      await db.delete(memories).where(eq(memories.id, r.id)).catch((e: Error) => { console.error('[memory-tiers]', e.message); return null })
       pruned++
       pruneCount++
       if (pruneCount >= excess) break
@@ -138,7 +138,7 @@ export async function promote(memoryId: string): Promise<boolean> {
   if (row.length === 0) return false
   const tags = ((row[0]?.tags as string[] | null) ?? []).filter(t => t !== 'pinned')
   tags.push('pinned')
-  await db.update(memories).set({ tags, confidence: 1.0 }).where(eq(memories.id, memoryId)).catch(() => null)
+  await db.update(memories).set({ tags, confidence: 1.0 }).where(eq(memories.id, memoryId)).catch((e: Error) => { console.error('[memory-tiers]', e.message); return null })
   return true
 }
 
@@ -147,7 +147,7 @@ export async function promote(memoryId: string): Promise<boolean> {
  *  memory in a successful response. */
 export async function touch(memoryId: string): Promise<void> {
   await db.update(memories).set({ updatedAt: Date.now() })
-    .where(eq(memories.id, memoryId)).catch(() => null)
+    .where(eq(memories.id, memoryId)).catch((e: Error) => { console.error('[memory-tiers]', e.message); return null })
 }
 
 /** Run decay across every workspace. Called from learning-cron. Bounded

@@ -107,7 +107,7 @@ export async function recordCalibrationFindings(workspaceId: string): Promise<{ 
       ],
       confidence: c.total >= 30 ? 0.75 : 0.55,
       source: 'meta-learning',
-    }).then(() => recorded++).catch(() => null)
+    }).then(() => recorded++).catch((e: Error) => { console.error('[meta-learning]', e.message); return null })
   }
   return { recorded, calibrations: cals }
 }

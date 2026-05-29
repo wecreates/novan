@@ -47,7 +47,7 @@ export async function saveView(input: {
     cameraPosition: input.cameraPosition ?? null,
     lod: input.lod ?? 'systems',
     createdAt: now, updatedAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[brain-persistence]', e.message); return null })
   return id
 }
 
@@ -61,7 +61,7 @@ export async function listSavedViews(workspaceId: string, limit = 20) {
 export async function deleteSavedView(workspaceId: string, id: string): Promise<void> {
   await db.delete(savedViews)
     .where(and(eq(savedViews.workspaceId, workspaceId), eq(savedViews.id, id)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[brain-persistence]', e.message); return null })
 }
 
 // ─── Status history ─────────────────────────────────────────────────────
@@ -85,7 +85,7 @@ export async function recordStatusChange(input: {
     source: input.source,
     changedAt: Date.now(),
     metadata: input.metadata ?? {},
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[brain-persistence]', e.message); return null })
 }
 
 /**
@@ -101,7 +101,7 @@ export async function statusAt(workspaceId: string, entityType: StatusEntityType
       lte(statusChanges.changedAt, at),
     ))
     .orderBy(desc(statusChanges.changedAt))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[brain-persistence]', e.message); return null })
   return row?.status ?? null
 }
 

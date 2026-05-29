@@ -216,16 +216,16 @@ const voiceRoutes: FastifyPluginAsync = async (fastify) => {
     if (b.kind === 'failover') {
       await db.update(voiceSessions)
         .set({ failoverCount: (await db.select().from(voiceSessions).where(eq(voiceSessions.id, req.params.id)).limit(1).then(r => r[0]?.failoverCount ?? 0) ?? 0) + 1 })
-        .where(eq(voiceSessions.id, req.params.id)).catch(() => null)
-      if (b.provider) await recordProviderHealth(b.workspace_id, b.provider, false, b.latency_ms ?? 0, 'failover').catch(() => null)
+        .where(eq(voiceSessions.id, req.params.id)).catch((e: Error) => { console.error('[voice]', e.message); return null })
+      if (b.provider) await recordProviderHealth(b.workspace_id, b.provider, false, b.latency_ms ?? 0, 'failover').catch((e: Error) => { console.error('[voice]', e.message); return null })
     }
     if (b.kind === 'block') {
       const cur = await db.select().from(voiceSessions).where(eq(voiceSessions.id, req.params.id)).limit(1).then(r => r[0]?.blockedCommands ?? 0) ?? 0
       await db.update(voiceSessions).set({ blockedCommands: cur + 1 })
-        .where(eq(voiceSessions.id, req.params.id)).catch(() => null)
+        .where(eq(voiceSessions.id, req.params.id)).catch((e: Error) => { console.error('[voice]', e.message); return null })
     }
     if (b.kind === 'tts' && b.provider && typeof b.latency_ms === 'number') {
-      await recordProviderHealth(b.workspace_id, b.provider, true, b.latency_ms).catch(() => null)
+      await recordProviderHealth(b.workspace_id, b.provider, true, b.latency_ms).catch((e: Error) => { console.error('[voice]', e.message); return null })
     }
     return reply.code(201).send({ success: true })
   })
@@ -322,9 +322,9 @@ const voiceRoutes: FastifyPluginAsync = async (fastify) => {
     // Wake-phrase gating (applied to the raw transcript before any other
     // processing). When the workspace requires wake AND the request says
     // `apply_wake: true`, drop transcripts that do not contain a phrase.
-    const prefs = await getVoicePrefs(ws).catch(() => null)
+    const prefs = await getVoicePrefs(ws).catch((e: Error) => { console.error('[voice]', e.message); return null })
     const userId = (req.body as { user_id?: string }).user_id ?? null
-    const operatorPrefs = userId ? await getOperatorPrefs(ws, userId).catch(() => null) : null
+    const operatorPrefs = userId ? await getOperatorPrefs(ws, userId).catch((e: Error) => { console.error('[voice]', e.message); return null }) : null
     const applyWake = (req.body as { apply_wake?: boolean }).apply_wake === true
     let effectiveText = text
 
@@ -337,7 +337,7 @@ const voiceRoutes: FastifyPluginAsync = async (fastify) => {
     if (expanded) {
       effectiveText  = expanded.expansion
       appliedShortcut = { id: expanded.id, phrase: expanded.phrase }
-      await recordShortcutUse(expanded.id).catch(() => null)
+      await recordShortcutUse(expanded.id).catch((e: Error) => { console.error('[voice]', e.message); return null })
     }
     let wakeMatched: { matched: boolean; phrase: string | null } | null = null
     if (applyWake && prefs?.wakeEnabled) {
@@ -357,7 +357,7 @@ const voiceRoutes: FastifyPluginAsync = async (fastify) => {
           payload: { phrase: wakeMatched.phrase, remainder: effectiveText },
           traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
           source: 'api/voice-command', version: 1, createdAt: Date.now(),
-        }).catch(() => null)
+        }).catch((e: Error) => { console.error('[voice]', e.message); return null })
       }
     }
 
@@ -376,7 +376,7 @@ const voiceRoutes: FastifyPluginAsync = async (fastify) => {
       clarification = turn.clarification
       carryover = turn.carryover ?? null
       // Persist context patch (best-effort)
-      await patchContext(req.body.session_id, ws, deriveContextPatch(turn, ctx)).catch(() => null)
+      await patchContext(req.body.session_id, ws, deriveContextPatch(turn, ctx)).catch((e: Error) => { console.error('[voice]', e.message); return null })
       // Append voice_events row
       await db.insert(voiceEvents).values({
         id: uuidv7(),
@@ -387,7 +387,7 @@ const voiceRoutes: FastifyPluginAsync = async (fastify) => {
         text,
         meta:        { intent: intent.kind, target: intent.target ?? null, confidence: intent.confidence, verdict: plan.verdict, risk: plan.risk, matched: intent.matched ?? null, conversationMeta: meta, carryover },
         createdAt:   Date.now(),
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[voice]', e.message); return null })
     } else {
       intent = parseIntent(effectiveText)
       plan   = routeIntent(intent, effectiveText)
@@ -417,24 +417,24 @@ const voiceRoutes: FastifyPluginAsync = async (fastify) => {
           workspaceId: ws, userId, sessionId: req.body.session_id ?? null,
           kind: 'brain_node', phrase: effectiveText, intentKind: intent.kind, nodeId: String(intent.target),
           confidence: intent.confidence,
-        }).catch(() => null)
+        }).catch((e: Error) => { console.error('[voice]', e.message); return null })
       }
       if (plan.verdict !== 'reject') {
         await recordObservation({
           workspaceId: ws, userId, sessionId: req.body.session_id ?? null,
           kind: 'preferred_action', phrase: effectiveText, intentKind: intent.kind, confidence: intent.confidence,
-        }).catch(() => null)
+        }).catch((e: Error) => { console.error('[voice]', e.message); return null })
       }
     }
     if (meta === 'correction') {
       // The previous turn's lastPlan tells us what we initially routed
-      const fromIntent = (await (req.body.session_id ? getContext(req.body.session_id, ws) : Promise.resolve(null)).catch(() => null))?.lastPlan?.intent.kind ?? null
+      const fromIntent = (await (req.body.session_id ? getContext(req.body.session_id, ws) : Promise.resolve(null)).catch((e: Error) => { console.error('[voice]', e.message); return null }))?.lastPlan?.intent.kind ?? null
       await recordObservation({
         workspaceId: ws, userId, sessionId: req.body.session_id ?? null,
         kind: 'corrected', phrase: effectiveText,
         ...(fromIntent ? { fromIntent } : {}),
         toIntent: intent.kind, confidence: intent.confidence,
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[voice]', e.message); return null })
     }
     if (meta === 'clarify' || (intent.kind === 'unknown' && effectiveText.length > 2)) {
       await recordObservation({
@@ -442,7 +442,7 @@ const voiceRoutes: FastifyPluginAsync = async (fastify) => {
         kind: 'misunderstood', phrase: effectiveText,
         ...(intent.kind === 'unknown' ? {} : { intentKind: intent.kind }),
         confidence: intent.confidence,
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[voice]', e.message); return null })
     }
 
     // Hands-free policy: when the operator enabled hands-free, downgrade
@@ -480,7 +480,7 @@ const voiceRoutes: FastifyPluginAsync = async (fastify) => {
       // Stash the dry-run id in conversation context so spoken approval
       // ("approve dry run") on a later turn can find it.
       if (req.body.session_id) {
-        await patchContext(req.body.session_id, ws, { pendingDryRunId: dryRun.id }).catch(() => null)
+        await patchContext(req.body.session_id, ws, { pendingDryRunId: dryRun.id }).catch((e: Error) => { console.error('[voice]', e.message); return null })
       }
     }
 
@@ -517,7 +517,7 @@ const voiceRoutes: FastifyPluginAsync = async (fastify) => {
         await db.update(voiceDryRuns)
           .set({ status: 'rejected', rejectedReason: 'spoken_reject' })
           .where(and(eq(voiceDryRuns.id, targetId), eq(voiceDryRuns.workspaceId, ws)))
-          .catch(() => null)
+          .catch((e: Error) => { console.error('[voice]', e.message); return null })
         spokenExec = { ok: true, dryRunId: targetId, reason: 'rejected' }
       }
     }
@@ -536,7 +536,7 @@ const voiceRoutes: FastifyPluginAsync = async (fastify) => {
       },
       traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'api/voice-command', version: 1, createdAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[voice]', e.message); return null })
 
     return { success: true, data: { ...plan, meta, naturalSpeak, clarification, carryover, wake: wakeMatched, handsFree, shortcut: appliedShortcut, dryRun, spokenExec } }
   })
@@ -662,13 +662,13 @@ const voiceRoutes: FastifyPluginAsync = async (fastify) => {
       },
       traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'api/voice-realtime', version: 1, createdAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[voice]', e.message); return null })
 
     // Health rollup: a mint failure decays provider health so the router
     // will route around it on the next /route call.
     if (!result.ok) {
       const { recordProviderHealth } = await import('../services/speech-providers.js')
-      await recordProviderHealth(b.workspace_id, b.provider_id, false, 0, result.reason).catch(() => null)
+      await recordProviderHealth(b.workspace_id, b.provider_id, false, 0, result.reason).catch((e: Error) => { console.error('[voice]', e.message); return null })
       return reply.code(502).send({ success: false, error: result.reason })
     }
     return reply.code(201).send({ success: true, data: result.session })
@@ -699,7 +699,7 @@ const voiceRoutes: FastifyPluginAsync = async (fastify) => {
         provider:    req.params.provider_id,
         meta:        { ok: r.ok, reason: r.reason ?? null, provider_session_id: req.body.provider_session_id ?? null },
         createdAt:   Date.now(),
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[voice]', e.message); return null })
     }
     await db.insert(events).values({
       id: uuidv7(),
@@ -708,7 +708,7 @@ const voiceRoutes: FastifyPluginAsync = async (fastify) => {
       payload: { provider: req.params.provider_id, ...r },
       traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'api/voice-realtime', version: 1, createdAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[voice]', e.message); return null })
     return { success: true, data: r }
   })
 
@@ -720,7 +720,7 @@ const voiceRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{ Body: { workspace_id?: string; window_ms?: number; floor?: 'normal' | 'high' | 'critical' } }>('/ambient/refresh', async (req, reply) => {
     const ws = req.body.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
-    const prefs = await getVoicePrefs(ws).catch(() => null)
+    const prefs = await getVoicePrefs(ws).catch((e: Error) => { console.error('[voice]', e.message); return null })
     if (prefs && !prefs.ambientAlertsEnabled) return reply.code(200).send({ success: true, data: { skipped: true, reason: 'ambient_alerts_enabled is off' } })
     const floor = req.body.floor ?? prefs?.ambientSeverityFloor ?? 'critical'
     const r = await refreshAmbientBriefings(ws, { floor, windowMs: req.body.window_ms ?? 30 * 60_000 })

@@ -30,7 +30,7 @@ interface BudgetConfig {
 async function ensureRow(cronName: string, cfg: BudgetConfig) {
   const now = Date.now()
   const existing = await db.select().from(cronBudgets)
-    .where(eq(cronBudgets.cronName, cronName)).limit(1).then(r => r[0]).catch(() => null)
+    .where(eq(cronBudgets.cronName, cronName)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[cron-budget]', e.message); return null })
   if (existing) return existing
   await db.insert(cronBudgets).values({
     id: uuidv7(), cronName,
@@ -41,7 +41,7 @@ async function ensureRow(cronName: string, cfg: BudgetConfig) {
     maxCostUsd:  cfg.maxCostUsd  ?? 5.0,
     windowMs:    cfg.windowMs    ?? 3_600_000,
     blocked:     false, updatedAt: now,
-  }).onConflictDoNothing().catch(() => null)
+  }).onConflictDoNothing().catch((e: Error) => { console.error('[cron-budget]', e.message); return null })
   return db.select().from(cronBudgets).where(eq(cronBudgets.cronName, cronName)).limit(1).then(r => r[0])
 }
 
@@ -57,7 +57,7 @@ export async function checkBudget(cronName: string, cfg: BudgetConfig = {}): Pro
       windowStart: now,
       callsUsed: 0, tokensUsed: 0, costUsdUsed: 0,
       blocked: false, updatedAt: now,
-    }).where(eq(cronBudgets.id, row.id)).catch(() => null)
+    }).where(eq(cronBudgets.id, row.id)).catch((e: Error) => { console.error('[cron-budget]', e.message); return null })
     return {
       ok: true, blocked: false,
       remaining: { calls: row.maxCalls, tokens: row.maxTokens, costUsd: row.maxCostUsd },
@@ -71,7 +71,7 @@ export async function checkBudget(cronName: string, cfg: BudgetConfig = {}): Pro
   if (overCalls || overTokens || overCost) {
     if (!row.blocked) {
       await db.update(cronBudgets).set({ blocked: true, lastBlockedAt: now, updatedAt: now })
-        .where(eq(cronBudgets.id, row.id)).catch(() => null)
+        .where(eq(cronBudgets.id, row.id)).catch((e: Error) => { console.error('[cron-budget]', e.message); return null })
     }
     return {
       ok: false, blocked: true,
@@ -83,7 +83,7 @@ export async function checkBudget(cronName: string, cfg: BudgetConfig = {}): Pro
   // If we were previously blocked but no longer over, clear the flag
   if (row.blocked) {
     await db.update(cronBudgets).set({ blocked: false, updatedAt: now })
-      .where(eq(cronBudgets.id, row.id)).catch(() => null)
+      .where(eq(cronBudgets.id, row.id)).catch((e: Error) => { console.error('[cron-budget]', e.message); return null })
   }
 
   return {
@@ -109,7 +109,7 @@ export async function consume(cronName: string, used: { calls?: number; tokens?:
     tokensUsed:  sql`${cronBudgets.tokensUsed}  + ${dTokens}`,
     costUsdUsed: sql`ROUND((${cronBudgets.costUsdUsed} + ${dCost})::numeric, 4)`,
     updatedAt:   Date.now(),
-  }).where(eq(cronBudgets.cronName, cronName)).catch(() => null)
+  }).where(eq(cronBudgets.cronName, cronName)).catch((e: Error) => { console.error('[cron-budget]', e.message); return null })
 }
 
 export async function listBudgets() {

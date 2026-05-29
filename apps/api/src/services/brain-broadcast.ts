@@ -52,7 +52,7 @@ async function ensureBroadcastConversation(workspaceId: string): Promise<string>
     totalCostUsd: 0,
     createdAt: now,
     updatedAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[brain-broadcast]', e.message); return null })
   return id
 }
 
@@ -187,9 +187,9 @@ export async function runBroadcastCycle(workspaceId: string): Promise<BroadcastR
     role: 'assistant', content,
     citations: [], streamComplete: true, createdAt: now,
     provider: 'brain-broadcast', model: 'cron',
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[brain-broadcast]', e.message); return null })
   await db.update(conversations).set({
     messageCount: 1, updatedAt: now,
-  }).where(eq(conversations.id, convoId)).catch(() => null)
+  }).where(eq(conversations.id, convoId)).catch((e: Error) => { console.error('[brain-broadcast]', e.message); return null })
   return { workspaceId, broadcasted: true, reason: `${sections.length} section(s)`, messageId: msgId, conversationId: convoId }
 }

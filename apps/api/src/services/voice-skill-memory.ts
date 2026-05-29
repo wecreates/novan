@@ -49,7 +49,7 @@ export async function recordObservation(input: SkillObservationInput): Promise<{
     nodeId:      input.nodeId ?? null,
     meta:        input.meta ?? null,
     createdAt:   Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[voice-skill-memory]', e.message); return null })
   return { id }
 }
 
@@ -146,10 +146,10 @@ export async function rollupSkillMemory(workspaceId: string, opts: { userId?: st
 export async function eraseSkillMemory(workspaceId: string, userId?: string): Promise<void> {
   if (userId) {
     await db.delete(voiceSkillObservations)
-      .where(and(eq(voiceSkillObservations.workspaceId, workspaceId), eq(voiceSkillObservations.userId, userId))).catch(() => null)
+      .where(and(eq(voiceSkillObservations.workspaceId, workspaceId), eq(voiceSkillObservations.userId, userId))).catch((e: Error) => { console.error('[voice-skill-memory]', e.message); return null })
   } else {
     await db.delete(voiceSkillObservations)
-      .where(eq(voiceSkillObservations.workspaceId, workspaceId)).catch(() => null)
+      .where(eq(voiceSkillObservations.workspaceId, workspaceId)).catch((e: Error) => { console.error('[voice-skill-memory]', e.message); return null })
   }
 }
 

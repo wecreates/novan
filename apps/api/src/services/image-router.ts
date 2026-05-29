@@ -95,7 +95,7 @@ export async function selectProvider(req: RouteRequest): Promise<RouteResult> {
   // Budget check (cap at 50% of remaining daily budget per single image)
   const budget = await db.select().from(providerBudgets)
     .where(eq(providerBudgets.workspaceId, req.workspaceId)).limit(1)
-    .then(r => r[0]).catch(() => null)
+    .then(r => r[0]).catch((e: Error) => { console.error('[image-router]', e.message); return null })
   const dailyRemaining = budget ? Math.max(0, budget.dailyLimitUsd - budget.dailySpendUsd) : Infinity
   const maxPerImageUsd = budget?.maxPerJobUsd && budget.maxPerJobUsd > 0
     ? Math.min(budget.maxPerJobUsd, dailyRemaining / 2)
@@ -117,7 +117,7 @@ export async function selectProvider(req: RouteRequest): Promise<RouteResult> {
         eq(imageGenerations.provider, p),
         gte(imageGenerations.createdAt, since),
       ))
-      .then(r => r[0]).catch(() => null)
+      .then(r => r[0]).catch((e: Error) => { console.error('[image-router]', e.message); return null })
     const total = Number(perf?.total ?? 0)
     const successRate = total >= 3 ? Number(perf?.succeeded ?? 0) / total : -1  // -1 = insufficient data
     const avgLatency  = Number(perf?.avgLatency ?? 0)
@@ -189,7 +189,7 @@ export async function providerScores(workspaceId: string): Promise<ProviderScore
       avgRating:   sql<number>`coalesce(avg(${imageGenerations.userRating}), 0)::float`,
     }).from(imageGenerations)
       .where(and(eq(imageGenerations.workspaceId, workspaceId), eq(imageGenerations.provider, p), gte(imageGenerations.createdAt, since)))
-      .then(r => r[0]).catch(() => null)
+      .then(r => r[0]).catch((e: Error) => { console.error('[image-router]', e.message); return null })
     const total = Number(perf?.total ?? 0)
     const successRate = total >= 3 ? Number(perf?.succeeded ?? 0) / total : -1
     scores.push({

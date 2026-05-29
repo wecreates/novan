@@ -30,7 +30,7 @@ async function emitCancelEvent(
     id: uuidv7(), type, workspaceId,
     payload, traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/cancellation', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[cancellation]', e.message); return null })
 }
 
 // ─── Workflow run cancellation ────────────────────────────────────────────────
@@ -75,7 +75,7 @@ export async function cancelWorkflowRun(
       eq(executionLeases.workspaceId, workspaceId),
       eq(executionLeases.status, 'active'),
     ))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[cancellation]', e.message); return null })
 
   await emitCancelEvent(workspaceId, 'run.cancelled', {
     runId, reason, cancelledBy, cancelledAt: now,

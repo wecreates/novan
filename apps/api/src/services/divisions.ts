@@ -336,7 +336,7 @@ export async function crossDivisionBlockers(workspaceId: string): Promise<CrossD
 
   // Budget cap > 90% → blocks all autonomous divisions
   const { providerBudgets: pb } = await import('../db/schema.js')
-  const budgetRow = await db.select().from(pb).where(eq(pb.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch(() => null)
+  const budgetRow = await db.select().from(pb).where(eq(pb.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[divisions]', e.message); return null })
   if (budgetRow) {
     const dailyPct = budgetRow.dailyLimitUsd > 0 ? budgetRow.dailySpendUsd / budgetRow.dailyLimitUsd : 0
     if (dailyPct > 0.9) {
@@ -487,7 +487,7 @@ export async function seedOrganizationalAgents(workspaceId: string): Promise<{ c
   for (const def of ORG_AGENT_DEFS) {
     const existing = await db.select({ id: agents.id }).from(agents)
       .where(and(eq(agents.workspaceId, workspaceId), eq(agents.type, def.type)))
-      .limit(1).then(r => r[0]).catch(() => null)
+      .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[divisions]', e.message); return null })
     if (existing) { skipped++; continue }
     const { v7: uuidv7 } = await import('uuid')
     await db.insert(agents).values({
@@ -496,7 +496,7 @@ export async function seedOrganizationalAgents(workspaceId: string): Promise<{ c
       capabilities: [...def.capabilities],
       config: {}, status: 'idle',
       createdAt: now, updatedAt: now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[divisions]', e.message); return null })
     created++
   }
   return { created, skipped }
@@ -548,7 +548,7 @@ export async function autoTagMissions(workspaceId: string): Promise<AutoTagResul
     if (added.length === 0) continue
     await db.update(strategicGoals).set({
       tags: [...existing, ...added], updatedAt: Date.now(),
-    }).where(eq(strategicGoals.id, r.id)).catch(() => null)
+    }).where(eq(strategicGoals.id, r.id)).catch((e: Error) => { console.error('[divisions]', e.message); return null })
     result.updated++
     result.bindings.push({ missionId: r.id, title: String(r.title ?? '').slice(0, 80), added })
   }

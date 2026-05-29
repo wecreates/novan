@@ -189,7 +189,7 @@ async function* streamOpenAI(p: ProviderDef, msgs: ChatMsg[], abort?: AbortSigna
   let promptTok = 0, completionTok = 0, cachedTok = 0
   try {
     while (true) {
-      if (abort?.aborted) { await reader.cancel().catch(() => null); break }
+      if (abort?.aborted) { await reader.cancel().catch((e: Error) => { console.error('[chat-providers]', e.message); return null }); break }
       const { done, value } = await reader.read()
       if (done) break
       buf += decoder.decode(value, { stream: true })
@@ -323,7 +323,7 @@ async function* streamAnthropic(p: ProviderDef, msgs: ChatMsg[], abort?: AbortSi
   let cacheRead = 0, cacheCreate = 0
   try {
     while (true) {
-      if (abort?.aborted) { await reader.cancel().catch(() => null); break }
+      if (abort?.aborted) { await reader.cancel().catch((e: Error) => { console.error('[chat-providers]', e.message); return null }); break }
       const { done, value } = await reader.read()
       if (done) break
       buf += decoder.decode(value, { stream: true })
@@ -431,7 +431,7 @@ async function* streamGemini(p: ProviderDef, msgs: ChatMsg[], abort?: AbortSigna
   let promptTok = 0, outTok = 0
   try {
     while (true) {
-      if (abort?.aborted) { await reader.cancel().catch(() => null); break }
+      if (abort?.aborted) { await reader.cancel().catch((e: Error) => { console.error('[chat-providers]', e.message); return null }); break }
       const { done, value } = await reader.read()
       if (done) break
       buf += decoder.decode(value, { stream: true })
@@ -514,7 +514,7 @@ export interface StreamOpts {
 /** Stream with automatic fallback across configured providers. */
 export async function* streamChat(workspaceId: string, msgs: ChatMsg[], opts?: StreamOpts): AsyncGenerator<StreamChunk, StreamResult> {
   // Heartbeat the llm agent — every chat call is real AI activity.
-  void import('./agent-state-sync.js').then(m => m.recordAgentActivity(workspaceId, 'llm', { status: 'running' })).catch(() => null)
+  void import('./agent-state-sync.js').then(m => m.recordAgentActivity(workspaceId, 'llm', { status: 'running' })).catch((e: Error) => { console.error('[chat-providers]', e.message); return null })
   const streamStartedAt = Date.now()      // R146.10 — for ai_usage.latencyMs
   const tried: string[] = []
   // R146 — accumulate every provider's error-marker delta across the
@@ -594,7 +594,7 @@ export async function* streamChat(workspaceId: string, msgs: ChatMsg[], opts?: S
           taskType:     opts?.taskType ?? 'chat',
           ...(opts?.traceId      ? { traceId:       opts.traceId } : {}),
           ...(opts?.workflowRunId ? { workflowRunId: opts.workflowRunId } : {}),
-        })).catch(() => null)
+        })).catch((e: Error) => { console.error('[chat-providers]', e.message); return null })
       }
       return result
     }
@@ -650,7 +650,7 @@ export async function configureProvider(workspaceId: string, providerId: string,
   // because no matching constraint existed).
   const existing = await db.select().from(providerConfigs)
     .where(and(eq(providerConfigs.workspaceId, workspaceId), eq(providerConfigs.providerId, providerId)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[chat-providers]', e.message); return null })
 
   const enabled  = opts.enabled  ?? existing?.enabled  ?? true
   const priority = opts.priority ?? existing?.priority ?? 50

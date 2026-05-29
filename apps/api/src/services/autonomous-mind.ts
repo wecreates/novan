@@ -109,9 +109,9 @@ async function runMindCycleInner(workspaceId: string): Promise<MindCycleResult> 
   let plansCreated = 0
   let proposalsCreated = 0
   for (const g of buildable.slice(0, 5)) {   // cap per-cycle so we don't flood
-    const plan = await planBuild(workspaceId, g.id).catch(() => null)
+    const plan = await planBuild(workspaceId, g.id).catch((e: Error) => { console.error('[autonomous-mind]', e.message); return null })
     if (!plan) continue
-    const r = await persistPlan(workspaceId, plan).catch(() => null)
+    const r = await persistPlan(workspaceId, plan).catch((e: Error) => { console.error('[autonomous-mind]', e.message); return null })
     if (r && r.created > 0) {
       plansCreated += r.created
       await recordChain({
@@ -122,7 +122,7 @@ async function runMindCycleInner(workspaceId: string): Promise<MindCycleResult> 
         evidence: [{ type: 'capability_gap', id: g.id, extract: `${g.dimension} · ${g.maturity}` }],
         confidence: 0.6,
         source: 'autonomous-mind',
-      }).then(() => result.chainsRecorded++).catch(() => null)
+      }).then(() => result.chainsRecorded++).catch((e: Error) => { console.error('[autonomous-mind]', e.message); return null })
 
       // Generate a code proposal so the autonomy loop has an actionable artifact
       try {
@@ -164,7 +164,7 @@ async function runMindCycleInner(workspaceId: string): Promise<MindCycleResult> 
       evidence: [{ type: 'recommendation_feedback', id: 'aggregate', extract: `${recentRejections} rejections in window` }],
       confidence: 0.7,
       source: 'autonomous-mind',
-    }).then(() => result.chainsRecorded++).catch(() => null)
+    }).then(() => result.chainsRecorded++).catch((e: Error) => { console.error('[autonomous-mind]', e.message); return null })
   }
 
   result.notes = [

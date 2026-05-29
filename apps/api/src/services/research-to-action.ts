@@ -60,7 +60,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'research-to-action', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[research-to-action]', e.message); return null })
 }
 
 export async function convertFindings(workspaceId: string, opts?: { sinceMs?: number; maxFindings?: number }): Promise<ConversionResult> {
@@ -119,7 +119,7 @@ export async function convertFindings(workspaceId: string, opts?: { sinceMs?: nu
       status:          'pending',
       createdAt:       now,
       updatedAt:       now,
-    }).onConflictDoNothing().catch(() => null)
+    }).onConflictDoNothing().catch((e: Error) => { console.error('[research-to-action]', e.message); return null })
     created++
   }
 

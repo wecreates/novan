@@ -37,7 +37,7 @@ if (endpoint) {
     })
 
     sdk.start()
-    process.on('SIGTERM', () => sdk.shutdown().catch(() => null))
+    process.on('SIGTERM', () => sdk.shutdown().catch((e: Error) => { console.error('[telemetry]', e.message); return null }))
     // eslint-disable-next-line no-console
     console.log(`[telemetry] OpenTelemetry started → ${endpoint}`)
   } catch (err) {

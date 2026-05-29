@@ -33,7 +33,7 @@ export async function track(i: TrackInput): Promise<void> {
     durationMs:  i.durationMs  ?? null,
     attributes:  i.attributes  ?? {},
     createdAt:   Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[telemetry]', e.message); return null })
 }
 
 // ─── Aggregations ────────────────────────────────────────────────────────────

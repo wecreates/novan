@@ -169,7 +169,7 @@ export const webhooksRoutes: FastifyPluginAsync = async (app) => {
         id: uuidv7(), type: eventType, workspaceId: wh.workspaceId, payload,
         traceId: uuidv7(), correlationId: deliveryId, causationId: null,
         source: `webhook:${id}`, version: 1, createdAt: now,
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[webhooks]', e.message); return null })
       await db.update(webhookDeliveries).set({ status: 'processed' }).where(eq(webhookDeliveries.id, deliveryId))
     }
 

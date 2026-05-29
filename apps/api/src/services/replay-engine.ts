@@ -39,7 +39,7 @@ async function emitEvent(
     id: uuidv7(), type, workspaceId,
     payload, traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/replay-engine', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[replay-engine]', e.message); return null })
 }
 
 // ─── Replay operations ────────────────────────────────────────────────────────
@@ -132,7 +132,7 @@ export async function startReplay(input: StartReplayInput): Promise<ReplayResult
           actualState:    actualState,
           divergenceType: 'state_mismatch',
           createdAt:      now,
-        }).catch(() => null)
+        }).catch((e: Error) => { console.error('[replay-engine]', e.message); return null })
 
         divergenceCount++
         if (!divergedAtEventId) {
@@ -155,7 +155,7 @@ export async function startReplay(input: StartReplayInput): Promise<ReplayResult
         actualState:    { error: 'unexpected_error' },
         divergenceType: 'unexpected_error',
         createdAt:      now,
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[replay-engine]', e.message); return null })
 
       divergenceCount++
       break

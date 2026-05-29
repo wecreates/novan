@@ -254,7 +254,7 @@ export async function persistSandboxEvent(
     eventType,
     payload,
     createdAt:   Date.now(),
-  }).catch(() => null)  // best-effort — never block execution
+  }).catch((e: Error) => { console.error('[worker-lease]', e.message); return null })  // best-effort — never block execution
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────

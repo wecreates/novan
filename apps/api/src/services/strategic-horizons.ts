@@ -53,14 +53,14 @@ export async function createHorizon(i: CreateHorizonInput): Promise<string> {
     reviewAt: i.reviewAt ?? (now + Math.min(7 * 24 * 60 * 60_000, HORIZON_MS[i.horizon] / 12)),
     status: 'active',
     createdAt: now, updatedAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[strategic-horizons]', e.message); return null })
   return id
 }
 
 export async function updateObjective(workspaceId: string, horizonId: string, objective: Objective): Promise<void> {
   const row = await db.select().from(strategicHorizons)
     .where(and(eq(strategicHorizons.workspaceId, workspaceId), eq(strategicHorizons.id, horizonId)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[strategic-horizons]', e.message); return null })
   if (!row) return
   const objs = (row.objectives as unknown as Objective[]) ?? []
   const idx  = objs.findIndex(o => o.id === objective.id)
@@ -68,7 +68,7 @@ export async function updateObjective(workspaceId: string, horizonId: string, ob
   if (idx >= 0) objs[idx] = next; else objs.push(next)
   await db.update(strategicHorizons).set({
     objectives: objs as unknown as Array<Record<string, unknown>>, updatedAt: Date.now(),
-  }).where(eq(strategicHorizons.id, horizonId)).catch(() => null)
+  }).where(eq(strategicHorizons.id, horizonId)).catch((e: Error) => { console.error('[strategic-horizons]', e.message); return null })
 }
 
 export async function listHorizons(workspaceId: string, opts?: { horizon?: Horizon; status?: HorizonStatus }) {
@@ -84,7 +84,7 @@ export async function listHorizons(workspaceId: string, opts?: { horizon?: Horiz
 export async function setStatus(workspaceId: string, id: string, status: HorizonStatus): Promise<void> {
   await db.update(strategicHorizons).set({ status, updatedAt: Date.now() })
     .where(and(eq(strategicHorizons.workspaceId, workspaceId), eq(strategicHorizons.id, id)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[strategic-horizons]', e.message); return null })
 }
 
 /** Cron-callable: find horizons whose review_at has passed and notify. */
@@ -103,12 +103,12 @@ export async function sweepDueReviews(workspaceId: string): Promise<{ notified: 
       body:  `Objectives: ${((h.objectives as unknown as Objective[]) ?? []).map(o => o.statement).slice(0, 3).join('; ')}`,
       severity: 'normal',
       signature: `horizon:${h.id}:${h.reviewAt}`,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[strategic-horizons]', e.message); return null })
     // Push reviewAt forward by 1/12th of horizon to avoid re-notifying
     const horizonMs = HORIZON_MS[h.horizon as Horizon] ?? 90 * 24 * 60 * 60_000
     await db.update(strategicHorizons).set({
       reviewAt: Date.now() + horizonMs / 12, updatedAt: Date.now(),
-    }).where(eq(strategicHorizons.id, h.id)).catch(() => null)
+    }).where(eq(strategicHorizons.id, h.id)).catch((e: Error) => { console.error('[strategic-horizons]', e.message); return null })
   }
   return { notified: due.length }
 }

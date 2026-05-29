@@ -78,7 +78,7 @@ export async function evolveConfidence(workspaceId: string): Promise<ConfidenceE
     rejected: sql<number>`count(*) filter (where ${patchApprovals.status} = 'rejected')::int`,
   }).from(patchApprovals)
     .where(eq(patchApprovals.workspaceId, workspaceId))
-    .then(r => r[0]).catch(() => null)
+    .then(r => r[0]).catch((e: Error) => { console.error('[confidence-evolution]', e.message); return null })
   const decided = Number(apprStats?.approved ?? 0) + Number(apprStats?.rejected ?? 0)
   const approvalRate = decided > 0 ? Number((Number(apprStats!.approved) / decided).toFixed(3)) : null
 
@@ -89,7 +89,7 @@ export async function evolveConfidence(workspaceId: string): Promise<ConfidenceE
     rolledBack: sql<number>`count(*) filter (where ${events.type} = 'patch.rolled_back')::int`,
   }).from(events)
     .where(and(eq(events.workspaceId, workspaceId), gte(events.createdAt, weekAgo)))
-    .then(r => r[0]).catch(() => null)
+    .then(r => r[0]).catch((e: Error) => { console.error('[confidence-evolution]', e.message); return null })
   const applied = Number(patchStats?.applied ?? 0)
   const rolledBack = Number(patchStats?.rolledBack ?? 0)
   const rollbackRate = applied > 0 ? Number((rolledBack / applied).toFixed(3)) : null

@@ -192,7 +192,7 @@ export async function scanVoiceSkillMemory(workspaceId: string, opts: { apply?: 
         .where(and(
           eq(voiceSkillObservations.workspaceId, workspaceId),
           sql`${voiceSkillObservations.id} = ANY(${batch})`,
-        )).catch(() => null)
+        )).catch((e: Error) => { console.error('[memory-hygiene]', e.message); return null })
       if (r !== null) applied += batch.length
     }
   }
@@ -210,7 +210,7 @@ export async function scanVoiceSkillMemory(workspaceId: string, opts: { apply?: 
     },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/memory-hygiene', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[memory-hygiene]', e.message); return null })
 
   return {
     scoped: ['voice_skill_observations'],

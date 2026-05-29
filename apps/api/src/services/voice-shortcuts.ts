@@ -59,7 +59,7 @@ export async function upsertShortcut(input: ShortcutInput): Promise<ShortcutRow>
       eq(voiceShortcuts.workspaceId, input.workspaceId),
       eq(voiceShortcuts.phrase, phrase),
     ))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[voice-shortcuts]', e.message); return null })
   const now = Date.now()
 
   if (existing) {
@@ -88,7 +88,7 @@ export async function upsertShortcut(input: ShortcutInput): Promise<ShortcutRow>
 }
 
 export async function deleteShortcut(id: string, workspaceId: string): Promise<void> {
-  await db.delete(voiceShortcuts).where(and(eq(voiceShortcuts.id, id), eq(voiceShortcuts.workspaceId, workspaceId))).catch(() => null)
+  await db.delete(voiceShortcuts).where(and(eq(voiceShortcuts.id, id), eq(voiceShortcuts.workspaceId, workspaceId))).catch((e: Error) => { console.error('[voice-shortcuts]', e.message); return null })
 }
 
 /**
@@ -123,5 +123,5 @@ export async function recordShortcutUse(id: string): Promise<void> {
   await db.update(voiceShortcuts).set({
     useCount: sql`${voiceShortcuts.useCount} + 1`,
     lastUsedAt: Date.now(),
-  }).where(eq(voiceShortcuts.id, id)).catch(() => null)
+  }).where(eq(voiceShortcuts.id, id)).catch((e: Error) => { console.error('[voice-shortcuts]', e.message); return null })
 }

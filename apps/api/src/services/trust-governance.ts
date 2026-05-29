@@ -33,7 +33,7 @@ export async function getTrustScore(workspaceId: string, subjectType: SubjectTyp
       eq(trustScores.workspaceId, workspaceId),
       eq(trustScores.subjectType, subjectType),
       eq(trustScores.subjectId,   subjectId),
-    )).limit(1).then(r => r[0]).catch(() => null)
+    )).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[trust-governance]', e.message); return null })
   return row?.score ?? 0.8   // default starting trust
 }
 
@@ -43,7 +43,7 @@ export async function adjustTrust(workspaceId: string, subjectType: SubjectType,
       eq(trustScores.workspaceId, workspaceId),
       eq(trustScores.subjectType, subjectType),
       eq(trustScores.subjectId,   subjectId),
-    )).limit(1).then(r => r[0]).catch(() => null)
+    )).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[trust-governance]', e.message); return null })
 
   const prev = existing?.score ?? 0.8
   const next = Math.max(FLOOR, Math.min(CEIL, prev + delta))
@@ -56,7 +56,7 @@ export async function adjustTrust(workspaceId: string, subjectType: SubjectType,
   }).onConflictDoUpdate({
     target: [trustScores.workspaceId, trustScores.subjectType, trustScores.subjectId],
     set: { score: next, signals, updatedAt: Date.now() },
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[trust-governance]', e.message); return null })
   return next
 }
 
@@ -155,25 +155,25 @@ export async function setAgentPaused(workspaceId: string, agentName: string, pau
       paused, pausedBy: paused ? by : null, pausedAt: paused ? now : null,
       reason: reason ?? null, updatedAt: now,
     },
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[trust-governance]', e.message); return null })
   await recordChain({
     workspaceId, kind: 'decision', subjectId: `agent-pause:${agentName}`,
     decision: `Agent ${agentName} ${paused ? 'PAUSED' : 'RESUMED'} by ${by}${reason ? `: ${reason}` : ''}`,
     confidence: 1.0, source: 'trust-governance',
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[trust-governance]', e.message); return null })
   // Event-source the status change for replay fidelity
   const { recordStatusChange } = await import('./brain-persistence.js')
   await recordStatusChange({
     workspaceId, entityType: 'agent', entityId: agentName,
     status: paused ? 'paused' : 'healthy',
     source: 'trust-governance', metadata: { by, reason },
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[trust-governance]', e.message); return null })
 }
 
 export async function isAgentPaused(workspaceId: string, agentName: string): Promise<boolean> {
   const row = await db.select({ paused: agentPauseState.paused }).from(agentPauseState)
     .where(and(eq(agentPauseState.workspaceId, workspaceId), eq(agentPauseState.agentName, agentName)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[trust-governance]', e.message); return null })
   return row?.paused ?? false
 }
 
@@ -197,12 +197,12 @@ export async function recordOverride(i: {
     originalStatus: i.originalStatus, overrideStatus: i.overrideStatus,
     operatorId: i.operatorId ?? null, reason: i.reason ?? null,
     createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[trust-governance]', e.message); return null })
   await recordChain({
     workspaceId: i.workspaceId, kind: 'decision', subjectId: `override:${i.subjectId ?? id}`,
     decision: `Operator override on ${i.actionType}: ${i.originalStatus} → ${i.overrideStatus}${i.reason ? ` (${i.reason})` : ''}`,
     confidence: 1.0, source: 'trust-governance',
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[trust-governance]', e.message); return null })
   return id
 }
 

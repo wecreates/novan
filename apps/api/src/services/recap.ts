@@ -40,7 +40,7 @@ async function getOrInitPresence(workspaceId: string, operatorId = 'default') {
     workspaceId, operatorId,
     lastSeenAt: fallback, lastPolledAt: now,
     createdAt: now, updatedAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[recap]', e.message); return null })
   return { workspaceId, operatorId, lastSeenAt: fallback, lastPolledAt: now,
     createdAt: now, updatedAt: now }
 }
@@ -54,7 +54,7 @@ async function pollPresence(workspaceId: string, operatorId = 'default') {
       eq(operatorPresence.workspaceId, workspaceId),
       eq(operatorPresence.operatorId, operatorId),
     ))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[recap]', e.message); return null })
 }
 
 /** Operator dismissed the recap — move the boundary to now. */
@@ -67,13 +67,13 @@ export async function acknowledgeRecap(workspaceId: string, operatorId = 'defaul
       eq(operatorPresence.workspaceId, workspaceId),
       eq(operatorPresence.operatorId, operatorId),
     ))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[recap]', e.message); return null })
   await db.insert(events).values({
     id: uuidv7(), type: 'recap.acknowledged', workspaceId,
     payload: { operatorId, at: now },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/recap', version: 1, createdAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[recap]', e.message); return null })
 }
 
 // ── Result shape ──────────────────────────────────────────────────────

@@ -97,7 +97,7 @@ export async function delegateToAgent(i: DelegateInput): Promise<DelegateResult 
   // 3. Fetch the full prompt for the winner
   const def = await db.select().from(agentDefinitions)
     .where(and(eq(agentDefinitions.workspaceId, i.workspaceId), eq(agentDefinitions.slug, pick.slug)))
-    .limit(1).then(r => r[0] ?? null).catch(() => null)
+    .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[ceo-orchestrator]', e.message); return null })
   if (!def) return { ok: false, reason: `agent definition ${pick.slug} disappeared` }
 
   // 4. Insert pending delegation
@@ -114,7 +114,7 @@ export async function delegateToAgent(i: DelegateInput): Promise<DelegateResult 
     requestedBy:  i.requestedBy ?? 'ceo',
     createdAt:    now,
     startedAt:    now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[ceo-orchestrator]', e.message); return null })
 
   // 5. Build system + user prompt; stream.
   //
@@ -196,7 +196,7 @@ export async function delegateToAgent(i: DelegateInput): Promise<DelegateResult 
       status: 'failed',
       error:  (e as Error).message.slice(0, 500),
       completedAt: Date.now(),
-    }).where(eq(agentDelegations.id, delegationId)).catch(() => null)
+    }).where(eq(agentDelegations.id, delegationId)).catch((e: Error) => { console.error('[ceo-orchestrator]', e.message); return null })
     return { ok: false, reason: `agent run failed: ${(e as Error).message}` }
   }
 
@@ -209,7 +209,7 @@ export async function delegateToAgent(i: DelegateInput): Promise<DelegateResult 
     evidence:    [{ type: 'agent', id: def.id, extract: def.name }],
     confidence:  Math.min(1, pick.score / 8),
     source:      'ceo-orchestrator',
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[ceo-orchestrator]', e.message); return null })
 
   // 7. Persist result
   await db.update(agentDelegations).set({
@@ -221,7 +221,7 @@ export async function delegateToAgent(i: DelegateInput): Promise<DelegateResult 
     status:      'succeeded',
     reasoningChainId: chain ?? null,
     completedAt: Date.now(),
-  }).where(eq(agentDelegations.id, delegationId)).catch(() => null)
+  }).where(eq(agentDelegations.id, delegationId)).catch((e: Error) => { console.error('[ceo-orchestrator]', e.message); return null })
 
   // 8. Cross-team collaboration — if the agent's output names another
   //    department for follow-up, queue that delegation automatically.
@@ -351,7 +351,7 @@ async function chainHandoff(
         })
       }
       return null
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[ceo-orchestrator]', e.message); return null })
     queued++
   }
 }

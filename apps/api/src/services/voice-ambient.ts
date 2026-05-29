@@ -122,7 +122,7 @@ export async function refreshAmbientBriefings(workspaceId: string, opts: { floor
     kind: b.kind, severity: b.severity, summary: b.summary,
     sourceEventId: b.sourceEventId ?? null,
     createdAt: now,
-  }))).catch(() => null)
+  }))).catch((e: Error) => { console.error('[voice-ambient]', e.message); return null })
   return { created: briefings.length }
 }
 
@@ -135,10 +135,10 @@ export async function pendingBriefings(workspaceId: string, limit = 5) {
 
 export async function markDelivered(id: string): Promise<void> {
   await db.update(voiceAmbientBriefings).set({ deliveredAt: Date.now() })
-    .where(eq(voiceAmbientBriefings.id, id)).catch(() => null)
+    .where(eq(voiceAmbientBriefings.id, id)).catch((e: Error) => { console.error('[voice-ambient]', e.message); return null })
 }
 
 export async function ackBriefing(id: string): Promise<void> {
   await db.update(voiceAmbientBriefings).set({ ackedAt: Date.now() })
-    .where(eq(voiceAmbientBriefings.id, id)).catch(() => null)
+    .where(eq(voiceAmbientBriefings.id, id)).catch((e: Error) => { console.error('[voice-ambient]', e.message); return null })
 }

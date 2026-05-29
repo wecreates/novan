@@ -55,7 +55,7 @@ async function emitEvent(workspaceId: string, type: string, payload: Record<stri
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'web-fetch', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[web-fetch]', e.message); return null })
 }
 
 /** Reject private IP ranges, file://, javascript:, data:, etc. */
@@ -190,7 +190,7 @@ export async function webFetch(input: WebFetchInput): Promise<WebFetchResult> {
         if (done) break
         chunks.push(value)
         total += value.length
-        if (total >= MAX_BODY_BYTES) { await reader.cancel().catch(() => null); break }
+        if (total >= MAX_BODY_BYTES) { await reader.cancel().catch((e: Error) => { console.error('[web-fetch]', e.message); return null }); break }
       }
       const buf = new Uint8Array(total)
       let off = 0

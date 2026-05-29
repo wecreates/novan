@@ -24,7 +24,7 @@ const EMPTY_CTX = (sessionId: string, workspaceId: string): ConversationContext 
 export async function getContext(sessionId: string, workspaceId: string): Promise<ConversationContext> {
   const row = await db.select().from(voiceSessionContext)
     .where(eq(voiceSessionContext.sessionId, sessionId))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[voice-context-store]', e.message); return null })
   if (!row) return EMPTY_CTX(sessionId, workspaceId)
   return {
     sessionId,
@@ -49,7 +49,7 @@ export async function getContext(sessionId: string, workspaceId: string): Promis
 
 export async function patchContext(sessionId: string, workspaceId: string, patch: Partial<ConversationContext>): Promise<void> {
   const now = Date.now()
-  const existing = await db.select().from(voiceSessionContext).where(eq(voiceSessionContext.sessionId, sessionId)).limit(1).then(r => r[0]).catch(() => null)
+  const existing = await db.select().from(voiceSessionContext).where(eq(voiceSessionContext.sessionId, sessionId)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[voice-context-store]', e.message); return null })
   if (!existing) {
     await db.insert(voiceSessionContext).values({
       sessionId, workspaceId,
@@ -69,7 +69,7 @@ export async function patchContext(sessionId: string, workspaceId: string, patch
       voiceLocked:     patch.voiceLocked ?? false,
       pendingDryRunId: patch.pendingDryRunId ?? null,
       updatedAt:       now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[voice-context-store]', e.message); return null })
     return
   }
   // Selective set — never null-out fields the caller didn't touch
@@ -90,11 +90,11 @@ export async function patchContext(sessionId: string, workspaceId: string, patch
   if (patch.voiceLocked     !== undefined) update['voiceLocked']     = patch.voiceLocked
   if (patch.pendingDryRunId !== undefined) update['pendingDryRunId'] = patch.pendingDryRunId
   await db.update(voiceSessionContext).set(update)
-    .where(eq(voiceSessionContext.sessionId, sessionId)).catch(() => null)
+    .where(eq(voiceSessionContext.sessionId, sessionId)).catch((e: Error) => { console.error('[voice-context-store]', e.message); return null })
 }
 
 export async function resetContext(sessionId: string): Promise<void> {
-  await db.delete(voiceSessionContext).where(eq(voiceSessionContext.sessionId, sessionId)).catch(() => null)
+  await db.delete(voiceSessionContext).where(eq(voiceSessionContext.sessionId, sessionId)).catch((e: Error) => { console.error('[voice-context-store]', e.message); return null })
 }
 
 // ─── Voice quality feedback ─────────────────────────────────────────────
@@ -121,7 +121,7 @@ export async function recordQualityFeedback(input: {
     usefulness:  sanitize(input.ratings.usefulness),
     comment:     input.comment ?? null,
     createdAt:   Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[voice-context-store]', e.message); return null })
   return { id }
 }
 
@@ -191,7 +191,7 @@ export interface SessionSummary {
 export async function summarizeSession(sessionId: string, workspaceId: string): Promise<SessionSummary | null> {
   const { voiceEvents, voiceSessions } = await import('../db/schema.js')
   const [session, evts] = await Promise.all([
-    db.select().from(voiceSessions).where(eq(voiceSessions.id, sessionId)).limit(1).then(r => r[0]).catch(() => null),
+    db.select().from(voiceSessions).where(eq(voiceSessions.id, sessionId)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[voice-context-store]', e.message); return null }),
     db.select().from(voiceEvents)
       .where(and(eq(voiceEvents.sessionId, sessionId), eq(voiceEvents.workspaceId, workspaceId)))
       .orderBy(voiceEvents.createdAt).limit(2000).catch(() => []),

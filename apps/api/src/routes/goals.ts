@@ -13,7 +13,7 @@ async function emit(type: string, workspaceId: string, payload: unknown): Promis
     payload: payload as Record<string, unknown>,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/goals', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[goals]', e.message); return null })
 }
 
 const StatusEnum = z.enum(['draft', 'active', 'paused', 'completed', 'abandoned'])

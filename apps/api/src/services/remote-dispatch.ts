@@ -54,7 +54,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/remote-dispatch', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[remote-dispatch]', e.message); return null })
 }
 
 export async function dispatchJob(req: DispatchRequest): Promise<DispatchResult> {
@@ -115,7 +115,7 @@ export async function dispatchJob(req: DispatchRequest): Promise<DispatchResult>
 
     if (!resp.ok) {
       const body = await resp.text().catch(() => '')
-      await cancelLease(lease.id, req.workspaceId).catch(() => null)
+      await cancelLease(lease.id, req.workspaceId).catch((e: Error) => { console.error('[remote-dispatch]', e.message); return null })
       await emit(req.workspaceId, 'remote.dispatch.failed', { jobId, leaseId: lease.id, status: resp.status, body: body.slice(0, 500) })
       return { ok: false, decision, jobId, leaseId: lease.id, workerId: decision.workerId,
         error: `worker returned ${resp.status}: ${body.slice(0, 200)}` }
@@ -127,7 +127,7 @@ export async function dispatchJob(req: DispatchRequest): Promise<DispatchResult>
     })
     return { ok: true, decision, jobId, leaseId: lease.id, workerId: decision.workerId }
   } catch (e) {
-    await cancelLease(lease.id, req.workspaceId).catch(() => null)
+    await cancelLease(lease.id, req.workspaceId).catch((e: Error) => { console.error('[remote-dispatch]', e.message); return null })
     const msg = (e as Error).message
     await emit(req.workspaceId, 'remote.dispatch.error', { jobId, leaseId: lease.id, error: msg })
     return { ok: false, decision, jobId, leaseId: lease.id, workerId: decision.workerId,

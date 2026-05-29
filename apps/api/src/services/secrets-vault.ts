@@ -75,7 +75,7 @@ async function audit(
     ipAddress: null, userAgent: null,
     immutable: true,
     createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[secrets-vault]', e.message); return null })
 
   // Mirror to events table
   await db.insert(events).values({
@@ -83,7 +83,7 @@ async function audit(
     payload: { ...context, resource, action, outcome, severity },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'secrets-vault', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[secrets-vault]', e.message); return null })
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────

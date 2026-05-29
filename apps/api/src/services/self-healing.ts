@@ -29,7 +29,7 @@ async function emitHealEvent(workspaceId: string, type: string, payload: Record<
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/self-healing', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[self-healing]', e.message); return null })
 }
 
 async function recordAction(input: { workspaceId: string; kind: string; targetKind: string; targetId: string; reason: string; applied: boolean; result?: Record<string, unknown> }) {
@@ -44,7 +44,7 @@ async function recordAction(input: { workspaceId: string; kind: string; targetKi
     result:      input.result ?? null,
     createdAt:   Date.now(),
     appliedAt:   input.applied ? Date.now() : null,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[self-healing]', e.message); return null })
 }
 
 const TWO_HOURS = 2 * 60 * 60_000
@@ -61,7 +61,7 @@ export async function scanAndHeal(): Promise<HealReport> {
     .limit(200).catch(() => [])
   if (staleSessions.length > 0) {
     await db.update(voiceSessions).set({ status: 'ended', endedAt: Date.now() })
-      .where(inArray(voiceSessions.id, staleSessions.map(s => s.id))).catch(() => null)
+      .where(inArray(voiceSessions.id, staleSessions.map(s => s.id))).catch((e: Error) => { console.error('[self-healing]', e.message); return null })
     for (const s of staleSessions) {
       await recordAction({
         workspaceId: s.workspaceId, kind: 'clear_stuck', targetKind: 'voice_session',
@@ -82,7 +82,7 @@ export async function scanAndHeal(): Promise<HealReport> {
     .limit(200).catch(() => [])
   if (stuckDryRuns.length > 0) {
     await db.update(voiceDryRuns).set({ status: 'expired' })
-      .where(inArray(voiceDryRuns.id, stuckDryRuns.map(r => r.id))).catch(() => null)
+      .where(inArray(voiceDryRuns.id, stuckDryRuns.map(r => r.id))).catch((e: Error) => { console.error('[self-healing]', e.message); return null })
     for (const r of stuckDryRuns) {
       await recordAction({
         workspaceId: r.workspaceId, kind: 'clear_stuck', targetKind: 'dry_run',
@@ -108,7 +108,7 @@ export async function scanAndHeal(): Promise<HealReport> {
         status: 'failed',
         error:  'reaped by self-healing: pending > 5min (likely hung LLM stream)',
         completedAt: Date.now(),
-      }).where(inArray(agentDelegations.id, stuck.map(s => s.id))).catch(() => null)
+      }).where(inArray(agentDelegations.id, stuck.map(s => s.id))).catch((e: Error) => { console.error('[self-healing]', e.message); return null })
       report.byKind['agent_delegation_reaped'] = stuck.length
       report.applied += stuck.length
     }

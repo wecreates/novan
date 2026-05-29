@@ -152,7 +152,7 @@ export async function proposeImprovement(input: {
     } as never,
     traceId: uuidv7(), correlationId: id, causationId: null,
     source: 'self-improvement', version: 1, createdAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[self-improvement]', e.message); return null })
   return { ok: true, proposalId: id }
 }
 
@@ -210,7 +210,7 @@ export async function transitionProposal(input: {
     } as never,
     traceId: uuidv7(), correlationId: input.proposalId, causationId: null,
     source: 'self-improvement', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[self-improvement]', e.message); return null })
   return { ok: true }
 }
 
@@ -458,7 +458,7 @@ export async function runAllImprovementHealthChecks(workspaceId: string): Promis
     payload: { goodhart, narrow, coord, compounding, reward, overallVerdict } as never,
     traceId: uuidv7(), correlationId: 'self_improvement', causationId: null,
     source: 'self-improvement', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[self-improvement]', e.message); return null })
 
   return {
     goodhart:              { drifted: goodhart.drifted, divergences: goodhart.divergences },

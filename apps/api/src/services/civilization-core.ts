@@ -414,7 +414,7 @@ export async function generateRecap(workspaceId: string, sinceHoursAgo = 24): Pr
 
   const patterns = await discoverPatterns(workspaceId).catch(() => [])
   const proposals = await discoverWeaknesses(workspaceId).catch(() => [])
-  const phys = await execPhysics(workspaceId).catch(() => null)
+  const phys = await execPhysics(workspaceId).catch((e: Error) => { console.error('[civilization-core]', e.message); return null })
 
   const alerts: string[] = []
   if (phys && phys.friction > 0.3) alerts.push(phys.recommendation)

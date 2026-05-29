@@ -35,18 +35,18 @@ export async function autoRegister(workspaceId: string): Promise<{ added: number
       .where(and(
         eq(discoveredCapabilities.workspaceId, workspaceId),
         eq(discoveredCapabilities.serviceFile, m.file),
-      )).limit(1).then(r => r[0]).catch(() => null)
+      )).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[capability-auto-register]', e.message); return null })
     if (existing) {
       await db.update(discoveredCapabilities).set({
         exportsCount, maturity, lastSeenAt: Date.now(),
-      }).where(eq(discoveredCapabilities.id, existing.id)).catch(() => null)
+      }).where(eq(discoveredCapabilities.id, existing.id)).catch((e: Error) => { console.error('[capability-auto-register]', e.message); return null })
       updated++
     } else {
       await db.insert(discoveredCapabilities).values({
         id: uuidv7(), workspaceId, serviceFile: m.file,
         exportsCount, maturity,
         firstSeenAt: Date.now(), lastSeenAt: Date.now(),
-      }).onConflictDoNothing().catch(() => null)
+      }).onConflictDoNothing().catch((e: Error) => { console.error('[capability-auto-register]', e.message); return null })
       added++
     }
   }

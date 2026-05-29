@@ -203,7 +203,7 @@ export async function suggestPlaybook(
       payload: { mode, playbook: pb.title, runbook: pb.runbook, autoRecoverable: pb.autoRecoverable, context },
       traceId: uuidv7(), correlationId: null, causationId: null,
       source: 'recovery-playbook', version: 1, createdAt: Date.now(),
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[recovery-playbook]', e.message); return null })
   } catch { /* tolerated */ }
   return { suggested: true, playbook: pb }
 }

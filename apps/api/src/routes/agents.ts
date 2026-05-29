@@ -25,7 +25,7 @@ async function emit(type: string, workspaceId: string, payload: unknown): Promis
     payload: payload as Record<string, unknown>,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/agents', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[agents]', e.message); return null })
 }
 
 const AgentStatus = z.enum(['idle', 'running', 'paused', 'error', 'offline'])

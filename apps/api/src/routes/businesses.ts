@@ -23,7 +23,7 @@ async function emit(type: string, workspaceId: string, payload: unknown): Promis
     payload: payload as Record<string, unknown>,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/businesses', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[businesses]', e.message); return null })
 }
 
 const Stage = z.enum(['early', 'growth', 'scale', 'enterprise'])
@@ -212,7 +212,7 @@ export const businessesRoutes: FastifyPluginAsync = async (app) => {
         eq(businessSystems.businessId,  id),
         eq(businessSystems.id,          sid),
       ))
-      .limit(1).then(r => r[0] ?? null).catch(() => null)
+      .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[businesses]', e.message); return null })
     if (!row) return reply.status(404).send({ success: false, error: 'system not found' })
     return reply.send({ success: true, data: row })
   })
@@ -236,7 +236,7 @@ export const businessesRoutes: FastifyPluginAsync = async (app) => {
         eq(businessSystems.workspaceId, workspaceId),
         eq(businessSystems.businessId,  id),
         eq(businessSystems.id,          sid),
-      )).catch(() => null)
+      )).catch((e: Error) => { console.error('[businesses]', e.message); return null })
     await emit('business.system.updated', workspaceId, { businessId: id, systemId: sid, changes: Object.keys(patch).filter(k => k !== 'updatedAt') })
     return reply.send({ success: true })
   })

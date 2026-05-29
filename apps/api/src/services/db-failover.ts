@@ -98,7 +98,7 @@ export async function probeEndpoint(role: DbRole, url: string | undefined): Prom
   } catch (e) {
     return { role, status: 'failed', latencyMs: Date.now() - start, error: (e as Error).message, probedAt: Date.now() }
   } finally {
-    if (client) await client.end({ timeout: 1 }).catch(() => null)
+    if (client) await client.end({ timeout: 1 }).catch((e: Error) => { console.error('[db-failover]', e.message); return null })
   }
 }
 

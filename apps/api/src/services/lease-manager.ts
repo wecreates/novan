@@ -35,7 +35,7 @@ async function emitLeaseEvent(
     id: uuidv7(), type, workspaceId,
     payload, traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/lease-manager', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[lease-manager]', e.message); return null })
 }
 
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ async function emitLeaseEvent(
 export async function throttleFactor(workspaceId: string, jobType: LeaseJobType): Promise<number> {
   const row = await db.select().from(workerConcurrency)
     .where(and(eq(workerConcurrency.workspaceId, workspaceId), eq(workerConcurrency.queueName, jobType)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[lease-manager]', e.message); return null })
   if (!row) return 1.0
   return Math.max(0, Math.min(2.0, Number(row.factor)))
 }
@@ -86,7 +86,7 @@ export async function createLease(input: CreateLeaseInput): Promise<typeof execu
       updatedAt:    now,
     })
     .where(eq(workerRegistry.id, input.workerId))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[lease-manager]', e.message); return null })
 
   await emitLeaseEvent(input.workspaceId, 'lease.created', {
     leaseId: lease!.id, workerId: input.workerId, jobId: input.jobId, jobType: input.jobType,
@@ -153,7 +153,7 @@ export async function releaseLease(
       updatedAt:    now,
     })
     .where(eq(workerRegistry.id, rows[0]!.workerId))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[lease-manager]', e.message); return null })
 
   await emitLeaseEvent(workspaceId, 'lease.completed', { leaseId, costUsd })
   return true
@@ -181,7 +181,7 @@ export async function cancelLease(leaseId: string, workspaceId: string): Promise
       updatedAt:    now,
     })
     .where(eq(workerRegistry.id, rows[0]!.workerId))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[lease-manager]', e.message); return null })
 
   await emitLeaseEvent(workspaceId, 'lease.cancelled', { leaseId })
   return true
@@ -234,7 +234,7 @@ export async function reclaimStaleLeases(workspaceId: string): Promise<number> {
         updatedAt:    now,
       })
       .where(eq(workerRegistry.id, wid))
-      .catch(() => null)
+      .catch((e: Error) => { console.error('[lease-manager]', e.message); return null })
   }
 
   await emitLeaseEvent(workspaceId, 'lease.reclaimed_batch', {

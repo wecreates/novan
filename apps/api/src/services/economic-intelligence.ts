@@ -74,7 +74,7 @@ export async function economicState(workspaceId: string, windowDays = 7): Promis
   const total = ai + ep + ig + ae
 
   const budgetRow = await db.select().from(providerBudgets)
-    .where(eq(providerBudgets.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch(() => null)
+    .where(eq(providerBudgets.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[economic-intelligence]', e.message); return null })
 
   const byProviderRows = await db.select({
     provider: aiUsage.provider,
@@ -534,7 +534,7 @@ export async function generateEconomicRecommendations(workspaceId: string): Prom
         recordedAt: Date.now(),
       },
       source: 'economic-intelligence',
-    }).then(() => chainsRecorded++).catch(() => null)
+    }).then(() => chainsRecorded++).catch((e: Error) => { console.error('[economic-intelligence]', e.message); return null })
   }
   if (forecast.likelihood !== 'insufficient_data' && forecast.projectedNextWeekUsd !== null) {
     await recordChain({
@@ -552,7 +552,7 @@ export async function generateEconomicRecommendations(workspaceId: string): Prom
         horizonDays: 7,
       },
       source: 'economic-intelligence',
-    }).then(() => chainsRecorded++).catch(() => null)
+    }).then(() => chainsRecorded++).catch((e: Error) => { console.error('[economic-intelligence]', e.message); return null })
 
     // Push alert on high-likelihood spike (deduped by signature)
     if (forecast.likelihood === 'high') {
@@ -563,7 +563,7 @@ export async function generateEconomicRecommendations(workspaceId: string): Prom
         body: `Linear extrapolation of last ${forecast.windowDays}d daily spend projects a HIGH-likelihood spike. ${forecast.evidence}`,
         severity: 'high',
         signature: `econ:spend_forecast:high:${Math.round(forecast.projectedNextWeekUsd / 5)}`,  // bucket by $5 to dedupe
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[economic-intelligence]', e.message); return null })
     }
   }
   return { suggestions, forecast, chainsRecorded }
@@ -643,7 +643,7 @@ export async function evaluateEconomicOutcomes(workspaceId: string): Promise<{
       await db.update(reasoningChains).set({
         outcomeKnown: true, outcomeMatched: ok, outcomeAt: Date.now(),
         outcomeEvidence: { actualSpendUsd: Number(actual.toFixed(4)), projectedUsd: pred.projectedNextWeekUsd, withinBand: ok, band: '±30%' },
-      }).where(eq(reasoningChains.id, c.id)).catch(() => null)
+      }).where(eq(reasoningChains.id, c.id)).catch((e: Error) => { console.error('[economic-intelligence]', e.message); return null })
       if (ok) matched++; else unmatched++
     }
 
@@ -675,7 +675,7 @@ export async function evaluateEconomicOutcomes(workspaceId: string): Promise<{
           estimatedSavingsUsd: pred.estimatedSavingsUsd,
           note: 'correlation only — operator may have taken other actions',
         },
-      }).where(eq(reasoningChains.id, c.id)).catch(() => null)
+      }).where(eq(reasoningChains.id, c.id)).catch((e: Error) => { console.error('[economic-intelligence]', e.message); return null })
       if (ok) matched++; else unmatched++
     }
   }

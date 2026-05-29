@@ -493,7 +493,7 @@ export async function getNodeDetail(workspaceId: string, nodeId: string): Promis
     case 'agent': {
       const row = await db.select().from(agentPauseState)
         .where(and(eq(agentPauseState.workspaceId, workspaceId), eq(agentPauseState.agentName, rawId)))
-        .limit(1).then(r => r[0]).catch(() => null)
+        .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[brain-graph]', e.message); return null })
       const status: NodeStatus = row?.paused ? 'paused' : 'healthy'
       return {
         id: nodeId, kind: 'agent', label: rawId, status,
@@ -510,7 +510,7 @@ export async function getNodeDetail(workspaceId: string, nodeId: string): Promis
     case 'proposal': {
       const row = await db.select().from(codeProposals)
         .where(and(eq(codeProposals.workspaceId, workspaceId), eq(codeProposals.id, rawId)))
-        .limit(1).then(r => r[0]).catch(() => null)
+        .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[brain-graph]', e.message); return null })
       if (!row) return null
       return {
         id: nodeId, kind: 'approval', label: row.title,
@@ -532,7 +532,7 @@ export async function getNodeDetail(workspaceId: string, nodeId: string): Promis
     case 'provider': {
       const row = await db.select().from(providerConfigs)
         .where(and(eq(providerConfigs.workspaceId, workspaceId), eq(providerConfigs.id, rawId)))
-        .limit(1).then(r => r[0]).catch(() => null)
+        .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[brain-graph]', e.message); return null })
       if (!row) return null
       return {
         id: nodeId, kind: 'provider', label: row.providerId,
@@ -550,7 +550,7 @@ export async function getNodeDetail(workspaceId: string, nodeId: string): Promis
     case 'drift': {
       const row = await db.select().from(driftWarnings)
         .where(and(eq(driftWarnings.workspaceId, workspaceId), eq(driftWarnings.id, rawId)))
-        .limit(1).then(r => r[0]).catch(() => null)
+        .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[brain-graph]', e.message); return null })
       if (!row) return null
       return {
         id: nodeId, kind: 'drift', label: row.kind,
@@ -569,7 +569,7 @@ export async function getNodeDetail(workspaceId: string, nodeId: string): Promis
     case 'scenario': {
       const row = await db.select().from(scenarios)
         .where(and(eq(scenarios.workspaceId, workspaceId), eq(scenarios.id, rawId)))
-        .limit(1).then(r => r[0]).catch(() => null)
+        .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[brain-graph]', e.message); return null })
       if (!row) return null
       return {
         id: nodeId, kind: 'scenario', label: row.name, status: 'healthy',
@@ -585,7 +585,7 @@ export async function getNodeDetail(workspaceId: string, nodeId: string): Promis
     case 'horizon': {
       const row = await db.select().from(strategicHorizons)
         .where(and(eq(strategicHorizons.workspaceId, workspaceId), eq(strategicHorizons.id, rawId)))
-        .limit(1).then(r => r[0]).catch(() => null)
+        .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[brain-graph]', e.message); return null })
       if (!row) return null
       return {
         id: nodeId, kind: 'horizon', label: row.title, status: 'healthy',
@@ -601,7 +601,7 @@ export async function getNodeDetail(workspaceId: string, nodeId: string): Promis
     case 'run': {
       const row = await db.select().from(workflowRuns)
         .where(and(eq(workflowRuns.workspaceId, workspaceId), eq(workflowRuns.id, rawId)))
-        .limit(1).then(r => r[0]).catch(() => null)
+        .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[brain-graph]', e.message); return null })
       if (!row) return null
       return {
         id: nodeId, kind: 'mission', label: row.workflowId,
@@ -616,7 +616,7 @@ export async function getNodeDetail(workspaceId: string, nodeId: string): Promis
     case 'concept': {
       const row = await db.select().from(designConcepts)
         .where(and(eq(designConcepts.workspaceId, workspaceId), eq(designConcepts.id, rawId)))
-        .limit(1).then(r => r[0]).catch(() => null)
+        .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[brain-graph]', e.message); return null })
       if (!row) return null
       return {
         id: nodeId, kind: 'concept', label: row.brief.slice(0, 40),

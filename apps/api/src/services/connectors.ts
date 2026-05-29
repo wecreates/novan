@@ -169,7 +169,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: (payload['actionId'] as string) ?? uuidv7(),
     causationId: null, source: 'api/connectors', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[connectors]', e.message); return null })
 }
 
 function permTier(p: Permission): number {
@@ -246,7 +246,7 @@ export async function listConnectors() {
 }
 
 export async function getConnector(id: string) {
-  return db.select().from(connectors).where(eq(connectors.id, id)).limit(1).then(r => r[0] ?? null).catch(() => null)
+  return db.select().from(connectors).where(eq(connectors.id, id)).limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[connectors]', e.message); return null })
 }
 
 // ── Accounts ──────────────────────────────────────────────────────────
@@ -261,7 +261,7 @@ export async function listAccounts(workspaceId: string) {
 export async function getAccount(workspaceId: string, id: string) {
   return db.select().from(connectorAccounts)
     .where(and(eq(connectorAccounts.id, id), eq(connectorAccounts.workspaceId, workspaceId)))
-    .limit(1).then(r => r[0] ?? null).catch(() => null)
+    .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[connectors]', e.message); return null })
 }
 
 export interface CreateAccountInput {
@@ -363,7 +363,7 @@ export async function setKillSwitch(
     await db.update(connectorKillSwitches)
       .set({ ...patch, setBy: by, setAt: now, updatedAt: now })
       .where(eq(connectorKillSwitches.workspaceId, workspaceId))
-      .catch(() => null)
+      .catch((e: Error) => { console.error('[connectors]', e.message); return null })
   } else {
     await db.insert(connectorKillSwitches).values({
       workspaceId,
@@ -374,7 +374,7 @@ export async function setKillSwitch(
       setBy:            by,
       setAt:            now,
       updatedAt:        now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[connectors]', e.message); return null })
   }
   await emit(workspaceId, 'connector.kill_switch_changed', { ...patch, by })
   return getKillSwitch(workspaceId)
@@ -635,13 +635,13 @@ export async function approveAction(workspaceId: string, actionId: string, appro
   await db.update(connectorActions)
     .set({ approvedBy: approver, approvedAt: Date.now(), phase: 'approved', updatedAt: Date.now() })
     .where(eq(connectorActions.id, actionId))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[connectors]', e.message); return null })
   await emit(workspaceId, 'connector.action_approved', { actionId, approver })
 
   if (!impl?.handler) {
     await db.update(connectorActions)
       .set({ phase: 'failed', errorMessage: 'handler not implemented', updatedAt: Date.now() })
-      .where(eq(connectorActions.id, actionId)).catch(() => null)
+      .where(eq(connectorActions.id, actionId)).catch((e: Error) => { console.error('[connectors]', e.message); return null })
     return {
       actionId, phase: 'failed',
       error: `handler not implemented for '${row.action}'`,
@@ -716,7 +716,7 @@ async function persistAction(
     createdAt:        now,
     updatedAt:        now,
     ...extra,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[connectors]', e.message); return null })
 }
 
 async function buildContext(
@@ -750,11 +750,11 @@ async function executeNow(
   const startedAt = Date.now()
   await db.update(connectorActions)
     .set({ phase: 'executing', startedAt, riskLevel: risk, dryRunPreview: preview ?? null, updatedAt: startedAt })
-    .where(eq(connectorActions.id, actionId)).catch(() => null)
+    .where(eq(connectorActions.id, actionId)).catch((e: Error) => { console.error('[connectors]', e.message); return null })
   // First-time insert path — when called from dispatchAction without prior persist
   await persistAction(actionId, input, connectorId, 'executing', {
     riskLevel: risk, dryRunPreview: preview ?? null,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[connectors]', e.message); return null })
 
   try {
     const ctx = await buildContext(account, connectorId)
@@ -762,10 +762,10 @@ async function executeNow(
     const completedAt = Date.now()
     await db.update(connectorActions)
       .set({ phase: 'completed', completedAt, result: (result ?? null) as never, updatedAt: completedAt })
-      .where(eq(connectorActions.id, actionId)).catch(() => null)
+      .where(eq(connectorActions.id, actionId)).catch((e: Error) => { console.error('[connectors]', e.message); return null })
     await db.update(connectorAccounts)
       .set({ lastActionAt: completedAt, updatedAt: completedAt })
-      .where(eq(connectorAccounts.id, account.id)).catch(() => null)
+      .where(eq(connectorAccounts.id, account.id)).catch((e: Error) => { console.error('[connectors]', e.message); return null })
     await emit(input.workspaceId, 'connector.action_completed', {
       actionId, action: input.action, durationMs: completedAt - startedAt,
     })
@@ -775,12 +775,12 @@ async function executeNow(
     const failedAt = Date.now()
     await db.update(connectorActions)
       .set({ phase: 'failed', completedAt: failedAt, errorMessage: msg, updatedAt: failedAt })
-      .where(eq(connectorActions.id, actionId)).catch(() => null)
+      .where(eq(connectorActions.id, actionId)).catch((e: Error) => { console.error('[connectors]', e.message); return null })
     // Failures count as "last action" too — operators need to see signs of
     // life even when calls fail (auth issues, network outages, etc.).
     await db.update(connectorAccounts)
       .set({ lastActionAt: failedAt, updatedAt: failedAt })
-      .where(eq(connectorAccounts.id, account.id)).catch(() => null)
+      .where(eq(connectorAccounts.id, account.id)).catch((e: Error) => { console.error('[connectors]', e.message); return null })
     await emit(input.workspaceId, 'connector.action_failed', { actionId, action: input.action, error: msg })
     return { actionId, phase: 'failed', error: msg }
   }

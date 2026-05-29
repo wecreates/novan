@@ -165,7 +165,7 @@ export function decideFromRows(rows: ProviderRow[], prefs: RoutingPreferences): 
 export async function decideForWorkspace(workspaceId: string, prefs: RoutingPreferences): Promise<RoutingDecision> {
   const [rows, wsPrefs, rollup] = await Promise.all([
     listProviders(workspaceId),
-    import('./voice-preferences.js').then(m => m.getVoicePrefs(workspaceId)).catch(() => null),
+    import('./voice-preferences.js').then(m => m.getVoicePrefs(workspaceId)).catch((e: Error) => { console.error('[speech-router]', e.message); return null }),
     import('./voice-context-store.js').then(m => m.providerQualityRollup(workspaceId)).catch(() => [] as Array<{ provider: string; composite: number }>),
   ])
   const qualityScores: Record<string, number> = {}

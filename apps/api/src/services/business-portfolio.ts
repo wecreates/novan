@@ -50,7 +50,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'business-portfolio', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[business-portfolio]', e.message); return null })
 }
 
 // ─── Revenue ledger ─────────────────────────────────────────────────────────

@@ -268,7 +268,7 @@ export async function syncAgentCatalog(workspaceId: string, root: string): Promi
       const existing = await db.select({ checksum: agentDefinitions.checksum })
         .from(agentDefinitions)
         .where(and(eq(agentDefinitions.workspaceId, workspaceId), eq(agentDefinitions.slug, parsed.slug)))
-        .limit(1).then(r => r[0] ?? null).catch(() => null)
+        .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[agency-catalog]', e.message); return null })
 
       const now = Date.now()
       if (existing && existing.checksum === parsed.checksum) {

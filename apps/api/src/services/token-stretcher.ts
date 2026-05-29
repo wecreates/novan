@@ -172,7 +172,7 @@ async function recordMetrics(workspaceId: string, baseline: number, stretched: n
       savedTokensTotal:     sqlOp`${tokenStretchMetrics.savedTokensTotal} + ${saved}`,
       lastCallAt:           now,
     },
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[token-stretcher]', e.message); return null })
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -194,13 +194,13 @@ export async function stretch(req: StretchRequest): Promise<StretchResult> {
     const now = Date.now()
     const row = await db.select().from(aiResponseCache)
       .where(and(eq(aiResponseCache.workspaceId, req.workspaceId), eq(aiResponseCache.cacheKey, key)))
-      .limit(1).then(r => r[0]).catch(() => null)
+      .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[token-stretcher]', e.message); return null })
     if (row && row.expiresAt > now) {
       // bump hit counter
       await db.update(aiResponseCache).set({
         hitCount:  row.hitCount + 1,
         lastHitAt: now,
-      }).where(eq(aiResponseCache.id, row.id)).catch(() => null)
+      }).where(eq(aiResponseCache.id, row.id)).catch((e: Error) => { console.error('[token-stretcher]', e.message); return null })
 
       const result: StretchResult = {
         content:          row.response,
@@ -243,7 +243,7 @@ export async function stretch(req: StretchRequest): Promise<StretchResult> {
       createdAt:      now,
       lastHitAt:      null,
       expiresAt:      now + ttl,
-    }).onConflictDoNothing().catch(() => null)
+    }).onConflictDoNothing().catch((e: Error) => { console.error('[token-stretcher]', e.message); return null })
   }
 
   const result: StretchResult = {
@@ -276,7 +276,7 @@ export async function purgeExpired(): Promise<number> {
 export async function getMetrics(workspaceId: string) {
   const row = await db.select().from(tokenStretchMetrics)
     .where(eq(tokenStretchMetrics.workspaceId, workspaceId))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[token-stretcher]', e.message); return null })
   if (!row) {
     return {
       workspaceId,

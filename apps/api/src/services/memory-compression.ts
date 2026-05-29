@@ -96,7 +96,7 @@ export async function rankedMemory(workspaceId: string, opts?: { limit?: number;
 export async function missionMemory(workspaceId: string, missionId: string, limit = 10): Promise<{ mission: { id: string; title: string; tags: string[] } | null; memory: RankedMemoryItem[] }> {
   const mission = await db.select().from(strategicGoals)
     .where(and(eq(strategicGoals.workspaceId, workspaceId), eq(strategicGoals.id, missionId)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[memory-compression]', e.message); return null })
   if (!mission) return { mission: null, memory: [] }
 
   const tags = (Array.isArray(mission.tags) ? mission.tags : []) as string[]

@@ -89,7 +89,7 @@ export async function buildWhyChain(opts: BuildOpts): Promise<WhyChain | null> {
   if (opts.rootEventId) {
     const root = await db.select().from(events)
       .where(and(eq(events.workspaceId, opts.workspaceId), eq(events.id, opts.rootEventId)))
-      .limit(1).then(r => r[0]).catch(() => null)
+      .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[voice-why-chain]', e.message); return null })
     if (!root) return null
     anchorAt = root.createdAt
     rootType = root.type

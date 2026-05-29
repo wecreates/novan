@@ -81,7 +81,7 @@ async function emit(type: string, workspaceId: string, payload: unknown): Promis
     source:        'api/opportunities',
     version:       EVENT_SCHEMA_VERSION,
     createdAt:     Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[opportunities]', e.message); return null })
 }
 
 // ─── Validation schemas ───────────────────────────────────────────────────────

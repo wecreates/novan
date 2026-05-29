@@ -282,7 +282,7 @@ export async function constructBusiness(i: ConstructInput): Promise<ConstructRes
     metrics: {},
     metadata: { archetype: industry, plannedSystems: plan.systems.length },
     createdAt: now, updatedAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[business-construction]', e.message); return null })
 
   await db.insert(events).values({
     id: uuidv7(),
@@ -291,7 +291,7 @@ export async function constructBusiness(i: ConstructInput): Promise<ConstructRes
     payload: { businessId, name, industry, brief: i.brief.slice(0, 280) },
     traceId: uuidv7(), correlationId: businessId, causationId: null,
     source: 'business-construction', version: 1, createdAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[business-construction]', e.message); return null })
   await notifyEventsChanged(i.workspaceId)
 
   // 2. Sort systems: departments first (parents), then everything else
@@ -323,7 +323,7 @@ export async function constructBusiness(i: ConstructInput): Promise<ConstructRes
       position:     s.position ?? null,
       metadata:     {},
       createdAt: Date.now(), updatedAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[business-construction]', e.message); return null })
 
     await db.insert(events).values({
       id: uuidv7(),
@@ -332,7 +332,7 @@ export async function constructBusiness(i: ConstructInput): Promise<ConstructRes
       payload: { businessId, systemId: id, kind: s.kind, layer: s.layer, name: s.name, parentId, position: s.position ?? null },
       traceId: uuidv7(), correlationId: businessId, causationId: parentId,
       source: 'business-construction', version: 1, createdAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[business-construction]', e.message); return null })
     await notifyEventsChanged(i.workspaceId)
 
     spawnOrder.push({ id, kind: s.kind, layer: s.layer, name: s.name, parentId })
@@ -342,7 +342,7 @@ export async function constructBusiness(i: ConstructInput): Promise<ConstructRes
   await db.update(businesses)
     .set({ stage: 'active', updatedAt: Date.now() })
     .where(eq(businesses.id, businessId))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[business-construction]', e.message); return null })
 
   await db.insert(events).values({
     id: uuidv7(),
@@ -351,7 +351,7 @@ export async function constructBusiness(i: ConstructInput): Promise<ConstructRes
     payload: { businessId, name, systemsSpawned: systemIds.length },
     traceId: uuidv7(), correlationId: businessId, causationId: null,
     source: 'business-construction', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[business-construction]', e.message); return null })
   await notifyEventsChanged(i.workspaceId)
 
   return { ok: true, businessId, name, industry, dna: plan.dna, systemIds, spawnOrder }

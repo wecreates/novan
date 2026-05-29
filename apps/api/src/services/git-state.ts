@@ -65,7 +65,7 @@ export async function captureGitState(workspaceId: string, repoRoot = process.en
       filesChanged: c.filesChanged,
       committedAt: c.committedAt,
       capturedAt:  Date.now(),
-    }).onConflictDoNothing().then(() => captured++).catch(() => null)
+    }).onConflictDoNothing().then(() => captured++).catch((e: Error) => { console.error('[git-state]', e.message); return null })
   }
   return { captured, available: true }
 }

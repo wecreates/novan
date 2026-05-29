@@ -93,7 +93,7 @@ async function processJob(job: PendingJob): Promise<void> {
         : { jobId: job.jobId, url: job.url, analysis: analyzed },
       traceId: uuidv7(), correlationId: job.jobId, causationId: null,
       source: 'media-video-worker', version: 1, createdAt: Date.now(),
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[media-video-worker]', e.message); return null })
   } catch { /* tolerated */ }
   incCounter(error ? 'media_video_worker_failed_total' : 'media_video_worker_succeeded_total', { mode: job.mode })
 }

@@ -163,7 +163,7 @@ export async function deleteWorkspaceData(input: {
   async function del(scope: GovernanceScope, run: () => Promise<unknown>) {
     if (!wants(scope)) return
     const before = await rowCount(scope, input.workspaceId)
-    await run().catch(() => null)
+    await run().catch((e: Error) => { console.error('[data-governance]', e.message); return null })
     const after = await rowCount(scope, input.workspaceId)
     deleted[scope] = Math.max(0, before - after)
   }
@@ -279,5 +279,5 @@ async function audit(workspaceId: string, type: string, payload: Record<string, 
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/data-governance', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[data-governance]', e.message); return null })
 }

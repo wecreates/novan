@@ -194,7 +194,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: (payload['ideaId'] as string) ?? uuidv7(),
     causationId: null, source: 'api/ideas', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[ideas]', e.message); return null })
 }
 
 // ── Persistence ───────────────────────────────────────────────────────
@@ -283,7 +283,7 @@ export async function ingestText(
       sourceType: source.type,
       ...(source.ref       ? { sourceRef: source.ref } : {}),
       ...(source.createdBy ? { createdBy: source.createdBy } : {}),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[ideas]', e.message); return null })
     if (!r) continue
     if (r.created) created.push(r.idea); else deduped.push(r.idea)
   }
@@ -391,7 +391,7 @@ export async function promoteIdea(workspaceId: string, ideaId: string, opts: { f
 export async function getIdea(workspaceId: string, id: string) {
   return db.select().from(ideas)
     .where(and(eq(ideas.id, id), eq(ideas.workspaceId, workspaceId)))
-    .limit(1).then(r => r[0] ?? null).catch(() => null)
+    .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[ideas]', e.message); return null })
 }
 
 export async function listIdeas(

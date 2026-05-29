@@ -32,7 +32,7 @@ export async function recordRevenue(i: RecordRevenueInput): Promise<string> {
     occurredAt: i.occurredAt ?? Date.now(),
     metadata:   i.metadata   ?? {},
     createdAt:  Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[revenue]', e.message); return null })
   return id
 }
 

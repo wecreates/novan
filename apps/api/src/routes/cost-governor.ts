@@ -30,7 +30,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId,
     payload, traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/cost-governor', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[cost-governor]', e.message); return null })
 }
 
 /** Load budget row, returning defaults if not found */
@@ -543,7 +543,7 @@ const costGovernorRoutes: FastifyPluginAsync = async (app) => {
             alertType: a.alertType, thresholdPct: a.pct,
             currentUsd: a.currentUsd, limitUsd: a.limitUsd,
             dismissed: false, dismissedAt: null, firedAt: now,
-          }).catch(() => null)
+          }).catch((e: Error) => { console.error('[cost-governor]', e.message); return null })
           await emit(workspace_id, 'budget.limit.hit', {
             workspaceId: workspace_id, alertType: a.alertType,
             thresholdPct: a.pct, currentUsd: a.currentUsd, limitUsd: a.limitUsd,

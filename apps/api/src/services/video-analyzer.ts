@@ -122,7 +122,7 @@ async function fetchYouTubeTranscript(videoId: string): Promise<{ transcript?: s
         if (done) break
         total += value.length
         acc += decoder.decode(value, { stream: true })
-        if (total >= MAX_HTML_BYTES) { await reader.cancel().catch(() => null); break }
+        if (total >= MAX_HTML_BYTES) { await reader.cancel().catch((e: Error) => { console.error('[video-analyzer]', e.message); return null }); break }
       }
       html = acc
     }
@@ -1046,7 +1046,7 @@ export async function analyzeVideo(url: string, context = '', workspaceId = 'def
         },
         traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
         source: 'video-analyzer', version: 1, createdAt: Date.now(),
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[video-analyzer]', e.message); return null })
     } catch { /* tolerated — emit is best-effort */ }
 
     return out

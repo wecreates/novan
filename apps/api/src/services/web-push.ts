@@ -121,7 +121,7 @@ export async function recordSubscription(workspaceId: string, sub: PushSubscript
       payload: { endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth, endpointHash, userAgent: userAgent ?? null },
       traceId: uuidv7(), correlationId: endpointHash, causationId: null,
       source: 'web-push', version: 1, createdAt: Date.now(),
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[web-push]', e.message); return null })
   } catch { /* tolerated */ }
 }
 
@@ -135,7 +135,7 @@ export async function revokeSubscription(workspaceId: string, endpoint: string, 
       payload: { endpoint, endpointHash, reason },
       traceId: uuidv7(), correlationId: endpointHash, causationId: null,
       source: 'web-push', version: 1, createdAt: Date.now(),
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[web-push]', e.message); return null })
   } catch { /* tolerated */ }
 }
 
@@ -256,7 +256,7 @@ export async function broadcastPush(workspaceId: string, payload: PushPayload): 
       payload: { ...payload, attempted: subs.length, succeeded, revoked },
       traceId: uuidv7(), correlationId: null, causationId: null,
       source: 'web-push', version: 1, createdAt: Date.now(),
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[web-push]', e.message); return null })
   } catch { /* tolerated */ }
   return { attempted: subs.length, succeeded, revoked, errors }
 }

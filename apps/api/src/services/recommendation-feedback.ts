@@ -36,7 +36,7 @@ export async function submitFeedback(input: {
     reason:     input.reason     ?? null,
     operatorId: input.operatorId ?? null,
     weightDelta, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[recommendation-feedback]', e.message); return null })
   // Side-effect: rejecting a recommendation cuts its confidence
   if (input.action === 'reject') {
     await db.update(reasoningChains).set({
@@ -44,7 +44,7 @@ export async function submitFeedback(input: {
     }).where(and(
       eq(reasoningChains.workspaceId, input.workspaceId),
       eq(reasoningChains.id,          input.chainId),
-    )).catch(() => null)
+    )).catch((e: Error) => { console.error('[recommendation-feedback]', e.message); return null })
   }
   return { id, weightDelta }
 }

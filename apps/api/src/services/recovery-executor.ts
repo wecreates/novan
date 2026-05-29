@@ -89,7 +89,7 @@ async function emit(type: string, payload: Record<string, unknown>): Promise<voi
       id: uuidv7(), type, workspaceId: null, payload,
       traceId: uuidv7(), correlationId: null, causationId: null,
       source: 'recovery-executor', version: 1, createdAt: Date.now(),
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[recovery-executor]', e.message); return null })
   } catch { /* tolerated */ }
 }
 

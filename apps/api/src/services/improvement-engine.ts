@@ -44,7 +44,7 @@ async function emitEvent(workspaceId: string, type: string, payload: Record<stri
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'improvement-engine', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[improvement-engine]', e.message); return null })
 }
 
 function priorityScore(impact: number, risk: number): number {

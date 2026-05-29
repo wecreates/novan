@@ -38,7 +38,7 @@ async function emitEvent(
     id: uuidv7(), type, workspaceId,
     payload, traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/disaster-recovery', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[disaster-recovery]', e.message); return null })
 }
 
 // ─── Recovery operations ──────────────────────────────────────────────────────
@@ -117,7 +117,7 @@ export async function recoverDeadWorkers(workspaceId: string): Promise<number> {
           eq(executionLeases.workerId, w.id),
           eq(executionLeases.status, 'active'),
         ))
-        .catch(() => null)
+        .catch((e: Error) => { console.error('[disaster-recovery]', e.message); return null })
     }
     await emitEvent(workspaceId, 'recovery.dead_workers_offlined', {
       workerIds: dead.map((w) => w.id),
@@ -151,7 +151,7 @@ export async function runDisasterRecovery(workspaceId: string): Promise<Recovery
 
   await emitEvent(workspaceId, 'recovery.disaster_recovery_completed', {
     stuckWorkflows, orphanLeases, deadWorkers, errors,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[disaster-recovery]', e.message); return null })
 
   return { stuckWorkflows, orphanLeases, deadWorkers, errors }
 }

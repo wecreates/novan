@@ -228,7 +228,7 @@ const studioRoutes: FastifyPluginAsync = async (fastify) => {
       defaultAspectRatio: b.default_aspect_ratio ?? null,
       tags: b.tags ?? [],
       createdAt: now, updatedAt: now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[image-studio]', e.message); return null })
     return { success: true, data: { id } }
   })
 
@@ -238,8 +238,8 @@ const studioRoutes: FastifyPluginAsync = async (fastify) => {
     await db.update(promptTemplates)
       .set({ useCount: sql`${promptTemplates.useCount} + 1`, updatedAt: Date.now() })
       .where(and(eq(promptTemplates.id, req.params.id), eq(promptTemplates.workspaceId, ws)))
-      .catch(() => null)
-    const t = await db.select().from(promptTemplates).where(eq(promptTemplates.id, req.params.id)).limit(1).then(r => r[0]).catch(() => null)
+      .catch((e: Error) => { console.error('[image-studio]', e.message); return null })
+    const t = await db.select().from(promptTemplates).where(eq(promptTemplates.id, req.params.id)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[image-studio]', e.message); return null })
     return { success: true, data: t }
   })
 
@@ -248,7 +248,7 @@ const studioRoutes: FastifyPluginAsync = async (fastify) => {
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     await db.delete(promptTemplates)
       .where(and(eq(promptTemplates.id, req.params.id), eq(promptTemplates.workspaceId, ws)))
-      .catch(() => null)
+      .catch((e: Error) => { console.error('[image-studio]', e.message); return null })
     return { success: true }
   })
 

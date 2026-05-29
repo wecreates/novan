@@ -48,7 +48,7 @@ export async function registerNode(i: {
       endpoint: i.endpoint ?? null,
       lastHeartbeatAt: now, updatedAt: now,
     },
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[runtime-fabric]', e.message); return null })
 }
 
 export async function heartbeat(workspaceId: string, nodeId: string, snapshot: { activeLoad?: number; queueDepth?: number; metadata?: Record<string, unknown> }): Promise<void> {
@@ -59,7 +59,7 @@ export async function heartbeat(workspaceId: string, nodeId: string, snapshot: {
     metadata:    snapshot.metadata    ?? {},
     status: 'healthy',
     updatedAt: Date.now(),
-  }).where(and(eq(runtimeNodes.workspaceId, workspaceId), eq(runtimeNodes.id, nodeId))).catch(() => null)
+  }).where(and(eq(runtimeNodes.workspaceId, workspaceId), eq(runtimeNodes.id, nodeId))).catch((e: Error) => { console.error('[runtime-fabric]', e.message); return null })
 }
 
 export async function listNodes(workspaceId: string) {
@@ -70,12 +70,12 @@ export async function listNodes(workspaceId: string) {
 
 export async function setNodeStatus(workspaceId: string, nodeId: string, status: NodeStatus, reason: string): Promise<void> {
   await db.update(runtimeNodes).set({ status, updatedAt: Date.now() })
-    .where(and(eq(runtimeNodes.workspaceId, workspaceId), eq(runtimeNodes.id, nodeId))).catch(() => null)
+    .where(and(eq(runtimeNodes.workspaceId, workspaceId), eq(runtimeNodes.id, nodeId))).catch((e: Error) => { console.error('[runtime-fabric]', e.message); return null })
   await db.insert(scalingEvents).values({
     id: uuidv7(), workspaceId, kind: status === 'isolated' ? 'isolate' : 'reroute',
     target: nodeId, reason, approvedBy: 'auto',
     createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[runtime-fabric]', e.message); return null })
 }
 
 /**
@@ -166,12 +166,12 @@ export async function recordScalingEvent(workspaceId: string, d: ScalingDecision
     before: d.before, after: d.after,
     reason: d.reason, approvedBy,
     createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[runtime-fabric]', e.message); return null })
   await recordChain({
     workspaceId, kind: 'decision', subjectId: `scaling:${d.target}`,
     decision: `${d.kind} ${d.target}: ${d.before}→${d.after} (${d.reason})`,
     confidence: 0.8, source: 'runtime-fabric',
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[runtime-fabric]', e.message); return null })
   return id
 }
 

@@ -39,7 +39,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: (payload['issueId'] as string) ?? uuidv7(),
     causationId: null, source: 'api/issue-auto-loop', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[issue-auto-loop]', e.message); return null })
 }
 
 // ── Step 0: open → diagnosed (auto-diagnose common patterns) ──────────
@@ -102,7 +102,7 @@ export async function autoDiagnoseIssues(workspaceId: string): Promise<AutoDiagn
       verificationPlan: 'Re-run the failing operation; confirm no recurrence in last 30 min of events',
       riskLevel:        pat.riskLevel,
       diagnosedBy:      'auto-diagnoser',
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[issue-auto-loop]', e.message); return null })
     await emit(workspaceId, 'issue.auto_diagnosed', {
       issueId: issue.id, pattern: pat.rootCause, riskLevel: pat.riskLevel,
     })
@@ -163,7 +163,7 @@ export async function promoteDiagnosedIssues(workspaceId: string): Promise<Promo
         reasoning:     [`Auto-promoted from issue ${issue.id} on ${new Date(now).toISOString()}`],
         createdAt:     now,
         updatedAt:     now,
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[issue-auto-loop]', e.message); return null })
 
       await linkProposalToIssue(issue.workspaceId, issue.id, proposalId)
       await emit(issue.workspaceId, 'issue.auto_promoted_to_proposal', {
@@ -370,7 +370,7 @@ export async function autoApproveSafeProposals(workspaceId: string): Promise<Aut
     }
 
     await db.update(codeProposals).set({ status: 'approved', updatedAt: Date.now() })
-      .where(eq(codeProposals.id, p.id)).catch(() => null)
+      .where(eq(codeProposals.id, p.id)).catch((e: Error) => { console.error('[issue-auto-loop]', e.message); return null })
     await emit(workspaceId, 'issue.auto_approved', {
       proposalId: p.id, riskLevel: p.riskLevel, files: allFiles, dailyRemaining: remaining - approved - 1,
     })
@@ -447,10 +447,10 @@ export async function autoApplyValidatedPatches(workspaceId: string): Promise<Au
       await db.update(codeProposals).set({
         status: 'shipped', shippedAt: Date.now(), shippedBy: 'auto-apply',
         updatedAt: Date.now(),
-      }).where(eq(codeProposals.id, prop.id)).catch(() => null)
+      }).where(eq(codeProposals.id, prop.id)).catch((e: Error) => { console.error('[issue-auto-loop]', e.message); return null })
       const issueId = prop.capabilityId?.replace(/^issue:/, '')
       if (issueId && firstApplied?.recordId) {
-        await linkPatch(workspaceId, issueId, firstApplied.recordId).catch(() => null)
+        await linkPatch(workspaceId, issueId, firstApplied.recordId).catch((e: Error) => { console.error('[issue-auto-loop]', e.message); return null })
       }
       await emit(workspaceId, 'issue.auto_applied', {
         proposalId: prop.id, patchId: patch.id,
@@ -461,7 +461,7 @@ export async function autoApplyValidatedPatches(workspaceId: string): Promise<Au
     } else {
       const reason = 'error' in result ? result.error : result.results.map(r => r.error).filter(Boolean).join('; ')
       await db.update(codeProposals).set({ status: 'rejected', updatedAt: Date.now() })
-        .where(eq(codeProposals.id, prop.id)).catch(() => null)
+        .where(eq(codeProposals.id, prop.id)).catch((e: Error) => { console.error('[issue-auto-loop]', e.message); return null })
       await emit(workspaceId, 'issue.auto_apply_failed', { proposalId: prop.id, patchId: patch.id, reason })
       failed++
     }

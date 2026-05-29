@@ -137,7 +137,7 @@ export async function seedBuiltinSkills(workspaceId: string): Promise<{ created:
   for (const def of BUILTIN_SKILLS) {
     const existing = await db.select({ id: skills.id }).from(skills)
       .where(and(eq(skills.workspaceId, workspaceId), eq(skills.slug, def.slug)))
-      .limit(1).then(r => r[0]).catch(() => null)
+      .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[skills]', e.message); return null })
     if (existing) { skipped++; continue }
     await db.insert(skills).values({
       id:              uuidv7(),
@@ -158,7 +158,7 @@ export async function seedBuiltinSkills(workspaceId: string): Promise<{ created:
       verificationRequirements: (def.verificationRequirements ?? []) as never,
       status:          'verified',   // built-ins are pre-verified
       createdAt: now, updatedAt: now,
-    }).onConflictDoNothing().catch(() => null)
+    }).onConflictDoNothing().catch((e: Error) => { console.error('[skills]', e.message); return null })
     created++
   }
   return { created, skipped }
@@ -177,7 +177,7 @@ export async function listSkills(workspaceId: string, opts?: { status?: string; 
 export async function getSkill(workspaceId: string, slug: string) {
   return db.select().from(skills)
     .where(and(eq(skills.workspaceId, workspaceId), eq(skills.slug, slug)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[skills]', e.message); return null })
 }
 
 // ─── Skill execution router ──────────────────────────────────────────────────
@@ -205,7 +205,7 @@ export async function executeSkill(workspaceId: string, slug: string, inputs: Re
     payload: { skillId: skill.id, slug, riskLevel: skill.riskLevel, inputs },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'skills', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[skills]', e.message); return null })
 
   // Risk gate
   if (skill.requiresApproval) {
@@ -218,7 +218,7 @@ export async function executeSkill(workspaceId: string, slug: string, inputs: Re
       payload: { skillId: skill.id, slug, reason: 'requires_approval' },
       traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'skills', version: 1, createdAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[skills]', e.message); return null })
     return blocked
   }
 
@@ -282,14 +282,14 @@ export async function executeSkill(workspaceId: string, slug: string, inputs: Re
       ? Math.round((skill.avgDurationMs * Number(skill.successCount) + totalDurationMs) / (Number(skill.successCount) + 1))
       : totalDurationMs,
     updatedAt:    Date.now(),
-  }).where(eq(skills.id, skill.id)).catch(() => null)
+  }).where(eq(skills.id, skill.id)).catch((e: Error) => { console.error('[skills]', e.message); return null })
 
   await db.insert(events).values({
     id: uuidv7(), type: 'skill.execution_succeeded', workspaceId,
     payload: { skillId: skill.id, slug, durationMs: totalDurationMs, outputs },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'skills', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[skills]', e.message); return null })
 
   return { skillSlug: slug, status: 'succeeded', outputs, steps, totalDurationMs }
 }
@@ -348,18 +348,18 @@ async function recordStepFailure(
     lastSeenAt: Date.now(),
     createdAt: Date.now(),
     updatedAt: Date.now(),
-  }).onConflictDoNothing().catch(() => null)
+  }).onConflictDoNothing().catch((e: Error) => { console.error('[skills]', e.message); return null })
   await db.update(skills).set({
     failureCount: sql`${skills.failureCount} + 1`,
     lastUsedAt:   Date.now(),
     updatedAt:    Date.now(),
-  }).where(eq(skills.id, skill.id)).catch(() => null)
+  }).where(eq(skills.id, skill.id)).catch((e: Error) => { console.error('[skills]', e.message); return null })
   await db.insert(events).values({
     id: uuidv7(), type: 'skill.execution_failed', workspaceId,
     payload: { skillId: skill.id, slug, action, error: msg },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'skills', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[skills]', e.message); return null })
 }
 
 // ─── Promotion lifecycle (#8) ────────────────────────────────────────────────
@@ -375,7 +375,7 @@ export async function promoteSkill(workspaceId: string, slug: string, target: Sk
   const current = skill.status as SkillStatus
   if (target === 'deprecated') {
     await db.update(skills).set({ status: 'deprecated', updatedAt: Date.now() })
-      .where(eq(skills.id, skill.id)).catch(() => null)
+      .where(eq(skills.id, skill.id)).catch((e: Error) => { console.error('[skills]', e.message); return null })
     return { ok: true, status: 'deprecated' }
   }
   const curIdx = PROMOTION_ORDER.indexOf(current)
@@ -388,13 +388,13 @@ export async function promoteSkill(workspaceId: string, slug: string, target: Sk
     return { ok: false, reason: `production promotion requires ≥3 successful runs (current: ${skill.successCount ?? 0})` }
   }
   await db.update(skills).set({ status: target, updatedAt: Date.now() })
-    .where(eq(skills.id, skill.id)).catch(() => null)
+    .where(eq(skills.id, skill.id)).catch((e: Error) => { console.error('[skills]', e.message); return null })
   await db.insert(events).values({
     id: uuidv7(), type: 'skill.promoted', workspaceId,
     payload: { skillId: skill.id, slug, from: current, to: target },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'skills', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[skills]', e.message); return null })
   return { ok: true, status: target }
 }
 

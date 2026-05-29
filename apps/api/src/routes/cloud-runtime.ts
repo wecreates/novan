@@ -29,7 +29,7 @@ async function emitEvent(
     id: uuidv7(), type, workspaceId,
     payload, traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/cloud-runtime', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[cloud-runtime]', e.message); return null })
 }
 
 /** Validate a provider API key by hitting its models endpoint. */

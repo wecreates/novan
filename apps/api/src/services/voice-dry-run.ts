@@ -332,7 +332,7 @@ async function emitAudit(workspaceId: string, type: string, payload: Record<stri
     payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/voice-dry-run', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[voice-dry-run]', e.message); return null })
 }
 
 export interface RecordDryRunInput {
@@ -362,7 +362,7 @@ export async function recordDryRun(input: RecordDryRunInput): Promise<{ id: stri
       scopeType:         'workspace',
       scopeId:           input.workspaceId,
       estimatedCostUsd:  report.estimatedCostUsd,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[voice-dry-run]', e.message); return null })
     if (guard) {
       budgetDecision = {
         approved:    guard.approved,
@@ -412,7 +412,7 @@ export async function recordDryRun(input: RecordDryRunInput): Promise<{ id: stri
     budgetDecision:    report.budgetDecision,
     createdAt: now,
     expiresAt: now + TTL_MS,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[voice-dry-run]', e.message); return null })
   await emitAudit(input.workspaceId, 'voice.dry_run.created', {
     id, command: input.command, intent: report.intentKind, risk: report.risk,
     hardBlocked: report.hardBlocked, budgetApproved: budgetDecision?.approved ?? null,
@@ -428,7 +428,7 @@ export interface ApproveDryRunInput {
 }
 
 export async function approveDryRun(input: ApproveDryRunInput): Promise<{ ok: boolean; reason?: string; fullyApproved?: boolean }> {
-  const row = await db.select().from(voiceDryRuns).where(eq(voiceDryRuns.id, input.id)).limit(1).then(r => r[0]).catch(() => null)
+  const row = await db.select().from(voiceDryRuns).where(eq(voiceDryRuns.id, input.id)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[voice-dry-run]', e.message); return null })
   if (!row)                                   return { ok: false, reason: 'not found' }
   if (row.workspaceId !== input.workspaceId)  return { ok: false, reason: 'workspace mismatch' }
   if (row.status === 'rejected')              return { ok: false, reason: row.rejectedReason ?? 'rejected' }
@@ -472,7 +472,7 @@ export interface ExecuteDryRunInput {
 }
 
 export async function executeDryRun(input: ExecuteDryRunInput): Promise<{ ok: boolean; reason?: string; result?: unknown; status?: number }> {
-  const row = await db.select().from(voiceDryRuns).where(eq(voiceDryRuns.id, input.id)).limit(1).then(r => r[0]).catch(() => null)
+  const row = await db.select().from(voiceDryRuns).where(eq(voiceDryRuns.id, input.id)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[voice-dry-run]', e.message); return null })
   if (!row)                                   return { ok: false, reason: 'not found' }
   if (row.workspaceId !== input.workspaceId)  return { ok: false, reason: 'workspace mismatch' }
   if (row.status !== 'approved')              return { ok: false, reason: `status is ${row.status} — needs dual-channel approval first` }
@@ -571,12 +571,12 @@ export async function sweepExpiredDryRuns(): Promise<{ expired: number }> {
     .limit(500).catch(() => [])
   if (rows.length === 0) return { expired: 0 }
   await db.update(voiceDryRuns).set({ status: 'expired' })
-    .where(inArray(voiceDryRuns.id, rows.map(r => r.id))).catch(() => null)
+    .where(inArray(voiceDryRuns.id, rows.map(r => r.id))).catch((e: Error) => { console.error('[voice-dry-run]', e.message); return null })
   // Audit (one event per workspace to avoid noise)
   const byWs = new Map<string, number>()
   for (const r of rows) byWs.set(r.workspaceId, (byWs.get(r.workspaceId) ?? 0) + 1)
   for (const [ws, n] of byWs) {
-    await emitAudit(ws, 'voice.dry_run.swept_expired', { count: n }).catch(() => null)
+    await emitAudit(ws, 'voice.dry_run.swept_expired', { count: n }).catch((e: Error) => { console.error('[voice-dry-run]', e.message); return null })
   }
   return { expired: rows.length }
 }
@@ -594,5 +594,5 @@ export async function listDryRuns(workspaceId: string, opts: { limit?: number; s
 export async function getDryRun(id: string, workspaceId: string) {
   return db.select().from(voiceDryRuns)
     .where(and(eq(voiceDryRuns.id, id), eq(voiceDryRuns.workspaceId, workspaceId)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[voice-dry-run]', e.message); return null })
 }

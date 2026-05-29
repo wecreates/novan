@@ -45,7 +45,7 @@ export async function declare(input: DeclareInput): Promise<string> {
     status:     input.evidenceRefs && input.evidenceRefs.length > 0 ? 'unverified' : 'unverified',
     source:     input.source,
     createdAt:  now, updatedAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[assumption-tracker]', e.message); return null })
   return id
 }
 
@@ -65,14 +65,14 @@ export async function setStatus(
   if (opts?.evidenceRefs) update['evidenceRefs'] = opts.evidenceRefs as never
   await db.update(assumptions).set(update)
     .where(and(eq(assumptions.workspaceId, workspaceId), eq(assumptions.id, id)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[assumption-tracker]', e.message); return null })
 
   await db.insert(events).values({
     id: uuidv7(), type: `assumption.${status}`, workspaceId,
     payload: { assumptionId: id, status, reason: opts?.reason ?? null },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'assumption-tracker', version: 1, createdAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[assumption-tracker]', e.message); return null })
   return { ok: true }
 }
 

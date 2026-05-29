@@ -37,7 +37,7 @@ async function emitEvent(workspaceId: string, type: string, payload: Record<stri
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'production-readiness', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[production-readiness]', e.message); return null })
 }
 
 // ─── Individual checks ────────────────────────────────────────────────────────

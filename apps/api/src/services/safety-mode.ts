@@ -39,7 +39,7 @@ async function audit(workspaceId: string, type: string, payload: Record<string, 
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'safety-mode', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[safety-mode]', e.message); return null })
   await db.insert(securityAudits).values({
     id: uuidv7(), workspaceId,
     userId: (payload['setBy'] as string) ?? null,
@@ -48,7 +48,7 @@ async function audit(workspaceId: string, type: string, payload: Record<string, 
     context: payload, immutable: true,
     ipAddress: null, userAgent: null,
     createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[safety-mode]', e.message); return null })
 }
 
 // ─── Read / init ──────────────────────────────────────────────────────────────

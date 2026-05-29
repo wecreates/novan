@@ -34,7 +34,7 @@ async function emitEvent(
     id: uuidv7(), type, workspaceId,
     payload, traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/protection', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[protection]', e.message); return null })
 }
 
 // ─── Plugin ───────────────────────────────────────────────────────────────────

@@ -77,7 +77,7 @@ async function retrieveRelevantSkills(workspaceId: string, plan: BuildPlan): Pro
     await db.update(skillLibrary)
       .set({ useCount: sql`${skillLibrary.useCount} + 1`, lastUsedAt: Date.now() })
       .where(and(inArray(skillLibrary.workspaceId, [workspaceId, 'global']), inArray(skillLibrary.id, scored.map(s => s.id))))
-      .catch(() => null)
+      .catch((e: Error) => { console.error('[code-writer]', e.message); return null })
   }
   return scored.map(s => ({ id: s.id, name: s.name, category: s.category, tags: s.tags ?? [] }))
 }
@@ -216,7 +216,7 @@ export async function persistProposal(p: Omit<CodeProposal, 'id' | 'status'>): P
     evidence: [{ type: 'code_proposal', id, extract: `${p.filesToCreate.length} new + ${p.filesToModify.length} mod files` }],
     confidence: p.riskLevel === 'low' ? 0.75 : p.riskLevel === 'medium' ? 0.6 : 0.5,
     source: 'code-writer',
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[code-writer]', e.message); return null })
 
   return id
 }
@@ -233,12 +233,12 @@ export async function listProposals(workspaceId: string, opts?: { status?: CodeP
 export async function setProposalStatus(workspaceId: string, id: string, status: CodeProposal['status']): Promise<void> {
   await db.update(codeProposals).set({ status, updatedAt: Date.now() })
     .where(and(eq(codeProposals.workspaceId, workspaceId), eq(codeProposals.id, id)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[code-writer]', e.message); return null })
   const { recordStatusChange } = await import('./brain-persistence.js')
   await recordStatusChange({
     workspaceId, entityType: 'proposal', entityId: id,
     status, source: 'code-writer',
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[code-writer]', e.message); return null })
 }
 
 export async function markShipped(workspaceId: string, id: string, commitSha: string, by = 'operator'): Promise<void> {
@@ -249,7 +249,7 @@ export async function markShipped(workspaceId: string, id: string, commitSha: st
     shippedBy: by,
     updatedAt: Date.now(),
   }).where(and(eq(codeProposals.workspaceId, workspaceId), eq(codeProposals.id, id)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[code-writer]', e.message); return null })
 }
 
 export async function credibilityMetrics(workspaceId: string, windowDays = 90) {

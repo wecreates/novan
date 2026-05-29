@@ -418,7 +418,7 @@ export async function bootstrapWorkspace(workspaceId = 'default'): Promise<Boots
       notes:        'auto-seeded from env-var presence at boot',
       createdAt:    now,
       updatedAt:    now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[workspace-bootstrap]', e.message); return null })
     result.providersSeeded++
   }
 
@@ -440,7 +440,7 @@ export async function bootstrapWorkspace(workspaceId = 'default'): Promise<Boots
       disabledAt: now,
       createdAt: now,
       updatedAt: now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[workspace-bootstrap]', e.message); return null })
     result.killSwitchesSeeded++
   }
 
@@ -464,13 +464,13 @@ export async function bootstrapWorkspace(workspaceId = 'default'): Promise<Boots
       lastHeartbeatAt: now,
       createdAt:    now,
       updatedAt:    now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[workspace-bootstrap]', e.message); return null })
     result.runtimeNodesSeeded++
   } else {
     // Refresh heartbeat on every boot
     await db.update(runtimeNodes).set({
       status: 'up', lastHeartbeatAt: now, updatedAt: now,
-    }).where(eq(runtimeNodes.id, existingNode.id)).catch(() => null)
+    }).where(eq(runtimeNodes.id, existingNode.id)).catch((e: Error) => { console.error('[workspace-bootstrap]', e.message); return null })
   }
 
   // ─── 4. Setup state — initialize once so onboarding flows have a target ──
@@ -483,11 +483,11 @@ export async function bootstrapWorkspace(workspaceId = 'default'): Promise<Boots
       firstProviderAt:     result.providersSeeded > 0 ? now : null,
       completedOnboarding: false,
       updatedAt:           now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[workspace-bootstrap]', e.message); return null })
     result.setupStateSeeded = true
   } else if (result.providersSeeded > 0 && !existingSetup.firstProviderAt) {
     await db.update(setupState).set({ firstProviderAt: now, updatedAt: now })
-      .where(eq(setupState.workspaceId, workspaceId)).catch(() => null)
+      .where(eq(setupState.workspaceId, workspaceId)).catch((e: Error) => { console.error('[workspace-bootstrap]', e.message); return null })
   }
 
   // ─── 5. Notification prefs — sensible default so the brain knows what
@@ -504,7 +504,7 @@ export async function bootstrapWorkspace(workspaceId = 'default'): Promise<Boots
       severityFloor: t === 'security' ? 'warning' : 'normal',
       mutedUntil:    null,
       updatedAt:     now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[workspace-bootstrap]', e.message); return null })
     result.notificationPrefsSeeded = true
   }
 
@@ -535,7 +535,7 @@ export async function bootstrapWorkspace(workspaceId = 'default'): Promise<Boots
       lastError:         null,
       createdAt:         now,
       updatedAt:         now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[workspace-bootstrap]', e.message); return null })
     result.feedsSeeded++
   }
 
@@ -558,7 +558,7 @@ export async function bootstrapWorkspace(workspaceId = 'default'): Promise<Boots
       await db.update(businesses).set({
         metadata: { ...meta, responsibleDepartments: DEFAULT_DEPTS },
         updatedAt: now,
-      }).where(eq(businesses.id, biz.id)).catch(() => null)
+      }).where(eq(businesses.id, biz.id)).catch((e: Error) => { console.error('[workspace-bootstrap]', e.message); return null })
       result.businessesBackfilled++
     }
     // Skip system scaffold if any row already exists for this business
@@ -582,7 +582,7 @@ export async function bootstrapWorkspace(workspaceId = 'default'): Promise<Boots
         metadata:    {},
         createdAt:   now,
         updatedAt:   now,
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[workspace-bootstrap]', e.message); return null })
       result.businessSystemsSeeded++
     }
   }
@@ -609,7 +609,7 @@ export async function bootstrapWorkspace(workspaceId = 'default'): Promise<Boots
       createdBy:       'bootstrap',
       createdAt:       now,
       updatedAt:       now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[workspace-bootstrap]', e.message); return null })
     result.researchTopicsSeeded++
   }
 
@@ -637,7 +637,7 @@ export async function bootstrapWorkspace(workspaceId = 'default'): Promise<Boots
       tags:         ['openjarvis', 'monitor-operative', `interval:${m.intervalSec}`, ...m.tools.map(t => `tool:${t}`)],
       createdAt:    now,
       updatedAt:    now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[workspace-bootstrap]', e.message); return null })
     result.monitorAgentsSeeded++
   }
 

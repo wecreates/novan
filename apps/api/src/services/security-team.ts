@@ -93,7 +93,7 @@ export async function ensureSecurityTeam(): Promise<void> {
       capabilities: a.capabilities, isActive: true,
       findingsProduced: 0,
       createdAt: now, updatedAt: now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[security-team]', e.message); return null })
   }
 }
 
@@ -109,7 +109,7 @@ async function emitEvent(workspaceId: string | null, type: string, payload: Reco
     id: uuidv7(), type, workspaceId: workspaceId ?? 'global', payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'security-team', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[security-team]', e.message); return null })
 }
 
 async function persistFinding(f: Finding): Promise<string> {

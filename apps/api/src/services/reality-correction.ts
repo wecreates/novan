@@ -32,7 +32,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'reality-correction', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[reality-correction]', e.message); return null })
 }
 
 async function reduceChainConfidence(workspaceId: string, kind: string, factor = 0.85): Promise<number> {
@@ -52,7 +52,7 @@ async function reduceChainConfidence(workspaceId: string, kind: string, factor =
     if (Math.abs(next - Number(r.confidence)) < 0.01) continue
     await db.update(reasoningChains).set({ confidence: Number(next.toFixed(3)) })
       .where(eq(reasoningChains.id, r.id))
-      .catch(() => null)
+      .catch((e: Error) => { console.error('[reality-correction]', e.message); return null })
     n++
   }
   return n
@@ -62,7 +62,7 @@ async function markAssumptionForRevalidation(workspaceId: string, assumptionId: 
   await db.update(assumptions).set({
     status: 'verifying', updatedAt: Date.now(),
   }).where(and(eq(assumptions.workspaceId, workspaceId), eq(assumptions.id, assumptionId)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[reality-correction]', e.message); return null })
 }
 
 async function engageKillSwitchIfCritical(workspaceId: string, reason: string): Promise<boolean> {
@@ -70,26 +70,26 @@ async function engageKillSwitchIfCritical(workspaceId: string, reason: string): 
   // unless operator explicitly engages.
   const existing = await db.select().from(killSwitches)
     .where(and(eq(killSwitches.workspaceId, workspaceId), eq(killSwitches.switchType, 'research')))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[reality-correction]', e.message); return null })
   if (existing?.enabled) return false
   const now = Date.now()
   if (existing) {
     await db.update(killSwitches).set({
       enabled: true, reason, enabledBy: 'reality-correction', enabledAt: now, updatedAt: now,
-    }).where(eq(killSwitches.id, existing.id)).catch(() => null)
+    }).where(eq(killSwitches.id, existing.id)).catch((e: Error) => { console.error('[reality-correction]', e.message); return null })
   } else {
     await db.insert(killSwitches).values({
       id: uuidv7(), workspaceId, switchType: 'research', enabled: true,
       reason, enabledBy: 'reality-correction', enabledAt: now,
       createdAt: now, updatedAt: now,
-    }).onConflictDoNothing().catch(() => null)
+    }).onConflictDoNothing().catch((e: Error) => { console.error('[reality-correction]', e.message); return null })
   }
   return true
 }
 
 export async function applyCorrections(workspaceId: string): Promise<CorrectionResult> {
   const { getPreferences } = await import('./operator-preferences.js')
-  const prefs = await getPreferences(workspaceId).catch(() => null)
+  const prefs = await getPreferences(workspaceId).catch((e: Error) => { console.error('[reality-correction]', e.message); return null })
   const policy = prefs?.driftCorrectionPolicy ?? 'balanced'
 
   const open = await db.select().from(driftWarnings)
@@ -119,11 +119,11 @@ export async function applyCorrections(workspaceId: string): Promise<CorrectionR
         body: `Subject: ${w.subjectId ?? 'n/a'}. Recommended: ${w.recommendedAction}. Policy is notify_only — no auto-correction applied.`,
         severity: w.severity === 'critical' || w.severity === 'high' ? 'high' : 'normal',
         signature: `drift:${w.id}`,
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[reality-correction]', e.message); return null })
       action = 'notify_only — no auto-correction'
       await db.update(driftWarnings).set({
         status: 'acknowledged', appliedAction: action,
-      }).where(eq(driftWarnings.id, w.id)).catch(() => null)
+      }).where(eq(driftWarnings.id, w.id)).catch((e: Error) => { console.error('[reality-correction]', e.message); return null })
       result.warningsHandled++
       result.details.push({ warningId: w.id, kind: w.kind, action })
       await emit(workspaceId, 'governance.reality_correction', { warningId: w.id, kind: w.kind, action, policy })
@@ -146,7 +146,7 @@ export async function applyCorrections(workspaceId: string): Promise<CorrectionR
       for (const r of rows) {
         if (typeof r.confidence !== 'number') continue
         await db.update(reasoningChains).set({ confidence: Math.max(0.1, Number(r.confidence) * 0.7) })
-          .where(eq(reasoningChains.id, r.id)).catch(() => null)
+          .where(eq(reasoningChains.id, r.id)).catch((e: Error) => { console.error('[reality-correction]', e.message); return null })
         result.confidenceReductions++
       }
       action = `reduced confidence on failing subject ${w.subjectId}`
@@ -170,7 +170,7 @@ export async function applyCorrections(workspaceId: string): Promise<CorrectionR
         action = `kill_switch NOT engaged (policy=${policy}, severity=${w.severity})`
         await db.update(driftWarnings).set({
           status: 'acknowledged', appliedAction: action,
-        }).where(eq(driftWarnings.id, w.id)).catch(() => null)
+        }).where(eq(driftWarnings.id, w.id)).catch((e: Error) => { console.error('[reality-correction]', e.message); return null })
         result.warningsHandled++
         result.details.push({ warningId: w.id, kind: w.kind, action })
         await emit(workspaceId, 'governance.reality_correction', { warningId: w.id, kind: w.kind, action, policy })
@@ -179,7 +179,7 @@ export async function applyCorrections(workspaceId: string): Promise<CorrectionR
     } else if (w.kind === 'unsupported_conclusion' && w.subjectId) {
       await db.update(assumptions).set({ status: 'unverified', updatedAt: Date.now() })
         .where(and(eq(assumptions.workspaceId, workspaceId), eq(assumptions.id, w.subjectId)))
-        .catch(() => null)
+        .catch((e: Error) => { console.error('[reality-correction]', e.message); return null })
       result.assumptionsMarkedForRevalidation++
       action = `assumption ${w.subjectId} downgraded to unverified (no evidence)`
     }
@@ -187,7 +187,7 @@ export async function applyCorrections(workspaceId: string): Promise<CorrectionR
     // Mark warning as resolved with applied action
     await db.update(driftWarnings).set({
       status: 'resolved', appliedAction: action, resolvedAt: Date.now(),
-    }).where(eq(driftWarnings.id, w.id)).catch(() => null)
+    }).where(eq(driftWarnings.id, w.id)).catch((e: Error) => { console.error('[reality-correction]', e.message); return null })
 
     result.warningsHandled++
     result.details.push({ warningId: w.id, kind: w.kind, action })

@@ -21,7 +21,7 @@ async function emitRuntimeEvent(workspaceId: string, type: string, payload: Reco
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'incident-service', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[incident-service]', e.message); return null })
 }
 
 async function appendTimeline(
@@ -31,7 +31,7 @@ async function appendTimeline(
   await db.insert(incidentTimeline).values({
     id: uuidv7(), incidentId, workspaceId, actionType, actor,
     note: note ?? null, payload, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[incident-service]', e.message); return null })
 }
 
 // ─── Dedup ────────────────────────────────────────────────────────────────────

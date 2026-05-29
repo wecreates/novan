@@ -288,7 +288,7 @@ export async function completeCallback(input: CallbackInput): Promise<CallbackRe
     value:       accessToken,
   })
   if (tok.refresh_token) {
-    // FIX: previously swallowed via .catch(() => null). A failed refresh-token
+    // FIX: previously swallowed via .catch((e: Error) => { console.error('[connector-oauth]', e.message); return null }). A failed refresh-token
     // persist means we have an access token expiring in ~1hr with no way to
     // refresh — silent auth break. Now throw so the OAuth flow returns
     // failure to the operator instead of pretending success.
@@ -326,7 +326,7 @@ export async function completeCallback(input: CallbackInput): Promise<CallbackRe
     payload: { connectorId: pending.connectorId, accountId: account.id, scopes: grantedScopes },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/connector-oauth', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[connector-oauth]', e.message); return null })
 
   return {
     accountId:     account.id,

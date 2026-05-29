@@ -222,7 +222,7 @@ export async function generateForecasts(workspaceId: string): Promise<AllForecas
           historicalEndsAt: Date.now(),  // when the forecast was made
         },
         source: 'forecasting',
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[forecasting]', e.message); return null })
 
       // Declare the underlying assumption explicitly: "current trend
       // continues for next horizonWeeks weeks." Drift detector can
@@ -236,7 +236,7 @@ export async function generateForecasts(workspaceId: string): Promise<AllForecas
         }],
         confidence: f.confidence,
         source: 'forecasting',
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[forecasting]', e.message); return null })
     }
   })()
 

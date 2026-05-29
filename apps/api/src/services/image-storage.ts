@@ -66,7 +66,7 @@ async function fetchBytes(url: string): Promise<Buffer> {
     if (done) break
     total += value.length
     if (total > MAX_IMAGE_BYTES) {
-      await reader.cancel().catch(() => null)
+      await reader.cancel().catch((e: Error) => { console.error('[image-storage]', e.message); return null })
       throw new Error(`image exceeded ${MAX_IMAGE_BYTES} bytes mid-stream — aborted`)
     }
     chunks.push(value)

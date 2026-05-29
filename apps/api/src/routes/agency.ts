@@ -91,7 +91,7 @@ const agencyRoutes: FastifyPluginAsync = async (fastify) => {
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     const row = await db.select().from(agentDefinitions)
       .where(and(eq(agentDefinitions.workspaceId, ws), eq(agentDefinitions.slug, req.params.slug)))
-      .limit(1).then(r => r[0] ?? null).catch(() => null)
+      .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[agency]', e.message); return null })
     if (!row) return reply.code(404).send({ success: false, error: 'agent not found' })
     return { success: true, data: row }
   })
@@ -150,7 +150,7 @@ const agencyRoutes: FastifyPluginAsync = async (fastify) => {
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     const row = await db.select().from(agentDelegations)
       .where(and(eq(agentDelegations.workspaceId, ws), eq(agentDelegations.id, req.params.id)))
-      .limit(1).then(r => r[0] ?? null).catch(() => null)
+      .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[agency]', e.message); return null })
     if (!row) return reply.code(404).send({ success: false, error: 'delegation not found' })
     return { success: true, data: row }
   })

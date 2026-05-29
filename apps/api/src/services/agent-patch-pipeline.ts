@@ -93,7 +93,7 @@ async function emitStage(
     payload: { jobId, stage, ...payload },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/eng-agents/pipeline', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[agent-patch-pipeline]', e.message); return null })
 }
 
 function fail(

@@ -56,7 +56,7 @@ async function recordDrift(workspaceId: string, opts: {
       sql`${driftWarnings.status} IN ('open', 'acknowledged')`,
       opts.subjectId ? eq(driftWarnings.subjectId, opts.subjectId) : sql`${driftWarnings.subjectId} IS NULL`,
     ))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[drift-detector]', e.message); return null })
   if (existing) return { created: false }
 
   await db.insert(driftWarnings).values({
@@ -67,7 +67,7 @@ async function recordDrift(workspaceId: string, opts: {
     recommendedAction: opts.recommendedAction,
     status: 'open',
     createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[drift-detector]', e.message); return null })
   return { created: true }
 }
 
@@ -227,6 +227,6 @@ export async function resolveWarning(workspaceId: string, id: string, status: 'a
   await db.update(driftWarnings).set({
     status, resolvedAt: status === 'resolved' ? Date.now() : null,
   }).where(and(eq(driftWarnings.workspaceId, workspaceId), eq(driftWarnings.id, id)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[drift-detector]', e.message); return null })
   return { ok: true }
 }

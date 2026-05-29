@@ -49,7 +49,7 @@ const DEFAULTS = (workspaceId: string): WorkspaceVoicePrefs => ({
 export async function getVoicePrefs(workspaceId: string): Promise<WorkspaceVoicePrefs> {
   const row = await db.select().from(workspaceVoicePrefs)
     .where(eq(workspaceVoicePrefs.workspaceId, workspaceId))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[voice-preferences]', e.message); return null })
   if (!row) return DEFAULTS(workspaceId)
   return {
     workspaceId,
@@ -72,7 +72,7 @@ export async function getVoicePrefs(workspaceId: string): Promise<WorkspaceVoice
 
 export async function patchVoicePrefs(workspaceId: string, patch: Partial<WorkspaceVoicePrefs>): Promise<WorkspaceVoicePrefs> {
   const now = Date.now()
-  const existing = await db.select().from(workspaceVoicePrefs).where(eq(workspaceVoicePrefs.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch(() => null)
+  const existing = await db.select().from(workspaceVoicePrefs).where(eq(workspaceVoicePrefs.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[voice-preferences]', e.message); return null })
   if (!existing) {
     const next = { ...DEFAULTS(workspaceId), ...patch, workspaceId }
     await db.insert(workspaceVoicePrefs).values({
@@ -92,7 +92,7 @@ export async function patchVoicePrefs(workspaceId: string, patch: Partial<Worksp
       ambientSeverityFloor:    next.ambientSeverityFloor,
       pushToTalkDefault:       next.pushToTalkDefault,
       updatedAt:               now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[voice-preferences]', e.message); return null })
     return next
   }
   const update: Record<string, unknown> = { updatedAt: now }
@@ -110,6 +110,6 @@ export async function patchVoicePrefs(workspaceId: string, patch: Partial<Worksp
   if (patch.ambientAlertsEnabled    !== undefined) update['ambientAlertsEnabled']    = patch.ambientAlertsEnabled
   if (patch.ambientSeverityFloor    !== undefined) update['ambientSeverityFloor']    = patch.ambientSeverityFloor
   if (patch.pushToTalkDefault       !== undefined) update['pushToTalkDefault']       = patch.pushToTalkDefault
-  await db.update(workspaceVoicePrefs).set(update).where(eq(workspaceVoicePrefs.workspaceId, workspaceId)).catch(() => null)
+  await db.update(workspaceVoicePrefs).set(update).where(eq(workspaceVoicePrefs.workspaceId, workspaceId)).catch((e: Error) => { console.error('[voice-preferences]', e.message); return null })
   return getVoicePrefs(workspaceId)
 }

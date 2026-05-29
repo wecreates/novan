@@ -54,7 +54,7 @@ async function emitEvent(
     id: uuidv7(), type, workspaceId,
     payload, traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/provider-router', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[provider-router]', e.message); return null })
 }
 
 /** Select the best enabled provider by composite score. */
@@ -81,7 +81,7 @@ async function selectProvider(
         eq(providerPreferences.workspaceId, workspaceId),
         eq(providerPreferences.taskType, taskType),
         eq(providerPreferences.status, 'active'),
-      )).limit(1).then(r => r[0]).catch(() => null)
+      )).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[provider-router]', e.message); return null })
     if (pref) {
       const configs = await db.select().from(providerConfigs)
         .where(and(

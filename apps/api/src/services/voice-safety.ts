@@ -103,7 +103,7 @@ export async function preflightVoiceSession(input: PreflightInput): Promise<Pref
     scopeType:    'workspace',
     scopeId:      input.workspaceId,
     estimatedCostUsd: input.estimatedCostUsd,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[voice-safety]', e.message); return null })
 
   if (!decision) return { ok: true }                  // guard table missing → allow (single-op default)
   if (!decision.approved) {

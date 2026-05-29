@@ -55,7 +55,7 @@ async function emitEvent(workspaceId: string, type: string, payload: Record<stri
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'autonomous-orchestrator', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[autonomous-orchestrator]', e.message); return null })
 }
 
 async function updateRun(id: string, updates: Partial<typeof autonomousRuns.$inferInsert>): Promise<void> {

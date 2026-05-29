@@ -118,7 +118,7 @@ async function persistEvidence(
       targetKind:     filesChanged.length > 0 ? 'file' : 'command',
       errorMessage,
       evidenceIds:    [id],
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[verification-engine]', e.message); return null })
   } else {
     // Pass — if a recent matching failure exists, record this as a successful fix
     const { signature } = buildSignature({
@@ -143,7 +143,7 @@ async function persistEvidence(
           patchRecordIds:          [],
         })
       })
-      .catch(() => null)
+      .catch((e: Error) => { console.error('[verification-engine]', e.message); return null })
     // Silence unused-warning for buildSignature when no recent failure
     void signature
   }

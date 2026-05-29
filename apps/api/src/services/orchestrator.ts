@@ -30,7 +30,7 @@ async function emitEvent(workspaceId: string, type: string, payload: Record<stri
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'orchestrator', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[orchestrator]', e.message); return null })
 }
 
 // ─── Agent registration ───────────────────────────────────────────────────────

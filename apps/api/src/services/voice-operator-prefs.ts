@@ -42,7 +42,7 @@ function clampSpeed(n: number): number { return Math.max(0.5, Math.min(1.5, n)) 
 export async function getOperatorPrefs(workspaceId: string, userId: string): Promise<OperatorVoicePrefs> {
   const row = await db.select().from(operatorVoicePrefs)
     .where(and(eq(operatorVoicePrefs.workspaceId, workspaceId), eq(operatorVoicePrefs.userId, userId)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[voice-operator-prefs]', e.message); return null })
   if (!row) return DEFAULTS(workspaceId, userId)
   return {
     workspaceId, userId,
@@ -60,7 +60,7 @@ export async function patchOperatorPrefs(workspaceId: string, userId: string, pa
   const now = Date.now()
   const existing = await db.select().from(operatorVoicePrefs)
     .where(and(eq(operatorVoicePrefs.workspaceId, workspaceId), eq(operatorVoicePrefs.userId, userId)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[voice-operator-prefs]', e.message); return null })
   if (!existing) {
     const next = { ...DEFAULTS(workspaceId, userId), ...patch }
     next.preferredSpeed = clampSpeed(next.preferredSpeed)
@@ -75,7 +75,7 @@ export async function patchOperatorPrefs(workspaceId: string, userId: string, pa
       responseMode:         next.responseMode,
       createdAt:            now,
       updatedAt:            now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[voice-operator-prefs]', e.message); return null })
     return next
   }
   const upd: Record<string, unknown> = { updatedAt: now }
@@ -88,7 +88,7 @@ export async function patchOperatorPrefs(workspaceId: string, userId: string, pa
   if (patch.responseMode         !== undefined) upd['responseMode']         = patch.responseMode
   await db.update(operatorVoicePrefs).set(upd)
     .where(and(eq(operatorVoicePrefs.workspaceId, workspaceId), eq(operatorVoicePrefs.userId, userId)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[voice-operator-prefs]', e.message); return null })
   return getOperatorPrefs(workspaceId, userId)
 }
 
@@ -96,5 +96,5 @@ export async function patchOperatorPrefs(workspaceId: string, userId: string, pa
 export async function resetOperatorPrefs(workspaceId: string, userId: string): Promise<void> {
   await db.delete(operatorVoicePrefs)
     .where(and(eq(operatorVoicePrefs.workspaceId, workspaceId), eq(operatorVoicePrefs.userId, userId)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[voice-operator-prefs]', e.message); return null })
 }

@@ -139,13 +139,13 @@ export async function generateSchedule(workspaceId: string, opts?: { statuses?: 
 export async function addPredecessor(workspaceId: string, taskId: string, predecessorRecommendationId: string): Promise<{ ok: boolean }> {
   const row = await db.select().from(roadmapTasks)
     .where(and(eq(roadmapTasks.workspaceId, workspaceId), eq(roadmapTasks.id, taskId)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[long-horizon-planner]', e.message); return null })
   if (!row) return { ok: false }
   const current = (Array.isArray(row.predecessors) ? row.predecessors : []) as string[]
   if (current.includes(predecessorRecommendationId)) return { ok: true }
   await db.update(roadmapTasks).set({
     predecessors: [...current, predecessorRecommendationId],
     updatedAt: Date.now(),
-  }).where(eq(roadmapTasks.id, taskId)).catch(() => null)
+  }).where(eq(roadmapTasks.id, taskId)).catch((e: Error) => { console.error('[long-horizon-planner]', e.message); return null })
   return { ok: true }
 }

@@ -366,7 +366,7 @@ const intelligenceRoutes: FastifyPluginAsync = async (fastify) => {
       payload: report as unknown as Record<string, unknown>,
       traceId: uuidv7Lib(), correlationId: uuidv7Lib(), causationId: null,
       source: 'manual-trigger', version: 1, createdAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[intelligence]', e.message); return null })
     return { success: true, data: report }
   })
 

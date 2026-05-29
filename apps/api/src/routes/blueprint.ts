@@ -47,7 +47,7 @@ const blueprintRoutes: FastifyPluginAsync = async (fastify) => {
       fileCount:    snap.fileCount,
       snapshot:     snap as unknown as Record<string, unknown>,
       generatedAt:  snap.generatedAt,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[blueprint]', e.message); return null })
     return { success: true, data: snap }
   })
 
@@ -79,7 +79,7 @@ const blueprintRoutes: FastifyPluginAsync = async (fastify) => {
       approvedBy:   b.approved_by ?? 'operator',
       approvedAt:   Date.now(),
       archived:     false,
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[blueprint]', e.message); return null })
     const { approvePattern } = await import('../services/knowledge-curator.js')
     await approvePattern({ workspaceId: b.workspace_id, patternId: b.pattern_id, approvedBy: b.approved_by ?? 'operator', patternData: data as never })
     return { success: true }
@@ -129,7 +129,7 @@ const blueprintRoutes: FastifyPluginAsync = async (fastify) => {
       baselinePassRate: b.baseline_pass_rate ?? 0.80,
       tags: b.tags ?? [],
       archived: false, createdAt: now, updatedAt: now,
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[blueprint]', e.message); return null })
     return { success: true, data: { id } }
   })
 
@@ -149,7 +149,7 @@ const blueprintRoutes: FastifyPluginAsync = async (fastify) => {
       input: b.input, expectedBehavior: b.expected_behavior,
       tags: b.tags ?? [], knownFailure: b.known_failure ?? false,
       notes: b.notes ?? null, createdAt: Date.now(),
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[blueprint]', e.message); return null })
     return { success: true, data: { id } }
   })
 
@@ -197,7 +197,7 @@ const blueprintRoutes: FastifyPluginAsync = async (fastify) => {
         priority: b.priority ?? 100, enabled: b.enabled ?? true,
         updatedAt: now,
       },
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[blueprint]', e.message); return null })
     const { invalidateOperatorRules } = await import('../services/policy-engine.js')
     invalidateOperatorRules(b.workspace_id)
     return { success: true }
@@ -208,7 +208,7 @@ const blueprintRoutes: FastifyPluginAsync = async (fastify) => {
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     await db.delete(policyRules)
       .where(and(eq(policyRules.workspaceId, ws), eq(policyRules.id, req.params.id)))
-      .catch(() => null)
+      .catch((e: Error) => { console.error('[blueprint]', e.message); return null })
     const { invalidateOperatorRules } = await import('../services/policy-engine.js')
     invalidateOperatorRules(ws)
     return { success: true }
@@ -234,7 +234,7 @@ const blueprintRoutes: FastifyPluginAsync = async (fastify) => {
       ownerUserId: b.owner_user_id ?? null,
       config: b.config ?? {}, archived: false,
       createdAt: now, updatedAt: now,
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[blueprint]', e.message); return null })
     return { success: true, data: { id, slug: b.slug.toLowerCase() } }
   })
 

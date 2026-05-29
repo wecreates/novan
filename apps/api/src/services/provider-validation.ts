@@ -128,7 +128,7 @@ export async function validateProviders(workspaceId: string, opts?: { forceRefre
       latencyMs:   probe.latencyMs,
       errorRate:   probe.ok ? 0 : 1,
       checkedAt:   now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[provider-validation]', e.message); return null })
   }
 
   await db.insert(events).values({
@@ -137,7 +137,7 @@ export async function validateProviders(workspaceId: string, opts?: { forceRefre
     payload: { configuredCount, reachableCount, total: TARGETS.length },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'provider-validation', version: 1, createdAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[provider-validation]', e.message); return null })
 
   const out = { results, configuredCount, reachableCount }
   if (useCache) PROBE_CACHE.set(workspaceId, { value: out, expiresAt: Date.now() + PROBE_TTL_MS })

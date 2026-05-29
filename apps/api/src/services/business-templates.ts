@@ -126,7 +126,7 @@ export async function applyTemplateToWorkspace(
       },
       traceId: uuidv7(), correlationId: workspaceId, causationId: null,
       source: 'business-templates', version: 1, createdAt: Date.now(),
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[business-templates]', e.message); return null })
   } catch { /* DB unavailable — tolerated */ }
   return { applied: t.key, targetMonthlyUsd: t.targetMonthlyUsd }
 }

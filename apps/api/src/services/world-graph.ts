@@ -172,7 +172,7 @@ export async function populateWorldGraph(workspaceId: string): Promise<PopulateR
       confidence:   edge.confidence ?? 1.0,
       createdAt:    now,
       updatedAt:    now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[world-graph]', e.message); return null })
     inserted++
   }
 
@@ -181,7 +181,7 @@ export async function populateWorldGraph(workspaceId: string): Promise<PopulateR
     if (want.has(k)) continue
     await db.delete(entityRelationships)
       .where(eq(entityRelationships.id, row.id))
-      .catch(() => null)
+      .catch((e: Error) => { console.error('[world-graph]', e.message); return null })
     pruned++
   }
 
@@ -190,7 +190,7 @@ export async function populateWorldGraph(workspaceId: string): Promise<PopulateR
     payload: { inserted, unchanged, pruned, total: want.size },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/world-graph', version: 1, createdAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[world-graph]', e.message); return null })
 
   return { inserted, unchanged, pruned }
 }

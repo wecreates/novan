@@ -42,7 +42,7 @@ export async function ingest(i: IngestInput): Promise<{ id: string; intent: Inte
         eq(inboundMessages.workspaceId, i.workspaceId),
         eq(inboundMessages.channel,     i.channel),
         eq(inboundMessages.externalId,  i.externalId),
-      )).limit(1).then(r => r[0]).catch(() => null)
+      )).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[inbound]', e.message); return null })
     if (existing) return { id: existing.id, intent: 'unknown', deduped: true }
   }
   const id = uuidv7()
@@ -56,7 +56,7 @@ export async function ingest(i: IngestInput): Promise<{ id: string; intent: Inte
     receivedAt: i.receivedAt ?? Date.now(),
     intent,
     metadata:   i.metadata   ?? {},
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[inbound]', e.message); return null })
   return { id, intent, deduped: false }
 }
 
@@ -73,7 +73,7 @@ export async function listRecent(workspaceId: string, opts?: { channel?: Channel
 export async function markProcessed(workspaceId: string, id: string): Promise<void> {
   await db.update(inboundMessages).set({ processedAt: Date.now() })
     .where(and(eq(inboundMessages.workspaceId, workspaceId), eq(inboundMessages.id, id)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[inbound]', e.message); return null })
 }
 
 export async function summary(workspaceId: string, windowDays = 7) {

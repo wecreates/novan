@@ -275,7 +275,7 @@ export async function recordKnowledgeOutcome(input: {
     payload: { patternId: input.patternId, followed: input.followed, good: input.good },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'knowledge-curator', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[knowledge-curator-v2]', e.message); return null })
 }
 
 /** Aggregate trust counts for an entry from recorded outcome events. */
@@ -328,13 +328,13 @@ export async function autoDeprecateLowTrust(input: {
       await db.update(approvedPatterns)
         .set({ archived: true })
         .where(eq(approvedPatterns.id, r.id))
-        .catch(() => null)
+        .catch((e: Error) => { console.error('[knowledge-curator-v2]', e.message); return null })
       await db.insert(events).values({
         id: uuidv7(), type: 'knowledge.auto_deprecated', workspaceId: input.workspaceId,
         payload: { patternId: r.id, trustScore: trust.trustScore, sampleSize: trust.followedGood + trust.followedBad },
         traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
         source: 'knowledge-curator', version: 1, createdAt: Date.now(),
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[knowledge-curator-v2]', e.message); return null })
       deprecated.push(r.id)
     }
   }
@@ -428,7 +428,7 @@ export async function runPeriodicReview(workspaceId: string): Promise<{
     },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'knowledge-curator', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[knowledge-curator-v2]', e.message); return null })
 
   return {
     newProposals:          totalProposals,
@@ -462,7 +462,7 @@ export async function proposePersonaPromptPatch(input: {
     payload: { patternId: input.patternId, persona: input.persona, addedRule },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'knowledge-curator', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[knowledge-curator-v2]', e.message); return null })
   return { proposalId, persona: input.persona, addedRule }
 }
 

@@ -30,7 +30,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'pattern-extractor', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[pattern-extractor]', e.message); return null })
 }
 
 /** Create a preventive roadmap task if not already present for the source pattern. */
@@ -44,7 +44,7 @@ async function ensurePreventiveTask(workspaceId: string, recoId: string, opts: {
 }): Promise<boolean> {
   const existing = await db.select({ id: roadmapTasks.id }).from(roadmapTasks)
     .where(and(eq(roadmapTasks.workspaceId, workspaceId), eq(roadmapTasks.recommendationId, recoId)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[pattern-extractor]', e.message); return null })
   if (existing) return false
   const now = Date.now()
   await db.insert(roadmapTasks).values({
@@ -54,7 +54,7 @@ async function ensurePreventiveTask(workspaceId: string, recoId: string, opts: {
     priorityScore: Math.round(opts.impact * 20 - opts.risk * 5 + 30),
     requiresApproval: opts.requiresApproval, status: 'pending',
     createdAt: now, updatedAt: now,
-  }).onConflictDoNothing().catch(() => null)
+  }).onConflictDoNothing().catch((e: Error) => { console.error('[pattern-extractor]', e.message); return null })
   return true
 }
 

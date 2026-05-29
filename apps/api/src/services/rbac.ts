@@ -101,7 +101,7 @@ async function audit(
     context, immutable: true,
     ipAddress: null, userAgent: null,
     createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[rbac]', e.message); return null })
   if (outcome === 'denied') {
     await db.insert(events).values({
       id: uuidv7(), type: 'security.permission_denied',
@@ -109,7 +109,7 @@ async function audit(
       payload: { userId, resource, action, ...context },
       traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'rbac', version: 1, createdAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[rbac]', e.message); return null })
   }
 }
 

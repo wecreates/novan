@@ -178,7 +178,7 @@ export async function runAiDriftSample(): Promise<{
           payload: verdict,
           traceId: uuidv7(), correlationId: null, causationId: null,
           source: 'ai-drift', version: 1, createdAt: Date.now(),
-        } as never).catch(() => null)
+        } as never).catch((e: Error) => { console.error('[ai-drift]', e.message); return null })
       } catch { /* tolerated */ }
     }
   }

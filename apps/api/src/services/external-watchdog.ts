@@ -29,7 +29,7 @@ export async function watchdogTick(): Promise<{ liveness: 'live' | 'stale'; aler
       body: `Last heartbeat ${Math.floor(s.lastHeartbeatAgoMs / 1000)}s ago. Crons active: ${(await import('./learning-cron.js')).learningCronHandleCount()}. Uptime: ${s.uptimeHuman}.`,
       severity: 'critical',
       signature: `watchdog:stale:${Math.floor(s.lastHeartbeatAgoMs / 60_000)}`,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[external-watchdog]', e.message); return null })
     return { liveness, alertedAt: Date.now() }
   }
   return { liveness }

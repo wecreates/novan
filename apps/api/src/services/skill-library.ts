@@ -146,7 +146,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/skill-library', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[skill-library]', e.message); return null })
 }
 
 export async function ingestSkillsFromDirectory(
@@ -169,9 +169,9 @@ export async function ingestSkillsFromDirectory(
     const skillDir  = join(rootDir, slug)
     const skillPath = join(skillDir, 'SKILL.md')
     try {
-      const s = await stat(skillDir).catch(() => null)
+      const s = await stat(skillDir).catch((e: Error) => { console.error('[skill-library]', e.message); return null })
       if (!s || !s.isDirectory()) continue
-      const raw = await readFile(skillPath, 'utf8').catch(() => null)
+      const raw = await readFile(skillPath, 'utf8').catch((e: Error) => { console.error('[skill-library]', e.message); return null })
       if (!raw) continue
       result.scanned++
 
@@ -203,7 +203,7 @@ export async function ingestSkillsFromDirectory(
             updatedAt:   now,
           })
           .where(eq(skillLibrary.id, slug))
-          .catch(() => null)
+          .catch((e: Error) => { console.error('[skill-library]', e.message); return null })
         result.updated++
       } else {
         await db.insert(skillLibrary).values({
@@ -245,7 +245,7 @@ export async function ingestSkillsFromDirectory(
 export async function getSkill(id: string, workspaceId = 'global') {
   return db.select().from(skillLibrary)
     .where(and(eq(skillLibrary.id, id), eq(skillLibrary.workspaceId, workspaceId)))
-    .limit(1).then(r => r[0] ?? null).catch(() => null)
+    .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[skill-library]', e.message); return null })
 }
 
 export async function listSkills(opts: {

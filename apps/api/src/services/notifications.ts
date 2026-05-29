@@ -150,7 +150,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'notifications', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[notifications]', e.message); return null })
 }
 
 /**
@@ -170,7 +170,7 @@ async function loadRestraintContext(workspaceId: string): Promise<{
   let loadMode: LoadMode = 'normal'
   try {
     const { snapshotOperatorLoad } = await import('./operator-cognitive-load.js')
-    const verdict = await snapshotOperatorLoad(workspaceId, { windowMs }).catch(() => null)
+    const verdict = await snapshotOperatorLoad(workspaceId, { windowMs }).catch((e: Error) => { console.error('[notifications]', e.message); return null })
     if (verdict) { loadScore = verdict.loadScore; loadMode = verdict.mode as LoadMode }
   } catch { /* tolerated */ }
 
@@ -192,7 +192,7 @@ async function loadRestraintContext(workspaceId: string): Promise<{
       eq(events.type, 'notification.acked'),
     ))
     .orderBy(desc(events.createdAt)).limit(1)
-    .then(r => r[0]?.createdAt ?? null).catch(() => null)
+    .then(r => r[0]?.createdAt ?? null).catch((e: Error) => { console.error('[notifications]', e.message); return null })
 
   const msSinceLastAck = lastAck === null
     ? windowMs

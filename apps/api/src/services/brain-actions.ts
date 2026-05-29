@@ -57,7 +57,7 @@ export async function performBrainAction(i: BrainActionInput): Promise<BrainActi
     payload: { actionId: i.actionId, nodeId: i.nodeId, risk },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'brain-actions', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[brain-actions]', e.message); return null })
 
   try {
     switch (i.actionId) {

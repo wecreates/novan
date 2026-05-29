@@ -222,7 +222,7 @@ async function emitEvent(workspaceId: string, type: string, payload: Record<stri
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'business-reality', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[business-reality]', e.message); return null })
 }
 
 // `gte` and `businessRevenue` referenced for future extensions (forecasting

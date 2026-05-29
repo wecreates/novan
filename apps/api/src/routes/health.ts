@@ -21,7 +21,7 @@ export const healthRoutes: FastifyPluginAsync = async (app) => {
     const redisOk = checks[1]?.status === 'fulfilled'
     const allOk   = dbOk && redisOk
 
-    const queueMetrics = await import('../queues/index.js').then((m) => m.getQueueMetrics()).catch(() => null)
+    const queueMetrics = await import('../queues/index.js').then((m) => m.getQueueMetrics()).catch((e: Error) => { console.error('[health]', e.message); return null })
 
     const body = {
       status:    allOk ? 'ready' : 'not_ready',

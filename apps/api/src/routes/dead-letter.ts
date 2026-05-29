@@ -31,7 +31,7 @@ async function emit(type: string, workspaceId: string, payload: unknown): Promis
     source:        'api/dead-letter',
     version:       1,
     createdAt:     Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[dead-letter]', e.message); return null })
 }
 
 // ─── Query schemas ────────────────────────────────────────────────────────────

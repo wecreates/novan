@@ -60,7 +60,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     const row = await db.select().from(chatActions)
       .where(and(eq(chatActions.workspaceId, ws), eq(chatActions.id, req.params.id)))
-      .limit(1).then(r => r[0]).catch(() => null)
+      .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[chat]', e.message); return null })
     if (!row) return reply.code(404).send({ success: false, error: 'not found' })
     if (row.status !== 'suggested') return reply.code(400).send({ success: false, error: `already ${row.status}` })
 
@@ -138,14 +138,14 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
         executedResult: result,
         decidedBy: 'operator', decidedAt: Date.now(),
         ...(req.body.reason ? { reason: req.body.reason } : {}),
-      }).where(eq(chatActions.id, row.id)).catch(() => null)
+      }).where(eq(chatActions.id, row.id)).catch((e: Error) => { console.error('[chat]', e.message); return null })
       return { success: true, data: { status: 'executed', result } }
     } catch (e) {
       await db.update(chatActions).set({
         status: 'failed',
         executedResult: { error: (e as Error).message },
         decidedBy: 'operator', decidedAt: Date.now(),
-      }).where(eq(chatActions.id, row.id)).catch(() => null)
+      }).where(eq(chatActions.id, row.id)).catch((e: Error) => { console.error('[chat]', e.message); return null })
       return reply.code(500).send({ success: false, error: (e as Error).message })
     }
   })
@@ -158,7 +158,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
       decidedBy: 'operator', decidedAt: Date.now(),
       ...(req.body.reason ? { reason: req.body.reason } : {}),
     }).where(and(eq(chatActions.workspaceId, ws), eq(chatActions.id, req.params.id)))
-      .catch(() => null)
+      .catch((e: Error) => { console.error('[chat]', e.message); return null })
     return { success: true }
   })
 
@@ -262,7 +262,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
     const { conversations, messages } = await import('../db/schema.js')
     const conv = await db.select().from(conversations)
       .where(and(eq(conversations.workspaceId, ws), eq(conversations.id, req.params.id)))
-      .limit(1).then(r => r[0] ?? null).catch(() => null)
+      .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[chat]', e.message); return null })
     if (!conv) return reply.code(404).send({ success: false, error: 'conversation not found' })
 
     const rows = await db.select().from(messages)

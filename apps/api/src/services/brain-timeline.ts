@@ -232,7 +232,7 @@ export async function decisionPath(workspaceId: string, key: string, windowMinut
   // Try as reasoning chain id first
   const chain = await db.select().from(reasoningChains)
     .where(and(eq(reasoningChains.workspaceId, workspaceId), eq(reasoningChains.id, key)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[brain-timeline]', e.message); return null })
 
   let rootAt: number | null = null
   let rootEvent: DecisionPath['rootEvent'] = null
@@ -272,7 +272,7 @@ export async function decisionPath(workspaceId: string, key: string, windowMinut
   // Try as event timestamp (numeric) if no chain
   if (!chain && /^\d+$/.test(key)) {
     rootAt = Number(key)
-    const ev = await db.select().from(events).where(eq(events.createdAt, rootAt)).limit(1).then(r => r[0]).catch(() => null)
+    const ev = await db.select().from(events).where(eq(events.createdAt, rootAt)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[brain-timeline]', e.message); return null })
     if (ev) {
       rootEvent = { type: ev.type, at: ev.createdAt, payload: (ev.payload as Record<string, unknown> | null) ?? null }
       steps.push({

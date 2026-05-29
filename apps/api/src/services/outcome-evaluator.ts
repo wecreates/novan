@@ -47,7 +47,7 @@ async function linkIncidentResolutions(workspaceId: string): Promise<number> {
         eq(reasoningChains.subjectId, `incident:${inc.id}`),
         eq(reasoningChains.outcomeKnown, false),
       ))
-      .limit(1).then(r => r[0]).catch(() => null)
+      .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[outcome-evaluator]', e.message); return null })
     if (!chains) continue
     await linkOutcome(workspaceId, chains.id, true, {
       source: 'incident.resolved',
@@ -77,7 +77,7 @@ async function evaluateForecastHorizons(workspaceId: string): Promise<{ evaluate
   let evaluated = 0, matched = 0, missed = 0
 
   // Pull current trend data once
-  const trends = await allTrends(workspaceId).catch(() => null)
+  const trends = await allTrends(workspaceId).catch((e: Error) => { console.error('[outcome-evaluator]', e.message); return null })
   if (!trends) return { evaluated, matched, missed }
 
   for (const c of unknownForecasts) {
@@ -165,7 +165,7 @@ async function linkRollbacksToRecommendations(workspaceId: string): Promise<numb
           outcomeMatched: false,
           outcomeEvidence: { downgradedBy: 'rollback', filePath, rollbackEventId: rb.id, reason: p['reason'] ?? null } as never,
           outcomeAt: Date.now(),
-        }).where(eq(reasoningChains.id, c.id)).catch(() => null)
+        }).where(eq(reasoningChains.id, c.id)).catch((e: Error) => { console.error('[outcome-evaluator]', e.message); return null })
         linked++
       }
     }

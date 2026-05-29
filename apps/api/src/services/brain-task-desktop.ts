@@ -148,7 +148,7 @@ export async function desktopWriteFile(_ws: string, params: Record<string, unkno
   if (content.length > FILE_MAX_WRITE) throw new Error(`desktop.write_file: content too large (${content.length} > ${FILE_MAX_WRITE})`)
   const abs = resolve(path)
   if (isProtectedWrite(abs)) throw new Error(`desktop.write_file: protected path: ${abs}`)
-  await mkdir(dirname(abs), { recursive: true }).catch(() => null)
+  await mkdir(dirname(abs), { recursive: true }).catch((e: Error) => { console.error('[brain-task-desktop]', e.message); return null })
   await writeFile(abs, content, 'utf8')
   return { path: abs, bytes: Buffer.byteLength(content, 'utf8') }
 }

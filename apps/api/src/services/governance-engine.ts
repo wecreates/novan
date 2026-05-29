@@ -130,7 +130,7 @@ export async function check(workspaceId: string, op: string, context = ''): Prom
       VALUES (gen_random_uuid(), ${workspaceId}, 'governance.rule_broken',
               ${JSON.stringify({ brokenRules })}::jsonb, ${Date.now()},
               gen_random_uuid()::text, gen_random_uuid()::text, null, 'governance-engine', 1)
-    `).catch(() => null)
+    `).catch((e: Error) => { console.error('[governance-engine]', e.message); return null })
   }
   const explanation = matched.length === 0
     ? 'No governance rules matched — default allow.'

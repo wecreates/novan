@@ -160,7 +160,7 @@ export async function attestReadinessItem(
       payload: { itemId, previousStatus: item.status, newStatus: status, attestedBy, note: note ?? null },
       traceId: uuidv7(), correlationId: null, causationId: null,
       source: 'operational-readiness', version: 1, createdAt: Date.now(),
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[operational-readiness]', e.message); return null })
   } catch { /* tolerated */ }
   // In-memory mutation: persisted attestations are read by the
   // Compliance tab via event timeline replay; the catalog itself

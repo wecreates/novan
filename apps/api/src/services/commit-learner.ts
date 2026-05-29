@@ -35,7 +35,7 @@ export async function linkCommitsToOutcomes(workspaceId: string): Promise<{ eval
     // Skip if already evaluated
     const existing = await db.select({ id: commitOutcomes.id }).from(commitOutcomes)
       .where(and(eq(commitOutcomes.workspaceId, workspaceId), eq(commitOutcomes.gitSha, snap.gitSha)))
-      .limit(1).then(r => r[0]).catch(() => null)
+      .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[commit-learner]', e.message); return null })
     if (existing) continue
 
     const windowStart = snap.committedAt
@@ -87,7 +87,7 @@ export async function linkCommitsToOutcomes(workspaceId: string): Promise<{ eval
       driftWarningsAfter: driftCount,
       matchRateDelta,
       verdict, notes,
-    }).onConflictDoNothing().catch(() => null)
+    }).onConflictDoNothing().catch((e: Error) => { console.error('[commit-learner]', e.message); return null })
 
     evaluated++
     if (verdict === 'regression') regressions++

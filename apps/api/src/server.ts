@@ -563,7 +563,7 @@ async function waitForPortFree(port: number, host: string): Promise<void> {
 }
 
 try {
-  await waitForPortFree(PORT, HOST).catch(() => null)
+  await waitForPortFree(PORT, HOST).catch((e: Error) => { console.error('[server]', e.message); return null })
   await app.listen({ port: PORT, host: HOST })
   app.log.info({ port: PORT, host: HOST, docs: `http://${HOST}:${PORT}/docs` }, 'API server started')
 } catch (err) {

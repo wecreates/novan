@@ -121,7 +121,7 @@ function approvalsRequiredFor(c: CapabilityDef): string[] {
 async function pickAgent(workspaceId: string, role: typeof BUILD_ROLES[number]): Promise<string | null> {
   const row = await db.select({ id: agents.id }).from(agents)
     .where(and(eq(agents.workspaceId, workspaceId), eq(agents.type, role)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[self-build-planner]', e.message); return null })
   return row?.id ?? null
 }
 
@@ -269,7 +269,7 @@ export async function persistPlan(workspaceId: string, plan: BuildPlan): Promise
     const recoId = `${recoBase}:${i}:${crypto.createHash('sha256').update(t.title).digest('hex').slice(0, 12)}`
     const existing = await db.select({ id: roadmapTasks.id }).from(roadmapTasks)
       .where(and(eq(roadmapTasks.workspaceId, workspaceId), eq(roadmapTasks.recommendationId, recoId)))
-      .limit(1).then(r => r[0]).catch(() => null)
+      .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[self-build-planner]', e.message); return null })
     if (existing) { skipped++; continue }
 
     const priorityScore = Math.round(t.impact * 20 - t.risk * 5 + (t.phase === 'immediate' ? 30 : t.phase === 'near_term' ? 15 : 0))
@@ -288,7 +288,7 @@ export async function persistPlan(workspaceId: string, plan: BuildPlan): Promise
       requiresApproval: t.requiresApproval,
       status: 'pending',
       createdAt: now, updatedAt: now,
-    }).onConflictDoNothing().catch(() => null)
+    }).onConflictDoNothing().catch((e: Error) => { console.error('[self-build-planner]', e.message); return null })
     created++
   }
 
@@ -303,7 +303,7 @@ export async function persistPlan(workspaceId: string, plan: BuildPlan): Promise
       },
       traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'self-build-planner', version: 1, createdAt: now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[self-build-planner]', e.message); return null })
   }
   return { created, skipped }
 }

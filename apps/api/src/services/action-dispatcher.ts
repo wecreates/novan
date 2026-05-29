@@ -63,14 +63,14 @@ export async function dispatch(input: DispatchInput): Promise<{ id: string; stat
     subjectId: input.subjectId ?? null, payload: input.payload,
     status: 'pending', riskLevel: risk, requestedBy: input.requestedBy,
     createdAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
 
   // High-risk requires approval token in payload to proceed
   if (risk === 'high' || risk === 'critical') {
     const approved = (input.payload['approvalToken'] === 'OPERATOR_APPROVED')
     if (!approved) {
       await db.update(actions).set({ status: 'pending', error: 'approval_required' })
-        .where(eq(actions.id, id)).catch(() => null)
+        .where(eq(actions.id, id)).catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
       return { id, status: 'pending', error: 'approval_required' }
     }
   }
@@ -85,7 +85,7 @@ export async function dispatch(input: DispatchInput): Promise<{ id: string; stat
     let loadMode: LoadMode = 'normal'
     try {
       const { snapshotOperatorLoad } = await import('./operator-cognitive-load.js')
-      const verdict = await snapshotOperatorLoad(input.workspaceId).catch(() => null)
+      const verdict = await snapshotOperatorLoad(input.workspaceId).catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
       if (verdict) loadMode = verdict.mode as LoadMode
     } catch { /* tolerated */ }
 
@@ -104,26 +104,26 @@ export async function dispatch(input: DispatchInput): Promise<{ id: string; stat
       await db.update(actions).set({
         status: 'pending',
         error: `restraint:${decision.deferTo}:${decision.reason}`,
-      }).where(eq(actions.id, id)).catch(() => null)
+      }).where(eq(actions.id, id)).catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
       return { id, status: 'pending', error: `restraint:${decision.deferTo}:${decision.reason}` }
     }
   }
 
   // Execute
   await db.update(actions).set({ status: 'executing', startedAt: Date.now() })
-    .where(eq(actions.id, id)).catch(() => null)
+    .where(eq(actions.id, id)).catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
 
   try {
     const result = await execute(input)
     await db.update(actions).set({
       status: 'succeeded', result, completedAt: Date.now(),
-    }).where(eq(actions.id, id)).catch(() => null)
+    }).where(eq(actions.id, id)).catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
     return { id, status: 'succeeded', result }
   } catch (e) {
     const msg = (e as Error).message
     await db.update(actions).set({
       status: 'failed', error: msg, completedAt: Date.now(),
-    }).where(eq(actions.id, id)).catch(() => null)
+    }).where(eq(actions.id, id)).catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
     return { id, status: 'failed', error: msg }
   }
 }
@@ -155,7 +155,7 @@ async function execute(i: DispatchInput): Promise<Record<string, unknown>> {
         outcomeKnown: false,
         source: 'action-dispatcher',
         createdAt: Date.now(),
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
       return { chainId: id }
     }
 
@@ -171,7 +171,7 @@ async function execute(i: DispatchInput): Promise<Record<string, unknown>> {
       }).onConflictDoUpdate({
         target: [workerConcurrency.workspaceId, workerConcurrency.queueName],
         set: { factor, setBy: 'action-dispatcher', reason, updatedAt: Date.now() },
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
       return { queueName, factor, applied: 'persisted', note: 'Workers read worker_concurrency at lease time' }
     }
 
@@ -180,19 +180,19 @@ async function execute(i: DispatchInput): Promise<Record<string, unknown>> {
       const reason     = String(i.payload['reason']     ?? 'manual via action-dispatcher')
       const existing = await db.select().from(killSwitches)
         .where(and(eq(killSwitches.workspaceId, i.workspaceId), eq(killSwitches.switchType, switchType)))
-        .limit(1).then(r => r[0]).catch(() => null)
+        .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
       const now = Date.now()
       if (existing?.enabled) return { engaged: false, alreadyEngaged: true }
       if (existing) {
         await db.update(killSwitches).set({
           enabled: true, reason, enabledBy: 'action-dispatcher', enabledAt: now, updatedAt: now,
-        }).where(eq(killSwitches.id, existing.id)).catch(() => null)
+        }).where(eq(killSwitches.id, existing.id)).catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
       } else {
         await db.insert(killSwitches).values({
           id: uuidv7(), workspaceId: i.workspaceId, switchType, enabled: true,
           reason, enabledBy: 'action-dispatcher', enabledAt: now,
           createdAt: now, updatedAt: now,
-        }).onConflictDoNothing().catch(() => null)
+        }).onConflictDoNothing().catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
       }
       return { engaged: true, switchType, reason }
     }
@@ -212,7 +212,7 @@ async function execute(i: DispatchInput): Promise<Record<string, unknown>> {
       }).onConflictDoUpdate({
         target: [providerPreferences.workspaceId, providerPreferences.taskType],
         set: { preferredProvider: to, setBy: 'action-dispatcher', status: 'pending', reason, updatedAt: Date.now() },
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
       const id = uuidv7()
       await db.insert(reasoningChains).values({
         id, workspaceId: i.workspaceId, kind: 'recommendation',
@@ -223,7 +223,7 @@ async function execute(i: DispatchInput): Promise<Record<string, unknown>> {
         outcomeKnown: false,
         source: 'action-dispatcher',
         createdAt: Date.now(),
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
       return { recommendedSwap: { from, to, task }, chainId: id, preferenceStatus: 'pending' }
     }
 
@@ -233,7 +233,7 @@ async function execute(i: DispatchInput): Promise<Record<string, unknown>> {
       if (!targetId) throw new Error('actionId required')
       await db.update(actions).set({
         status: 'cancelled', completedAt: Date.now(),
-      }).where(and(eq(actions.id, targetId), eq(actions.status, 'pending'))).catch(() => null)
+      }).where(and(eq(actions.id, targetId), eq(actions.status, 'pending'))).catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
       return { cancelled: targetId }
     }
 

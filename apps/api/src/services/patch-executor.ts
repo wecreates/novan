@@ -111,7 +111,7 @@ export async function applyPatches(opts: {
         payload: { jobId, runId, decision: govDecision.decision, reason: govDecision.reason, filePaths },
         traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
         source: 'patch-executor', version: 1, createdAt: Date.now(),
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[patch-executor]', e.message); return null })
     }
     return {
       results: patches.map(p => ({
@@ -186,7 +186,7 @@ export async function applyPatches(opts: {
       payload: { recordId, jobId, runId, filePath: spec.filePath, linesAdded: added, linesRemoved: removed },
       traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'patch-executor', version: 1, createdAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[patch-executor]', e.message); return null })
   }
 
   // Invalidate cached patch counter so governor sees the new count next check
@@ -229,7 +229,7 @@ export async function rollbackPatches(opts: {
         payload: { recordId: p.recordId, jobId: opts.jobId, runId: opts.runId, filePath: p.filePath, reason },
         traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
         source: 'patch-executor', version: 1, createdAt: now,
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[patch-executor]', e.message); return null })
     }
   }
 
@@ -244,6 +244,6 @@ export async function rollbackPatches(opts: {
       errorMessage:   reason.slice(0, 500),
       evidenceIds:    [p.recordId],
       attemptedFixId: p.recordId,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[patch-executor]', e.message); return null })
   }
 }

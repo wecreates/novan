@@ -236,7 +236,7 @@ export const briefingRoutes: FastifyPluginAsync = async (app) => {
       source:        'api',
       version:       EVENT_SCHEMA_VERSION,
       createdAt:     now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[briefings]', e.message); return null })
 
     return reply.send({
       success: true,

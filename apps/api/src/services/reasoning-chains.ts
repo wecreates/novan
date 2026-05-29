@@ -42,7 +42,7 @@ export async function record(input: RecordChainInput): Promise<string> {
     outcomeKnown: false,
     source:      input.source,
     createdAt:   Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[reasoning-chains]', e.message); return null })
   return id
 }
 
@@ -53,7 +53,7 @@ export async function linkOutcome(workspaceId: string, chainId: string, outcomeM
     outcomeEvidence,
     outcomeAt: Date.now(),
   }).where(and(eq(reasoningChains.workspaceId, workspaceId), eq(reasoningChains.id, chainId)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[reasoning-chains]', e.message); return null })
 }
 
 export async function recentChains(workspaceId: string, opts?: { kind?: ChainKind; limit?: number; withOutcomeOnly?: boolean }) {
@@ -95,7 +95,7 @@ export async function reconcileRecommendationOutcomes(workspaceId: string): Prom
         eq(reasoningChains.kind, 'recommendation'),
         eq(reasoningChains.subjectId, recId),
         eq(reasoningChains.outcomeKnown, false),
-      )).limit(1).then(r => r[0]).catch(() => null)
+      )).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[reasoning-chains]', e.message); return null })
     if (!chain) continue
 
     const matched = action === 'accepted'

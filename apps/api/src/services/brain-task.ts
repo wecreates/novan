@@ -3277,7 +3277,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'brain-task', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[brain-task]', e.message); return null })
 }
 
 export function listAvailableOperations(): Array<{ op: string; description: string; risk: OpRisk }> {
@@ -3303,7 +3303,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
       evidence: plan.map(s => ({ type: 'operation', id: s.op, extract: JSON.stringify(s.params).slice(0, 120) })),
       confidence: 0.8,
       source: 'brain-task',
-    })).catch(() => null)
+    })).catch((e: Error) => { console.error('[brain-task]', e.message); return null })
   }
 
   const results: TaskRunResult['results'] = []

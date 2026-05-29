@@ -47,7 +47,7 @@ const auditPluginImpl: FastifyPluginAsync = async (app) => {
       source:        'audit-plugin',
       version:       1,
       createdAt:     Date.now(),
-    }).catch(() => null) // never throw
+    }).catch((e: Error) => { console.error('[audit]', e.message); return null }) // never throw
   })
 }
 

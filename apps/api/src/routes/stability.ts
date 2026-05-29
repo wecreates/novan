@@ -81,7 +81,7 @@ const stabilityRoutes: FastifyPluginAsync = async (app) => {
       source:        'api/stability',
       version:       1,
       createdAt:     Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[stability]', e.message); return null })
 
     return {
       simulated: true,

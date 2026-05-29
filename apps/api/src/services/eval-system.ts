@@ -60,7 +60,7 @@ export async function persistRun(input: {
     perCase:     input.results.map(r => ({ caseId: r.caseId, passed: r.passed, grade: r.grade, latencyMs: r.latencyMs })) as unknown as Record<string, unknown>[],
     regressions: input.regressionIds,
     createdAt:   Date.now(),
-  } as never).catch(() => null)
+  } as never).catch((e: Error) => { console.error('[eval-system]', e.message); return null })
   return id
 }
 
@@ -191,7 +191,7 @@ export async function sampleProductionTraffic(input: {
     },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'eval-system', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[eval-system]', e.message); return null })
 
   return {
     totalMessagesSeen: recent.length,
@@ -358,7 +358,7 @@ export async function ciGateEval(input: {
   }
 
   // Drift check (informational; doesn't block but warns).
-  const drift = await detectDrift({ workspaceId: input.workspaceId }).catch(() => null)
+  const drift = await detectDrift({ workspaceId: input.workspaceId }).catch((e: Error) => { console.error('[eval-system]', e.message); return null })
   if (drift?.drifted) {
     perLayer.push({
       layer: 'production', setName: '(drift)', setId: '',
@@ -397,6 +397,6 @@ export async function captureFailureAsRegressionCase(input: {
     knownFailure:     true,
     notes:            (input.notes ?? '') + `\n\n=== Failing output excerpt ===\n${input.failingOutput.slice(0, 1_000)}`,
     createdAt:        Date.now(),
-  } as never).catch(() => null)
+  } as never).catch((e: Error) => { console.error('[eval-system]', e.message); return null })
   return id
 }

@@ -113,7 +113,7 @@ async function imagesThisHour(workspaceId: string): Promise<number> {
 async function effectiveLimits(workspaceId: string, override?: Partial<GovernorLimits>): Promise<GovernorLimits> {
   // Lazy import to avoid circular dependency
   const { getPreferences } = await import('./operator-preferences.js')
-  const prefs = await getPreferences(workspaceId).catch(() => null)
+  const prefs = await getPreferences(workspaceId).catch((e: Error) => { console.error('[resource-governor]', e.message); return null })
   const fromPrefs: Partial<GovernorLimits> = {}
   if (prefs) {
     if (prefs.maxConcurrentAgents        !== null) fromPrefs.maxConcurrentAgents        = prefs.maxConcurrentAgents
@@ -213,5 +213,5 @@ export async function emitGovernorBlock(workspaceId: string, decision: GovernorD
     payload: { kind, reason: decision.reason, current: decision.current, limits: decision.limits },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'resource-governor', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[resource-governor]', e.message); return null })
 }

@@ -221,13 +221,13 @@ export async function buildScenario(workspaceId: string, kind: ScenarioKind): Pr
     mitigation: draft.mitigation,
     evidenceRefs: draft.evidenceRefs,
     createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[simulation-engine]', e.message); return null })
   await recordChain({
     workspaceId, kind: 'forecast', subjectId: `scenario:${id}`,
     decision: `Scenario built: ${draft.name} (conf ${draft.confidence.toFixed(2)})`,
     evidence: draft.evidenceRefs,
     confidence: draft.confidence, source: 'simulation-engine',
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[simulation-engine]', e.message); return null })
   return { id, workspaceId, ...draft }
 }
 
@@ -294,7 +294,7 @@ export async function recordObservedOutcome(workspaceId: string, scenarioId: str
     matchedCase: matchedCase ?? null,
     delta: delta ?? {},
     observedAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[simulation-engine]', e.message); return null })
   return id
 }
 

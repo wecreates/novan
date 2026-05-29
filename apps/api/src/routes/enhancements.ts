@@ -55,7 +55,7 @@ const enhancementRoutes: FastifyPluginAsync = async (fastify) => {
       payload: { recommendationId: recommendation_id, action, outcome: outcome ?? null, notes: notes ?? null },
       traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'operator', version: 1, createdAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[enhancements]', e.message); return null })
     return { success: true, data: { eventId: id, recommendationId: recommendation_id } }
   })
 
@@ -85,7 +85,7 @@ const enhancementRoutes: FastifyPluginAsync = async (fastify) => {
     const ids = await db.select({ id: workspaces.id, name: workspaces.name, plan: workspaces.plan }).from(workspaces)
       .limit(50).catch(() => [] as Array<{ id: string; name: string; plan: string }>)
     const portfolio = await Promise.all(ids.map(async (w) => {
-      const h = await computeHealth(w.id).catch(() => null)
+      const h = await computeHealth(w.id).catch((e: Error) => { console.error('[enhancements]', e.message); return null })
       return {
         workspaceId: w.id, name: w.name, plan: w.plan,
         health: h ? { score: h.score, band: h.band, recommendations: h.recommendations } : null,

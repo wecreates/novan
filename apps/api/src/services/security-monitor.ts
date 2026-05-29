@@ -14,7 +14,7 @@ async function emitEvent(workspaceId: string | null, type: string, payload: Reco
     id: uuidv7(), type, workspaceId: workspaceId ?? 'global', payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'security-monitor', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[security-monitor]', e.message); return null })
 }
 
 // ─── Recording ────────────────────────────────────────────────────────────────

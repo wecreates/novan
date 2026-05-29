@@ -91,7 +91,7 @@ export async function configureSpeechProvider(input: ConfigureProviderInput): Pr
   const now = Date.now()
   const existing = await db.select().from(speechProviderConfigs)
     .where(and(eq(speechProviderConfigs.workspaceId, input.workspaceId), eq(speechProviderConfigs.providerId, input.providerId)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[speech-providers]', e.message); return null })
 
   if (existing) {
     await db.update(speechProviderConfigs).set({
@@ -190,14 +190,14 @@ export async function setProviderEnabled(workspaceId: string, providerId: string
   await db.update(speechProviderConfigs)
     .set({ enabled, updatedAt: Date.now() })
     .where(and(eq(speechProviderConfigs.workspaceId, workspaceId), eq(speechProviderConfigs.providerId, providerId)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[speech-providers]', e.message); return null })
 }
 
 export async function recordProviderHealth(workspaceId: string, providerId: string, ok: boolean, latencyMs: number, err?: string): Promise<void> {
   // Exponential moving average for healthScore (alpha = 0.3)
   const existing = await db.select().from(speechProviderConfigs)
     .where(and(eq(speechProviderConfigs.workspaceId, workspaceId), eq(speechProviderConfigs.providerId, providerId)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[speech-providers]', e.message); return null })
   if (!existing) return
   const alpha = 0.3
   const score = alpha * (ok ? 1 : 0) + (1 - alpha) * existing.healthScore
@@ -207,5 +207,5 @@ export async function recordProviderHealth(workspaceId: string, providerId: stri
     lastError: ok ? null : (err ?? 'unknown'),
     lastHealthAt: Date.now(),
     updatedAt: Date.now(),
-  }).where(eq(speechProviderConfigs.id, existing.id)).catch(() => null)
+  }).where(eq(speechProviderConfigs.id, existing.id)).catch((e: Error) => { console.error('[speech-providers]', e.message); return null })
 }

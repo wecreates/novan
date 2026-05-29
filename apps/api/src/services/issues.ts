@@ -75,7 +75,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: (payload['issueId'] as string) ?? uuidv7(),
     causationId: null, source: 'api/issues', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[issues]', e.message); return null })
 }
 
 // ── Core API ──────────────────────────────────────────────────────────
@@ -289,7 +289,7 @@ export async function rejectIssue(workspaceId: string, issueId: string, reason: 
 export async function getIssue(workspaceId: string, id: string) {
   return db.select().from(issues)
     .where(and(eq(issues.id, id), eq(issues.workspaceId, workspaceId)))
-    .limit(1).then(r => r[0] ?? null).catch(() => null)
+    .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[issues]', e.message); return null })
 }
 
 export async function listIssues(
@@ -358,7 +358,7 @@ export async function autoIngestSignals(workspaceId: string) {
       evidence:         [{ type: 'incident', ref: inc.id, summary: inc.summary, at: inc.detectedAt }],
       sourceIncidentId: inc.id,
       fingerprint:      `incident:${inc.type}:${inc.id}`,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[issues]', e.message); return null })
     if (r?.deduped) appended++
     else if (r)     created++
   }
@@ -386,7 +386,7 @@ export async function autoIngestSignals(workspaceId: string) {
       evidence:        [{ type: 'event', ref: e.id, summary: err, at: e.createdAt }],
       sourceEventId:   e.id,
       fingerprint:     `cron-error:${task}:${createHash('sha256').update(err).digest('hex').slice(0, 8)}`,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[issues]', e.message); return null })
     if (r?.deduped) appended++
     else if (r)     created++
   }

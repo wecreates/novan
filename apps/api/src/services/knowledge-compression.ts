@@ -54,7 +54,7 @@ async function upsertLesson(workspaceId: string, opts: {
       eq(compressedLessons.kind, opts.kind),
       sql`array_to_string(${compressedLessons.sourceRefs}, '|') = ${[...opts.sourceRefs].sort().join('|')}`,
     ))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[knowledge-compression]', e.message); return null })
   if (existing) return { created: false }
   void stableKey
 
@@ -71,7 +71,7 @@ async function upsertLesson(workspaceId: string, opts: {
     confidence:         opts.confidence ?? 0.5,
     confidenceProvenance: opts.confidenceProvenance ?? 'heuristic',
     createdAt: now, updatedAt: now,
-  }).onConflictDoNothing().catch(() => null)
+  }).onConflictDoNothing().catch((e: Error) => { console.error('[knowledge-compression]', e.message); return null })
   return { created: true }
 }
 
@@ -274,7 +274,7 @@ export async function listLessons(workspaceId: string, opts?: { kind?: string; a
 export async function archiveLesson(workspaceId: string, id: string): Promise<{ ok: boolean }> {
   await db.update(compressedLessons).set({ archivedAt: Date.now() })
     .where(and(eq(compressedLessons.workspaceId, workspaceId), eq(compressedLessons.id, id)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[knowledge-compression]', e.message); return null })
   return { ok: true }
 }
 

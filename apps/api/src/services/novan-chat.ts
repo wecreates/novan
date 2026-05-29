@@ -148,7 +148,7 @@ export async function regenerateMessage(workspaceId: string, assistantMessageId:
 > {
   const target = await db.select().from(messages)
     .where(and(eq(messages.workspaceId, workspaceId), eq(messages.id, assistantMessageId)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[novan-chat]', e.message); return null })
   if (!target)                       return { ok: false, reason: 'message not found' }
   if (target.role !== 'assistant')   return { ok: false, reason: 'can only regenerate assistant messages' }
   if (target.supersededAt)           return { ok: false, reason: 'message is already superseded' }
@@ -226,7 +226,7 @@ async function buildSystemPrompt(workspaceId: string, userMessage: string): Prom
   const citations: PromptContext['citations'] = []
 
   // 1. Identity
-  const profile = await getProfile(workspaceId).catch(() => null)
+  const profile = await getProfile(workspaceId).catch((e: Error) => { console.error('[novan-chat]', e.message); return null })
   const traits = profile?.traits ?? CORE_TRAITS
 
   // 2. Charter top principles (always include the operator-first + safety ones)
@@ -424,7 +424,7 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
 
   // 1. Persist user message
   // R146.7 — surface persistence failures instead of silently dropping
-  // them. The previous `.catch(() => null)` made user input invisible
+  // them. The previous `.catch((e: Error) => { console.error('[novan-chat]', e.message); return null })` made user input invisible
   // on refresh AND let the LLM run on a message that wasn't saved
   // anywhere, burning tokens with no recoverable record. Now: log the
   // failure, emit an SSE error frame, and short-circuit before the LLM

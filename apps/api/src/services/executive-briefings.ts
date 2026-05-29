@@ -237,7 +237,7 @@ export async function costSummary(workspaceId: string) {
   const dayAgo = now - DAY
   const [budget, imageSpend24h, imageSpend7d, costTrendBlock, forecasts] = await Promise.all([
     db.select().from(providerBudgets)
-      .where(eq(providerBudgets.workspaceId, workspaceId)).limit(1).then(r => r[0] ?? null).catch(() => null),
+      .where(eq(providerBudgets.workspaceId, workspaceId)).limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[executive-briefings]', e.message); return null }),
     db.select({
       spend: sql<number>`coalesce(sum(${imageGenerations.actualCostUsd}), 0)::float`,
       count: sql<number>`count(*)::int`,

@@ -103,7 +103,7 @@ export async function recordAgentActivity(
     if (row) {
       await db.update(agents).set({
         status, lastActiveAt: now, heartbeatAt: now, updatedAt: now,
-      }).where(eq(agents.id, row.id)).catch(() => null)
+      }).where(eq(agents.id, row.id)).catch((e: Error) => { console.error('[agent-state-sync]', e.message); return null })
     }
   } catch { /* tolerated */ }
 }
@@ -137,7 +137,7 @@ export async function selfRegister(input: AgentSelfRegister): Promise<void> {
     if (existing) {
       await db.update(agentRegistrations).set({
         status: 'idle', lastHeartbeat: now, capabilities: input.capabilities, updatedAt: now,
-      }).where(eq(agentRegistrations.id, existing.id)).catch(() => null)
+      }).where(eq(agentRegistrations.id, existing.id)).catch((e: Error) => { console.error('[agent-state-sync]', e.message); return null })
     } else {
       await db.insert(agentRegistrations).values({
         id: uuidv7(),
@@ -148,7 +148,7 @@ export async function selfRegister(input: AgentSelfRegister): Promise<void> {
         lastHeartbeat: now,
         registeredAt: now,
         updatedAt: now,
-      }).catch(() => null)
+      }).catch((e: Error) => { console.error('[agent-state-sync]', e.message); return null })
     }
   } catch { /* tolerated */ }
 }
@@ -173,7 +173,7 @@ export function startAgentHeartbeatTicker(workspaceId = 'default', intervalMs = 
         .where(and(
           eq(agents.workspaceId, workspaceId),
           inArray(agents.status, ['idle', 'running']),
-        )).catch(() => null)
+        )).catch((e: Error) => { console.error('[agent-state-sync]', e.message); return null })
 
       // Also register the API itself in agent_registrations so the
       // orchestrator's heartbeat scanner sees something.
@@ -193,7 +193,7 @@ export function startAgentHeartbeatTicker(workspaceId = 'default', intervalMs = 
           eq(agentRegistrations.status, 'idle'),
           lt(agentRegistrations.lastHeartbeat, FIVE_MIN_AGO),
         ))
-        .catch(() => null)
+        .catch((e: Error) => { console.error('[agent-state-sync]', e.message); return null })
     } catch { /* tolerated */ }
   }
   void beat()
@@ -211,7 +211,7 @@ export async function emitAgentEvent(workspaceId: string, type: string, payload:
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'agent-state-sync', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[agent-state-sync]', e.message); return null })
 }
 
 // Silence unused imports — sql kept available for ad-hoc bumps.

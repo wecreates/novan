@@ -74,14 +74,14 @@ export async function forkConversation(i: ForkConversationInput): Promise<ForkCo
       eq(conversations.workspaceId, i.workspaceId),
       eq(conversations.id, i.sourceConversationId),
     ))
-    .limit(1).then(r => r[0] ?? null).catch(() => null)
+    .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[conversation-branching]', e.message); return null })
 
   const fp = await db.select().from(messages)
     .where(and(
       eq(messages.workspaceId, i.workspaceId),
       eq(messages.id, i.forkPointMessageId),
     ))
-    .limit(1).then(r => r[0] ?? null).catch(() => null)
+    .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[conversation-branching]', e.message); return null })
 
   const validation = validateForkRequest({
     sourceConversation: src ? { id: src.id, workspaceId: src.workspaceId, branchRootId: src.branchRootId } : null,
@@ -105,7 +105,7 @@ export async function forkConversation(i: ForkConversationInput): Promise<ForkCo
     forkedFromMessageId:      fp.id,
     branchRootId,
     createdAt: now, updatedAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[conversation-branching]', e.message); return null })
 
   // Copy all non-superseded messages with createdAt <= fp.createdAt.
   // Superseded turns are skipped — those are the "rolled back" branches
@@ -145,14 +145,14 @@ export async function forkConversation(i: ForkConversationInput): Promise<ForkCo
       cancelled:       false,
       attachments:     m.attachments ?? [],
       createdAt:       m.createdAt,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[conversation-branching]', e.message); return null })
     copied++
   }
 
   await db.update(conversations)
     .set({ messageCount: copied, updatedAt: Date.now() })
     .where(eq(conversations.id, newId))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[conversation-branching]', e.message); return null })
 
   return { ok: true, newConversationId: newId, copiedMessageCount: copied }
 }
@@ -165,7 +165,7 @@ export async function forkConversation(i: ForkConversationInput): Promise<ForkCo
 export async function listBranchTree(workspaceId: string, anyConversationId: string): Promise<Array<{ id: string; title: string; forkedFromConversationId: string | null; forkedFromMessageId: string | null; createdAt: number; updatedAt: number; messageCount: number }>> {
   const node = await db.select().from(conversations)
     .where(and(eq(conversations.workspaceId, workspaceId), eq(conversations.id, anyConversationId)))
-    .limit(1).then(r => r[0] ?? null).catch(() => null)
+    .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[conversation-branching]', e.message); return null })
   if (!node) return []
 
   const rootId = node.branchRootId ?? node.id

@@ -31,13 +31,13 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'research-safety', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[research-safety]', e.message); return null })
 }
 
 export async function isKillSwitchOn(workspaceId: string, switchType = 'research'): Promise<boolean> {
   const row = await db.select().from(killSwitches)
     .where(and(eq(killSwitches.workspaceId, workspaceId), eq(killSwitches.switchType, switchType)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[research-safety]', e.message); return null })
   return !!row?.enabled
 }
 

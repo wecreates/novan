@@ -80,14 +80,14 @@ export async function captureIdea(input: {
     createdAt:   idea.createdAt,
     updatedAt:   idea.createdAt,
     expiresAt:   null,
-  } as never).catch(() => null)
+  } as never).catch((e: Error) => { console.error('[product-factory]', e.message); return null })
 
   await db.insert(events).values({
     id: uuidv7(), type: 'product.idea_captured', workspaceId: input.workspaceId,
     payload: { ideaId: id, title: idea.title, provenance: input.provenance, composite: scores.composite },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'product-factory', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[product-factory]', e.message); return null })
 
   return idea
 }

@@ -128,7 +128,7 @@ export async function getTeamActivity(workspaceId: string): Promise<TeamStatus[]
         .orderBy(desc(events.createdAt))
         .limit(1)
         .then(r => r[0] ?? null)
-        .catch(() => null)
+        .catch((e: Error) => { console.error('[team-activity]', e.message); return null })
 
       const lastRanAt = row?.createdAt ?? null
       const ranAgoMs  = lastRanAt !== null ? now - lastRanAt : null

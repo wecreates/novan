@@ -23,7 +23,7 @@ import { scoreGeneration, isPromptUnsafe, antiSlopRewrite, premiumRewrite, type 
 export async function reviewGeneration(workspaceId: string, generationId: string, reviewer?: string): Promise<GenerationVerdict | null> {
   const gen = await db.select().from(imageGenerations)
     .where(and(eq(imageGenerations.workspaceId, workspaceId), eq(imageGenerations.id, generationId)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[image-creative]', e.message); return null })
   if (!gen) return null
 
   const verdict = scoreGeneration({
@@ -50,7 +50,7 @@ export async function reviewGeneration(workspaceId: string, generationId: string
     reasons:      [...verdict.reasons, ...verdict.promptScore.flags],
     reviewer:     reviewer ?? null,
     createdAt:    Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[image-creative]', e.message); return null })
 
   await db.update(imageGenerations).set({
     qualityScore:     Number(verdict.composite.toFixed(3)),
@@ -59,14 +59,14 @@ export async function reviewGeneration(workspaceId: string, generationId: string
     compositionScore: Number(verdict.promptScore.compositionScore.toFixed(3)),
     brandFitScore:    Number(verdict.promptScore.brandFitScore.toFixed(3)),
     creativeFlags:    verdict.promptScore.flags,
-  }).where(eq(imageGenerations.id, generationId)).catch(() => null)
+  }).where(eq(imageGenerations.id, generationId)).catch((e: Error) => { console.error('[image-creative]', e.message); return null })
 
   await db.insert(events).values({
     id: uuidv7(), type: `image.creative.${verdict.shouldReject ? 'rejected' : verdict.shouldFlag ? 'flagged' : 'approved'}`,
     workspaceId, payload: { generationId, composite: verdict.composite, flags: verdict.promptScore.flags },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/image-creative', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[image-creative]', e.message); return null })
 
   return verdict
 }
@@ -79,7 +79,7 @@ export async function reviewBatch(workspaceId: string, limit = 50): Promise<{ re
     .limit(limit).catch(() => [])
   let rejected = 0, flagged = 0
   for (const r of rows) {
-    const v = await reviewGeneration(workspaceId, r.id).catch(() => null)
+    const v = await reviewGeneration(workspaceId, r.id).catch((e: Error) => { console.error('[image-creative]', e.message); return null })
     if (!v) continue
     if (v.shouldReject) rejected++
     else if (v.shouldFlag) flagged++

@@ -110,7 +110,7 @@ export async function recordAudit(workspaceId: string, source: string, outputTyp
     violations: result.violations,
     passed: result.passed,
     createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[identity-core]', e.message); return null })
   return { id, result }
 }
 
@@ -119,13 +119,13 @@ export async function recordAudit(workspaceId: string, source: string, outputTyp
 export async function getProfile(workspaceId: string) {
   const row = await db.select().from(identityProfile)
     .where(eq(identityProfile.workspaceId, workspaceId))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[identity-core]', e.message); return null })
   if (row) return row
   // Ensure default exists
   await db.insert(identityProfile).values({
     workspaceId, traits: CORE_TRAITS as unknown as Record<string, number>,
     toneSettings: {}, version: 1, updatedAt: Date.now(),
-  }).onConflictDoNothing().catch(() => null)
+  }).onConflictDoNothing().catch((e: Error) => { console.error('[identity-core]', e.message); return null })
   return db.select().from(identityProfile)
     .where(eq(identityProfile.workspaceId, workspaceId))
     .limit(1).then(r => r[0])
@@ -141,7 +141,7 @@ export async function updateTraits(workspaceId: string, overrides: Partial<Recor
   }
   await db.update(identityProfile).set({
     traits: next, version: (existing?.version ?? 1) + 1, updatedAt: Date.now(),
-  }).where(eq(identityProfile.workspaceId, workspaceId)).catch(() => null)
+  }).where(eq(identityProfile.workspaceId, workspaceId)).catch((e: Error) => { console.error('[identity-core]', e.message); return null })
 }
 
 // ─── Drift detection ────────────────────────────────────────────────────

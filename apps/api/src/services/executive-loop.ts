@@ -42,7 +42,7 @@ export interface ReviewResult {
 }
 
 async function readState(workspaceId: string) {
-  return db.select().from(executiveState).where(eq(executiveState.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch(() => null)
+  return db.select().from(executiveState).where(eq(executiveState.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[executive-loop]', e.message); return null })
 }
 
 async function writeState(workspaceId: string, patch: {
@@ -73,14 +73,14 @@ async function writeState(workspaceId: string, patch: {
       lastReviewAt:        patch.lastReviewAt ?? now,
       reviewCount:         patch.reviewCount ?? 1,
       updatedAt:           now,
-    }).onConflictDoNothing().catch(() => null)
+    }).onConflictDoNothing().catch((e: Error) => { console.error('[executive-loop]', e.message); return null })
   } else {
     const update: Record<string, unknown> = { updatedAt: now, lastReviewAt: patch.lastReviewAt ?? now, reviewCount: (existing.reviewCount ?? 0) + 1 }
     for (const k of ['topPriorities', 'activeRisks', 'strategicObjectives', 'blockedInitiatives', 'costPosture', 'reliabilityPosture', 'securityPosture', 'focusAreas'] as const) {
       const v = patch[k]
       if (v !== undefined) update[k] = v
     }
-    await db.update(executiveState).set(update).where(eq(executiveState.workspaceId, workspaceId)).catch(() => null)
+    await db.update(executiveState).set(update).where(eq(executiveState.workspaceId, workspaceId)).catch((e: Error) => { console.error('[executive-loop]', e.message); return null })
   }
 }
 
@@ -89,7 +89,7 @@ async function writeState(workspaceId: string, patch: {
 export async function runHourlyHealthReview(workspaceId: string): Promise<ReviewResult> {
   const { recordAgentActivityAsync } = await import('./agent-state-sync.js')
   recordAgentActivityAsync(workspaceId, 'research_planner', { status: 'running' })
-  const stab = await stabilitySnapshot(workspaceId).catch(() => null)
+  const stab = await stabilitySnapshot(workspaceId).catch((e: Error) => { console.error('[executive-loop]', e.message); return null })
   const before = await readState(workspaceId)
   const beforePrio = (before?.topPriorities ?? []) as Array<{ title: string }>
   const prioritiesBefore = beforePrio.map(p => p.title)
@@ -108,7 +108,7 @@ export async function runHourlyHealthReview(workspaceId: string): Promise<Review
 
 export async function runSixHourlyOperationalReview(workspaceId: string): Promise<ReviewResult> {
   const recs = await topRecommendations(workspaceId, 5).catch(() => [])
-  const forecasts = await generateForecasts(workspaceId).catch(() => null)
+  const forecasts = await generateForecasts(workspaceId).catch((e: Error) => { console.error('[executive-loop]', e.message); return null })
 
   const before = await readState(workspaceId)
   const beforePrio = (before?.topPriorities ?? []) as Array<{ title: string }>
@@ -144,7 +144,7 @@ export async function runDailyStrategicReview(workspaceId: string): Promise<Revi
 
   // Cost posture
   const budget = await db.select().from(providerBudgets)
-    .where(eq(providerBudgets.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch(() => null)
+    .where(eq(providerBudgets.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[executive-loop]', e.message); return null })
   const costPosture = budget ? {
     dailyLimitUsd: Number(budget.dailyLimitUsd), dailySpendUsd: Number(budget.dailySpendUsd),
     dailyPct: budget.dailyLimitUsd > 0 ? Number((budget.dailySpendUsd / budget.dailyLimitUsd).toFixed(3)) : 0,
@@ -205,7 +205,7 @@ async function persistReview(
     prioritiesAfter:  prioritiesAfter as never,
     actionsRecommended: actionsRecommended as never,
     createdAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[executive-loop]', e.message); return null })
 
   // Record reasoning chain so meta-reasoning can score these reviews later
   const chainId = await recordChain({
@@ -224,7 +224,7 @@ async function persistReview(
     payload: { cycle, signals: signalsAnalyzed, prioritiesAfter, actionsRecommended, reviewLogId: id, chainId },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'executive-loop', version: 1, createdAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[executive-loop]', e.message); return null })
 
   return { cycle, workspaceId, reviewedAt: now, signalsAnalyzed, prioritiesBefore, prioritiesAfter, actionsRecommended, chainId }
 }

@@ -93,7 +93,7 @@ function classifyPromptSafety(prompt: string): { unsafe: boolean; reason?: strin
 async function imageKillSwitchOn(workspaceId: string): Promise<boolean> {
   const row = await db.select().from(killSwitches)
     .where(and(eq(killSwitches.workspaceId, workspaceId), eq(killSwitches.switchType, 'image')))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[image-generator]', e.message); return null })
   return !!row?.enabled
 }
 
@@ -211,7 +211,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'image-generator', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[image-generator]', e.message); return null })
 }
 
 export async function generateImage(input: GenerateInput): Promise<GenerateResult> {
@@ -240,7 +240,7 @@ export async function generateImage(input: GenerateInput): Promise<GenerateResul
     status:          'pending',
     createdBy:       input.createdBy    ?? null,
     createdAt:       now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[image-generator]', e.message); return null })
 
   // 0. Feature flag
   if (!isImageGenerationEnabled()) {
@@ -407,20 +407,20 @@ export async function rateImage(workspaceId: string, id: string, rating: number)
   const clamped = Math.max(1, Math.min(5, Math.round(rating)))
   const row = await db.select().from(imageGenerations)
     .where(and(eq(imageGenerations.workspaceId, workspaceId), eq(imageGenerations.id, id)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[image-generator]', e.message); return null })
   if (!row) return { ok: false }
   const prior = row.qualityScore ?? 0
   const updated = prior > 0 ? 0.7 * clamped + 0.3 * prior : clamped
   await db.update(imageGenerations).set({
     userRating: clamped, qualityScore: Number(updated.toFixed(2)),
-  }).where(eq(imageGenerations.id, id)).catch(() => null)
+  }).where(eq(imageGenerations.id, id)).catch((e: Error) => { console.error('[image-generator]', e.message); return null })
   return { ok: true }
 }
 
 export async function setFavorite(workspaceId: string, id: string, isFavorite: boolean): Promise<{ ok: boolean }> {
   await db.update(imageGenerations).set({ isFavorite })
     .where(and(eq(imageGenerations.workspaceId, workspaceId), eq(imageGenerations.id, id)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[image-generator]', e.message); return null })
   return { ok: true }
 }
 

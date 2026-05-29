@@ -66,7 +66,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     source:        'api/deploy-guard',
     version:       1,
     createdAt:     Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[deploy-guard]', e.message); return null })
 }
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ export async function rollbackDeployment(
     traceId:     uuidv7(),
     reason,
     requestedBy: 'deploy-guard',
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[deploy-guard]', e.message); return null })
 
   record.status = 'rolled_back'
   record.rollbackTriggered = true

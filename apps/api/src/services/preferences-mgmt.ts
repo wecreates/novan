@@ -18,7 +18,7 @@ export async function setProviderPreferenceStatus(
 ): Promise<void> {
   await db.update(providerPreferences).set({ status, updatedAt: Date.now() })
     .where(and(eq(providerPreferences.workspaceId, workspaceId), eq(providerPreferences.taskType, taskType)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[preferences-mgmt]', e.message); return null })
 }
 
 export async function listWorkerConcurrency(workspaceId: string) {
@@ -34,7 +34,7 @@ export async function setWorkerConcurrency(workspaceId: string, queueName: strin
   }).onConflictDoUpdate({
     target: [workerConcurrency.workspaceId, workerConcurrency.queueName],
     set: { factor, setBy: 'operator', reason: reason ?? null, updatedAt: Date.now() },
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[preferences-mgmt]', e.message); return null })
 }
 
 /** Cron failure summary — reads cron.error events from last N hours. */

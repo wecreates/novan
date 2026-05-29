@@ -159,7 +159,7 @@ export async function snapshot(workspaceId: string): Promise<CognitiveSnapshot> 
     db.select({ ts: researchFindings.createdAt }).from(researchFindings)
       .where(eq(researchFindings.workspaceId, workspaceId))
       .orderBy(desc(researchFindings.createdAt)).limit(1)
-      .then(r => r[0]?.ts ? Number(r[0].ts) : null).catch(() => null),
+      .then(r => r[0]?.ts ? Number(r[0].ts) : null).catch((e: Error) => { console.error('[cognitive-state]', e.message); return null }),
 
     int(db.select({ c: sql<number>`coalesce(sum(${successfulFixes.successCount}),0)::int` }).from(successfulFixes)
       .where(eq(successfulFixes.workspaceId, workspaceId))),
@@ -169,7 +169,7 @@ export async function snapshot(workspaceId: string): Promise<CognitiveSnapshot> 
     int(db.select({ c: sql<number>`count(*)::int` }).from(strategicGoals).where(eq(strategicGoals.workspaceId, workspaceId))),
     int(db.select({ c: sql<number>`count(*)::int` }).from(failureMemory).where(eq(failureMemory.workspaceId, workspaceId))),
 
-    getPreferences(workspaceId).catch(() => null),
+    getPreferences(workspaceId).catch((e: Error) => { console.error('[cognitive-state]', e.message); return null }),
   ])
 
   const lastFindingAgeHours = lastFinding ? (now - lastFinding) / HOUR : null

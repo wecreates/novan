@@ -217,7 +217,7 @@ export async function runPlatformSmoke(workspaceId: string, opts: SmokeOpts = {}
   const prior = await db.select().from(platformSmokeRuns)
     .where(eq(platformSmokeRuns.workspaceId, workspaceId))
     .orderBy(desc(platformSmokeRuns.ranAt))
-    .limit(1).then(r => r[0] ?? null).catch(() => null)
+    .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[platform-smoke]', e.message); return null })
 
   const regressions = prior
     ? detectRegressions(prior.probes as ProbeResult[], probes)
@@ -231,7 +231,7 @@ export async function runPlatformSmoke(workspaceId: string, opts: SmokeOpts = {}
     okCount: ok, failCount: fail, slowCount: slow,
     probes, regressions,
     source: opts.source ?? 'cron',
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[platform-smoke]', e.message); return null })
 
   // Emit a regression event when something newly broke — the operator
   // wires notifications + the existing incident detector picks this up.
@@ -243,7 +243,7 @@ export async function runPlatformSmoke(workspaceId: string, opts: SmokeOpts = {}
       payload: { runId: id, count: regressions.length, paths: regressions.map(r => r.path) },
       traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'platform-smoke', version: 1, createdAt: ranAt,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[platform-smoke]', e.message); return null })
   }
 
   return { id, ranAt, durationMs, okCount: ok, failCount: fail, slowCount: slow, probes, regressions }
@@ -253,7 +253,7 @@ export async function getLatestSmokeRun(workspaceId: string): Promise<SmokeRun |
   const row = await db.select().from(platformSmokeRuns)
     .where(eq(platformSmokeRuns.workspaceId, workspaceId))
     .orderBy(desc(platformSmokeRuns.ranAt))
-    .limit(1).then(r => r[0] ?? null).catch(() => null)
+    .limit(1).then(r => r[0] ?? null).catch((e: Error) => { console.error('[platform-smoke]', e.message); return null })
   if (!row) return null
   return {
     id: row.id, ranAt: row.ranAt, durationMs: row.durationMs,

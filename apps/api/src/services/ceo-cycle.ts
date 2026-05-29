@@ -64,7 +64,7 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
     id: uuidv7(), type, workspaceId, payload,
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'ceo-cycle', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[ceo-cycle]', e.message); return null })
 }
 
 export async function runCeoCycle(workspaceId: string): Promise<CycleResult> {
@@ -90,7 +90,7 @@ export async function runCeoCycle(workspaceId: string): Promise<CycleResult> {
   }
 
   // 2. Snapshot all divisions
-  const snapshots = await allDivisionsSnapshot(workspaceId).catch(() => null)
+  const snapshots = await allDivisionsSnapshot(workspaceId).catch((e: Error) => { console.error('[ceo-cycle]', e.message); return null })
   if (!snapshots) {
     result.notes.push('division snapshot failed; aborting cycle')
     result.durationMs = Date.now() - t0
@@ -189,7 +189,7 @@ export async function runCeoCycle(workspaceId: string): Promise<CycleResult> {
           ],
           confidence: 0.7,
           source: 'ceo-cycle',
-        }).catch(() => null)
+        }).catch((e: Error) => { console.error('[ceo-cycle]', e.message); return null })
         if (chainId) result.chainsRecorded++
 
         await emit(workspaceId, 'ceo.delegation_dispatched', {

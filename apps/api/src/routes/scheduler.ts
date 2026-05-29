@@ -203,7 +203,7 @@ export const schedulerRoutes: FastifyPluginAsync = async (app) => {
       source:        'api/scheduler',
       version:       1,
       createdAt:     now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[scheduler]', e.message); return null })
 
     return reply.send({ success: true, data: { runId } })
   })

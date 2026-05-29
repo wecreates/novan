@@ -79,7 +79,7 @@ export async function heartbeat(): Promise<void> {
       },
       traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'runtime-heartbeat', version: 1, createdAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[runtime-heartbeat]', e.message); return null })
   }
 
   // Re-arm learning-cron if its handles vanished (e.g. someone called stop)

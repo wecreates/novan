@@ -63,7 +63,7 @@ export async function buildPatchFromProposal(workspaceId: string, proposalId: st
     status: 'pending', agent: 'template', files: [],
     safetyReport: {}, sandboxReport: {},
     createdAt: now, updatedAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[code-agent]', e.message); return null })
 
   // Generate files via multi-provider LLM fallback. Template-stub mode
   // is now ONLY used when no LLM provider key is configured at all — and
@@ -106,20 +106,20 @@ export async function buildPatchFromProposal(workspaceId: string, proposalId: st
       blockReason: safety.blockedReasons.slice(0, 5).join(' | '),
       tokensUsed, costUsdUsed,
       completedAt: Date.now(), updatedAt: Date.now(),
-    }).where(eq(codePatches.id, patchId)).catch(() => null)
+    }).where(eq(codePatches.id, patchId)).catch((e: Error) => { console.error('[code-agent]', e.message); return null })
     await recordChain({
       workspaceId, kind: 'decision',
       subjectId: `patch:${patchId}`,
       decision: `Patch SAFETY_BLOCKED: ${safety.blockedReasons.slice(0, 3).join('; ')}`,
       evidence: [{ type: 'safety_policy', id: patchId, extract: safety.blockedReasons.join('; ') }],
       confidence: 0.95, source: 'code-agent',
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[code-agent]', e.message); return null })
     await notify({
       workspaceId, type: 'agent.patch_blocked',
       title: `Patch blocked: ${proposal.title}`,
       body: `Safety policy rejected ${safety.blockedReasons.length} item(s): ${safety.blockedReasons.slice(0, 2).join('; ')}`,
       severity: 'high', signature: `patch-blocked:${patchId}`,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[code-agent]', e.message); return null })
     return { patchId, status: 'safety_blocked', agent, files, blockReason: safety.blockedReasons.join(' | '), safetyReport: safety, sandboxReport: {}, tokensUsed, costUsdUsed }
   }
 
@@ -166,7 +166,7 @@ export async function buildPatchFromProposal(workspaceId: string, proposalId: st
       : `sandbox: ${sandbox.errors.slice(0, 3).join('; ')}`,
     tokensUsed, costUsdUsed,
     completedAt: Date.now(), updatedAt: Date.now(),
-  }).where(eq(codePatches.id, patchId)).catch(() => null)
+  }).where(eq(codePatches.id, patchId)).catch((e: Error) => { console.error('[code-agent]', e.message); return null })
 
   await recordChain({
     workspaceId, kind: 'decision',
@@ -178,7 +178,7 @@ export async function buildPatchFromProposal(workspaceId: string, proposalId: st
     ],
     confidence: sandbox.ok ? 0.75 : 0.4,
     source: 'code-agent',
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[code-agent]', e.message); return null })
 
   return {
     patchId, status, agent, files,
@@ -192,7 +192,7 @@ export async function buildPatchFromProposal(workspaceId: string, proposalId: st
 async function loadProposal(workspaceId: string, id: string): Promise<Proposal | null> {
   const row = await db.select().from(codeProposals)
     .where(and(eq(codeProposals.workspaceId, workspaceId), eq(codeProposals.id, id)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[code-agent]', e.message); return null })
   if (!row) return null
   return {
     id: row.id, workspaceId: row.workspaceId,
@@ -209,7 +209,7 @@ async function loadProposal(workspaceId: string, id: string): Promise<Proposal |
 async function getProposalStatus(workspaceId: string, id: string): Promise<string | null> {
   const row = await db.select({ status: codeProposals.status }).from(codeProposals)
     .where(and(eq(codeProposals.workspaceId, workspaceId), eq(codeProposals.id, id)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[code-agent]', e.message); return null })
   return row?.status ?? null
 }
 

@@ -126,9 +126,9 @@ export async function browserOpen(workspaceId: string, params: Record<string, un
     javaScriptEnabled: true,
   })
   const page = await context.newPage()
-  const res = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20_000 }).catch(() => null)
+  const res = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20_000 }).catch((e: Error) => { console.error('[brain-task-browser]', e.message); return null })
   if (!res) {
-    await context.close().catch(() => null)
+    await context.close().catch((e: Error) => { console.error('[brain-task-browser]', e.message); return null })
     throw new Error(`browser.open: navigation failed/timeout for ${url}`)
   }
 
@@ -162,7 +162,7 @@ export async function browserText(_ws: string, params: Record<string, unknown>):
   const s = getSession(String(params['sessionId'] ?? ''))
   const selector = String(params['selector'] ?? '').trim()
   if (selector) {
-    const t = await s.page.textContent(selector, { timeout: 5_000 }).catch(() => null)
+    const t = await s.page.textContent(selector, { timeout: 5_000 }).catch((e: Error) => { console.error('[brain-task-browser]', e.message); return null })
     return { sessionId: s.id, selector, text: (t ?? '').slice(0, 5000) }
   }
   // Whole-page text fallback

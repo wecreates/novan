@@ -45,12 +45,12 @@ export async function requestSession(i: SessionInput): Promise<{ id: string; sta
     status: 'pending', scopes: i.scopes,
     eventsCount: 0, screenshotsTaken: 0,
     createdAt: now, updatedAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
   await recordChain({
     workspaceId: i.workspaceId, kind: 'decision', subjectId: `browser-session:${id}`,
     decision: `Browser session requested: ${i.platform}/${i.accountRef} scopes=${i.scopes.join(',')}`,
     confidence: 0.8, source: 'commerce-ops',
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
   return { id, status: 'pending', requiresApproval: true }
 }
 
@@ -58,19 +58,19 @@ export async function approveSession(workspaceId: string, sessionId: string, by 
   await db.update(commerceSessions).set({
     status: 'approved', startedAt: Date.now(), updatedAt: Date.now(),
   }).where(and(eq(commerceSessions.workspaceId, workspaceId), eq(commerceSessions.id, sessionId)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
   await recordChain({
     workspaceId, kind: 'decision', subjectId: `browser-session:${sessionId}`,
     decision: `Operator ${by} approved browser session`,
     confidence: 0.95, source: 'commerce-ops',
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
 }
 
 export async function endSession(workspaceId: string, sessionId: string, status: 'ended' | 'revoked' = 'ended'): Promise<void> {
   await db.update(commerceSessions).set({
     status, endedAt: Date.now(), updatedAt: Date.now(),
   }).where(and(eq(commerceSessions.workspaceId, workspaceId), eq(commerceSessions.id, sessionId)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
 }
 
 export interface BrowserActionInput {
@@ -98,14 +98,14 @@ export async function recordBrowserEvent(i: BrowserActionInput): Promise<{ id: s
       requiresConfirm: false, confirmed: false,
       blockedReason: policy.reasons.join('; '),
       occurredAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
     await db.insert(ethicalBlocks).values({
       id: uuidv7(), workspaceId: i.workspaceId,
       intent: intent.slice(0, 500), source: 'commerce-ops',
       category: policy.category === 'purchase' ? 'purchase' : policy.category === 'security' ? 'other' : 'other',
       reason: policy.reasons.join('; '),
       blockedAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
     return { id, status: 'blocked', reason: policy.reasons.join('; ') }
   }
 
@@ -117,12 +117,12 @@ export async function recordBrowserEvent(i: BrowserActionInput): Promise<{ id: s
     requiresConfirm: i.requiresConfirm ?? false,
     confirmed: false,
     occurredAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
   await db.update(commerceSessions).set({
     eventsCount: sql`${commerceSessions.eventsCount} + 1`,
     screenshotsTaken: i.eventType === 'screenshot' ? sql`${commerceSessions.screenshotsTaken} + 1` : commerceSessions.screenshotsTaken,
     updatedAt: Date.now(),
-  }).where(eq(commerceSessions.id, i.sessionId)).catch(() => null)
+  }).where(eq(commerceSessions.id, i.sessionId)).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
 
   return { id, status: 'recorded' }
 }
@@ -140,7 +140,7 @@ export async function registerAccount(workspaceId: string, platform: string, acc
   }).onConflictDoUpdate({
     target: [accountCredentials.workspaceId, accountCredentials.platform, accountCredentials.accountRef],
     set: { grantedScopes: scopes, vaultSecretId: vaultSecretId ?? null, updatedAt: now },
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
   return id
 }
 
@@ -150,7 +150,7 @@ export async function pauseAccount(workspaceId: string, platform: string, accoun
       eq(accountCredentials.workspaceId, workspaceId),
       eq(accountCredentials.platform, platform),
       eq(accountCredentials.accountRef, accountRef),
-    )).catch(() => null)
+    )).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
 }
 
 export async function listAccounts(workspaceId: string) {
@@ -175,7 +175,7 @@ export async function checkGovernor(workspaceId: string, platform: string, accou
       eq(postingGovernor.workspaceId, workspaceId),
       eq(postingGovernor.platform, platform),
       eq(postingGovernor.accountRef, accountRef),
-    )).limit(1).then(r => r[0]).catch(() => null)
+    )).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
 
   if (!row) {
     // Default conservative settings
@@ -183,7 +183,7 @@ export async function checkGovernor(workspaceId: string, platform: string, accou
       workspaceId, platform, accountRef,
       postsToday: 0, maxPerDay: 5, cooldownMin: 45,
       windowStart: now, updatedAt: now,
-    }).onConflictDoNothing().catch(() => null)
+    }).onConflictDoNothing().catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
     return { ok: true, remainingToday: 5, cooldownLeftSec: 0 }
   }
 
@@ -195,7 +195,7 @@ export async function checkGovernor(workspaceId: string, platform: string, accou
       eq(postingGovernor.workspaceId, workspaceId),
       eq(postingGovernor.platform, platform),
       eq(postingGovernor.accountRef, accountRef),
-    )).catch(() => null)
+    )).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
     row = { ...row, postsToday: 0, windowStart: now }
   }
 
@@ -222,7 +222,7 @@ export async function recordPost(workspaceId: string, platform: string, accountR
     eq(postingGovernor.workspaceId, workspaceId),
     eq(postingGovernor.platform, platform),
     eq(postingGovernor.accountRef, accountRef),
-  )).catch(() => null)
+  )).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
 }
 
 // ─── Social post drafting ───────────────────────────────────────────────
@@ -240,7 +240,7 @@ export async function draftSocialPost(workspaceId: string, platform: string, acc
     status, spamScore: spam.score,
     blockReasons: reasons,
     createdAt: now, updatedAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
 
   if (status === 'blocked') {
     await db.insert(ethicalBlocks).values({
@@ -248,7 +248,7 @@ export async function draftSocialPost(workspaceId: string, platform: string, acc
       intent: body.slice(0, 500), source: 'commerce-ops',
       category: content.category === 'ip' ? 'ip' : 'spam',
       reason: reasons.join('; '), blockedAt: now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
   }
   return { id, status, reasons }
 }
@@ -256,7 +256,7 @@ export async function draftSocialPost(workspaceId: string, platform: string, acc
 export async function publishSocialPost(workspaceId: string, postId: string, by = 'operator'): Promise<{ ok: boolean; reason?: string }> {
   const post = await db.select().from(socialPosts)
     .where(and(eq(socialPosts.workspaceId, workspaceId), eq(socialPosts.id, postId)))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
   if (!post) return { ok: false, reason: 'not found' }
   if (post.status === 'blocked') return { ok: false, reason: 'post is blocked by policy' }
 
@@ -267,13 +267,13 @@ export async function publishSocialPost(workspaceId: string, postId: string, by 
   // Mark posted (operator handles actual platform call)
   await db.update(socialPosts).set({
     status: 'posted', postedAt: Date.now(), updatedAt: Date.now(),
-  }).where(eq(socialPosts.id, postId)).catch(() => null)
+  }).where(eq(socialPosts.id, postId)).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
   await recordPost(workspaceId, post.platform, post.accountRef)
   await recordChain({
     workspaceId, kind: 'decision', subjectId: `social-post:${postId}`,
     decision: `Social post published by ${by}: ${post.platform}/${post.accountRef}`,
     confidence: 0.9, source: 'commerce-ops',
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
   return { ok: true }
 }
 
@@ -308,14 +308,14 @@ export async function createDesignConcept(workspaceId: string, brief: string, pr
     originalityScore: orig.score, ipRiskScore, slopScore: slop.score, qualityScore: quality,
     trendRefs, status, blockReasons,
     createdAt: now, updatedAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
 
   if (blockReasons.length > 0) {
     await db.insert(ethicalBlocks).values({
       id: uuidv7(), workspaceId,
       intent: `design: ${brief}`.slice(0, 500), source: 'commerce-ops',
       category: 'ip', reason: blockReasons.join('; '), blockedAt: now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
   }
   return { id, status, scores: { originality: orig.score, slop: slop.score, ipRisk: ipRiskScore, quality }, blockReasons }
 }
@@ -336,7 +336,7 @@ export async function createListing(workspaceId: string, platform: string, title
     tags: tags.slice(0, 30), assetRefs,
     status, qualityScore: Number(quality.toFixed(3)),
     createdAt: now, updatedAt: now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
 
   if (!content.ok) {
     await db.insert(ethicalBlocks).values({
@@ -344,7 +344,7 @@ export async function createListing(workspaceId: string, platform: string, title
       intent: `listing: ${title}`.slice(0, 500), source: 'commerce-ops',
       category: content.category === 'ip' ? 'ip' : 'spam',
       reason: content.reasons.join('; '), blockedAt: now,
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
   }
   return { id, status, reasons: content.reasons }
 }
@@ -358,7 +358,7 @@ export async function recordTrendFinding(i: { workspaceId: string; source: strin
     source: i.source, niche: i.niche, signal: i.signal,
     score: i.score, confidence: i.confidence, citations: i.citations,
     capturedAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
   return id
 }
 
@@ -401,5 +401,5 @@ export async function notifyApprovalNeeded(workspaceId: string, subject: string,
     title: `Approval needed: ${subject}`, body,
     severity: 'normal',
     signature: `commerce-approval:${subject}`,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[commerce-ops]', e.message); return null })
 }

@@ -153,7 +153,7 @@ export async function approvePattern(input: {
     payload: { ...input.patternData, status: 'approved', approvedBy: input.approvedBy },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'knowledge-curator', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[knowledge-curator]', e.message); return null })
 }
 
 /** Reject a proposal — the curator won't surface it again. */
@@ -168,5 +168,5 @@ export async function rejectPattern(input: {
     payload: { patternId: input.patternId, reason: input.reason },
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'knowledge-curator', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[knowledge-curator]', e.message); return null })
 }

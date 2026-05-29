@@ -192,7 +192,7 @@ export async function sinceLastVisit(workspaceId: string, lastVisitAt?: number):
       failed: sql<number>`count(*) filter (where ${telemetryEvents.outcome} = 'failure')::int`,
     }).from(telemetryEvents)
       .where(and(eq(telemetryEvents.workspaceId, workspaceId), gte(telemetryEvents.createdAt, end - halfWindow)))
-      .then(r => r[0]).catch(() => null),
+      .then(r => r[0]).catch((e: Error) => { console.error('[engagement-feed]', e.message); return null }),
     db.select({
       total: sql<number>`count(*)::int`,
       failed: sql<number>`count(*) filter (where ${telemetryEvents.outcome} = 'failure')::int`,
@@ -202,7 +202,7 @@ export async function sinceLastVisit(workspaceId: string, lastVisitAt?: number):
         gte(telemetryEvents.createdAt, end - 2 * halfWindow),
         sql`${telemetryEvents.createdAt} < ${end - halfWindow}`,
       ))
-      .then(r => r[0]).catch(() => null),
+      .then(r => r[0]).catch((e: Error) => { console.error('[engagement-feed]', e.message); return null }),
   ])
   const rate = (r: typeof recent) => r && Number(r.total) > 0 ? Number(r.failed) / Number(r.total) : null
   const recentRate = rate(recent)

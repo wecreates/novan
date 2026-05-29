@@ -54,7 +54,7 @@ export async function indexChain(workspaceId: string, chainId: string, text: str
     vector: JSON.stringify(vector), dim: DIM,
     sourceKind: sourceKind ?? null,
     createdAt: Date.now(),
-  }).onConflictDoNothing().catch(() => null)
+  }).onConflictDoNothing().catch((e: Error) => { console.error('[semantic-search]', e.message); return null })
 }
 
 /** Backfill: index any chains in the last N days that lack an embedding. */

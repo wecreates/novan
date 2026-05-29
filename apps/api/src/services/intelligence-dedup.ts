@@ -50,7 +50,7 @@ async function recordSuggestion(workspaceId: string, s: DupSuggestion): Promise<
       sql`(${duplicateMergeLog.primaryId} = ${s.primaryId} AND ${duplicateMergeLog.duplicateId} = ${s.duplicateId})
          OR (${duplicateMergeLog.primaryId} = ${s.duplicateId} AND ${duplicateMergeLog.duplicateId} = ${s.primaryId})`,
     ))
-    .limit(1).then(r => r[0]).catch(() => null)
+    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[intelligence-dedup]', e.message); return null })
   if (existing) return
   await db.insert(duplicateMergeLog).values({
     id: uuidv7(), workspaceId,
@@ -58,7 +58,7 @@ async function recordSuggestion(workspaceId: string, s: DupSuggestion): Promise<
     similarity: s.similarity, reason: s.reason,
     status: 'suggested',
     createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[intelligence-dedup]', e.message); return null })
 }
 
 async function pairwiseScan<T extends { id: string }>(
@@ -143,6 +143,6 @@ export async function decideSuggestion(workspaceId: string, id: string, decision
   await db.update(duplicateMergeLog).set({
     status: decision, decidedBy: actor, decidedAt: Date.now(),
   }).where(and(eq(duplicateMergeLog.workspaceId, workspaceId), eq(duplicateMergeLog.id, id)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[intelligence-dedup]', e.message); return null })
   return { ok: true }
 }

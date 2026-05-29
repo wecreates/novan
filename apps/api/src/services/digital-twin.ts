@@ -208,7 +208,7 @@ export async function snapshotAllForWorkspace(workspaceId: string): Promise<{ co
     const { listChannels } = await import('./channel-manager.js')
     const channels = await listChannels(workspaceId)
     for (const c of channels) {
-      const t = await snapshotChannelTwin(workspaceId, c.id, c.label).catch(() => null)
+      const t = await snapshotChannelTwin(workspaceId, c.id, c.label).catch((e: Error) => { console.error('[digital-twin]', e.message); return null })
       if (t) out.push(t)
     }
   } catch { /* */ }
@@ -216,7 +216,7 @@ export async function snapshotAllForWorkspace(workspaceId: string): Promise<{ co
   try {
     const rows = await db.execute(sql`SELECT id FROM businesses WHERE workspace_id = ${workspaceId} LIMIT 50`)
     for (const r of (rows as unknown as { rows?: Array<Record<string, unknown>> }).rows ?? []) {
-      const t = await snapshotBusinessTwin(workspaceId, String(r['id'])).catch(() => null)
+      const t = await snapshotBusinessTwin(workspaceId, String(r['id'])).catch((e: Error) => { console.error('[digital-twin]', e.message); return null })
       if (t) out.push(t)
     }
   } catch { /* */ }
@@ -225,7 +225,7 @@ export async function snapshotAllForWorkspace(workspaceId: string): Promise<{ co
     const { listSchedules } = await import('./scheduled-production.js')
     const schedules = await listSchedules(workspaceId)
     for (const s of schedules) {
-      const t = await snapshotScheduleTwin(workspaceId, s.id).catch(() => null)
+      const t = await snapshotScheduleTwin(workspaceId, s.id).catch((e: Error) => { console.error('[digital-twin]', e.message); return null })
       if (t) out.push(t)
     }
   } catch { /* */ }
@@ -237,7 +237,7 @@ export async function snapshotAllForWorkspace(workspaceId: string): Promise<{ co
       ORDER BY total_calls DESC LIMIT 20`)
     for (const r of (rows as unknown as { rows?: Array<Record<string, unknown>> }).rows ?? []) {
       const id = String(r['subject']).replace(/^agent:/, '')
-      const t = await snapshotAgentTwin(workspaceId, id, id).catch(() => null)
+      const t = await snapshotAgentTwin(workspaceId, id, id).catch((e: Error) => { console.error('[digital-twin]', e.message); return null })
       if (t) out.push(t)
     }
   } catch { /* */ }

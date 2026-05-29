@@ -50,7 +50,7 @@ export async function blackboardWrite(input: Omit<BlackboardEntry, 'id' | 'creat
     payload: { ...entry } as never,
     traceId: uuidv7(), correlationId: input.boardKey, causationId: null,
     source: 'agent-coordination', version: 1, createdAt: entry.createdAt,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[agent-coordination]', e.message); return null })
   return entry
 }
 
@@ -152,7 +152,7 @@ export async function emitEscalation(input: {
     payload: input.receipt as never,
     traceId: uuidv7(), correlationId: input.receipt.fromAgent, causationId: null,
     source: 'agent-coordination', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[agent-coordination]', e.message); return null })
 }
 
 // ── Loop detection ─────────────────────────────────────────────────
@@ -265,7 +265,7 @@ export async function execReversible<I, O>(input: {
 
   // Approval gate — irreversible actions require OPERATOR_APPROVED.
   if (input.approvalToken !== 'OPERATOR_APPROVED') {
-    await input.agent.cancel(intentId).catch(() => null)
+    await input.agent.cancel(intentId).catch((e: Error) => { console.error('[agent-coordination]', e.message); return null })
     _pendingIntents.delete(intentId)
     return { ok: false, error: `commit refused: missing OPERATOR_APPROVED token; intent cancelled`, intentId }
   }
@@ -278,10 +278,10 @@ export async function execReversible<I, O>(input: {
       payload: { action: input.agent.name, intentId } as never,
       traceId: uuidv7(), correlationId: intentId, causationId: null,
       source: 'agent-coordination', version: 1, createdAt: Date.now(),
-    }).catch(() => null)
+    }).catch((e: Error) => { console.error('[agent-coordination]', e.message); return null })
     return { ok: true, outcome, intentId }
   } catch (e) {
-    await input.agent.cancel(intentId).catch(() => null)
+    await input.agent.cancel(intentId).catch((e: Error) => { console.error('[agent-coordination]', e.message); return null })
     _pendingIntents.delete(intentId)
     return { ok: false, error: `commit failed; intent cancelled: ${(e as Error).message}`, intentId }
   }
@@ -297,7 +297,7 @@ export async function sweepStaleIntents(input: { maxAgeMs?: number; actions: Rec
     if (now - pending.openedAt < max) continue
     const action = input.actions[pending.actionName]
     if (!action) continue
-    await action.cancel(id).catch(() => null)
+    await action.cancel(id).catch((e: Error) => { console.error('[agent-coordination]', e.message); return null })
     _pendingIntents.delete(id)
     cancelled++
   }

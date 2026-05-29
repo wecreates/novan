@@ -137,7 +137,7 @@ async function recordBaseline(path: string, sha256: string, source: string): Pro
       payload: { path, sha256, source },
       traceId: uuidv7(), correlationId: null, causationId: null,
       source: 'lock-integrity', version: 1, createdAt: Date.now(),
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[lock-integrity]', e.message); return null })
   } catch { /* tolerated */ }
 }
 
@@ -204,7 +204,7 @@ export async function acknowledgeLockChange(
       payload: { path, reason, acknowledgedBy, newSha },
       traceId: uuidv7(), correlationId: null, causationId: null,
       source: 'lock-integrity', version: 1, createdAt: Date.now(),
-    } as never).catch(() => null)
+    } as never).catch((e: Error) => { console.error('[lock-integrity]', e.message); return null })
   } catch { /* tolerated */ }
   return { acknowledged: true, newSha }
 }
@@ -231,7 +231,7 @@ export async function runLockIntegrityCheck(): Promise<{
         payload: { reason: 'lock_paths_out_of_sync', uncovered: sync.uncovered },
         traceId: uuidv7(), correlationId: null, causationId: null,
         source: 'lock-integrity', version: 1, createdAt: Date.now(),
-      } as never).catch(() => null)
+      } as never).catch((e: Error) => { console.error('[lock-integrity]', e.message); return null })
     } catch { /* tolerated */ }
   }
 
@@ -242,7 +242,7 @@ export async function runLockIntegrityCheck(): Promise<{
   let matches = 0
 
   for (const path of LOCKED_PATHS) {
-    const v = await verifyPath(repoRoot, path).catch(() => null)
+    const v = await verifyPath(repoRoot, path).catch((e: Error) => { console.error('[lock-integrity]', e.message); return null })
     if (!v) continue
     if (v.status === 'match') matches++
     else if (v.status === 'tampered') tampered.push(path)
@@ -267,13 +267,13 @@ export async function runLockIntegrityCheck(): Promise<{
         payload: { tampered, checkedAt: Date.now() },
         traceId: uuidv7(), correlationId: null, causationId: null,
         source: 'lock-integrity', version: 1, createdAt: Date.now(),
-      } as never).catch(() => null)
+      } as never).catch((e: Error) => { console.error('[lock-integrity]', e.message); return null })
       await db.insert(events).values({
         id: uuidv7(), type: 'governance.stability_alert', workspaceId: null,
         payload: { reason: 'lock_integrity_tamper', tampered },
         traceId: uuidv7(), correlationId: null, causationId: null,
         source: 'lock-integrity', version: 1, createdAt: Date.now(),
-      } as never).catch(() => null)
+      } as never).catch((e: Error) => { console.error('[lock-integrity]', e.message); return null })
     } catch { /* tolerated */ }
   }
 
