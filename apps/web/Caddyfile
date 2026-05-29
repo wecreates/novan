@@ -1,10 +1,14 @@
 :8080 {
   root * /srv
   encode gzip zstd
-  file_server
-  try_files {path} /index.html
 
-  # Proxy API calls to api service
+  # R146 — order matters: `handle /api/*` (and the other API path prefixes)
+  # must be evaluated BEFORE the SPA `try_files`/`file_server` fallback,
+  # otherwise try_files rewrites /api/v1/* to /index.html and the proxy
+  # block never matches. The previous layout (file_server + try_files at
+  # the top of the block) sent /api/v1/chat/stream to the SPA, breaking
+  # the PWA chat in production. Each upstream route lives inside its own
+  # `handle` so the default SPA fallback only runs when nothing matched.
   handle /api/* {
     reverse_proxy {$API_UPSTREAM:api:3001}
   }
@@ -16,6 +20,13 @@
   }
   handle /health* {
     reverse_proxy {$API_UPSTREAM:api:3001}
+  }
+
+  # Default handle = SPA. Try the asset on disk, fall back to index.html
+  # so client-side routing works for any unknown path.
+  handle {
+    try_files {path} /index.html
+    file_server
   }
 
   # Long-cache static assets
