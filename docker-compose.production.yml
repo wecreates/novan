@@ -65,6 +65,11 @@ services:
       # returning 503 (default-deny). Generate via:
       #   openssl rand -base64 32 >> .env line `OPERATOR_BOOTSTRAP_SECRET=...`
       OPERATOR_BOOTSTRAP_SECRET: ${OPERATOR_BOOTSTRAP_SECRET:-}
+      # R146.25 — flip to "true" in .env once the PWA has been
+      # bootstrapped via /setup (R146.24) so it has a token in
+      # localStorage. Without that, this would 401 every chat request.
+      # Default off keeps existing deployments unaffected.
+      ENFORCE_GLOBAL_AUTH: ${ENFORCE_GLOBAL_AUTH:-false}
       CORS_ORIGINS:       ${CORS_ORIGINS}
       # Provider keys (optional — only set what you have)
       OPENAI_API_KEY:     ${OPENAI_API_KEY:-}

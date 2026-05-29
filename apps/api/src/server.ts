@@ -12,6 +12,7 @@
  */
 import './telemetry.js'
 import Fastify               from 'fastify'
+import type { FastifyRequest, FastifyReply } from 'fastify'
 import cors                  from '@fastify/cors'
 import helmet                from '@fastify/helmet'
 import rateLimit             from '@fastify/rate-limit'
@@ -231,6 +232,36 @@ await app.register(requestContextPlugin)
 await app.register(errorHandlerPlugin)
 await app.register(auditPlugin)
 await app.register(authPlugin)
+
+// R146.25 — global auth enforcement, env-gated. Off by default so
+// existing deployments keep working unchanged; flip ENFORCE_GLOBAL_AUTH=true
+// in .env once /setup has been used to mint an operator token (R146.24)
+// and the PWA's localStorage contains it. The hook then routes every
+// request through `app.authenticate` unless the path matches a public
+// prefix. Failed attempt history: R146.23 enabled this unconditionally
+// and broke chat because the PWA hadn't been bootstrapped yet — see
+// runbook gotcha #11 for the full lesson.
+if (process.env['ENFORCE_GLOBAL_AUTH'] === 'true') {
+  const PUBLIC_PREFIXES = [
+    '/health',
+    '/api/v1/health',
+    '/metrics',
+    '/docs',
+    '/api/v1/webhooks',
+    '/api/v1/auth/quick-link',
+    '/api/v1/auth/bootstrap',   // R146.24 — operator must reach this without a token
+  ]
+  type AuthFn = (req: FastifyRequest, reply: FastifyReply) => Promise<void>
+  const authenticate = (app as unknown as { authenticate: AuthFn }).authenticate
+  app.addHook('onRequest', async (req, reply) => {
+    const url = req.url.split('?')[0] ?? ''
+    for (const p of PUBLIC_PREFIXES) {
+      if (url === p || url.startsWith(p + '/')) return
+    }
+    await authenticate(req, reply)
+  })
+  app.log.info('[auth] global auth enforcement ENABLED via ENFORCE_GLOBAL_AUTH=true')
+}
 
 // Swagger is optional — wrap so a CJS/JSON quirk in @fastify/swagger-ui doesn't crash boot
 try {
