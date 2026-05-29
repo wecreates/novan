@@ -9,7 +9,11 @@
 services:
 
   postgres:
-    image: postgres:16-alpine
+    # R145 — pgvector image (not vanilla postgres) because migration 0000
+    # uses `vector(768)` type. Operator must `CREATE EXTENSION IF NOT
+    # EXISTS vector` once after first start, before the API container
+    # runs migrations. See scripts/deploy-cloud.sh.
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER:     ${POSTGRES_USER}
@@ -51,11 +55,16 @@ services:
       REDIS_URL:          redis://default:${REDIS_PASSWORD}@redis:6379
       AUTH_SECRET:        ${AUTH_SECRET}
       VAULT_MASTER_KEY:   ${VAULT_MASTER_KEY}
+      # R145 — production-mode env-validation requires these. Without
+      # CHANNEL_ENCRYPTION_KEY the API refuses to boot with a FATAL.
+      CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
+      RUNTIME_MODE:           ${RUNTIME_MODE:-cloud-api-only}
       CORS_ORIGINS:       ${CORS_ORIGINS}
       # Provider keys (optional — only set what you have)
       OPENAI_API_KEY:     ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY:  ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY:     ${GEMINI_API_KEY:-}
+      GROQ_API_KEY:       ${GROQ_API_KEY:-}
       STRIPE_SECRET_KEY:  ${STRIPE_SECRET_KEY:-}
       # Telemetry
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
@@ -63,7 +72,10 @@ services:
       LOG_LEVEL:                   info
       REPO_ROOT:                   /app
     healthcheck:
-      test:    ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/health"]
+      # R145 — actual liveness route lives at /api/v1/health (Fastify
+      # prefix). Previous /health returned 404 → container marked
+      # unhealthy → web's depends_on never satisfied → web never started.
+      test:    ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/api/v1/health"]
       interval: 30s
       timeout:  5s
       retries:  3
