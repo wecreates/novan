@@ -76,7 +76,10 @@ export const KNOWN_PROVIDERS: ProviderDef[] = [
   { id: 'fireworks',    family: 'openai',   baseUrl: 'https://api.fireworks.ai/inference/v1',           defaultModel: 'accounts/fireworks/models/llama-v3p3-70b-instruct', envVar: 'FIREWORKS_API_KEY', costPer1kTokens: 0.0009 },
   { id: 'cerebras',     family: 'openai',   baseUrl: 'https://api.cerebras.ai/v1',                      defaultModel: 'llama-3.3-70b',           envVar: 'CEREBRAS_API_KEY',     costPer1kTokens: 0.00085 },
   { id: 'anthropic',    family: 'anthropic', baseUrl: 'https://api.anthropic.com/v1',                   defaultModel: 'claude-3-5-sonnet-latest', envVar: 'ANTHROPIC_API_KEY',   costPer1kTokens: 0.003 },
-  { id: 'gemini',       family: 'gemini',    baseUrl: 'https://generativelanguage.googleapis.com/v1beta', defaultModel: 'gemini-2.0-flash',    envVar: 'GEMINI_API_KEY',       costPer1kTokens: 0.000075 },
+  // R146 — gemini-2.0-flash listed in :listModels but returns 404 from
+  // :streamGenerateContent for newer API keys; gemini-2.5-flash is the
+  // current generally-available flash tier and works for both endpoints.
+  { id: 'gemini',       family: 'gemini',    baseUrl: 'https://generativelanguage.googleapis.com/v1beta', defaultModel: 'gemini-2.5-flash',    envVar: 'GEMINI_API_KEY',       costPer1kTokens: 0.000075 },
 ]
 
 export interface AvailableProvider {
@@ -511,8 +514,16 @@ export async function* streamChat(workspaceId: string, msgs: ChatMsg[], opts?: S
       const fallback = available
         .filter(p => p.enabled && p.hasKey && !tried.includes(p.id))
         .sort((a, b) => a.priority - b.priority)[0]
-      provider = fallback ? (KNOWN_PROVIDERS.find(p => p.id === fallback.id) ?? null) : null
-      continue
+      if (fallback) {
+        provider = KNOWN_PROVIDERS.find(p => p.id === fallback.id) ?? null
+        continue
+      }
+      // R146 — no untried provider available: fall through to flush the
+      // buffered error markers below. Previously this nulled `provider`
+      // and `continue`d, exiting the loop with empty hands so the generic
+      // "_(No LLM provider configured)_" tail message hid the real
+      // upstream error (e.g. groq 429, gemini 404) the operator needs to
+      // see to debug.
     }
     // Fallback exhausted: emit whatever the last provider said + return.
     for (const ev of bufferedDeltas) yield ev
