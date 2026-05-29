@@ -244,11 +244,11 @@ export async function runComplianceEvidenceCollection(): Promise<{
     const { events } = await import('../db/schema.js')
     const { v7: uuidv7 } = await import('uuid')
     await db.insert(events).values({
-      id: uuidv7(), type: 'compliance.evidence_collected', workspaceId: null,
+      id: uuidv7(), type: 'compliance.evidence_collected', workspaceId: 'global',
       payload: { perControl, totalEvents, summary: controlSummary() },
-      traceId: uuidv7(), correlationId: null, causationId: null,
+      traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'compliance-soc2', version: 1, createdAt: Date.now(),
-    } as never).catch((e: Error) => { console.error('[compliance-soc2]', e.message); return null })
+    }).catch((e: Error) => { console.error('[compliance-soc2]', e.message); return null })
   } catch { /* DB unavailable — non-fatal */ }
   return { controlsCollected: perControl.length, totalEvents }
 }
@@ -288,11 +288,11 @@ export async function runDependencyCveScan(): Promise<{
     const { events } = await import('../db/schema.js')
     const { v7: uuidv7 } = await import('uuid')
     await db.insert(events).values({
-      id: uuidv7(), type: 'compliance.cve_scan_completed', workspaceId: null,
+      id: uuidv7(), type: 'compliance.cve_scan_completed', workspaceId: 'global',
       payload: result,
-      traceId: uuidv7(), correlationId: null, causationId: null,
+      traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'compliance-soc2', version: 1, createdAt: Date.now(),
-    } as never).catch((e: Error) => { console.error('[compliance-soc2]', e.message); return null })
+    }).catch((e: Error) => { console.error('[compliance-soc2]', e.message); return null })
   } catch { /* tolerated */ }
   return result
 }
@@ -317,11 +317,11 @@ export async function runQuarterlyAccessReviewCheck(): Promise<{ due: boolean }>
     if (due) {
       const { v7: uuidv7 } = await import('uuid')
       await db.insert(events).values({
-        id: uuidv7(), type: 'compliance.access_review_due', workspaceId: null,
+        id: uuidv7(), type: 'compliance.access_review_due', workspaceId: 'global',
         payload: { lastCompleted: null, daysSince: '>95' },
-        traceId: uuidv7(), correlationId: null, causationId: null,
+        traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
         source: 'compliance-soc2', version: 1, createdAt: Date.now(),
-      } as never).catch((e: Error) => { console.error('[compliance-soc2]', e.message); return null })
+      }).catch((e: Error) => { console.error('[compliance-soc2]', e.message); return null })
     }
   } catch { /* DB unavailable */ }
   return { due }

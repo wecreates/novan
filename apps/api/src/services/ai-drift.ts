@@ -174,9 +174,9 @@ export async function runAiDriftSample(): Promise<{
         const { db } = await import('../db/client.js')
         const { events } = await import('../db/schema.js')
         await db.insert(events).values({
-          id: uuidv7(), type: 'ai.drift_detected', workspaceId: null,
+          id: uuidv7(), type: 'ai.drift_detected', workspaceId: 'global',
           payload: verdict,
-          traceId: uuidv7(), correlationId: null, causationId: null,
+          traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
           source: 'ai-drift', version: 1, createdAt: Date.now(),
         } as never).catch((e: Error) => { console.error('[ai-drift]', e.message); return null })
       } catch { /* tolerated */ }

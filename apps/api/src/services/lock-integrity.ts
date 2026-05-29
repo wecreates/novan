@@ -133,11 +133,11 @@ async function recordBaseline(path: string, sha256: string, source: string): Pro
     const { db } = await import('../db/client.js')
     const { events } = await import('../db/schema.js')
     await db.insert(events).values({
-      id: uuidv7(), type: 'lock_integrity.baseline_recorded', workspaceId: null,
+      id: uuidv7(), type: 'lock_integrity.baseline_recorded', workspaceId: 'global',   // R146.20 — lock-integrity is system-wide; events.workspace_id is NOT NULL so null was silently rejected pre-R146.12, now logs every tick
       payload: { path, sha256, source },
-      traceId: uuidv7(), correlationId: null, causationId: null,
+      traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'lock-integrity', version: 1, createdAt: Date.now(),
-    } as never).catch((e: Error) => { console.error('[lock-integrity]', e.message); return null })
+    }).catch((e: Error) => { console.error('[lock-integrity]', e.message); return null })
   } catch { /* tolerated */ }
 }
 
@@ -200,11 +200,11 @@ export async function acknowledgeLockChange(
     const { db } = await import('../db/client.js')
     const { events } = await import('../db/schema.js')
     await db.insert(events).values({
-      id: uuidv7(), type: 'lock_integrity.change_acknowledged', workspaceId: null,
+      id: uuidv7(), type: 'lock_integrity.change_acknowledged', workspaceId: 'global',   // R146.20 — lock-integrity is system-wide; events.workspace_id is NOT NULL so null was silently rejected pre-R146.12, now logs every tick
       payload: { path, reason, acknowledgedBy, newSha },
-      traceId: uuidv7(), correlationId: null, causationId: null,
+      traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'lock-integrity', version: 1, createdAt: Date.now(),
-    } as never).catch((e: Error) => { console.error('[lock-integrity]', e.message); return null })
+    }).catch((e: Error) => { console.error('[lock-integrity]', e.message); return null })
   } catch { /* tolerated */ }
   return { acknowledged: true, newSha }
 }
@@ -227,11 +227,11 @@ export async function runLockIntegrityCheck(): Promise<{
       const { db } = await import('../db/client.js')
       const { events } = await import('../db/schema.js')
       await db.insert(events).values({
-        id: uuidv7(), type: 'governance.stability_alert', workspaceId: null,
+        id: uuidv7(), type: 'governance.stability_alert', workspaceId: 'global',   // R146.20 — lock-integrity is system-wide; events.workspace_id is NOT NULL so null was silently rejected pre-R146.12, now logs every tick
         payload: { reason: 'lock_paths_out_of_sync', uncovered: sync.uncovered },
-        traceId: uuidv7(), correlationId: null, causationId: null,
+        traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
         source: 'lock-integrity', version: 1, createdAt: Date.now(),
-      } as never).catch((e: Error) => { console.error('[lock-integrity]', e.message); return null })
+      }).catch((e: Error) => { console.error('[lock-integrity]', e.message); return null })
     } catch { /* tolerated */ }
   }
 
@@ -263,17 +263,17 @@ export async function runLockIntegrityCheck(): Promise<{
       const { db } = await import('../db/client.js')
       const { events } = await import('../db/schema.js')
       await db.insert(events).values({
-        id: uuidv7(), type: 'lock_integrity.tamper_detected', workspaceId: null,
+        id: uuidv7(), type: 'lock_integrity.tamper_detected', workspaceId: 'global',   // R146.20 — lock-integrity is system-wide; events.workspace_id is NOT NULL so null was silently rejected pre-R146.12, now logs every tick
         payload: { tampered, checkedAt: Date.now() },
-        traceId: uuidv7(), correlationId: null, causationId: null,
+        traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
         source: 'lock-integrity', version: 1, createdAt: Date.now(),
-      } as never).catch((e: Error) => { console.error('[lock-integrity]', e.message); return null })
+      }).catch((e: Error) => { console.error('[lock-integrity]', e.message); return null })
       await db.insert(events).values({
-        id: uuidv7(), type: 'governance.stability_alert', workspaceId: null,
+        id: uuidv7(), type: 'governance.stability_alert', workspaceId: 'global',   // R146.20 — lock-integrity is system-wide; events.workspace_id is NOT NULL so null was silently rejected pre-R146.12, now logs every tick
         payload: { reason: 'lock_integrity_tamper', tampered },
-        traceId: uuidv7(), correlationId: null, causationId: null,
+        traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
         source: 'lock-integrity', version: 1, createdAt: Date.now(),
-      } as never).catch((e: Error) => { console.error('[lock-integrity]', e.message); return null })
+      }).catch((e: Error) => { console.error('[lock-integrity]', e.message); return null })
     } catch { /* tolerated */ }
   }
 

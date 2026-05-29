@@ -156,11 +156,11 @@ export async function attestReadinessItem(
     const { events } = await import('../db/schema.js')
     const { v7: uuidv7 } = await import('uuid')
     await db.insert(events).values({
-      id: uuidv7(), type: 'operational_readiness.attested', workspaceId: null,
+      id: uuidv7(), type: 'operational_readiness.attested', workspaceId: 'global',
       payload: { itemId, previousStatus: item.status, newStatus: status, attestedBy, note: note ?? null },
-      traceId: uuidv7(), correlationId: null, causationId: null,
+      traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'operational-readiness', version: 1, createdAt: Date.now(),
-    } as never).catch((e: Error) => { console.error('[operational-readiness]', e.message); return null })
+    }).catch((e: Error) => { console.error('[operational-readiness]', e.message); return null })
   } catch { /* tolerated */ }
   // In-memory mutation: persisted attestations are read by the
   // Compliance tab via event timeline replay; the catalog itself

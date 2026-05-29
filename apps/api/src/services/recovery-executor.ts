@@ -86,10 +86,10 @@ async function emit(type: string, payload: Record<string, unknown>): Promise<voi
     const { db } = await import('../db/client.js')
     const { events } = await import('../db/schema.js')
     await db.insert(events).values({
-      id: uuidv7(), type, workspaceId: null, payload,
-      traceId: uuidv7(), correlationId: null, causationId: null,
+      id: uuidv7(), type, workspaceId: 'global', payload,
+      traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'recovery-executor', version: 1, createdAt: Date.now(),
-    } as never).catch((e: Error) => { console.error('[recovery-executor]', e.message); return null })
+    }).catch((e: Error) => { console.error('[recovery-executor]', e.message); return null })
   } catch { /* tolerated */ }
 }
 

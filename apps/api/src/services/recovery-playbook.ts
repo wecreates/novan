@@ -199,11 +199,11 @@ export async function suggestPlaybook(
     const { events } = await import('../db/schema.js')
     const { v7: uuidv7 } = await import('uuid')
     await db.insert(events).values({
-      id: uuidv7(), type: 'recovery.playbook_suggested', workspaceId: null,
+      id: uuidv7(), type: 'recovery.playbook_suggested', workspaceId: 'global',
       payload: { mode, playbook: pb.title, runbook: pb.runbook, autoRecoverable: pb.autoRecoverable, context },
-      traceId: uuidv7(), correlationId: null, causationId: null,
+      traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'recovery-playbook', version: 1, createdAt: Date.now(),
-    } as never).catch((e: Error) => { console.error('[recovery-playbook]', e.message); return null })
+    }).catch((e: Error) => { console.error('[recovery-playbook]', e.message); return null })
   } catch { /* tolerated */ }
   return { suggested: true, playbook: pb }
 }

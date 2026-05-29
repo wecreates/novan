@@ -105,11 +105,11 @@ export async function rotateSecret(key: string, rotatedBy: string = 'operator'):
     const { events } = await import('../db/schema.js')
     const { v7: uuidv7 } = await import('uuid')
     await db.insert(events).values({
-      id: uuidv7(), type: 'secret.rotation_requested', workspaceId: null,
+      id: uuidv7(), type: 'secret.rotation_requested', workspaceId: 'global',
       payload: { key, rotatedBy, driver: currentDriver(), at: Date.now() },
-      traceId: uuidv7(), correlationId: null, causationId: null,
+      traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
       source: 'secrets-provider', version: 1, createdAt: Date.now(),
-    } as never).catch((e: Error) => { console.error('[secrets-provider]', e.message); return null })
+    }).catch((e: Error) => { console.error('[secrets-provider]', e.message); return null })
   } catch { /* DB unavailable — tolerated */ }
   incCounter('secrets_rotation_total', { driver: currentDriver() })
 }
