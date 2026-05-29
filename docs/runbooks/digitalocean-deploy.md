@@ -137,6 +137,32 @@ open http://<PUBLIC_IP>:3000
 
 ---
 
+## Web container redeploy (after `pnpm build`)
+
+R146.26 — `tar -xzf` does NOT remove pre-existing files in the target
+directory. Without a `rm -rf` first, each deploy stacks new asset chunks
+on top of the old ones in `apps/web/dist/`, and `docker cp` then copies
+the bloated directory into the web container. Eight deploys had grown
+`/srv` to 27 MB / 1060 files with 508 source maps shipped. Clean ritual:
+
+```bash
+# Local: build with NODE_ENV=production so source maps are dropped
+cd apps/web && NODE_ENV=production pnpm build
+tar -czf /tmp/web-dist.tar.gz dist
+
+# Copy to droplet + atomic swap
+scp /tmp/web-dist.tar.gz root@<droplet>:/tmp/
+ssh root@<droplet> '
+  cd /root/novan
+  rm -rf apps/web/dist                     # ← critical: clear staging
+  tar -xzf /tmp/web-dist.tar.gz
+  docker cp apps/web/dist novan-web-1:/srv-new
+  docker exec novan-web-1 sh -c "rm -rf /srv-old; mv /srv /srv-old && mv /srv-new /srv && rm -rf /srv-old"
+'
+```
+
+Healthy size = ~3.5 MB / ~177 files / 0 maps.
+
 ## Maintenance
 
 ```bash

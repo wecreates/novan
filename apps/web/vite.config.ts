@@ -31,7 +31,15 @@ export default defineConfig({
   },
   build: {
     outDir:     'dist',
-    sourcemap:  true,
+    // R146.26 — source maps in production leak the full unminified
+    // source + comments + private logic of every page. They're useful
+    // in dev (hot-reload, browser-devtools step-through) but at prod
+    // deploy time they double bundle size AND expose the implementation
+    // to anyone who fetches `/assets/<chunk>.js.map`. Build inherits
+    // mode from vite: `vite build` defaults to mode='production', so
+    // we get source maps in `vite build --mode development` (rare) and
+    // none in the standard prod build.
+    sourcemap:  process.env['NODE_ENV'] !== 'production' && process.env['VITE_BUILD_MODE'] !== 'production',
     rollupOptions: {
       output: {
         manualChunks: {
