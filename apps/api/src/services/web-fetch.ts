@@ -183,19 +183,30 @@ export async function webFetch(input: WebFetchInput): Promise<WebFetchResult> {
     // Stream + truncate to MAX_BODY_BYTES
     const reader = r.body?.getReader()
     if (reader) {
-      const chunks: Uint8Array[] = []
-      let total = 0
-      while (total < MAX_BODY_BYTES) {
-        const { done, value } = await reader.read()
-        if (done) break
-        chunks.push(value)
-        total += value.length
-        if (total >= MAX_BODY_BYTES) { await reader.cancel().catch((e: Error) => { console.error('[web-fetch]', e.message); return null }); break }
+      // R146.15 — wrap read loop in try/finally so the reader is always
+      // released. Previously if `reader.read()` rejected mid-stream
+      // (truncated TCP, abort), control jumped to the outer catch and
+      // the reader + underlying HTTP connection stayed pinned until GC
+      // eventually cleared the Response. Called per autonomous research
+      // turn so this added up under load.
+      try {
+        const chunks: Uint8Array[] = []
+        let total = 0
+        while (total < MAX_BODY_BYTES) {
+          const { done, value } = await reader.read()
+          if (done) break
+          chunks.push(value)
+          total += value.length
+          if (total >= MAX_BODY_BYTES) { await reader.cancel().catch((e: Error) => { console.error('[web-fetch]', e.message); return null }); break }
+        }
+        const buf = new Uint8Array(total)
+        let off = 0
+        for (const c of chunks) { buf.set(c.subarray(0, Math.min(c.length, MAX_BODY_BYTES - off)), off); off += c.length }
+        rawBody = new TextDecoder('utf-8').decode(buf.subarray(0, Math.min(off, MAX_BODY_BYTES)))
+      } finally {
+        await reader.cancel().catch(() => null)
+        try { reader.releaseLock() } catch { /* already released */ }
       }
-      const buf = new Uint8Array(total)
-      let off = 0
-      for (const c of chunks) { buf.set(c.subarray(0, Math.min(c.length, MAX_BODY_BYTES - off)), off); off += c.length }
-      rawBody = new TextDecoder('utf-8').decode(buf.subarray(0, Math.min(off, MAX_BODY_BYTES)))
     } else {
       rawBody = (await r.text()).slice(0, MAX_BODY_BYTES)
     }

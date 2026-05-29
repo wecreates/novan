@@ -1477,7 +1477,29 @@ export function stopLearningCron(): void {
     clearInterval(h)
   }
   handles.length = 0
+  // R146.15 — DO NOT zero _running synchronously. The map tracks which
+  // ticks are currently mid-flight; in-flight ticks will set their tag
+  // back to false when they finish. Caller (`drainLearningCron`) polls
+  // it to know when it's safe to close the DB pool.
+}
+
+/** R146.15 — wait for in-flight ticks to drain before letting the
+ *  process exit. Without this, shutdown clears timers but lets running
+ *  ticks keep writing against `app.close()`'d resources and ultimately
+ *  get terminated mid-`for (const ws of ids)` by `process.exit(0)`,
+ *  with silent half-applied state. Polls `_running` until empty or
+ *  `timeoutMs` elapses, then returns regardless so a stuck tick can't
+ *  hang shutdown indefinitely. */
+export async function drainLearningCron(timeoutMs = 5_000): Promise<{ drained: boolean; remaining: string[] }> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const stillRunning = [..._running.entries()].filter(([, v]) => v).map(([k]) => k)
+    if (stillRunning.length === 0) { _running.clear(); return { drained: true, remaining: [] } }
+    await new Promise(r => setTimeout(r, 100))
+  }
+  const remaining = [..._running.entries()].filter(([, v]) => v).map(([k]) => k)
   _running.clear()
+  return { drained: false, remaining }
 }
 
 /** Number of active cron handles — used by runtime-heartbeat to detect drift. */

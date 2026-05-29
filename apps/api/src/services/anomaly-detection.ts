@@ -15,7 +15,7 @@
  */
 import { db } from '../db/client.js'
 import { events, anomalySignals } from '../db/schema.js'
-import { and, eq, gte, desc, sql } from 'drizzle-orm'
+import { and, eq, gte, desc, sql, inArray } from 'drizzle-orm'
 import { v7 as uuidv7 } from 'uuid'
 
 export type AnomalyKind = 'api_abuse' | 'auth_burst' | 'runtime_spike' | 'unsafe_automation' | 'secret_leak'
@@ -118,31 +118,61 @@ export async function scanAnomalies(workspaceId: string, opts: { windowMs?: numb
   const verdicts = detectAnomalies(rows as EventLike[])
 
   let raised = 0, updated = 0
+  // R146.15 — batch the existing-row lookup so we hit the DB once per
+  // scan instead of once per verdict. Previously each verdict did its
+  // own SELECT-then-INSERT-or-UPDATE: a 50-verdict scan was 100+ round
+  // trips; now it's 1 SELECT + 1 bulk INSERT + N small UPDATEs (one per
+  // already-existing kind, which must remain per-row because we
+  // increment occurrences by reading the existing count).
+  if (verdicts.length === 0) return { raised, updated, verdicts }
+  const now = Date.now()
+  const kinds = [...new Set(verdicts.map(v => v.kind))]
+  const existingRows = await db.select().from(anomalySignals)
+    .where(and(
+      eq(anomalySignals.workspaceId, workspaceId),
+      inArray(anomalySignals.kind, kinds),
+      gte(anomalySignals.lastSeenAt, now - DEDUPE_MS),
+    ))
+    .catch((e: Error) => { console.error('[anomaly-detection] batched lookup failed:', e.message); return [] as typeof anomalySignals.$inferSelect[] })
+  const byKind = new Map(existingRows.map(r => [r.kind, r]))
+
+  const toInsert: typeof anomalySignals.$inferInsert[] = []
+  const toUpdate: Array<{ id: string; occurrences: number; score: number; evidence: typeof anomalySignals.$inferSelect['evidence'] }> = []
   for (const v of verdicts) {
-    const existing = await db.select().from(anomalySignals)
-      .where(and(
-        eq(anomalySignals.workspaceId, workspaceId),
-        eq(anomalySignals.kind, v.kind),
-        gte(anomalySignals.lastSeenAt, Date.now() - DEDUPE_MS),
-      )).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[anomaly-detection]', e.message); return null })
+    const existing = byKind.get(v.kind)
     if (existing) {
-      await db.update(anomalySignals).set({
-        lastSeenAt: Date.now(),
+      toUpdate.push({
+        id: existing.id,
         occurrences: existing.occurrences + 1,
         score: Math.max(existing.score, v.score),
         evidence: v.evidence,
-      }).where(eq(anomalySignals.id, existing.id)).catch((e: Error) => { console.error('[anomaly-detection]', e.message); return null })
+      })
       updated++
     } else {
-      await db.insert(anomalySignals).values({
+      toInsert.push({
         id: uuidv7(), workspaceId,
         kind: v.kind, severity: v.severity, score: v.score,
         subject: v.subject, evidence: v.evidence,
-        firstSeenAt: Date.now(), lastSeenAt: Date.now(),
-        occurrences: 1, createdAt: Date.now(),
-      }).catch((e: Error) => { console.error('[anomaly-detection]', e.message); return null })
+        firstSeenAt: now, lastSeenAt: now,
+        occurrences: 1, createdAt: now,
+      })
       raised++
     }
+  }
+
+  if (toInsert.length > 0) {
+    await db.insert(anomalySignals).values(toInsert)
+      .catch((e: Error) => { console.error('[anomaly-detection] bulk insert failed:', e.message, 'count=', toInsert.length); return null })
+  }
+  // UPDATEs stay per-row — `occurrences = existing.occurrences + 1` can't
+  // be batched safely without a SQL expression-per-row, which drizzle
+  // doesn't compress here. Still fewer round-trips than before (no
+  // SELECT phase) and the rows are bounded by `kinds.length`.
+  for (const u of toUpdate) {
+    await db.update(anomalySignals).set({
+      lastSeenAt: now, occurrences: u.occurrences, score: u.score, evidence: u.evidence,
+    }).where(eq(anomalySignals.id, u.id))
+      .catch((e: Error) => { console.error('[anomaly-detection] update failed:', e.message); return null })
   }
   return { raised, updated, verdicts }
 }

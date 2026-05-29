@@ -479,8 +479,16 @@ const shutdown = async (signal: string) => {
   // setTimeouts that would otherwise hold the event loop open past
   // app.close() and force a SIGKILL after the grace period.
   try {
-    const { stopLearningCron } = await import('./services/learning-cron.js')
+    const { stopLearningCron, drainLearningCron } = await import('./services/learning-cron.js')
     stopLearningCron()
+    // R146.15 — wait for any tick already mid-flight to finish before
+    // we close the DB pool / redis client. Bounded 5s so a stuck tick
+    // can't hang shutdown forever; any tag still running past the
+    // deadline gets logged for forensics.
+    const drain = await drainLearningCron(5_000)
+    if (!drain.drained) {
+      app.log.warn({ remaining: drain.remaining }, '[shutdown] learning-cron drain timeout — tick(s) still running')
+    }
   } catch { /* */ }
   try {
     const { stopConnectorOauthReaper } = await import('./services/connector-oauth.js')
