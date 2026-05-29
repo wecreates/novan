@@ -21,7 +21,7 @@
  *   portfolio.weeklyReview  — compose the Monday briefing per the playbook
  */
 import { v7 as uuidv7 }           from 'uuid'
-import { and, desc, eq, gte, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, sql, inArray } from 'drizzle-orm'
 import { db }                     from '../db/client.js'
 import { businesses, businessRevenue, events } from '../db/schema.js'
 
@@ -187,16 +187,85 @@ export async function statusFor(workspaceId: string, businessId: string): Promis
 }
 
 /** Status for every business in the workspace. Used by portfolio.list and
- *  the Monday weekly review. */
+ *  the Monday weekly review.
+ *
+ *  R146.18 — collapsed N+1 (was 1 + 100×4 = 401 round trips for a 100-
+ *  business workspace) into 2 queries total: one SELECT for all
+ *  businesses, one GROUP BY for month + 30d + 7d revenue sums across
+ *  every business at once. The per-business `statusFor()` path stays
+ *  available for single-business callers but is no longer used inside
+ *  this loop.
+ */
 export async function listStatuses(workspaceId: string): Promise<BusinessStatus[]> {
-  const rows = await db.select({ id: businesses.id }).from(businesses)
+  const rows = await db.select().from(businesses)
     .where(eq(businesses.workspaceId, workspaceId))
     .orderBy(desc(businesses.updatedAt))
     .limit(100)
+  if (rows.length === 0) return []
+
+  const now = Date.now()
+  const month = earningsMonth(now)
+  const since30 = now - 30 * 86_400_000
+  const since7  = now -  7 * 86_400_000
+  const ids = rows.map(r => r.id)
+
+  // One aggregated SQL with three conditional SUMs scoped to the
+  // business_id list. Same result as the three separate queries in
+  // statusFor(), folded so postgres only walks the revenue index once.
+  const sumsRaw = await db
+    .select({
+      businessId: businessRevenue.businessId,
+      monthCents: sql<string>`COALESCE(SUM(CASE WHEN ${businessRevenue.earningsMonth} = ${month} THEN ${businessRevenue.amountUsdCents} ELSE 0 END), 0)::bigint`,
+      d30Cents:   sql<string>`COALESCE(SUM(CASE WHEN ${businessRevenue.recordedAt} >= ${since30} THEN ${businessRevenue.amountUsdCents} ELSE 0 END), 0)::bigint`,
+      d7Cents:    sql<string>`COALESCE(SUM(CASE WHEN ${businessRevenue.recordedAt} >= ${since7}  THEN ${businessRevenue.amountUsdCents} ELSE 0 END), 0)::bigint`,
+    })
+    .from(businessRevenue)
+    .where(inArray(businessRevenue.businessId, ids))
+    .groupBy(businessRevenue.businessId)
+
+  const sumsByBiz = new Map(sumsRaw.map(s => [s.businessId, {
+    month$: Number(s.monthCents) / 100,
+    d30$:   Number(s.d30Cents)   / 100,
+    d7$:    Number(s.d7Cents)    / 100,
+  }]))
+
   const out: BusinessStatus[] = []
-  for (const r of rows) {
-    const s = await statusFor(workspaceId, r.id)
-    if (s) out.push(s)
+  for (const b of rows) {
+    const sums = sumsByBiz.get(b.id) ?? { month$: 0, d30$: 0, d7$: 0 }
+    const target = targetFromMetrics(b.metrics as Record<string, unknown>)
+    const traj$  = sums.d7$ * (30 / 7)
+    const gap$   = Math.max(0, target - sums.d30$)
+    const phase  = String((b.metrics as { phase?: unknown } | null)?.phase ?? 'warm-up')
+    const enabled = b.health !== 'red'
+    const reasons: string[] = []
+    if (sums.d30$ >= target) {
+      reasons.push(`hit target (last 30d = $${sums.d30$.toFixed(0)} vs $${target} goal)`)
+    } else if (traj$ >= target) {
+      reasons.push(`behind target now ($${sums.d30$.toFixed(0)}) but on pace from recent velocity ($${traj$.toFixed(0)}/mo projected)`)
+    } else {
+      reasons.push(`short of target: $${gap$.toFixed(0)} to close, last 30d $${sums.d30$.toFixed(0)}, projection $${traj$.toFixed(0)}/mo`)
+    }
+    if (!enabled)           reasons.push('business is disabled — no production scheduled')
+    if (phase === 'sunset') reasons.push('phase=sunset — operator marked for shutdown')
+
+    out.push({
+      id: b.id,
+      name: b.name,
+      category: b.industry ?? 'mixed',
+      enabled,
+      monthlyTargetUsd: target,
+      currentMonth: month,
+      currentMonthUsd: sums.month$,
+      last30DaysUsd:   sums.d30$,
+      last7DaysUsd:    sums.d7$,
+      runRateUsd:      sums.d30$,
+      targetGapUsd:    gap$,
+      targetPct:       target > 0 ? Math.min(2, sums.d30$ / target) : 0,
+      trajectoryUsd:   traj$,
+      phase,
+      needsAttention:  enabled && sums.d30$ < target && traj$ < target,
+      reasons,
+    })
   }
   return out
 }
