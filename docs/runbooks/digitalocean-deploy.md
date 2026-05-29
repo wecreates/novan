@@ -174,6 +174,18 @@ These are all fixed in the repo now; documented for next time.
 
 5. **No Oracle iptables workaround needed.** DigitalOcean droplets ship with permissive iptables by default. The `deploy-oracle.sh` script's iptables-fixing step is Oracle-specific.
 
+6. **Caddyfile directive order** (fixed R146.2). The web container's Caddyfile had `file_server` + `try_files {path} /index.html` declared above the `handle /api/*` reverse-proxy block. In Caddy that means try_files runs first and rewrites `/api/v1/*` to `/index.html` before the proxy can match — so the PWA, which calls relative `/api/v1/chat/stream`, got the SPA HTML back instead of the SSE stream. The fix wraps try_files + file_server in a default `handle {}` so they only fire when no upstream-prefix handle matched.
+
+7. **Stale provider defaults** (fixed R146 / R146.3). Two model IDs in `chat-providers.ts` had aged out of validity since the codebase was last reviewed:
+   - `gemini-2.0-flash` is listed in `:listModels` but `:streamGenerateContent` returns 404 on current Generative Language API keys. Replaced with `gemini-2.5-flash`.
+   - `claude-3-5-sonnet-latest` no longer resolves — Anthropic retired Sonnet 3.5 in Jan 2026 and dropped the `-latest` alias convention at the 4.6 generation. Replaced with `claude-sonnet-4-6`.
+
+8. **streamChat fallback chain swallowed the diagnostic** (fixed R146 / R146.3). When every configured provider failed, the loop nulled `provider` and yielded a generic `_(No LLM provider configured)_` tail message — hiding the real upstream HTTP statuses (e.g. groq 429 + gemini 404). Now: each failed iteration's error marker is accumulated into a `failureMarkers` list, and the fallback-exhausted branch flushes the entire chain so the operator sees every provider's failure.
+
+9. **Groq free-tier rate limits.** Groq's free tier is ~30 RPM / ~14.4k TPM on `llama-3.3-70b-versatile`. A single multi-turn PWA chat with the playbook system prompt blasts past that and 429s into the gemini fallback. If you want chat to stay on groq, either add a paid Groq tier key or set `prefer_provider: "groq"` only after the rate window resets. Watching the api logs for `_(groq error: 429 ...)_` markers is the diagnostic.
+
+10. **HTTPS / TLS not configured.** This runbook stops at raw HTTP on `:3000` / `:3001` over Tailscale. That's fine for the Tailscale-only PWA install, BUT iOS Safari refuses to install service workers (and therefore Web Push from R129) without HTTPS. If you want push notifications on iPhone, add a domain + auto-TLS via Caddy (uncomment `:443` block + add an `A` record) or front the droplet with a Cloudflare Tunnel.
+
 ---
 
 ## Why DigitalOcean over Oracle Always Free

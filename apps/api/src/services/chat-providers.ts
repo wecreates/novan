@@ -75,7 +75,12 @@ export const KNOWN_PROVIDERS: ProviderDef[] = [
   { id: 'deepseek',     family: 'openai',   baseUrl: 'https://api.deepseek.com/v1',                     defaultModel: 'deepseek-chat',           envVar: 'DEEPSEEK_API_KEY',     costPer1kTokens: 0.00014 },
   { id: 'fireworks',    family: 'openai',   baseUrl: 'https://api.fireworks.ai/inference/v1',           defaultModel: 'accounts/fireworks/models/llama-v3p3-70b-instruct', envVar: 'FIREWORKS_API_KEY', costPer1kTokens: 0.0009 },
   { id: 'cerebras',     family: 'openai',   baseUrl: 'https://api.cerebras.ai/v1',                      defaultModel: 'llama-3.3-70b',           envVar: 'CEREBRAS_API_KEY',     costPer1kTokens: 0.00085 },
-  { id: 'anthropic',    family: 'anthropic', baseUrl: 'https://api.anthropic.com/v1',                   defaultModel: 'claude-3-5-sonnet-latest', envVar: 'ANTHROPIC_API_KEY',   costPer1kTokens: 0.003 },
+  // R146 — Claude Sonnet 3.5 was retired Jan 2026 and the `-latest`
+  // suffix convention was dropped at the 4.6 generation (model IDs are
+  // now pinned snapshots, no evergreen pointer). `claude-sonnet-4-6` is
+  // the current GA Sonnet ($3/$15 MTok, supports prompt-cache + extended
+  // thinking, matches what streamAnthropic already negotiates).
+  { id: 'anthropic',    family: 'anthropic', baseUrl: 'https://api.anthropic.com/v1',                   defaultModel: 'claude-sonnet-4-6',        envVar: 'ANTHROPIC_API_KEY',   costPer1kTokens: 0.003 },
   // R146 — gemini-2.0-flash listed in :listModels but returns 404 from
   // :streamGenerateContent for newer API keys; gemini-2.5-flash is the
   // current generally-available flash tier and works for both endpoints.
@@ -458,6 +463,15 @@ export async function* streamChat(workspaceId: string, msgs: ChatMsg[], opts?: S
   // Heartbeat the llm agent — every chat call is real AI activity.
   void import('./agent-state-sync.js').then(m => m.recordAgentActivity(workspaceId, 'llm', { status: 'running' })).catch(() => null)
   const tried: string[] = []
+  // R146 — accumulate every provider's error-marker delta across the
+  // fallback chain. Without this, when both groq AND gemini fail the
+  // operator only saw the LAST provider's error (the per-iteration
+  // `bufferedDeltas` resets each loop). Now: each failed attempt pushes
+  // its terminal error marker(s) into `failureMarkers`, and the final
+  // "fallback exhausted" flush emits them ALL so the diagnostic chain is
+  // visible — `_(groq error: 429)_ _(gemini error: 404)_` instead of
+  // just `_(gemini error: 404)_`.
+  const failureMarkers: StreamChunk[] = []
   let provider = await pickProvider(workspaceId, opts?.preferProvider)
 
   while (provider && !tried.includes(provider.id)) {
@@ -508,7 +522,10 @@ export async function* streamChat(workspaceId: string, msgs: ChatMsg[], opts?: S
       if (!flushed) for (const ev of bufferedDeltas) yield ev
       return result
     }
-    // Provider returned no content (key missing / error). Try next.
+    // Provider returned no content (key missing / error). Capture its
+    // error marker(s) so we can surface the whole failure chain at the
+    // end, then try the next fallback.
+    for (const ev of bufferedDeltas) failureMarkers.push(ev)
     if (!gotAnyContent && tried.length < 3) {
       const available = await listAvailableProviders(workspaceId)
       const fallback = available
@@ -518,15 +535,11 @@ export async function* streamChat(workspaceId: string, msgs: ChatMsg[], opts?: S
         provider = KNOWN_PROVIDERS.find(p => p.id === fallback.id) ?? null
         continue
       }
-      // R146 — no untried provider available: fall through to flush the
-      // buffered error markers below. Previously this nulled `provider`
-      // and `continue`d, exiting the loop with empty hands so the generic
-      // "_(No LLM provider configured)_" tail message hid the real
-      // upstream error (e.g. groq 429, gemini 404) the operator needs to
-      // see to debug.
+      // No untried provider available: fall through to flush the full
+      // accumulated marker chain below.
     }
-    // Fallback exhausted: emit whatever the last provider said + return.
-    for (const ev of bufferedDeltas) yield ev
+    // Fallback exhausted: emit every provider's error marker + return.
+    for (const ev of failureMarkers) yield ev
     return result
   }
 
