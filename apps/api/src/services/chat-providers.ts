@@ -524,16 +524,17 @@ export async function* streamChat(workspaceId: string, msgs: ChatMsg[], opts?: S
       : streamOpenAI(provider, msgs, opts?.signal)
 
     let gotAnyContent = false
-    // Buffer the deltas for THIS provider attempt so an error-marker
-    // delta doesn't leak to the operator before we know whether the
-    // fallback provider succeeds. Bounded buffer: once real content
-    // arrives + we exceed BUFFER_FLUSH_CHARS, flush immediately and
-    // stream the rest live. Without the cap, a 10k-token response from
-    // a working provider sat in memory until the whole stream finished;
-    // under concurrent load that's a real memory leak.
-    const BUFFER_FLUSH_CHARS = 4_000
+    // Buffer deltas for THIS provider attempt so an error-marker delta
+    // doesn't leak before we know whether the provider is succeeding.
+    // R146.6 — flush as soon as the FIRST real content delta arrives.
+    // Previously the buffer waited until 4000 chars accumulated before
+    // flushing, which meant any short response (which is most chat
+    // turns — even 200-2000 chars) stayed buffered until the entire
+    // stream finished. Result: chat was functionally non-streaming —
+    // operator saw nothing for 5-15 seconds then a wall of text. The
+    // 4000-char cap was originally a memory ceiling (#86), not a UX
+    // gate; the success signal is `gotAnyContent`, not buffer size.
     const bufferedDeltas: StreamChunk[] = []
-    let bufferedChars = 0
     let flushed = false
     let next: IteratorResult<StreamChunk, StreamResult>
     while (!(next = await stream.next()).done) {
@@ -542,20 +543,23 @@ export async function* streamChat(workspaceId: string, msgs: ChatMsg[], opts?: S
       // NOT count as real content — they should trigger fallback, not
       // burn the operator's eyeballs.
       const isErrorMarker = /^_\([a-z][a-z0-9_-]*\s+(?:error|key\s+not\s+set):/.test(d)
+      const wasContentful = gotAnyContent
       if (d && !isErrorMarker) gotAnyContent = true
       if (flushed) {
-        // Past the early-flush threshold — stream the rest live.
+        // Provider already confirmed real — stream live.
         yield next.value
+      } else if (gotAnyContent && !wasContentful) {
+        // First real content delta: flush whatever was buffered before
+        // (usually empty, occasionally provider warmup chunks) plus
+        // this delta, mark flushed so subsequent deltas stream live.
+        for (const ev of bufferedDeltas) yield ev
+        bufferedDeltas.length = 0
+        yield next.value
+        flushed = true
       } else {
+        // Pre-content (or pure error markers) — keep buffering until
+        // we see real text or the stream ends.
         bufferedDeltas.push(next.value)
-        bufferedChars += d.length
-        if (gotAnyContent && bufferedChars >= BUFFER_FLUSH_CHARS) {
-          // We've decided this provider is producing real content —
-          // flush the buffer and free its memory before continuing.
-          for (const ev of bufferedDeltas) yield ev
-          bufferedDeltas.length = 0
-          flushed = true
-        }
       }
     }
     const result = next.value
