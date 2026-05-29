@@ -186,6 +186,8 @@ These are all fixed in the repo now; documented for next time.
 
 10. **HTTPS / TLS not configured.** This runbook stops at raw HTTP on `:3000` / `:3001` over Tailscale. That's fine for the Tailscale-only PWA install, BUT iOS Safari refuses to install service workers (and therefore Web Push from R129) without HTTPS. If you want push notifications on iPhone, add a domain + auto-TLS via Caddy (uncomment `:443` block + add an `A` record) or front the droplet with a Cloudflare Tunnel.
 
+11. **API auth coverage is partial — Tailscale is the security boundary.** A scan of `apps/api/src/routes/*.ts` found **93 of 93 route files have ZERO `preHandler: app.authenticate`**. The auth plugin only decorates `app.authenticate` — it never registers as a global `onRequest` hook. Routes that don't opt in explicitly are wide open. In the current Tailscale-only deploy this is safe because port `3001` is bound to `100.116.59.64` (the Tailscale IP) and Docker doesn't expose it on the public internet, so only devices on your Tailnet can reach the API. **BEFORE you add a public domain + HTTPS (gotcha #10), wire global auth** — either an `app.addHook('onRequest', app.authenticate)` in `server.ts` with an explicit allowlist for `/api/v1/health`, `/docs`, `/metrics`, `/api/v1/webhooks/*`, OR add `preHandler: app.authenticate` to every route file individually. The latter is safer for the existing test surface. NODE_ENV=production already makes `devAutoAuthActive()` return false, but with no `preHandler` calling `authenticate`, the auth plugin never runs at all on those routes.
+
 ---
 
 ## Why DigitalOcean over Oracle Always Free
