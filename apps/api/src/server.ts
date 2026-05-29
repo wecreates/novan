@@ -96,6 +96,7 @@ import economyRoutes            from './routes/economy.js'
 import autonomyRoutes           from './routes/autonomy.js'
 import runtimeStatusRoutes      from './routes/runtime-status.js'
 import selfAwareRoutes          from './routes/self-aware.js'
+import promptsRoutes            from './routes/prompts.js'
 import issuesRoutes              from './routes/issues.js'
 import ideasRoutes               from './routes/ideas.js'
 import skillLibraryRoutes        from './routes/skill-library.js'
@@ -376,6 +377,7 @@ await app.register(economyRoutes,          { prefix: '/api/v1/economy' })
 await app.register(autonomyRoutes,         { prefix: '/api/v1/autonomy' })
 await app.register(runtimeStatusRoutes,    { prefix: '/api/v1/runtime' })
 await app.register(selfAwareRoutes,        { prefix: '/api/v1/self' })
+await app.register(promptsRoutes,          { prefix: '/api/v1/prompts' })
 await app.register(issuesRoutes,           { prefix: '/api/v1/issues' })
 await app.register(ideasRoutes,            { prefix: '/api/v1/ideas' })
 await app.register(skillLibraryRoutes,     { prefix: '/api/v1/skill-library' })

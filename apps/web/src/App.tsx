@@ -35,6 +35,7 @@ import BlueprintPage        from './pages/BlueprintPage.js'
 import HomeDashboardPage    from './pages/HomeDashboardPage.js'
 import AnomaliesPage        from './pages/AnomaliesPage.js'
 import ChatActionsInboxPage from './pages/ChatActionsInboxPage.js'
+import PromptLabPage        from './pages/PromptLabPage.js'
 import NarrativePage        from './pages/NarrativePage.js'
 import MissionPage          from './pages/MissionPage.js'
 import HelpPage             from './pages/HelpPage.js'
@@ -700,6 +701,7 @@ function AppRoutes() {
           <Route path="/home"                 element={<HomeDashboardPage />} />
           <Route path="/anomalies"            element={<AnomaliesPage />} />
           <Route path="/chat-actions"         element={<ChatActionsInboxPage />} />
+          <Route path="/prompts"              element={<PromptLabPage />} />
           <Route path="/proposals"            element={<CodeProposalsPage />} />
           <Route path="/notifications"        element={<NotificationDriversPage />} />
           <Route path="/search"               element={<SearchPage />} />
