@@ -33,6 +33,8 @@ import WarRoom              from './pages/WarRoom.js'
 import TalkPage             from './pages/TalkPage.js'
 import BlueprintPage        from './pages/BlueprintPage.js'
 import HomeDashboardPage    from './pages/HomeDashboardPage.js'
+import AnomaliesPage        from './pages/AnomaliesPage.js'
+import ChatActionsInboxPage from './pages/ChatActionsInboxPage.js'
 import NarrativePage        from './pages/NarrativePage.js'
 import MissionPage          from './pages/MissionPage.js'
 import HelpPage             from './pages/HelpPage.js'
@@ -696,6 +698,8 @@ function AppRoutes() {
           <Route path="/audit-trail"          element={<AuditTrailPage />} />
           <Route path="/runtime"              element={<RuntimePage />} />
           <Route path="/home"                 element={<HomeDashboardPage />} />
+          <Route path="/anomalies"            element={<AnomaliesPage />} />
+          <Route path="/chat-actions"         element={<ChatActionsInboxPage />} />
           <Route path="/proposals"            element={<CodeProposalsPage />} />
           <Route path="/notifications"        element={<NotificationDriversPage />} />
           <Route path="/search"               element={<SearchPage />} />

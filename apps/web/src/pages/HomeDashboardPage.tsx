@@ -61,6 +61,7 @@ const KIND_LINK: Record<string, string> = {
   budget_near_cap:     '/economy/budgets',
   cron_failure:        '/runtime',
   persistence_errors:  '/runtime',
+  anomaly:             '/anomalies',
 }
 
 function fmtUsd(n: number): string {

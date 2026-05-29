@@ -10,7 +10,7 @@ import {
 import { listAvailableProviders, configureProvider } from '../services/chat-providers.js'
 import { db } from '../db/client.js'
 import { chatActions } from '../db/schema.js'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { dispatch as dispatchAction, type ActionType } from '../services/action-dispatcher.js'
 import { createHorizon, type Horizon } from '../services/strategic-horizons.js'
 import { setProposalStatus } from '../services/code-writer.js'
@@ -52,6 +52,23 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
     const rows = await db.select().from(chatActions)
       .where(and(eq(chatActions.workspaceId, ws), eq(chatActions.conversationId, req.params.id)))
       .catch(() => [])
+    return { success: true, data: rows }
+  })
+
+  // R146.19 — workspace-wide pending-actions inbox. Without this the
+  // operator had to scroll every conversation to find the chat-detected
+  // intents waiting for approval. The frontend ChatActionsInboxPage
+  // calls this endpoint.
+  fastify.get<{ Querystring: { workspace_id?: string; status?: string; limit?: string } }>('/actions/pending', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
+    const status = req.query.status ?? 'suggested'
+    const limit = Math.min(Number(req.query.limit ?? 100) || 100, 200)
+    const rows = await db.select().from(chatActions)
+      .where(and(eq(chatActions.workspaceId, ws), eq(chatActions.status, status)))
+      .orderBy(sql`${chatActions.createdAt} desc`)
+      .limit(limit)
+      .catch((e: Error) => { console.error('[chat] pending actions list failed:', e.message); return [] })
     return { success: true, data: rows }
   })
 
