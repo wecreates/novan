@@ -44,7 +44,7 @@ async function emitGuardEvent(
     id: uuidv7(), type, workspaceId,
     payload, traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'api/budget-guard', version: 1, createdAt: Date.now(),
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[budget-guard] event emit failed:', type, e.message); return null })
 }
 
 // ─── Cap management ───────────────────────────────────────────────────────────
@@ -59,13 +59,13 @@ export async function loadActiveCaps(workspaceId: string): Promise<BudgetCap[]> 
   await db.update(budgetCaps)
     .set({ currentDailyUsd: 0, dailyResetAt: now + 86_400_000, updatedAt: now })
     .where(and(eq(budgetCaps.workspaceId, workspaceId), lt(budgetCaps.dailyResetAt, now)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[budget-guard] daily window reset failed:', e.message); return null })
 
   // Reset expired monthly windows
   await db.update(budgetCaps)
     .set({ currentMonthlyUsd: 0, monthlyResetAt: now + 30 * 86_400_000, updatedAt: now })
     .where(and(eq(budgetCaps.workspaceId, workspaceId), lt(budgetCaps.monthlyResetAt, now)))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[budget-guard] monthly window reset failed:', e.message); return null })
 
   const rows = await db.select().from(budgetCaps)
     .where(and(eq(budgetCaps.workspaceId, workspaceId), eq(budgetCaps.enabled, true)))
@@ -152,7 +152,7 @@ export async function runPreflight(ctx: PreflightContext): Promise<GuardDecision
     capId:            result.capId,
     actualCostUsd:    null,
     createdAt:        now,
-  }).catch(() => null)
+  }).catch((e: Error) => { console.error('[budget-guard] guard record insert failed:', e.message, 'execId=', ctx.executionId); return null })
 
   const eventType = result.approved ? 'budget.approved' : 'budget.blocked'
   await emitGuardEvent(ctx.workspaceId, eventType, {
@@ -186,9 +186,16 @@ export async function recordGuardActualCost(
       eq(executionGuards.workspaceId, workspaceId),
       eq(executionGuards.decision, 'approved'),
     ))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[budget-guard] actual-cost guard-record update failed:', e.message, 'execId=', executionId); return null })
 
-  // Increment cap spend counters
+  // R146.11 — Increment cap spend counters. Previously this UPDATE was
+  // silently catch'd, which is a CRITICAL safety hole: if the increment
+  // ever fails, `currentDailyUsd` / `currentMonthlyUsd` stay at 0
+  // forever. The next `checkBudget` call reads (0 + estimatedCost <
+  // maxDailyUsd) → APPROVED. Real spend continues past the cap
+  // completely invisibly, no event, no alarm. Now logs the error with
+  // workspace + amount so the operator can see when budget tracking
+  // has drifted from reality.
   await db.update(budgetCaps)
     .set({
       currentDailyUsd:   sql`${budgetCaps.currentDailyUsd} + ${actualCostUsd}`,
@@ -196,5 +203,5 @@ export async function recordGuardActualCost(
       updatedAt:         now,
     })
     .where(eq(budgetCaps.workspaceId, workspaceId))
-    .catch(() => null)
+    .catch((e: Error) => { console.error('[budget-guard] CAP COUNTER INCREMENT FAILED — caps will under-count and may not enforce:', e.message, 'ws=', workspaceId, 'amt=', actualCostUsd); return null })
 }
