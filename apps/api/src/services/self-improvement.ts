@@ -149,7 +149,7 @@ export async function proposeImprovement(input: {
       id, dimension: input.dimension, hypothesis: input.hypothesis,
       affectedFiles: input.affectedFiles, stage: 'observed',
       createdAt: now,
-    } as never,
+    },
     traceId: uuidv7(), correlationId: id, causationId: null,
     source: 'self-improvement', version: 1, createdAt: now,
   }).catch((e: Error) => { console.error('[self-improvement]', e.message); return null })
@@ -207,7 +207,7 @@ export async function transitionProposal(input: {
       stage:      input.toStage,
       approvedBy: input.approvedBy,
       note:       input.note ?? null,
-    } as never,
+    },
     traceId: uuidv7(), correlationId: input.proposalId, causationId: null,
     source: 'self-improvement', version: 1, createdAt: Date.now(),
   }).catch((e: Error) => { console.error('[self-improvement]', e.message); return null })
@@ -455,7 +455,7 @@ export async function runAllImprovementHealthChecks(workspaceId: string): Promis
 
   await db.insert(events).values({
     id: uuidv7(), type: 'self_improvement.health_check', workspaceId,
-    payload: { goodhart, narrow, coord, compounding, reward, overallVerdict } as never,
+    payload: { goodhart, narrow, coord, compounding, reward, overallVerdict },
     traceId: uuidv7(), correlationId: 'self_improvement', causationId: null,
     source: 'self-improvement', version: 1, createdAt: Date.now(),
   }).catch((e: Error) => { console.error('[self-improvement]', e.message); return null })

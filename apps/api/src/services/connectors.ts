@@ -761,7 +761,7 @@ async function executeNow(
     const result = await handler(ctx, input.params)
     const completedAt = Date.now()
     await db.update(connectorActions)
-      .set({ phase: 'completed', completedAt, result: (result ?? null) as never, updatedAt: completedAt })
+      .set({ phase: 'completed', completedAt, result: (result ?? null), updatedAt: completedAt })
       .where(eq(connectorActions.id, actionId)).catch((e: Error) => { console.error('[connectors]', e.message); return null })
     await db.update(connectorAccounts)
       .set({ lastActionAt: completedAt, updatedAt: completedAt })

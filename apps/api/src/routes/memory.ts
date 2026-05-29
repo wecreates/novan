@@ -159,7 +159,7 @@ export const memoryRoutes: FastifyPluginAsync = async (app) => {
             embeddingModel: 'auto',
             isStale:        false,
             createdAt:      Date.now(),
-          } as never).catch((e: Error) => { console.error('[memory]', e.message); return null })
+          }).catch((e: Error) => { console.error('[memory]', e.message); return null })
         }
       } catch { /* tolerated — memory still stored without embedding */ }
     })()

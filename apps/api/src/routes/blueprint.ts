@@ -79,7 +79,7 @@ const blueprintRoutes: FastifyPluginAsync = async (fastify) => {
       approvedBy:   b.approved_by ?? 'operator',
       approvedAt:   Date.now(),
       archived:     false,
-    } as never).catch((e: Error) => { console.error('[blueprint]', e.message); return null })
+    }).catch((e: Error) => { console.error('[blueprint]', e.message); return null })
     const { approvePattern } = await import('../services/knowledge-curator.js')
     await approvePattern({ workspaceId: b.workspace_id, patternId: b.pattern_id, approvedBy: b.approved_by ?? 'operator', patternData: data as never })
     return { success: true }
@@ -129,7 +129,7 @@ const blueprintRoutes: FastifyPluginAsync = async (fastify) => {
       baselinePassRate: b.baseline_pass_rate ?? 0.80,
       tags: b.tags ?? [],
       archived: false, createdAt: now, updatedAt: now,
-    } as never).catch((e: Error) => { console.error('[blueprint]', e.message); return null })
+    }).catch((e: Error) => { console.error('[blueprint]', e.message); return null })
     return { success: true, data: { id } }
   })
 
@@ -149,7 +149,7 @@ const blueprintRoutes: FastifyPluginAsync = async (fastify) => {
       input: b.input, expectedBehavior: b.expected_behavior,
       tags: b.tags ?? [], knownFailure: b.known_failure ?? false,
       notes: b.notes ?? null, createdAt: Date.now(),
-    } as never).catch((e: Error) => { console.error('[blueprint]', e.message); return null })
+    }).catch((e: Error) => { console.error('[blueprint]', e.message); return null })
     return { success: true, data: { id } }
   })
 
@@ -190,7 +190,7 @@ const blueprintRoutes: FastifyPluginAsync = async (fastify) => {
       description: b.description, params: b.params,
       priority: b.priority ?? 100, enabled: b.enabled ?? true,
       createdAt: now, updatedAt: now,
-    } as never).onConflictDoUpdate({
+    }).onConflictDoUpdate({
       target: [policyRules.workspaceId, policyRules.id],
       set: {
         kind: b.kind, description: b.description, params: b.params,
@@ -234,7 +234,7 @@ const blueprintRoutes: FastifyPluginAsync = async (fastify) => {
       ownerUserId: b.owner_user_id ?? null,
       config: b.config ?? {}, archived: false,
       createdAt: now, updatedAt: now,
-    } as never).catch((e: Error) => { console.error('[blueprint]', e.message); return null })
+    }).catch((e: Error) => { console.error('[blueprint]', e.message); return null })
     return { success: true, data: { id, slug: b.slug.toLowerCase() } }
   })
 

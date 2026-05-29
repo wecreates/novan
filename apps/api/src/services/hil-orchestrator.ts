@@ -101,6 +101,11 @@ export async function registerStation(input: {
     createdAt:    Date.now(),
     updatedAt:    Date.now(),
     expiresAt:    null,
+    // R146.21 — TYPE_DRIFT: memories.type schema enum doesn't include
+    // 'procedural'. Postgres TEXT accepts it (no DB-level enum), but TS
+    // flags the literal mismatch. Cast preserved with this note so the
+    // future schema update adding 'procedural' / 'episodic' (also drift
+    // in product-factory.ts:70 + hil-orchestrator.ts:287) can drop it.
   } as never).catch((e: Error) => { console.error('[hil-orchestrator]', e.message); return null })
   await emit(input.workspaceId, 'hil.station_registered', { stationId: id, label: input.label })
   return station
@@ -308,7 +313,7 @@ export async function archiveComplianceEvidence(input: {
     createdAt:    Date.now(),
     updatedAt:    Date.now(),
     expiresAt:    null,
-  } as never).catch((e: Error) => { console.error('[hil-orchestrator]', e.message); return null })
+  } as never).catch((e: Error) => { console.error('[hil-orchestrator]', e.message); return null })   // R146.21 — TYPE_DRIFT: 'episodic' not in memories.type enum
   return id
 }
 

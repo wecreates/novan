@@ -163,7 +163,7 @@ async function linkRollbacksToRecommendations(workspaceId: string): Promise<numb
       if (evi.includes(filePath)) {
         await db.update(reasoningChains).set({
           outcomeMatched: false,
-          outcomeEvidence: { downgradedBy: 'rollback', filePath, rollbackEventId: rb.id, reason: p['reason'] ?? null } as never,
+          outcomeEvidence: { downgradedBy: 'rollback', filePath, rollbackEventId: rb.id, reason: p['reason'] ?? null },
           outcomeAt: Date.now(),
         }).where(eq(reasoningChains.id, c.id)).catch((e: Error) => { console.error('[outcome-evaluator]', e.message); return null })
         linked++

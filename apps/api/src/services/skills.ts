@@ -155,7 +155,7 @@ export async function seedBuiltinSkills(workspaceId: string): Promise<{ created:
       steps:           def.steps as never,
       safetyRules:     def.safetyRules,
       rollbackBehavior: def.rollbackBehavior ?? null,
-      verificationRequirements: (def.verificationRequirements ?? []) as never,
+      verificationRequirements: (def.verificationRequirements ?? []),
       status:          'verified',   // built-ins are pre-verified
       createdAt: now, updatedAt: now,
     }).onConflictDoNothing().catch((e: Error) => { console.error('[skills]', e.message); return null })

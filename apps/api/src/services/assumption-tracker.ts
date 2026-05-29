@@ -39,7 +39,7 @@ export async function declare(input: DeclareInput): Promise<string> {
     id, workspaceId: input.workspaceId,
     category:   input.category,
     statement:  input.statement.slice(0, 1000),
-    evidenceRefs: (input.evidenceRefs ?? []) as never,
+    evidenceRefs: (input.evidenceRefs ?? []),
     confidence: input.confidence ?? 0.5,
     confidenceProvenance: 'heuristic',
     status:     input.evidenceRefs && input.evidenceRefs.length > 0 ? 'unverified' : 'unverified',

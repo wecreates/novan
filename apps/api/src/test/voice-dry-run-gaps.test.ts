@@ -45,7 +45,7 @@ describe('executor: dispatches the stored execute hook', () => {
     // so this test focuses on the contract: executor signature carries
     // the hook by typed shape.
     const exec: DryRunExecutor = async (hook) => ({ status: 200, body: { received: hook.path } })
-    const result = await exec({ method: 'POST', path: '/api/v1/agents/audit', body: {} }, {} as never)
+    const result = await exec({ method: 'POST', path: '/api/v1/agents/audit', body: {} }, {} as never)   // test fixture — full DryRunRow shape not needed
     expect(result.status).toBe(200)
     expect((result.body as { received: string }).received).toBe('/api/v1/agents/audit')
   })

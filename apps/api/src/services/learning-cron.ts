@@ -930,7 +930,7 @@ async function runMondayBriefing(workspaceIds: string[]): Promise<void> {
         role: 'assistant',
         content: body,
         createdAt: Date.now(),
-      } as never).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
+      }).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
 
       await _db.insert(_events).values({
         id: _uuidv7(),

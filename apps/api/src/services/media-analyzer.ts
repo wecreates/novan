@@ -176,7 +176,7 @@ export async function analyzeImage(req: ImageAnalysisRequest): Promise<ImageAnal
       payload: { analysisId, imageHash: req.imageHash, types: req.analysisTypes, requestedBy: req.requestedBy, flags },
       traceId: uuidv7(), correlationId: req.imageHash, causationId: null,
       source: 'media-analyzer', version: 1, createdAt: Date.now(),
-    } as never).catch((e: Error) => { console.error('[media-analyzer]', e.message); return null })
+    }).catch((e: Error) => { console.error('[media-analyzer]', e.message); return null })
   } catch { /* tolerated */ }
 
   return {
@@ -270,7 +270,7 @@ export async function submitVideoAnalysis(req: VideoAnalysisRequest): Promise<Vi
       payload: { jobId, url: req.videoUrl, mode: req.mode, estimate, requestedBy: req.requestedBy },
       traceId: uuidv7(), correlationId: jobId, causationId: null,
       source: 'media-analyzer', version: 1, createdAt: Date.now(),
-    } as never).catch((e: Error) => { console.error('[media-analyzer]', e.message); return null })
+    }).catch((e: Error) => { console.error('[media-analyzer]', e.message); return null })
   } catch { /* tolerated */ }
 
   return { jobId, estimate, accepted: true }

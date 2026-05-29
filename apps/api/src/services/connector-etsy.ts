@@ -213,7 +213,7 @@ export async function uploadListingImage(input: AccessTokenInput & {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${input.accessToken}` },
     body: form,
-  }).catch(e => ({ ok: false, status: 0, text: () => Promise.resolve(`network: ${(e as Error).message}`) } as never))
+  }).catch(e => ({ ok: false, status: 0, text: () => Promise.resolve(`network: ${(e as Error).message}`) }))
   if (!('ok' in r) || !r.ok) return { ok: false, error: `image upload failed: status ${(r as Response).status ?? 'network'}` }
   quotaTick(2)   // image uploads cost more
   return { ok: true, data: await (r as Response).json().catch(() => ({})) }

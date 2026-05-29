@@ -152,7 +152,7 @@ export async function initVideoPublish(input: VideoPublishInput): Promise<{ ok: 
         total_chunk_count: Math.ceil(input.videoSizeBytes / 10_000_000),
       },
     }),
-  }).catch(e => ({ ok: false, status: 0 } as never))
+  }).catch(e => ({ ok: false, status: 0 }))
   if (!('ok' in r) || !r.ok) return { ok: false, error: `TikTok init failed (status ${(r as Response).status ?? 'network'})` }
   const j = await (r as Response).json().catch(() => ({} as { data?: { publish_id?: string; upload_url?: string } }))
   const publishId = (j as { data?: { publish_id?: string } }).data?.publish_id

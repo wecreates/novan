@@ -47,7 +47,7 @@ export async function blackboardWrite(input: Omit<BlackboardEntry, 'id' | 'creat
   const entry: BlackboardEntry = { id, createdAt: Date.now(), ...input }
   await db.insert(events).values({
     id, type: 'blackboard.write', workspaceId: input.workspaceId,
-    payload: { ...entry } as never,
+    payload: { ...entry },
     traceId: uuidv7(), correlationId: input.boardKey, causationId: null,
     source: 'agent-coordination', version: 1, createdAt: entry.createdAt,
   }).catch((e: Error) => { console.error('[agent-coordination]', e.message); return null })
@@ -275,7 +275,7 @@ export async function execReversible<I, O>(input: {
     _pendingIntents.delete(intentId)
     await db.insert(events).values({
       id: uuidv7(), type: 'reversible.committed', workspaceId: input.workspaceId,
-      payload: { action: input.agent.name, intentId } as never,
+      payload: { action: input.agent.name, intentId },
       traceId: uuidv7(), correlationId: intentId, causationId: null,
       source: 'agent-coordination', version: 1, createdAt: Date.now(),
     }).catch((e: Error) => { console.error('[agent-coordination]', e.message); return null })

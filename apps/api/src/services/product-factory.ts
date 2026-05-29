@@ -80,7 +80,7 @@ export async function captureIdea(input: {
     createdAt:   idea.createdAt,
     updatedAt:   idea.createdAt,
     expiresAt:   null,
-  } as never).catch((e: Error) => { console.error('[product-factory]', e.message); return null })
+  } as never).catch((e: Error) => { console.error('[product-factory]', e.message); return null })   // R146.21 — TYPE_DRIFT: 'episodic' not in memories.type enum
 
   await db.insert(events).values({
     id: uuidv7(), type: 'product.idea_captured', workspaceId: input.workspaceId,

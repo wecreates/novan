@@ -60,7 +60,7 @@ export async function persistRun(input: {
     perCase:     input.results.map(r => ({ caseId: r.caseId, passed: r.passed, grade: r.grade, latencyMs: r.latencyMs })) as unknown as Record<string, unknown>[],
     regressions: input.regressionIds,
     createdAt:   Date.now(),
-  } as never).catch((e: Error) => { console.error('[eval-system]', e.message); return null })
+  }).catch((e: Error) => { console.error('[eval-system]', e.message); return null })
   return id
 }
 
@@ -397,6 +397,6 @@ export async function captureFailureAsRegressionCase(input: {
     knownFailure:     true,
     notes:            (input.notes ?? '') + `\n\n=== Failing output excerpt ===\n${input.failingOutput.slice(0, 1_000)}`,
     createdAt:        Date.now(),
-  } as never).catch((e: Error) => { console.error('[eval-system]', e.message); return null })
+  }).catch((e: Error) => { console.error('[eval-system]', e.message); return null })
   return id
 }

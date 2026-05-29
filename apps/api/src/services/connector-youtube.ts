@@ -140,7 +140,7 @@ export async function initUpload(input: UploadRequest): Promise<{ ok: true; uplo
       'X-Upload-Content-Length': String(input.fileSizeBytes),
     },
     body: JSON.stringify(metadata),
-  }).catch(e => ({ ok: false, status: 0, headers: new Headers(), error: (e as Error).message } as never))
+  }).catch(e => ({ ok: false, status: 0, headers: new Headers(), error: (e as Error).message }))
   if (!('ok' in r) || !r.ok) return { ok: false, error: `YouTube init failed (status ${(r as Response).status ?? 'network'})` }
   const uploadUrl = (r as Response).headers.get('location')
   if (!uploadUrl) return { ok: false, error: 'YouTube did not return upload URL — check scopes (youtube.upload)' }
@@ -292,7 +292,7 @@ export async function getAnalytics(input: AccessTokenInput & {
   url.searchParams.set('dimensions', 'day')
   const r = await fetch(url.toString(), {
     headers: { 'Authorization': `Bearer ${input.accessToken}` },
-  }).catch(e => ({ ok: false, status: 0, text: () => Promise.resolve(`network: ${(e as Error).message}`) } as never))
+  }).catch(e => ({ ok: false, status: 0, text: () => Promise.resolve(`network: ${(e as Error).message}`) }))
   if (!('ok' in r) || !r.ok) return { ok: false, error: `analytics failed (status ${(r as Response).status ?? 'network'})` }
   quotaCost(1)
   return { ok: true, data: await (r as Response).json().catch(() => ({})) }
