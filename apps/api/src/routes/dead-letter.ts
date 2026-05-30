@@ -9,7 +9,7 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { z }                       from 'zod'
-import { eq, and, desc, sql }      from 'drizzle-orm'
+import { eq, and, desc, sql, isNull } from 'drizzle-orm'
 import { Queue }                   from 'bullmq'
 import { v7 as uuidv7 }            from 'uuid'
 import { db }                      from '../db/client.js'
@@ -135,14 +135,35 @@ export const deadLetterRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(404).send({ success: false, error: 'Dead letter job not found' })
     }
 
+    // R146.40 — single-replay guard. Without this, an auth'd caller in
+    // the same workspace can call /replay N times on a single DLQ job
+    // and re-enqueue N copies (replayRunId differs each call, so BullMQ
+    // jobId `dlq-retry-${replayRunId}` doesn't dedupe). That's a cost
+    // amplification class — a single dead letter becomes worker capacity
+    // exhaustion + N× LLM calls if the job hits a model.
+    if (job.replayedAt) {
+      return reply.code(409).send({
+        success: false,
+        error: 'job already replayed',
+        detail: `replayed at ${new Date(job.replayedAt).toISOString()} (runId ${job.replayRunId ?? 'unknown'})`,
+      })
+    }
+
     const replayRunId = uuidv7()
     const now         = Date.now()
 
-    // Mark as replayed in DB
-    await db
+    // Mark as replayed in DB — atomic guard against a race with another
+    // concurrent /replay request on the same job: the UPDATE must match
+    // a row where replayedAt is still NULL, otherwise the parallel call
+    // already won. The follow-up enqueue only happens if our update wins.
+    const upd = await db
       .update(deadLetterJobs)
       .set({ replayedAt: now, replayedBy: 'api', replayRunId })
-      .where(eq(deadLetterJobs.id, id))
+      .where(and(eq(deadLetterJobs.id, id), isNull(deadLetterJobs.replayedAt)))
+      .returning({ id: deadLetterJobs.id })
+    if (upd.length === 0) {
+      return reply.code(409).send({ success: false, error: 'job already replayed (race)' })
+    }
 
     // Re-enqueue into original queue
     const queue = getQueue(job.queueName)
