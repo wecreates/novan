@@ -70,6 +70,16 @@ export function validateAttachments(raw: unknown): ValidationResult {
     if (isData && url.length > MAX_DATA_URL_BYTES) {
       return { ok: false, reason: `attachment too large (max ~${MAX_DATA_URL_BYTES} bytes base64)` }
     }
+    // Kind-mime allowlist first — declared mime gets the strongest
+    // semantic check. (Order matters: R146.50's cross-check moved
+    // BELOW this so a non-allowlisted declared mime always yields
+    // 'not allowed' rather than the weaker 'disagrees' message.)
+    if (kind === 'image' && !ALLOWED_IMAGE_MIMES.has(mime)) {
+      return { ok: false, reason: `image mime not allowed: ${mime}` }
+    }
+    if (kind === 'document' && !ALLOWED_DOC_MIMES.has(mime)) {
+      return { ok: false, reason: `document mime not allowed: ${mime}` }
+    }
     // R146.50 — cross-check declared mime vs the mime carried INSIDE a
     // data: URL. An attacker who declares `mime: image/png` while the
     // body is `data:image/svg+xml;base64,...` would slip past the kind
@@ -80,12 +90,6 @@ export function validateAttachments(raw: unknown): ValidationResult {
       if (inner && inner !== mime) {
         return { ok: false, reason: `attachment.mime '${mime}' disagrees with data: URL mime '${inner}'` }
       }
-    }
-    if (kind === 'image' && !ALLOWED_IMAGE_MIMES.has(mime)) {
-      return { ok: false, reason: `image mime not allowed: ${mime}` }
-    }
-    if (kind === 'document' && !ALLOWED_DOC_MIMES.has(mime)) {
-      return { ok: false, reason: `document mime not allowed: ${mime}` }
     }
     const att: ChatAttachment = { url, mime, kind }
     if (typeof it.name      === 'string' && it.name.length    > 0) att.name      = it.name.slice(0, 200)
