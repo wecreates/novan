@@ -22,7 +22,7 @@ import {
 } from '../services/autonomous-orchestrator.js'
 import { db }               from '../db/client.js'
 import { autonomousJobs }   from '../db/schema.js'
-import { eq }               from 'drizzle-orm'
+import { eq, and }          from 'drizzle-orm'
 
 const autonomousRoutes: FastifyPluginAsync = async (fastify) => {
 
@@ -94,18 +94,23 @@ const autonomousRoutes: FastifyPluginAsync = async (fastify) => {
     return { success: true, data: jobs }
   })
 
-  // GET /jobs/:id
-  fastify.get<{ Params: { id: string } }>('/jobs/:id', async (req, reply) => {
+  // GET /jobs/:id — R146.31 workspace-scope filter (was eq(id) only, allowing
+  // any auth'd caller to read any workspace's job by UUID).
+  fastify.get<{ Params: { id: string }; Querystring: { workspace_id?: string } }>('/jobs/:id', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     const rows = await db.select().from(autonomousJobs)
-      .where(eq(autonomousJobs.id, req.params.id)).limit(1)
+      .where(and(eq(autonomousJobs.id, req.params.id), eq(autonomousJobs.workspaceId, ws))).limit(1)
     if (!rows[0]) return reply.code(404).send({ success: false, error: 'Job not found' })
     return { success: true, data: rows[0] }
   })
 
-  // GET /jobs/:id/evidence
-  fastify.get<{ Params: { id: string } }>('/jobs/:id/evidence', async (req, reply) => {
+  // GET /jobs/:id/evidence — R146.31 same scope fix.
+  fastify.get<{ Params: { id: string }; Querystring: { workspace_id?: string } }>('/jobs/:id/evidence', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     const rows = await db.select().from(autonomousJobs)
-      .where(eq(autonomousJobs.id, req.params.id)).limit(1)
+      .where(and(eq(autonomousJobs.id, req.params.id), eq(autonomousJobs.workspaceId, ws))).limit(1)
     if (!rows[0]) return reply.code(404).send({ success: false, error: 'Job not found' })
     const evidence = await getJobEvidence(req.params.id)
     return { success: true, data: evidence }

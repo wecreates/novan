@@ -52,10 +52,12 @@ const sandboxRoutes: FastifyPluginAsync = async (fastify) => {
     return { success: true, data: enriched }
   })
 
-  // GET /sessions/:id
-  fastify.get<{ Params: { id: string } }>('/sessions/:id', async (req, reply) => {
+  // GET /sessions/:id — R146.31 workspace-scope filter
+  fastify.get<{ Params: { id: string }; Querystring: { workspace_id?: string } }>('/sessions/:id', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     const rows = await db.select().from(sandboxSessions)
-      .where(eq(sandboxSessions.id, req.params.id)).limit(1)
+      .where(and(eq(sandboxSessions.id, req.params.id), eq(sandboxSessions.workspaceId, ws))).limit(1)
     if (!rows[0]) return reply.code(404).send({ success: false, error: 'Session not found' })
 
     const now = Date.now()
@@ -72,19 +74,24 @@ const sandboxRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  // GET /sessions/:id/events
-  fastify.get<{ Params: { id: string } }>('/sessions/:id/events', async (req) => {
+  // GET /sessions/:id/events — R146.31 workspace-scope filter (was sessionId
+  // only; auth'd caller could read any workspace's events by session UUID).
+  fastify.get<{ Params: { id: string }; Querystring: { workspace_id?: string } }>('/sessions/:id/events', async (req, reply) => {
+    const ws = req.query.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     const events = await db.select().from(sandboxEvents)
-      .where(eq(sandboxEvents.sessionId, req.params.id))
+      .where(and(eq(sandboxEvents.sessionId, req.params.id), eq(sandboxEvents.workspaceId, ws)))
       .orderBy(desc(sandboxEvents.createdAt))
       .limit(200)
     return { success: true, data: events }
   })
 
-  // POST /sessions/:id/cancel — mark session cancelled (does not kill process, signals coordinator)
-  fastify.post<{ Params: { id: string } }>('/sessions/:id/cancel', async (req, reply) => {
+  // POST /sessions/:id/cancel — R146.31 workspace-scope filter
+  fastify.post<{ Params: { id: string }; Body: { workspace_id?: string } }>('/sessions/:id/cancel', async (req, reply) => {
+    const ws = req.body.workspace_id
+    if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     const rows = await db.select().from(sandboxSessions)
-      .where(eq(sandboxSessions.id, req.params.id)).limit(1)
+      .where(and(eq(sandboxSessions.id, req.params.id), eq(sandboxSessions.workspaceId, ws))).limit(1)
     const session = rows[0]
     if (!session) return reply.code(404).send({ success: false, error: 'Session not found' })
     if (session.status !== 'running') {

@@ -213,16 +213,20 @@ const voiceRoutes: FastifyPluginAsync = async (fastify) => {
       createdAt:    Date.now(),
     })
     // Side effects: failover/block counters + provider health
+    // R146.31 — scope session lookups/updates by workspace_id (was unscoped:
+    // any auth'd caller could increment counters on another workspace's
+    // session row by guessing the UUID).
+    const sessionScope = and(eq(voiceSessions.id, req.params.id), eq(voiceSessions.workspaceId, b.workspace_id))
     if (b.kind === 'failover') {
       await db.update(voiceSessions)
-        .set({ failoverCount: (await db.select().from(voiceSessions).where(eq(voiceSessions.id, req.params.id)).limit(1).then(r => r[0]?.failoverCount ?? 0) ?? 0) + 1 })
-        .where(eq(voiceSessions.id, req.params.id)).catch((e: Error) => { console.error('[voice]', e.message); return null })
+        .set({ failoverCount: (await db.select().from(voiceSessions).where(sessionScope).limit(1).then(r => r[0]?.failoverCount ?? 0) ?? 0) + 1 })
+        .where(sessionScope).catch((e: Error) => { console.error('[voice]', e.message); return null })
       if (b.provider) await recordProviderHealth(b.workspace_id, b.provider, false, b.latency_ms ?? 0, 'failover').catch((e: Error) => { console.error('[voice]', e.message); return null })
     }
     if (b.kind === 'block') {
-      const cur = await db.select().from(voiceSessions).where(eq(voiceSessions.id, req.params.id)).limit(1).then(r => r[0]?.blockedCommands ?? 0) ?? 0
+      const cur = await db.select().from(voiceSessions).where(sessionScope).limit(1).then(r => r[0]?.blockedCommands ?? 0) ?? 0
       await db.update(voiceSessions).set({ blockedCommands: cur + 1 })
-        .where(eq(voiceSessions.id, req.params.id)).catch((e: Error) => { console.error('[voice]', e.message); return null })
+        .where(sessionScope).catch((e: Error) => { console.error('[voice]', e.message); return null })
     }
     if (b.kind === 'tts' && b.provider && typeof b.latency_ms === 'number') {
       await recordProviderHealth(b.workspace_id, b.provider, true, b.latency_ms).catch((e: Error) => { console.error('[voice]', e.message); return null })

@@ -112,7 +112,10 @@ const ttsRoutes: FastifyPluginAsync = async (fastify) => {
       .where(eq(voiceProfiles.workspaceId, ws)).catch((e: Error) => { console.error('[tts]', e.message); return null })
     await db.update(voiceProfiles)
       .set({ isActive: true, updatedAt: Date.now() })
-      .where(eq(voiceProfiles.id, req.params.id)).catch((e: Error) => { console.error('[tts]', e.message); return null })
+      // R146.31 — defense-in-depth scope; pre-check at line 102 already
+      // confirms ownership, but scoping the UPDATE too means a stale row
+      // can never bypass the workspace invariant.
+      .where(and(eq(voiceProfiles.id, req.params.id), eq(voiceProfiles.workspaceId, ws))).catch((e: Error) => { console.error('[tts]', e.message); return null })
 
     return { success: true }
   })
