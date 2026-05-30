@@ -550,6 +550,12 @@ export async function completeCallback(input: CallbackInput): Promise<CallbackRe
     metadata: {
       ...(tok.token_type ? { tokenType: tok.token_type } : {}),
       ...(tok.expires_in ? { expiresIn: tok.expires_in } : {}),
+      // R146.68 — stamp absolute expiry at grant time so the proactive
+      // refresh in buildContext.getSecret has something to check
+      // against on the FIRST connector call, not just after a prior
+      // refresh. R146.49's refreshAccessToken also stamps this on
+      // every successful refresh.
+      ...(tok.expires_in ? { expiresAt: Date.now() + tok.expires_in * 1000 } : {}),
       ...(tok.team       ? { team: tok.team } : {}),
     },
   })

@@ -729,6 +729,44 @@ async function buildContext(
     connectorId,
     getSecret:   async () => {
       if (!account.secretRef) throw new Error('account has no linked secret')
+      // R146.68 — proactive token refresh. Before revealing, check
+      // account.metadata.expiresAt (stamped by R146.49 on every prior
+      // refresh + by completeCallback on initial grant). If within 60s
+      // of expiry, refresh now so the handler downstream sees a fresh
+      // token instead of provider 401s. Connectors silently broke ~1h
+      // after grant before this wiring; this is the missing link
+      // between R146.48's lock helper and the actual provider calls.
+      const meta = (account.metadata as { expiresAt?: number } | null) ?? {}
+      if (typeof meta.expiresAt === 'number' && meta.expiresAt < Date.now() + 60_000) {
+        try {
+          const { refreshAccessToken } = await import('./connector-oauth.js')
+          const r = await refreshAccessToken({
+            workspaceId: account.workspaceId,
+            accountId:   account.id,
+            requestedBy: `connector:${account.id}`,
+          })
+          if (r.ok) {
+            // Re-read metadata so this closure picks up the new
+            // expiresAt for any subsequent getSecret() in the same call.
+            const refreshed = await db.select().from(connectorAccounts)
+              .where(eq(connectorAccounts.id, account.id)).limit(1)
+              .then(rows => rows[0]).catch(() => null)
+            if (refreshed) account.metadata = refreshed.metadata
+          } else if (r.reason === 'revoked') {
+            // Provider returned 400 invalid_grant — operator must
+            // re-OAuth. Surface a clear error instead of letting the
+            // handler crash with a 401 it can't interpret.
+            throw new Error(`connector ${connectorId} account ${account.id} revoked by provider — operator must re-authorize`)
+          }
+          // Other refresh failures (network, missing refresh_secret,
+          // etc) fall through and the handler retries with the stale
+          // token; if it 401s, the operator at least gets a clean
+          // error chain from the handler itself.
+        } catch (e) {
+          // Only surface revoked errors; everything else is best-effort.
+          if (e instanceof Error && /revoked/.test(e.message)) throw e
+        }
+      }
       const v = await revealSecret(account.secretRef, `connector:${account.id}`, 'connector action runtime')
       if (!v) throw new Error('secret could not be revealed')
       return v
