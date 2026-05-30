@@ -204,8 +204,16 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
   // SSE chat turn — per-route rate limit caps a single IP/operator at 30
   // streams/minute. The global 200/min limit covers cheap reads; LLM
   // streams burn provider tokens so they get a tighter cap.
+  // R146.27 — per-route bodyLimit. Fastify global default is 1MB so a
+  // single request could ship 1MB of payload that the handler then
+  // truncates to a 20k userMessage anyway. Between 20KB and 1MB
+  // every byte was parsed, persisted, and triggered an LLM call —
+  // wasted compute + tokens. 64KB headroom covers a generous message
+  // (20k chars) + multiple base64 attachment slices + JSON overhead;
+  // anything bigger returns 413 instantly with no LLM cost.
   fastify.post<{ Body: { workspace_id?: string; conversation_id?: string; message?: string; regenerate_from?: string; attachments?: unknown; prefer_provider?: string } }>('/stream', {
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    bodyLimit: 64 * 1024,
   }, async (req, reply) => {
     const b = req.body
     if (!b.workspace_id || !b.conversation_id || !b.message) {
