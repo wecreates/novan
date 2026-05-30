@@ -33,12 +33,30 @@ const ExportQuery = z.object({
   limit:  z.coerce.number().int().min(1).max(10_000).default(1_000),
 })
 
+/** R146.55 — CSV formula-injection defense (CWE-1236). When the cell's
+ *  first character is one of = + - @ \t \r, Excel / Google Sheets /
+ *  LibreOffice treat the entire cell as a formula. A row containing
+ *  `=cmd|'/c calc'!A0` executes a shell command via DDE; HYPERLINK and
+ *  WEBSERVICE formulas exfiltrate other cells. Prefix any such cell
+ *  with a literal `'` (the spreadsheet eats it on display but the
+ *  formula no longer fires). Empty strings pass through unchanged. */
+function defuseFormula(s: string): string {
+  if (s.length === 0) return s
+  const c = s.charCodeAt(0)
+  // '=' 0x3D, '+' 0x2B, '-' 0x2D, '@' 0x40, TAB 0x09, CR 0x0D
+  if (c === 0x3D || c === 0x2B || c === 0x2D || c === 0x40 || c === 0x09 || c === 0x0D) {
+    return `'${s}`
+  }
+  return s
+}
+
 function toCsv(rows: Record<string, unknown>[], fields: string[]): string {
   const header = fields.join(',')
   const lines = rows.map(r => fields.map(f => {
     const v = r[f]
     if (v === null || v === undefined) return ''
-    const s = typeof v === 'object' ? JSON.stringify(v) : String(v)
+    const raw = typeof v === 'object' ? JSON.stringify(v) : String(v)
+    const s = defuseFormula(raw)
     return s.includes(',') || s.includes('"') || s.includes('\n')
       ? `"${s.replace(/"/g, '""')}"`
       : s

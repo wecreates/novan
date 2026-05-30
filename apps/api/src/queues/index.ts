@@ -43,13 +43,18 @@ export const queues: Record<QueueName, Queue> = {
 
 export const queueEvents: Partial<Record<QueueName, QueueEvents>> = {}
 
-// Passive drain worker for the `notifications` queue.
-// CONTEXT: notifications has no dedicated worker package. Notifications
-// are currently handled synchronously via services/notifications.ts (DB
-// write + cron broadcast). If anyone ever calls `queues.notifications.add(...)`,
-// jobs would accumulate forever without this. Attach a no-op consumer
-// that drains + emits an event so the operator sees the misuse.
+// Passive drain workers for queues whose producer side is live but
+// whose consumer was never registered. Without these, queues.X.add()
+// silently grows the Redis waiting list forever.
+//
+// notifications: handled inline via services/notifications.ts; legacy
+//   call sites still .add()
+// workflow: R146.54 — five routes call queues.workflow.add('execute-workflow')
+//   (approvals, briefings, opportunities, webhooks /trigger, workflows /run)
+//   but no consumer was ever wired. Webhook /trigger is the highest-rate
+//   producer; on a busy account that's hundreds of orphan jobs per hour.
 let _notificationsDrain: Worker | null = null
+let _workflowDrain:      Worker | null = null
 
 export async function registerQueues(): Promise<void> {
   // Await queue initialization (validates Redis connection)
@@ -64,6 +69,27 @@ export async function registerQueues(): Promise<void> {
       return { drained: true }
     }, { connection: redisClient, concurrency: 1 })
   }
+  // R146.54 — workflow drain. Same pattern, same purpose.
+  if (!_workflowDrain) {
+    _workflowDrain = new Worker('workflow', async (job) => {
+      console.warn(`[workflow-queue] unexpected job ${job.name} (id=${job.id}) — workflow execution is not implemented; ${job.data?.workflowId ?? 'unknown workflow'} dropped to prevent Redis backlog growth.`)
+      return { drained: true }
+    }, { connection: redisClient, concurrency: 4 })
+  }
+}
+
+/** R146.54 — graceful shutdown for the passive drain Workers + Queues.
+ *  Without this, the BullMQ Workers + Redis connections stay open after
+ *  the API process tries to exit. Called from server.ts shutdown chain. */
+export async function stopQueues(): Promise<void> {
+  await Promise.allSettled([
+    _notificationsDrain?.close(),
+    _workflowDrain?.close(),
+    ...Object.values(queues).map(q => q.close()),
+    ...Object.values(queueEvents).filter((qe): qe is QueueEvents => !!qe).map(qe => qe.close()),
+  ])
+  _notificationsDrain = null
+  _workflowDrain      = null
 }
 
 export async function getQueueMetrics(): Promise<Record<QueueName, {

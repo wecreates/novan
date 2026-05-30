@@ -67,12 +67,28 @@ const enhancementRoutes: FastifyPluginAsync = async (fastify) => {
     const lines: string[] = [
       'division,health,active_agents,active_missions,open_blockers,events_24h,missions_completed,missions_total',
     ]
+    // R146.55 — defuse CSV formula injection in operator-controlled
+    // string fields. `name` is the division key, set by the operator.
+    // The numeric metrics flow from the system; coerced via String()
+    // they can't start with =+-@, but defusing universally is cheap
+    // insurance for future schema additions.
+    const defuse = (raw: string): string => {
+      const c = raw.charCodeAt(0)
+      if (c === 0x3D || c === 0x2B || c === 0x2D || c === 0x40 || c === 0x09 || c === 0x0D) return `'${raw}`
+      return raw
+    }
+    const cell = (v: unknown): string => {
+      const s = defuse(String(v ?? ''))
+      return s.includes(',') || s.includes('"') || s.includes('\n')
+        ? `"${s.replace(/"/g, '""')}"`
+        : s
+    }
     for (const [name, d] of Object.entries(snap)) {
       lines.push([
-        name, d.health,
-        d.metrics.activeAgents, d.metrics.activeMissions,
-        d.metrics.openBlockers, d.metrics.eventsLast24h,
-        d.missions.completed, d.missions.total,
+        cell(name), cell(d.health),
+        cell(d.metrics.activeAgents), cell(d.metrics.activeMissions),
+        cell(d.metrics.openBlockers), cell(d.metrics.eventsLast24h),
+        cell(d.missions.completed), cell(d.missions.total),
       ].join(','))
     }
     reply.header('content-type', 'text/csv')

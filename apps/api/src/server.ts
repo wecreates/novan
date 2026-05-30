@@ -633,6 +633,13 @@ const shutdown = async (signal: string) => {
     const { stopConnectorOauthReaper } = await import('./services/connector-oauth.js')
     stopConnectorOauthReaper()
   } catch { /* */ }
+  // R146.54 — drain Workers + close Queues. Without this the BullMQ
+  // worker process stays connected to Redis after SIGTERM and the
+  // graceful shutdown hangs until forced.
+  try {
+    const { stopQueues } = await import('./queues/index.js')
+    await stopQueues()
+  } catch { /* */ }
   // R146.13 — runtime-heartbeat fires a DB write every 60s. The timer
   // was .unref()'d so it doesn't block exit, but during the SIGTERM
   // drain it keeps firing inserts against a closing pool. Stop it
