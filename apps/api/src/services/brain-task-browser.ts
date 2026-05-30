@@ -43,6 +43,44 @@ interface Session {
   url:         string
 }
 
+/** R146.47 — SSRF predicate at the Playwright sink. Imports the same
+ *  isInternalHost shared by image-storage, push, browser-route. Throws
+ *  with a descriptive message so the LLM/operator sees what was blocked.
+ *  Synchronous module-level require() because top-level ESM await isn't
+ *  available in this file; the import is satisfied at first call. */
+function assertExternalUrl(url: string, op: string): void {
+  let parsed: URL
+  try { parsed = new URL(url) } catch { throw new Error(`${op}: invalid url`) }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`${op}: url scheme must be http(s)`)
+  }
+  if (!parsed.hostname) throw new Error(`${op}: url missing hostname`)
+  // Dynamic ESM import; deferred so this module stays cheap to require.
+  // The first browser.open call pays a one-time module-load cost.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isInternalHost = (globalThis as any).__novan_isInternalHost as ((h: string) => boolean) | undefined
+  if (isInternalHost && isInternalHost(parsed.hostname)) {
+    throw new Error(`${op}: internal host blocked: ${parsed.hostname}`)
+  }
+  // Belt-and-suspenders inline check: even if the cache miss above
+  // returns undefined (first call before hydration), still reject the
+  // common literals.
+  const h = parsed.hostname.toLowerCase()
+  if (h === 'localhost' || h.startsWith('novan-') || h === '127.0.0.1' || h === '::1' || h === '0.0.0.0' || h === '169.254.169.254') {
+    throw new Error(`${op}: internal host blocked: ${h}`)
+  }
+}
+
+// Hydrate the shared predicate once at module load (best-effort; the
+// inline literal-list above covers any window where this is still null).
+;(async () => {
+  try {
+    const m = await import('./image-storage.js')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(globalThis as any).__novan_isInternalHost = m.isInternalHost
+  } catch { /* tolerated — falls back to inline check */ }
+})()
+
 /** Global cap on concurrent browser sessions across all workspaces. */
 const MAX_SESSIONS         = 5
 /** Per-workspace cap. Without this, a single workspace can claim every
@@ -115,7 +153,10 @@ export async function browserOpen(workspaceId: string, params: Record<string, un
   }
   const url = String(params['url'] ?? '').trim()
   if (!url) throw new Error('browser.open: url required')
-  if (!/^https?:\/\//i.test(url)) throw new Error('browser.open: url must be http(s)')
+  // R146.47 — SSRF guard at the actual Playwright sink. R146.45 fixed
+  // the queued-job route, but brain-task-browser is the LLM-callable
+  // path that bypasses the route entirely. Same predicate.
+  assertExternalUrl(url, 'browser.open')
 
   const br = await getBrowser()
   if (!br) throw new Error(`playwright not available${lastBrowserLoadError ? `: ${lastBrowserLoadError}` : ''}`)
@@ -204,7 +245,7 @@ export async function browserNavigate(_ws: string, params: Record<string, unknow
   const s = getSession(String(params['sessionId'] ?? ''))
   const url = String(params['url'] ?? '').trim()
   if (!url) throw new Error('browser.navigate: url required')
-  if (!/^https?:\/\//i.test(url)) throw new Error('browser.navigate: url must be http(s)')
+  assertExternalUrl(url, 'browser.navigate')   // R146.47 — same SSRF guard
   const res = await s.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20_000 })
   s.url = s.page.url()
   return { sessionId: s.id, url: s.page.url(), status: res?.status() ?? 0 }
