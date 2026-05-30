@@ -50,15 +50,36 @@ export function validateAttachments(raw: unknown): ValidationResult {
     const kind = typeof it.kind === 'string' ? it.kind : ''
     if (!url)  return { ok: false, reason: 'attachment.url required' }
     if (!mime) return { ok: false, reason: 'attachment.mime required' }
+    // R146.50 — bound mime length. Flows into materializeAnthropic/Gemini
+    // for non-image kinds as user-role text `[attached ${kind}: ${mime}]`.
+    // Even though user-role content is model-RLHF protected, an unbounded
+    // string blows past LLM context budgets and downstream storage caps.
+    if (mime.length > 120) return { ok: false, reason: 'attachment.mime too long' }
     if (kind !== 'image' && kind !== 'document' && kind !== 'reference') {
       return { ok: false, reason: `attachment.kind must be image|document|reference (got ${kind})` }
     }
-    // URL shape: data:<mime>;base64,... or http(s)://
-    const isData = url.startsWith('data:')
-    const isHttp = /^https?:\/\//i.test(url)
-    if (!isData && !isHttp) return { ok: false, reason: 'attachment.url must be data: or http(s)' }
+    // R146.50 — URL shape: data: or HTTPS only. Previous accepted http://
+    // too; no legitimate use case (every LLM-provider image-fetch goes
+    // through https), but a malicious provider-side image-fetcher could
+    // be coaxed into hitting attacker http://internal targets resolvable
+    // on the provider's infra (cloud metadata, etc — their problem, but
+    // tightening the door is cheap).
+    const isData  = url.startsWith('data:')
+    const isHttps = /^https:\/\//i.test(url)
+    if (!isData && !isHttps) return { ok: false, reason: 'attachment.url must be data: or https://' }
     if (isData && url.length > MAX_DATA_URL_BYTES) {
       return { ok: false, reason: `attachment too large (max ~${MAX_DATA_URL_BYTES} bytes base64)` }
+    }
+    // R146.50 — cross-check declared mime vs the mime carried INSIDE a
+    // data: URL. An attacker who declares `mime: image/png` while the
+    // body is `data:image/svg+xml;base64,...` would slip past the kind
+    // allowlist (svg+xml not in ALLOWED_IMAGE_MIMES) and have the SVG
+    // forwarded to the provider — SVGs can carry script. Reject mismatch.
+    if (isData) {
+      const inner = /^data:([^;,]+)/.exec(url)?.[1]?.toLowerCase()
+      if (inner && inner !== mime) {
+        return { ok: false, reason: `attachment.mime '${mime}' disagrees with data: URL mime '${inner}'` }
+      }
     }
     if (kind === 'image' && !ALLOWED_IMAGE_MIMES.has(mime)) {
       return { ok: false, reason: `image mime not allowed: ${mime}` }
