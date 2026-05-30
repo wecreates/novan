@@ -296,15 +296,22 @@ app.addHook('preHandler', async (req, reply) => {
   if (!authWs) return   // unauthenticated — body/query trust falls to per-route logic
   const body  = (req.body  as Record<string, unknown> | undefined) ?? undefined
   const query = (req.query as Record<string, unknown> | undefined) ?? undefined
-  const requested =
-    (typeof body?.['workspace_id']  === 'string' ? body['workspace_id']  : undefined) ??
-    (typeof query?.['workspace_id'] === 'string' ? query['workspace_id'] : undefined)
-  if (requested !== undefined && requested !== authWs) {
-    req.log.warn({ authWs, requested, url }, '[auth] cross-workspace request rejected')
+  // R146.32 — tighten guard against type-confusion bypass. The original
+  // R146.30 form only inspected workspace_id when it was a string, so
+  // sending `workspace_id: ["global"]`, `{x:"global"}`, or `99` bypassed
+  // the check entirely (Drizzle coerced them on insert and rows landed
+  // in arbitrary workspaces). Now ANY presence of workspace_id triggers
+  // the check: only an exact string-equal-to-authWs is allowed; any
+  // other shape (non-string, mismatched string) → 403.
+  const probe = body && 'workspace_id' in body
+    ? body['workspace_id']
+    : (query && 'workspace_id' in query ? query['workspace_id'] : undefined)
+  if (probe !== undefined && (typeof probe !== 'string' || probe !== authWs)) {
+    req.log.warn({ authWs, probeType: typeof probe, url }, '[auth] cross-workspace or type-confusion request rejected')
     return reply.code(403).send({
       success: false,
       error: 'cross-workspace request denied',
-      detail: 'authenticated workspace does not match requested workspace_id',
+      detail: 'workspace_id must be a string matching the authenticated workspace',
     })
   }
 })
