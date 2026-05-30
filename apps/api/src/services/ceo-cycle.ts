@@ -79,8 +79,14 @@ export async function runCeoCycle(workspaceId: string): Promise<CycleResult> {
   // Heartbeat so the agents table shows CEO activity
   recordAgentActivityAsync(workspaceId, 'research_planner', { status: 'running' })
 
-  // 1. Budget guard
-  const budget = await checkBudget('ceo_cycle', { maxCalls: 200, maxCostUsd: 2.0 }).catch(() => ({ ok: true, reason: '' }))
+  // 1. Budget guard.
+  // R146.56 — fail closed. Previously caught any error from checkBudget
+  // and treated it as { ok: true }; a DB blip would unblock spend and
+  // the cycle would run unmetered. Now: any error from the budget check
+  // refuses the cycle (next tick retries; one missed cycle is cheap,
+  // blowing through the $2 cap on a transient DB error isn't).
+  const budget = await checkBudget('ceo_cycle', { maxCalls: 200, maxCostUsd: 2.0 })
+    .catch((e: Error) => ({ ok: false as const, reason: `budget check failed (failing closed): ${e.message}` }))
   if (!budget.ok) {
     result.notes.push(`cron-budget blocked: ${budget.reason}`)
     await emit(workspaceId, 'cron.budget_blocked', { task: 'ceo_cycle', reason: budget.reason })
