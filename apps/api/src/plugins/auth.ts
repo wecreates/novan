@@ -22,6 +22,7 @@ declare module 'fastify' {
   interface FastifyRequest {
     userId:      string
     workspaceId: string
+    scopes?:     string[]
   }
 }
 
@@ -81,6 +82,9 @@ const authPluginImpl: FastifyPluginAsync = async (app) => {
 
       req.userId      = 'api-token'
       req.workspaceId = row.workspaceId
+      // R146.41 — expose token scopes on req. Stored as text[] in DB,
+      // may be null for legacy tokens — coerce to empty array.
+      req.scopes      = (Array.isArray(row.scopes) ? row.scopes : []) as string[]
 
       // fire-and-forget lastUsedAt
       void db.update(apiTokens).set({ lastUsedAt: now }).where(eq(apiTokens.id, row.id))

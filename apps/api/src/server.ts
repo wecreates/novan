@@ -316,6 +316,32 @@ app.addHook('preHandler', async (req, reply) => {
   }
 })
 
+// R146.41 — token-scope enforcement. The scopes column on apiTokens has
+// been stored + displayed since R35, but no route ever checked it. An
+// operator minting a 'read'-only token would still get full write power.
+// R146.24 bootstrap grants ['read','write'] so no current token is
+// affected; this gate just makes future read-only tokens behave
+// correctly when minted.
+//
+// JWT-auth and dev-auto-auth requests have no scopes attached
+// (req.scopes === undefined) and bypass — they represent the operator
+// with implicit full privilege.
+app.addHook('preHandler', async (req, reply) => {
+  const url = req.url.split('?')[0] ?? ''
+  if (isPublic(url)) return
+  const scopes = (req as unknown as { scopes?: string[] }).scopes
+  if (!scopes) return
+  const m = req.method
+  const isWrite = m === 'POST' || m === 'PUT' || m === 'PATCH' || m === 'DELETE'
+  if (isWrite && !scopes.includes('write')) {
+    req.log.warn({ scopes, method: m, url }, '[auth] token-scope: write denied')
+    return reply.code(403).send({ success: false, error: 'token lacks write scope' })
+  }
+  if (!isWrite && scopes.length > 0 && !scopes.includes('read')) {
+    return reply.code(403).send({ success: false, error: 'token lacks read scope' })
+  }
+})
+
 // Swagger is optional — wrap so a CJS/JSON quirk in @fastify/swagger-ui doesn't crash boot
 try {
   const { default: swagger }   = await import('@fastify/swagger')
