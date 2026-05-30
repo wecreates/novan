@@ -239,7 +239,10 @@ const studioRoutes: FastifyPluginAsync = async (fastify) => {
       .set({ useCount: sql`${promptTemplates.useCount} + 1`, updatedAt: Date.now() })
       .where(and(eq(promptTemplates.id, req.params.id), eq(promptTemplates.workspaceId, ws)))
       .catch((e: Error) => { console.error('[image-studio]', e.message); return null })
-    const t = await db.select().from(promptTemplates).where(eq(promptTemplates.id, req.params.id)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[image-studio]', e.message); return null })
+    // R146.34 — defense-in-depth scope. The UPDATE above is workspace-scoped,
+    // but the readback was eq(id) only, which would return any workspace's
+    // template if the caller knew the UUID. Scope the SELECT too.
+    const t = await db.select().from(promptTemplates).where(and(eq(promptTemplates.id, req.params.id), eq(promptTemplates.workspaceId, ws))).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[image-studio]', e.message); return null })
     return { success: true, data: t }
   })
 
