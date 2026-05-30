@@ -128,6 +128,8 @@ interface PendingState {
   scopes:      string[]
   permission:  Permission
   createdAt:   number
+  /** R146.44 — PKCE verifier; threaded into the token exchange. */
+  codeVerifier?: string
 }
 
 const PENDING = new Map<string, PendingState>()
@@ -177,6 +179,12 @@ export interface StartResult {
   authorizeUrl: string
 }
 
+/** R146.44 — RFC 7636 PKCE helper. base64url-encode SHA-256 of verifier. */
+function pkceChallenge(verifier: string): string {
+  return createHash('sha256').update(verifier).digest('base64')
+    .replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_')
+}
+
 export function buildStart(input: StartInput): StartResult {
   const provider = OAUTH_PROVIDERS[input.connectorId]
   if (!provider) throw new Error(`no OAuth provider config for '${input.connectorId}'`)
@@ -187,6 +195,17 @@ export function buildStart(input: StartInput): StartResult {
   // was within tolerance but state doubles as a CSRF token so we use the
   // upper bound.
   const state = randomBytes(32).toString('hex')
+  // R146.44 — PKCE. Per RFC 7636, the verifier is 43-128 chars from
+  // [A-Z][a-z][0-9]-._~. 64 random bytes → base64url → ~86 chars, well
+  // within range. Stored in PENDING so the callback can include it in
+  // the token-exchange POST. Providers that don't honor code_challenge
+  // ignore it harmlessly; providers that DO (Google, GitHub, Slack, all
+  // modern ones) gain protection against authorization-code interception
+  // — even if an attacker grabs the code from a referer leak or browser
+  // history, they can't exchange it without the verifier we never expose.
+  const codeVerifier  = randomBytes(64).toString('base64')
+    .replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_')
+  const codeChallenge = pkceChallenge(codeVerifier)
   pendingSet(state, {
     state,
     workspaceId: input.workspaceId,
@@ -196,15 +215,18 @@ export function buildStart(input: StartInput): StartResult {
     scopes:      input.scopes ?? provider.defaultScopes,
     permission:  input.permission ?? 'read',
     createdAt:   Date.now(),
+    codeVerifier,
   })
 
   const redirectUri = `${input.apiBaseUrl}${provider.redirectPathOverride ?? '/api/v1/connectors/oauth/callback'}`
   const params = new URLSearchParams({
-    client_id:     clientId,
-    redirect_uri:  redirectUri,
-    response_type: 'code',
-    scope:         (input.scopes ?? provider.defaultScopes).join(' '),
+    client_id:             clientId,
+    redirect_uri:          redirectUri,
+    response_type:         'code',
+    scope:                 (input.scopes ?? provider.defaultScopes).join(' '),
     state,
+    code_challenge:        codeChallenge,
+    code_challenge_method: 'S256',
     ...(provider.extraAuthParams ?? {}),
   })
   return {
@@ -268,6 +290,11 @@ export async function completeCallback(input: CallbackInput): Promise<CallbackRe
       code:          input.code,
       redirect_uri:  redirectUri,
       grant_type:    'authorization_code',
+      // R146.44 — include PKCE verifier. Providers that issued the
+      // code_challenge in the start flow require this; providers that
+      // didn't ignore an unknown field. We only add it when present
+      // so flows that started pre-R146.44 still complete.
+      ...(pending.codeVerifier ? { code_verifier: pending.codeVerifier } : {}),
     }),
   })
   if (!resp.ok) {
