@@ -838,6 +838,24 @@ async function runStretchCachePurge() {
   } catch (e) { await emit('cron.error', { task: 'stretch_purge', error: (e as Error).message }) }
 }
 
+// R146.71 — events table pruner. Audit + push + every emit() writes
+// here. Without a pruner the table grows unbounded. Default keep
+// window: 90 days. Operator can set EVENTS_RETENTION_DAYS to tune.
+async function runEventsPrune() {
+  try {
+    const days = Math.max(7, Math.min(365, Number(process.env['EVENTS_RETENTION_DAYS'] ?? 90)))
+    if (!Number.isFinite(days)) return
+    const cutoff = Date.now() - days * 24 * 60 * 60_000
+    const { db } = await import('../db/client.js')
+    const { sql: _sql } = await import('drizzle-orm')
+    // Use raw delete with a server-side filter to avoid loading any rows
+    // into Node memory; Postgres handles the batch internally.
+    const res = await db.execute(_sql`DELETE FROM events WHERE created_at < ${cutoff} RETURNING 1`)
+    const rows = (res as unknown as { rows?: unknown[] }).rows ?? (Array.isArray(res) ? res as unknown[] : [])
+    if (rows.length > 0) await emit('cron.events_pruned', { deleted: rows.length, retentionDays: days })
+  } catch (e) { await emit('cron.error', { task: 'events_prune', error: (e as Error).message }) }
+}
+
 async function runFeedIngestion() {
   try {
     const ids = await listWorkspaceIds()
@@ -1060,6 +1078,7 @@ const INTERVALS = {
   billing:      60 * 60_000,   // 1 hour
   feeds:        10 * 60_000,   // 10 min — RSS/Atom ingestion (per-feed intervals enforced inside)
   stretchPurge: 60 * 60_000,   // 1 hour — expire stale AI cache rows
+  eventsPrune:  24 * 60 * 60_000, // 24 hours — drop events older than EVENTS_RETENTION_DAYS (90 default)
   research:     15 * 60_000,   // 15 min — research topic polling (per-topic intervals enforced inside)
   dailyReview:  60 * 60_000,   // 1 hour — emits at most one review/24h via idempotency check
   researchToAction: 30 * 60_000, // 30 min — convert recent findings → roadmap tasks
@@ -1415,6 +1434,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runBillingSweep,     INTERVALS.billing))
   handles.push(scheduleJittered(runFeedIngestion,    INTERVALS.feeds))
   handles.push(scheduleJittered(runStretchCachePurge,INTERVALS.stretchPurge))
+  handles.push(scheduleJittered(runEventsPrune,       INTERVALS.eventsPrune))
   handles.push(scheduleJittered(runResearchScans,    INTERVALS.research))
   handles.push(scheduleJittered(runDailyReviews,     INTERVALS.dailyReview))
   handles.push(scheduleJittered(runResearchToAction, INTERVALS.researchToAction))
