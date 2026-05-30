@@ -203,6 +203,11 @@ export function stopConnectorOauthReaper(): void {
 //      body verbatim; log only `{ ok, status, rotated_refresh: bool }`.
 
 const REFRESH_LOCKS = new Map<string, Promise<unknown>>()
+// R146.53 — hard cap. Even with the per-entry finally-delete, a synthetic
+// burst of distinct accountIds would grow the map until the slow tail of
+// hung fetches resolves. 5000 lets a high-fanout operator workspace
+// refresh many accounts in parallel without bumping a real ceiling.
+const REFRESH_LOCKS_MAX = 5000
 
 /** Per-account in-flight lock. The future refreshAccessToken implementation
  *  MUST wrap its provider exchange + vault rotation in this. Subsequent
@@ -211,6 +216,13 @@ const REFRESH_LOCKS = new Map<string, Promise<unknown>>()
 export async function withRefreshLock<T>(accountId: string, fn: () => Promise<T>): Promise<T> {
   const existing = REFRESH_LOCKS.get(accountId) as Promise<T> | undefined
   if (existing) return existing
+  if (REFRESH_LOCKS.size >= REFRESH_LOCKS_MAX) {
+    // FIFO evict oldest entry. The orphaned promise still resolves and
+    // attempts its finally-delete on a key that's already gone (no-op).
+    // No correctness loss — the orphaned caller still sees its result.
+    const firstKey = REFRESH_LOCKS.keys().next().value
+    if (firstKey !== undefined) REFRESH_LOCKS.delete(firstKey)
+  }
   const p = (async () => {
     try { return await fn() }
     finally { REFRESH_LOCKS.delete(accountId) }
@@ -274,6 +286,10 @@ export async function refreshAccessToken(opts: {
     const refreshPlain = await revealSecret(refreshRow.id, opts.requestedBy, 'oauth refresh')
     if (!refreshPlain) return { ok: false, reason: 'no_refresh_secret' }
 
+    // R146.53 — bounded fetch. A provider that hangs without closing the
+    // socket would otherwise pin a REFRESH_LOCKS entry forever; combined
+    // with a synthetic burst that's the unbounded-map DoS class. 20s
+    // is comfortably above any legit token-exchange RTT.
     const r = await fetch(provider.tokenUrl, {
       method:  'POST',
       headers: { 'accept': 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
@@ -283,7 +299,14 @@ export async function refreshAccessToken(opts: {
         refresh_token: refreshPlain,
         grant_type:    'refresh_token',
       }),
+      signal:  AbortSignal.timeout(20_000),
+    }).catch((e: Error) => {
+      // Surface as parse_error rather than letting an AbortError or
+      // network DNS failure escape the function and reject the lock.
+      console.error('[connector-oauth] refresh fetch failed:', e.message)
+      return null
     })
+    if (!r) return { ok: false, reason: 'http_error' }
     if (!r.ok) {
       // 400 invalid_grant means the user revoked, or refresh TTL expired.
       // Mark account revoked + emit, but leave vault rows for forensics.
@@ -451,6 +474,9 @@ export async function completeCallback(input: CallbackInput): Promise<CallbackRe
 
   // Exchange code → tokens. Most providers accept form-encoded; GitHub
   // also accepts JSON with the Accept header below.
+  // R146.53 — same 20s timeout as the refresh path. Without it, a hung
+  // provider tokenUrl would pin the API connection until the operator
+  // notices their /callback hasn't returned.
   const resp = await fetch(provider.tokenUrl, {
     method:  'POST',
     headers: {
@@ -469,6 +495,9 @@ export async function completeCallback(input: CallbackInput): Promise<CallbackRe
       // so flows that started pre-R146.44 still complete.
       ...(pending.codeVerifier ? { code_verifier: pending.codeVerifier } : {}),
     }),
+    signal: AbortSignal.timeout(20_000),
+  }).catch((e: Error) => {
+    throw new Error(`OAuth token exchange network error: ${e.message}`)
   })
   if (!resp.ok) {
     throw new Error(`OAuth token exchange ${resp.status}: ${(await resp.text().catch(() => '')).slice(0, 300)}`)
