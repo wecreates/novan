@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Building2, ExternalLink, Plus, Pencil, BarChart2, Search, X, Check } from 'lucide-react'
 import { businessApi, type Business }        from '../api.js'
 import { NavLink }                            from 'react-router-dom'
+import { safeHref }                           from '../components/Markdown.js'
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -352,7 +353,7 @@ function BusinessCard({
       {/* Domain link */}
       {domainUrl && (
         <a
-          href={domainUrl}
+          href={safeHref(domainUrl)}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1 text-xs text-muted hover:text-blue-400 transition-colors w-fit"

@@ -15,7 +15,22 @@ function escapeHtml(s: string): string {
 
 function isSafeUrl(url: string): boolean {
   const u = url.trim().toLowerCase()
+  // R146.42 — protocol-relative URLs (starting with //) inherit the
+  // current scheme and navigate to an attacker-controlled host. The
+  // earlier startsWith('/') was meant to allow same-origin relative
+  // paths but also accidentally allowed //evil.com/phish. Reject any
+  // path that starts with // explicitly.
+  if (u.startsWith('//')) return false
   return u.startsWith('http://') || u.startsWith('https://') || u.startsWith('mailto:') || u.startsWith('/')
+}
+
+/** Exported for use by other components rendering user/LLM-supplied
+ *  URLs in anchor tags. Returns the original URL when safe, '#' when
+ *  not — so an attempted javascript:/data:/protocol-relative URL
+ *  becomes a no-op anchor instead of a navigation/script vector. */
+export function safeHref(url: string | undefined | null): string {
+  if (!url) return '#'
+  return isSafeUrl(url) ? url : '#'
 }
 
 function renderInline(text: string): string {

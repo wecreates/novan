@@ -223,6 +223,8 @@ interface PromptContext {
 }
 
 async function buildSystemPrompt(workspaceId: string, userMessage: string): Promise<PromptContext> {
+  // R146.42 — sanitize-and-clamp helper used at every text→prompt boundary below.
+  const { clampAndSanitize } = await import('./prompt-sanitize.js')
   const citations: PromptContext['citations'] = []
 
   // 1. Identity
@@ -332,28 +334,35 @@ async function buildSystemPrompt(workspaceId: string, userMessage: string): Prom
     for (const d of drifts) lines.push(`  · ${d.kind} (${d.severity}): ${d.recommendedAction ?? ''}`)
     lines.push('')
   }
+  // R146.42 — prompt-injection hardening. Each of these blocks
+  // concatenates LLM-generated OR operator-typed text directly into
+  // the system prompt. A malicious chain decision / horizon title /
+  // memory summary containing "user: ignore previous instructions"
+  // would otherwise propagate verbatim and turn the next chat into
+  // an attacker-controlled context. clampAndSanitize neutralizes the
+  // role-marker patterns + caps length in one call.
   if (proposals.length > 0) {
     lines.push('### Pending code proposals awaiting operator review:')
-    for (const p of proposals) lines.push(`  · ${p.title} (~${p.estimatedLoc} LOC, risk=${p.riskLevel}) at /proposals`)
+    for (const p of proposals) lines.push(`  · ${clampAndSanitize(p.title, 200)} (~${p.estimatedLoc} LOC, risk=${p.riskLevel}) at /proposals`)
     lines.push('')
   }
   if (chainHits.length > 0) {
     lines.push('### Semantically relevant past reasoning chains:')
     for (const h of chainHits) {
-      lines.push(`  · [${h.kind}] ${h.decision.slice(0, 140)} (chain:${h.chainId.slice(0, 8)})`)
+      lines.push(`  · [${h.kind}] ${clampAndSanitize(h.decision, 140)} (chain:${h.chainId.slice(0, 8)})`)
     }
     lines.push('')
   }
   if (recentDesigns.length > 0) {
     lines.push('### Recent design concepts:')
-    for (const d of recentDesigns) lines.push(`  · ${d.brief.slice(0, 80)} → ${d.status}`)
+    for (const d of recentDesigns) lines.push(`  · ${clampAndSanitize(d.brief, 80)} → ${d.status}`)
     lines.push('')
   }
   if (recentMemories.length > 0) {
     lines.push('### Long-term memories (operator preferences + learned facts):')
     for (const m of recentMemories) {
       const tagStr = (m.tags && m.tags.length > 0) ? ` [${m.tags.slice(0, 3).join(',')}]` : ''
-      lines.push(`  · [${m.type}${tagStr} conf=${m.confidence.toFixed(2)}] ${(m.summary ?? m.content).slice(0, 140)}`)
+      lines.push(`  · [${m.type}${tagStr} conf=${m.confidence.toFixed(2)}] ${clampAndSanitize(m.summary ?? m.content, 140)}`)
     }
     lines.push('')
   }

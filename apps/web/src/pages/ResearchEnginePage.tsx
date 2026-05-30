@@ -18,6 +18,7 @@ import {
   Search, Play, Pause, Skull, Plus, RefreshCw, FileText, Bot, Loader2,
 } from 'lucide-react'
 import { API_BASE as BASE } from '../api.js'
+import { safeHref } from '../components/Markdown.js'
 
 interface Topic {
   id:              string
@@ -257,7 +258,7 @@ export default function ResearchEnginePage() {
                 <span className="text-[10px] text-faint">conf {(f.confidence * 100).toFixed(0)}%</span>
               </div>
               {f.summary && <div className="text-muted mt-1 line-clamp-2">{f.summary}</div>}
-              {f.url && <a href={f.url} target="_blank" rel="noreferrer" className="text-[10px] text-[var(--accent)] hover:underline">{new URL(f.url).hostname}</a>}
+              {f.url && <a href={safeHref(f.url)} target="_blank" rel="noreferrer" className="text-[10px] text-[var(--accent)] hover:underline">{new URL(f.url).hostname}</a>}
             </li>
           ))}
         </ul>

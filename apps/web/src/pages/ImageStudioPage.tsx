@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { studioApi, type ImageGenRecord, type PromptTemplate } from '../api.js'
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
+import { safeHref } from '../components/Markdown.js'
 
 const BRAND_CATEGORIES = [
   'icon', 'logo', 'hero', 'mockup', 'ad', 'social', 'thumbnail', 'ui_concept', 'landing', 'other',
@@ -341,7 +342,7 @@ function HistoryTile({ r, onRate, onFavorite, onCopy }: {
               <Copy className="w-3 h-3 text-muted hover:text-sky-400" />
             </button>
             {r.imageUrl && (
-              <a href={r.imageUrl} target="_blank" rel="noopener noreferrer" download title="Open/download">
+              <a href={safeHref(r.imageUrl)} target="_blank" rel="noopener noreferrer" download title="Open/download">
                 <Download className="w-3 h-3 text-muted hover:text-sky-400" />
               </a>
             )}
