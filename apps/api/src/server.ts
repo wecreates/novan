@@ -278,6 +278,41 @@ if (process.env['ENFORCE_GLOBAL_AUTH'] === 'true') {
     await authenticate(req, reply)
   })
   app.log.info('[auth] global auth enforcement ENABLED via ENFORCE_GLOBAL_AUTH=true')
+
+  // R146.29 — workspace-ID injection (IDOR) guard. With auth ON, a
+  // Bearer-token holder for workspace A could pass `workspace_id=B`
+  // in body or query and routes would happily write/read in B. The
+  // auth check confirmed "valid token" but not "matches requested
+  // workspace". Verified by live attack: token-for-default created
+  // a conversation in workspace `global` (201, row landed there).
+  //
+  // This preHandler runs AFTER authenticate. It compares
+  // req.workspaceId (set from the token claim) against any
+  // workspace_id present in body or query. Mismatch → 403.
+  //
+  // Public paths are skipped (operator must reach /bootstrap, etc).
+  // Dev-mode auto-auth sets req.workspaceId from the query, so
+  // requests always match naturally; the guard only bites when a
+  // real Bearer token is used to forge a cross-workspace request.
+  app.addHook('preHandler', async (req, reply) => {
+    const url = req.url.split('?')[0] ?? ''
+    if (isPublic(url)) return
+    const authWs = (req as unknown as { workspaceId?: string }).workspaceId
+    if (!authWs) return   // un-authed should have been caught by onRequest above
+    const body  = (req.body  as Record<string, unknown> | undefined) ?? undefined
+    const query = (req.query as Record<string, unknown> | undefined) ?? undefined
+    const requested =
+      (typeof body?.['workspace_id']  === 'string' ? body['workspace_id']  : undefined) ??
+      (typeof query?.['workspace_id'] === 'string' ? query['workspace_id'] : undefined)
+    if (requested !== undefined && requested !== authWs) {
+      req.log.warn({ authWs, requested, url }, '[auth] cross-workspace request rejected')
+      return reply.code(403).send({
+        success: false,
+        error: 'cross-workspace request denied',
+        detail: 'authenticated workspace does not match requested workspace_id',
+      })
+    }
+  })
 }
 
 // Swagger is optional — wrap so a CJS/JSON quirk in @fastify/swagger-ui doesn't crash boot
