@@ -13,7 +13,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z }                       from 'zod'
 import { v7 as uuidv7 }            from 'uuid'
 import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto'
-import { eq, and, desc }           from 'drizzle-orm'
+import { eq, and, desc, sql }      from 'drizzle-orm'
 import { db }                      from '../db/client.js'
 import { webhooks, webhookDeliveries, workflowDefinitions, workflowRuns, events } from '../db/schema.js'
 import { queues }                  from '../queues/index.js'
@@ -26,6 +26,38 @@ const createSchema = z.object({
 
 function generateSecret(): string {
   return 'whsec_' + randomBytes(32).toString('hex')
+}
+
+// R146.64 — in-process idempotency cache for webhook /trigger. Senders
+// (Stripe, GitHub, custom callbacks) retry on network failures and
+// re-deliver the same payload. Without dedup, every retry produces a
+// fresh deliveryId + fresh side effects (double-billing, double-event).
+// Key: hash(webhookId + signature). TTL 5 min — covers typical retry
+// windows. Bounded to 10k entries; oldest evicted FIFO.
+const RECENT_DELIVERIES = new Map<string, { deliveryId: string; expiresAt: number }>()
+const DEDUP_TTL_MS = 5 * 60_000
+const DEDUP_MAX    = 10_000
+
+function dedupKey(webhookId: string, signature: string | undefined): string | null {
+  if (!signature) return null
+  return createHmac('sha256', webhookId).update(signature).digest('hex').slice(0, 32)
+}
+
+function checkAndRecordDedup(webhookId: string, signature: string | undefined, deliveryId: string): string | null {
+  const key = dedupKey(webhookId, signature)
+  if (!key) return null
+  const now = Date.now()
+  // Sweep expired entries opportunistically.
+  if (RECENT_DELIVERIES.size > DEDUP_MAX) {
+    const firstKey = RECENT_DELIVERIES.keys().next().value
+    if (firstKey !== undefined) RECENT_DELIVERIES.delete(firstKey)
+  }
+  const existing = RECENT_DELIVERIES.get(key)
+  if (existing && existing.expiresAt > now) {
+    return existing.deliveryId   // signal: replay; return prior deliveryId
+  }
+  RECENT_DELIVERIES.set(key, { deliveryId, expiresAt: now + DEDUP_TTL_MS })
+  return null
 }
 
 function verifySignature(payload: string, secret: string, signature: string): boolean {
@@ -144,14 +176,29 @@ export const webhooksRoutes: FastifyPluginAsync = async (app) => {
     const deliveryId = uuidv7()
     const now = Date.now()
 
+    // R146.64 — idempotency. If the same (webhookId, signature) was
+    // processed in the last 5 min, return the prior deliveryId without
+    // re-running side effects. Only fires when a signature is present
+    // (most providers send one; legacy unauth-trigger paths skip dedup).
+    const sigHeader = (req.headers['x-webhook-signature'] ?? req.headers['x-hub-signature-256']) as string | undefined
+    const replayDeliveryId = checkAndRecordDedup(id, sigHeader, deliveryId)
+    if (replayDeliveryId) {
+      return reply.send({ success: true, data: { deliveryId: replayDeliveryId, replay: true } })
+    }
+
     // Record delivery
     await db.insert(webhookDeliveries).values({
       id: deliveryId, webhookId: id, workspaceId: wh.workspaceId,
       eventType, payload, createdAt: now,
     })
 
-    // Update call count
-    await db.update(webhooks).set({ callCount: wh.callCount + 1, lastCalledAt: now, updatedAt: now }).where(eq(webhooks.id, id))
+    // R146.64 — atomic increment. Was read-then-update which loses
+    // increments under concurrent webhook delivery (same race class as
+    // voiceSessions R146.39).
+    await db.update(webhooks).set({
+      callCount: sql`${webhooks.callCount} + 1`,
+      lastCalledAt: now, updatedAt: now,
+    }).where(eq(webhooks.id, id))
 
     // If workflow configured, trigger it
     let runId: string | undefined
