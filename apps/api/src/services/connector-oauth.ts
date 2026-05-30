@@ -161,6 +161,64 @@ export function stopConnectorOauthReaper(): void {
   clearInterval(REAP_TIMER)
 }
 
+// ─── R146.48: refresh-flow hazards + lock helper ─────────────────────────
+//
+// Audit finding: completeCallback stores the refresh_token in the vault
+// under `${connectorId}:${label}:refresh`, but NOTHING in the codebase
+// uses it. Connectors will silently break ~1hr after grant once provider
+// access tokens expire. When the operator wires up the refresh flow,
+// the implementation MUST satisfy ALL of the following or it will ship
+// the vulnerabilities this audit was looking for:
+//
+//   1. Concurrent-refresh race. Two callers seeing an expired access
+//      token will both POST refresh_token to the provider. Some
+//      providers issue a new refresh_token on success AND invalidate
+//      the old; the slower of the two callers will then have a stale
+//      access + a now-invalid refresh and the account is bricked.
+//      → Use refreshLock.runExclusive(accountId, ...) below.
+//
+//   2. Rotating refresh tokens. Google, Microsoft, GitHub all rotate
+//      refresh_token in the response when configured to. If you only
+//      replace the access secret, the next refresh fails with
+//      invalid_grant the moment the provider rotates. → On every
+//      successful refresh, rotateSecret() BOTH access AND (when present
+//      in the response) refresh secrets atomically before returning.
+//
+//   3. Revoked refresh tokens. Provider returns 400 invalid_grant when
+//      the user revoked access in their settings, or when the refresh
+//      hit its TTL. → Emit `connector.refresh_revoked` event + mark the
+//      connector account inactive + DO NOT delete the vault rows
+//      (operator must consciously re-grant; auto-delete is recoverable
+//      via re-OAuth but the audit trail matters).
+//
+//   4. Stored access tokens with no expiry tracking. Currently we store
+//      `expiresIn` (number of seconds) in account.metadata but the
+//      absolute `expiresAt = now + expiresIn*1000` is not derived
+//      anywhere. → Compute and store expiresAt at grant time; check it
+//      before every outbound provider call and refresh proactively.
+//
+//   5. Logging. The refresh response body contains the new access +
+//      refresh tokens. pino redaction (R38) handles structured logs, but
+//      console.error() and toString() do NOT. → Never log the response
+//      body verbatim; log only `{ ok, status, rotated_refresh: bool }`.
+
+const REFRESH_LOCKS = new Map<string, Promise<unknown>>()
+
+/** Per-account in-flight lock. The future refreshAccessToken implementation
+ *  MUST wrap its provider exchange + vault rotation in this. Subsequent
+ *  concurrent callers await the first one's result instead of issuing
+ *  parallel refresh exchanges (which can brick rotating-refresh providers). */
+export async function withRefreshLock<T>(accountId: string, fn: () => Promise<T>): Promise<T> {
+  const existing = REFRESH_LOCKS.get(accountId) as Promise<T> | undefined
+  if (existing) return existing
+  const p = (async () => {
+    try { return await fn() }
+    finally { REFRESH_LOCKS.delete(accountId) }
+  })()
+  REFRESH_LOCKS.set(accountId, p)
+  return p
+}
+
 // ── Start ─────────────────────────────────────────────────────────────
 
 export interface StartInput {
