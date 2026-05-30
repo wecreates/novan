@@ -1008,11 +1008,27 @@ async function runPortfolioReview() {
 async function runPromptEvolutionTick() {
   try {
     const { listSlots, evolvePrompt } = await import('./prompt-evolution.js')
+    const { db } = await import('../db/client.js')
+    const { killSwitches } = await import('../db/schema.js')
+    const { and, eq } = await import('drizzle-orm')
     const ids = await listWorkspaceIds()
     let evolved = 0
     let retired = 0
+    let skipped_ks = 0
     for (const ws of ids) {
       try {
+        // R146.52 — per-workspace ai_request kill_switch check. R14
+        // wired this into scheduled-production but prompt-evolution
+        // also issues an LLM call per workspace per tick (evolvePrompt
+        // mutates by sampling the existing prompt + asking the model
+        // to rewrite). When the operator pulls the AI kill_switch for
+        // emergency-stop, this loop should respect it too.
+        const ks = await db.select({ enabled: killSwitches.enabled })
+          .from(killSwitches)
+          .where(and(eq(killSwitches.workspaceId, ws), eq(killSwitches.switchType, 'ai_request')))
+          .limit(1).then(r => r[0]).catch(() => null)
+        if (ks?.enabled) { skipped_ks++; continue }
+
         const slots = await listSlots(ws)
         if (slots.length === 0) continue
         // Pick the slot with the highest totalUses that's also reasonably
@@ -1029,7 +1045,7 @@ async function runPromptEvolutionTick() {
         await emit('cron.prompt_evolution_failed', { workspaceId: ws, error: (e as Error).message })
       }
     }
-    await emit('cron.prompt_evolution_completed', { workspaces: ids.length, evolved, retired })
+    await emit('cron.prompt_evolution_completed', { workspaces: ids.length, evolved, retired, skipped_ks })
   } catch (e) { await emit('cron.error', { task: 'prompt_evolution', error: (e as Error).message }) }
 }
 

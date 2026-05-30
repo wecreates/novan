@@ -89,12 +89,17 @@ export function renderMarkdown(
 
     if (m.attachments && m.attachments.length > 0) {
       for (const a of m.attachments) {
-        const label = a.name ?? a.mime
-        // Inline data URLs are bulky — show a placeholder; http(s) links inlined.
+        // R146.52 — escape markdown link syntax in label + URL. Label is
+        // a.name ?? a.mime; a `]` in either breaks out of the link text
+        // bracket and could let an attacker plant `[fake](javascript:0)`
+        // even though our URL is R146.50-locked to https/data. Cheap to
+        // strip the structural chars on the markdown side.
+        const safeLabel = (a.name ?? a.mime).replace(/[\\[\]]/g, ' ').slice(0, 200)
+        const safeUrl   = a.url.replace(/[\s)<>]/g, '')   // URL has no whitespace; strip ) too so it can't close the link early
         if (a.url.startsWith('data:')) {
-          lines.push(`> 📎 ${label} *(inline ${a.kind}, ${a.sizeBytes ?? '?'} bytes)*`)
+          lines.push(`> 📎 ${safeLabel} *(inline ${a.kind}, ${a.sizeBytes ?? '?'} bytes)*`)
         } else {
-          lines.push(`> 📎 [${label}](${a.url})`)
+          lines.push(`> 📎 [${safeLabel}](${safeUrl})`)
         }
       }
     }
