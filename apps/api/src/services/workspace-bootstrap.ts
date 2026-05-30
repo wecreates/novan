@@ -385,6 +385,33 @@ export async function bootstrapWorkspace(workspaceId = 'default'): Promise<Boots
     promptSeedsInserted: 0,
   }
 
+  // R146.70 — ensure the workspace row itself exists. Pre-fix, bootstrap
+  // seeded all the CHILD tables (provider_configs, kill_switches, etc.)
+  // but never created the parent workspaces row. As a result, any code
+  // that inserted to a table with a FK to workspaces.id silently failed:
+  // events, audit-plugin rows (R146.66), quick-link issue (R146.69 e2e
+  // probe surfaced this), connector accounts, and anywhere else with
+  // workspace_id FK. Every silent-catch in those paths was hiding this.
+  // Insert with ON CONFLICT DO NOTHING so re-bootstrap is idempotent.
+  try {
+    const { workspaces } = await import('@ops/db')
+    await db.insert(workspaces).values({
+      id:        workspaceId,
+      name:      workspaceId === 'default' ? 'Default Workspace' : workspaceId,
+      slug:      workspaceId,
+      plan:      'free',
+      ownerId:   'operator',
+      settings:  {},
+      createdAt: now,
+      updatedAt: now,
+    }).onConflictDoNothing()
+  } catch (e) {
+    // Don't block bootstrap if this fails; child seeds may still succeed
+    // for an existing workspace. But log loudly so the operator can spot
+    // it in the boot trace.
+    console.error('[workspace-bootstrap] failed to ensure workspace row:', (e as Error).message)
+  }
+
   // Seed the prompt-evolution registry with the curated starter prompts
   // from the playbooks. Idempotent — re-running skips slots that already
   // have a version. Without this, usePrompt() returns null on first call
