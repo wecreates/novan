@@ -4,7 +4,7 @@
  *   POST /api/v1/auth/quick-link/issue   — laptop issues a token
  *   POST /api/v1/auth/quick-link/redeem  — phone exchanges token for session
  */
-import type { FastifyPluginAsync } from 'fastify'
+import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
 
 export const quickLinkRoutes: FastifyPluginAsync = async (app) => {
 
@@ -17,7 +17,7 @@ export const quickLinkRoutes: FastifyPluginAsync = async (app) => {
   // cookie/JWT — feature stub from R130) so impact today is zero, but
   // closing the hole before someone wires up actual session minting.
   app.post<{ Body: { workspace_id?: string; issued_by?: string } }>('/issue', async (req, reply) => {
-    type AuthFn = (req: typeof req, reply: typeof reply) => Promise<void>
+    type AuthFn = (req: FastifyRequest, reply: FastifyReply) => Promise<void>
     const authenticate = (app as unknown as { authenticate: AuthFn }).authenticate
     await authenticate(req, reply)
     if (reply.sent) return
@@ -34,8 +34,12 @@ export const quickLinkRoutes: FastifyPluginAsync = async (app) => {
     // (without trusting x-forwarded-* which an attacker on the network can set
     // freely). Operator should configure NOVAN_PUBLIC_URL once Caddy fronting
     // is finalized.
+    // req.protocol respects x-forwarded-proto when trust-proxy is on, so
+    // we don't rely on it; pick https vs http based on prod/dev convention,
+    // and let NOVAN_PUBLIC_URL override entirely.
+    const fallbackScheme = process.env['NODE_ENV'] === 'production' ? 'https' : 'http'
     const base = process.env['NOVAN_PUBLIC_URL']
-      ?? `${req.protocol}://${req.headers.host ?? 'localhost'}`
+      ?? `${fallbackScheme}://${req.headers.host ?? 'localhost'}`
     return reply.send({
       success: true,
       data: { token: out.token, expiresAt: out.expiresAt, link: `${base}/m/auth?t=${encodeURIComponent(out.token)}` },
