@@ -16,6 +16,7 @@ import {
   Volume2, VolumeX,
 } from 'lucide-react'
 import { api } from '../api.js'
+import { safeHref } from '../components/Markdown.js'
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
 import { useVoicePlayback } from '../hooks/useVoicePlayback.js'
 
@@ -852,11 +853,15 @@ function MessageBubble({ m }: { m: ChatMessage }) {
       {isUser && m.attachments && m.attachments.length > 0 && (
         <div className="mb-1.5 flex flex-wrap gap-1.5">
           {m.attachments.map((a, i) => (
+            // R146.63 — wrap attachment URLs with safeHref. R146.50 locked
+            // the API ingestion to https/data only, but old attachments
+            // from pre-R146.50 are still in the DB unchanged; rendering
+            // them raw allowed javascript:/data:text URLs through.
             a.kind === 'image'
-              ? <a key={i} href={a.url} target="_blank" rel="noreferrer" title={a.name ?? a.mime}>
-                  <img src={a.url} alt={a.name ?? ''} className="max-h-32 rounded border border-border object-cover" />
+              ? <a key={i} href={safeHref(a.url)} target="_blank" rel="noreferrer" title={a.name ?? a.mime}>
+                  <img src={safeHref(a.url)} alt={a.name ?? ''} className="max-h-32 rounded border border-border object-cover" />
                 </a>
-              : <a key={i} href={a.url} target="_blank" rel="noreferrer"
+              : <a key={i} href={safeHref(a.url)} target="_blank" rel="noreferrer"
                    className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 border border-border rounded bg-surface">
                   <FileText className="w-3 h-3" /> {a.name ?? a.mime}
                 </a>
