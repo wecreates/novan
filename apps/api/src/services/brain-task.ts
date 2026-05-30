@@ -1429,14 +1429,27 @@ const OPERATIONS: Record<string, OpSpec> = {
     },
   },
   'kill_switch.enable': {
-    description: 'Enable an autonomy kill switch (operator opts in). Params: switch_type (autonomous_writes|autonomous_deploys|destructive_migrations|external_communications)',
+    description: 'Enable an autonomy kill switch (operator opts in). Params: switch_type (autonomous_writes|autonomous_deploys|destructive_migrations|external_communications|ai_request)',
     risk: 'high',     // requires OPERATOR_APPROVED token
     handler: async (workspaceId, p) => {
       const { db } = await import('../db/client.js')
       const { sql: _sql } = await import('drizzle-orm')
       const sw = String(p['switch_type'] ?? '').trim()
       if (!sw) throw new Error('kill_switch.enable: switch_type required')
-      await db.execute(_sql`UPDATE kill_switches SET enabled = true, reason = ${'Enabled by operator at ' + new Date().toISOString()} WHERE workspace_id = ${workspaceId} AND switch_type = ${sw}`)
+      // R146.60 — allowlist + row-count check. Pre-fix: an unknown
+      // switch_type silently UPDATE'd 0 rows and returned ok:true,
+      // telling the operator the switch was engaged when nothing
+      // happened. Plus an LLM hallucination could pass arbitrary
+      // switch_type and never get told it was wrong.
+      const KNOWN_SWITCHES = new Set(['autonomous_writes', 'autonomous_deploys', 'destructive_migrations', 'external_communications', 'ai_request'])
+      if (!KNOWN_SWITCHES.has(sw)) {
+        throw new Error(`kill_switch.enable: unknown switch_type '${sw}' (known: ${[...KNOWN_SWITCHES].join('|')})`)
+      }
+      const res = await db.execute(_sql`UPDATE kill_switches SET enabled = true, reason = ${'Enabled by operator at ' + new Date().toISOString()} WHERE workspace_id = ${workspaceId} AND switch_type = ${sw} RETURNING switch_type`)
+      const rows = (res as unknown as { rows?: unknown[] }).rows ?? (Array.isArray(res) ? res as unknown[] : [])
+      if (rows.length === 0) {
+        throw new Error(`kill_switch.enable: no row found for workspace+switch_type (run a kill_switch.list first)`)
+      }
       return { ok: true, switch_type: sw, enabled: true }
     },
   },
@@ -1448,7 +1461,16 @@ const OPERATIONS: Record<string, OpSpec> = {
       const { sql: _sql } = await import('drizzle-orm')
       const sw = String(p['switch_type'] ?? '').trim()
       if (!sw) throw new Error('kill_switch.disable: switch_type required')
-      await db.execute(_sql`UPDATE kill_switches SET enabled = false, reason = ${'Disabled by operator at ' + new Date().toISOString()} WHERE workspace_id = ${workspaceId} AND switch_type = ${sw}`)
+      // R146.60 — same allowlist + row-count guard as enable.
+      const KNOWN_SWITCHES = new Set(['autonomous_writes', 'autonomous_deploys', 'destructive_migrations', 'external_communications', 'ai_request'])
+      if (!KNOWN_SWITCHES.has(sw)) {
+        throw new Error(`kill_switch.disable: unknown switch_type '${sw}' (known: ${[...KNOWN_SWITCHES].join('|')})`)
+      }
+      const res = await db.execute(_sql`UPDATE kill_switches SET enabled = false, reason = ${'Disabled by operator at ' + new Date().toISOString()} WHERE workspace_id = ${workspaceId} AND switch_type = ${sw} RETURNING switch_type`)
+      const rows = (res as unknown as { rows?: unknown[] }).rows ?? (Array.isArray(res) ? res as unknown[] : [])
+      if (rows.length === 0) {
+        throw new Error(`kill_switch.disable: no row found for workspace+switch_type`)
+      }
       return { ok: true, switch_type: sw, enabled: false }
     },
   },
