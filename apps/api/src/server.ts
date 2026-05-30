@@ -343,6 +343,32 @@ app.addHook('preHandler', async (req, reply) => {
   }
 })
 
+// R146.58 — workspace_id shape validator. Runs BEFORE the R146.30 IDOR
+// guard and BEFORE per-route handlers. Any presence of workspace_id in
+// body or query must match [A-Za-z0-9_-]{1,64} — alphanumeric + dash +
+// underscore. Catches NUL bytes, control characters, oversized strings,
+// non-ASCII workspace IDs that would otherwise reach DB INSERTs and
+// pollute the workspace dimension. Fires regardless of auth state, so
+// even with ENFORCE_GLOBAL_AUTH=false the surface is consistent.
+const WORKSPACE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/
+app.addHook('preHandler', async (req, reply) => {
+  const url = req.url.split('?')[0] ?? ''
+  if (isPublic(url)) return
+  const body  = (req.body  as Record<string, unknown> | undefined) ?? undefined
+  const query = (req.query as Record<string, unknown> | undefined) ?? undefined
+  for (const src of [body, query]) {
+    if (!src || !('workspace_id' in src)) continue
+    const v = src['workspace_id']
+    if (v === undefined || v === null) continue
+    if (typeof v !== 'string' || !WORKSPACE_ID_RE.test(v)) {
+      return reply.code(400).send({
+        success: false,
+        error: 'workspace_id must match [A-Za-z0-9_-]{1,64}',
+      })
+    }
+  }
+})
+
 // R146.41 — token-scope enforcement. The scopes column on apiTokens has
 // been stored + displayed since R35, but no route ever checked it. An
 // operator minting a 'read'-only token would still get full write power.
