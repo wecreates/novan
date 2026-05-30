@@ -165,9 +165,23 @@ export async function runTypecheck(
 export async function runLint(
   opts: { jobId: string; runId: string; workspaceId: string; cwd: string; files: string[] }
 ): Promise<VerifyResult> {
-  const args   = opts.files.length > 0 ? [...opts.files, '--max-warnings', '0'] : ['.', '--ext', '.ts,.tsx', '--max-warnings', '0']
+  // R146.46 — argument-injection guard. opts.files originates from the
+  // BullMQ job payload (autonomous-orchestrator data.changedFiles).
+  // The producer is internal code today, but a future producer bug OR a
+  // hostile Redis writer could inject `--config /tmp/evil.eslintrc.js`
+  // or `--rulesdir /path/to/rce` — eslint would happily load those and
+  // a malicious .eslintrc.js can require() arbitrary code at lint time
+  // → RCE. Filter to plain path-like strings before spawning.
+  const safeFiles = opts.files
+    .filter((f): f is string => typeof f === 'string' && f.length > 0 && f.length < 500)
+    .filter(f => !f.startsWith('-'))                // reject option-shaped entries
+    .filter(f => !f.includes('\0'))                 // reject NUL injection
+    .filter(f => !/[\r\n]/.test(f))                 // reject newlines
+  const args = safeFiles.length > 0
+    ? [...safeFiles, '--max-warnings', '0']
+    : ['.', '--ext', '.ts,.tsx', '--max-warnings', '0']
   const result = await runCommand('eslint', args, opts.cwd)
-  const id     = await persistEvidence(opts.jobId, opts.runId, opts.workspaceId, 'eslint', args, result, opts.files)
+  const id     = await persistEvidence(opts.jobId, opts.runId, opts.workspaceId, 'eslint', args, result, safeFiles)
   return { evidenceId: id, command: 'eslint', args, ...result, passed: result.exitCode === 0 }
 }
 

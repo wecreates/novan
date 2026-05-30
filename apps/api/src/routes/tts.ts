@@ -201,7 +201,12 @@ const ttsRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(code).send({ success: false, error: result.error, fallback: result.fallback })
     }
     reply.header('Content-Type', result.mime ?? 'audio/wav')
-    reply.header('X-Voice-Profile', speakerWav ?? 'default')
+    // R146.46 — speakerWav is voiceProfiles.refAudioPath, operator-typed
+    // at profile-create time. Node's http module rejects CRLF in header
+    // values with a 500-throw anyway, but defensive sanitize means a
+    // typo with embedded \r\n becomes a clean header rather than a crash.
+    const safeProfile = (speakerWav ?? 'default').replace(/[\r\n]/g, '').slice(0, 200)
+    reply.header('X-Voice-Profile', safeProfile)
     return reply.send(Buffer.from(result.audio!))
   })
 
