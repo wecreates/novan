@@ -29,6 +29,13 @@ const auditPluginImpl: FastifyPluginAsync = async (app) => {
     const workspaceId = req.workspaceId ?? 'unknown'
     const durationMs = reply.elapsedTime
 
+    // R146.66 — strip query string before persisting. The audit trail
+    // is long-lived; storing raw req.url would put any sensitive query
+    // param (OAuth `?code=`, `?state=`, quick-link `?t=`, etc) into the
+    // events table forever. Same safeUrl pattern as errorHandler.
+    const q = req.url.indexOf('?')
+    const safeUrl = q >= 0 ? req.url.slice(0, q) : req.url
+
     // Fire and forget — never block the response
     db.insert(events).values({
       id:            uuidv7(),
@@ -36,7 +43,7 @@ const auditPluginImpl: FastifyPluginAsync = async (app) => {
       workspaceId,
       payload:       {
         method:      req.method,
-        url:         req.url,
+        url:         safeUrl,
         statusCode:  reply.statusCode,
         durationMs:  Math.round(durationMs),
         requestId:   req.id,
