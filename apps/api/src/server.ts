@@ -233,7 +233,34 @@ await app.register(cors, {
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['content-type', 'authorization', 'x-workspace-id', 'x-trace-id'],
 })
-await app.register(helmet,      { contentSecurityPolicy: false })
+// R146.43 — CSP was disabled wholesale. Most API responses are JSON
+// (Content-Type: application/json), so CSP is moot for them — but a
+// handful of routes return HTML directly: /api/v1/enhancements/briefing.html,
+// the OAuth redirect templates in connectors.ts, the /docs Swagger UI.
+// A reflected-XSS slip in any of those would otherwise execute with full
+// privilege. The SPA itself is served by the separate novan-web-1
+// container with its own headers and is not affected by this policy.
+//
+// Defaults are tight: no inline scripts, no eval, no remote origins for
+// scripts/styles. 'unsafe-inline' is permitted on styles only because
+// the Swagger UI ships inline <style> blocks; if /docs is removed the
+// styleSrc can drop back to 'self'.
+await app.register(helmet, {
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: [`'self'`],
+      scriptSrc:  [`'self'`],
+      styleSrc:   [`'self'`, `'unsafe-inline'`],
+      imgSrc:     [`'self'`, 'data:', 'https:'],
+      connectSrc: [`'self'`],
+      fontSrc:    [`'self'`, 'data:'],
+      objectSrc:  [`'none'`],
+      frameAncestors: [`'none'`],
+      baseUri:    [`'self'`],
+      formAction: [`'self'`],
+    },
+  },
+})
 await app.register(rateLimit,   { max: 200, timeWindow: '1 minute' })
 
 await app.register(jwt,         { secret: process.env['AUTH_SECRET']! })
