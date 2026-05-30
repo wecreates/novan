@@ -170,12 +170,26 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{ Params: { id: string }; Body: { workspace_id?: string; reason?: string } }>('/actions/:id/reject', async (req, reply) => {
     const ws = req.body.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
-    await db.update(chatActions).set({
+    // R146.59 — only suggested actions can be rejected. /approve has the
+    // same guard at line 82; /reject was missing it. Without this, an
+    // operator (or buggy script) clicking reject after the action has
+    // already executed flips status to 'rejected' with the original
+    // executedActionId still populated — inconsistent state.
+    // .returning() lets us tell row-not-found apart from
+    // status-already-final without a separate SELECT.
+    const updated = await db.update(chatActions).set({
       status: 'rejected',
       decidedBy: 'operator', decidedAt: Date.now(),
       ...(req.body.reason ? { reason: req.body.reason } : {}),
-    }).where(and(eq(chatActions.workspaceId, ws), eq(chatActions.id, req.params.id)))
-      .catch((e: Error) => { console.error('[chat]', e.message); return null })
+    }).where(and(
+      eq(chatActions.workspaceId, ws),
+      eq(chatActions.id, req.params.id),
+      eq(chatActions.status, 'suggested'),
+    )).returning({ id: chatActions.id })
+      .catch((e: Error) => { console.error('[chat]', e.message); return [] as { id: string }[] })
+    if (updated.length === 0) {
+      return reply.code(409).send({ success: false, error: 'action not found or already finalized' })
+    }
     return { success: true }
   })
 
