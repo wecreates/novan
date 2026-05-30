@@ -12,7 +12,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z }                       from 'zod'
 import { v7 as uuidv7 }            from 'uuid'
-import { randomBytes, createHmac } from 'node:crypto'
+import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto'
 import { eq, and, desc }           from 'drizzle-orm'
 import { db }                      from '../db/client.js'
 import { webhooks, webhookDeliveries, workflowDefinitions, workflowRuns, events } from '../db/schema.js'
@@ -31,7 +31,14 @@ function generateSecret(): string {
 function verifySignature(payload: string, secret: string, signature: string): boolean {
   try {
     const expected = 'sha256=' + createHmac('sha256', secret).update(payload).digest('hex')
-    return expected === signature
+    // R146.33 — constant-time compare. The previous `expected === signature`
+    // short-circuited at the first byte mismatch, leaking the HMAC byte-by-byte
+    // via response timing. Length pre-check is required because timingSafeEqual
+    // throws on length mismatch (and a length mismatch is itself a clear reject).
+    const a = Buffer.from(expected, 'utf8')
+    const b = Buffer.from(signature, 'utf8')
+    if (a.length !== b.length) return false
+    return timingSafeEqual(a, b)
   } catch { return false }
 }
 
