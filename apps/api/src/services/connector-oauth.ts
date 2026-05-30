@@ -219,6 +219,121 @@ export async function withRefreshLock<T>(accountId: string, fn: () => Promise<T>
   return p
 }
 
+export type RefreshResult =
+  | { ok: true;  rotated_refresh: boolean; expires_at: number | null }
+  | { ok: false; reason: 'revoked' | 'no_refresh_secret' | 'no_provider' | 'no_client_creds' | 'http_error' | 'parse_error' | 'no_account'; status?: number }
+
+/**
+ * R146.49 — canonical refresh implementation. Closes every hazard
+ * enumerated in R146.48's comment block. Call sites:
+ *   await refreshAccessToken({ workspaceId, accountId, requestedBy })
+ * before any outbound provider call where the access token may have
+ * expired (check account.metadata.expiresAt < now + safetyMargin).
+ *
+ * SECURITY INVARIANTS this function maintains:
+ *   - Concurrent-refresh race          → withRefreshLock
+ *   - Rotating refresh tokens          → rotates BOTH access AND refresh
+ *                                        secrets when provider returns new
+ *                                        refresh_token; access-only otherwise
+ *   - Revoked refresh (400 inv_grant)  → marks account status='revoked',
+ *                                        emits event, leaves vault rows alone
+ *                                        so operator can investigate
+ *   - Absolute expiry tracking         → stamps metadata.expiresAt
+ *   - No token values in logs          → emits only { rotated_refresh, status }
+ */
+export async function refreshAccessToken(opts: {
+  workspaceId: string
+  accountId:   string
+  requestedBy: string
+}): Promise<RefreshResult> {
+  return withRefreshLock(opts.accountId, async () => {
+    const { getAccount, updateAccountStatus } = await import('./connectors.js')
+    const { revealSecret, rotateSecret } = await import('./secrets-vault.js')
+    const { db } = await import('../db/client.js')
+    const { secretsVault, connectorAccounts, events } = await import('../db/schema.js')
+    const { eq, and } = await import('drizzle-orm')
+
+    const account = await getAccount(opts.workspaceId, opts.accountId)
+    if (!account) return { ok: false, reason: 'no_account' }
+    const provider = OAUTH_PROVIDERS[account.connectorId]
+    if (!provider) return { ok: false, reason: 'no_provider' }
+    const clientId     = process.env[provider.clientIdEnv]
+    const clientSecret = process.env[provider.clientSecretEnv]
+    if (!clientId || !clientSecret) return { ok: false, reason: 'no_client_creds' }
+
+    // Locate refresh secret by name. completeCallback stored it as
+    // `${connectorId}:${label}:refresh`.
+    const refreshName = `${account.connectorId}:${account.label}:refresh`
+    const refreshRows = await db.select({ id: secretsVault.id })
+      .from(secretsVault)
+      .where(and(eq(secretsVault.workspaceId, opts.workspaceId), eq(secretsVault.name, refreshName)))
+      .limit(1).catch(() => [])
+    const refreshRow = refreshRows[0]
+    if (!refreshRow) return { ok: false, reason: 'no_refresh_secret' }
+
+    const refreshPlain = await revealSecret(refreshRow.id, opts.requestedBy, 'oauth refresh')
+    if (!refreshPlain) return { ok: false, reason: 'no_refresh_secret' }
+
+    const r = await fetch(provider.tokenUrl, {
+      method:  'POST',
+      headers: { 'accept': 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
+      body:    new URLSearchParams({
+        client_id:     clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshPlain,
+        grant_type:    'refresh_token',
+      }),
+    })
+    if (!r.ok) {
+      // 400 invalid_grant means the user revoked, or refresh TTL expired.
+      // Mark account revoked + emit, but leave vault rows for forensics.
+      if (r.status === 400 || r.status === 401) {
+        if (account.secretRef) await updateAccountStatus(opts.workspaceId, account.id, 'revoked')
+        await db.insert(events).values({
+          id: uuidv7(), type: 'connector.refresh_revoked', workspaceId: opts.workspaceId,
+          payload: { accountId: account.id, connectorId: account.connectorId, status: r.status },
+          traceId: uuidv7(), correlationId: account.id, causationId: null,
+          source: 'api/connector-oauth', version: 1, createdAt: Date.now(),
+        }).catch((e: Error) => { console.error('[connector-oauth] revoked-emit:', e.message); return null })
+        return { ok: false, reason: 'revoked', status: r.status }
+      }
+      return { ok: false, reason: 'http_error', status: r.status }
+    }
+    let tok: { access_token?: string; refresh_token?: string; expires_in?: number }
+    try { tok = await r.json() as typeof tok } catch { return { ok: false, reason: 'parse_error' } }
+    if (!tok.access_token) return { ok: false, reason: 'parse_error' }
+
+    // Rotate access (always). Rotate refresh only when the provider
+    // returned a new one — most rotating providers do; some (Slack,
+    // some older Google flows) reuse the same refresh indefinitely.
+    if (account.secretRef) {
+      await rotateSecret(account.secretRef, tok.access_token, opts.requestedBy)
+    }
+    const rotated_refresh = !!tok.refresh_token && tok.refresh_token !== refreshPlain
+    if (rotated_refresh) {
+      await rotateSecret(refreshRow.id, tok.refresh_token!, opts.requestedBy)
+    }
+
+    // Stamp absolute expiry into account.metadata for proactive refresh.
+    const expires_at = tok.expires_in ? Date.now() + (tok.expires_in * 1000) : null
+    const newMeta = { ...(account.metadata as Record<string, unknown> ?? {}), expiresAt: expires_at }
+    await db.update(connectorAccounts)
+      .set({ metadata: newMeta, updatedAt: Date.now() })
+      .where(eq(connectorAccounts.id, account.id))
+      .catch((e: Error) => { console.error('[connector-oauth] meta-update:', e.message); return null })
+
+    // Audit event — payload carries the metadata change ONLY, never the tokens.
+    await db.insert(events).values({
+      id: uuidv7(), type: 'connector.refresh_succeeded', workspaceId: opts.workspaceId,
+      payload: { accountId: account.id, connectorId: account.connectorId, rotated_refresh, expires_at },
+      traceId: uuidv7(), correlationId: account.id, causationId: null,
+      source: 'api/connector-oauth', version: 1, createdAt: Date.now(),
+    }).catch((e: Error) => { console.error('[connector-oauth] success-emit:', e.message); return null })
+
+    return { ok: true, rotated_refresh, expires_at }
+  })
+}
+
 // ── Start ─────────────────────────────────────────────────────────────
 
 export interface StartInput {
