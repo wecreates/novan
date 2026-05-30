@@ -186,7 +186,15 @@ const app = Fastify({
   requestIdHeader:        'x-request-id',
   requestIdLogLabel:      'requestId',
   disableRequestLogging:  false,
-  trustProxy:             true,
+  // R146.61 — trustProxy was wide-open `true`, which accepts
+  // x-forwarded-for from ANY caller. Attackers connecting directly to
+  // the API could spoof their client IP and bypass the per-IP rate
+  // limits (R37 auth, R146.27 chat-stream, R146.51 /me, /verify, etc).
+  // Restrict to: loopback (Caddy on the same host might proxy via
+  // 127.0.0.1), Docker default-bridge networks 172.16.0.0/12, and the
+  // overlay network 10.0.0.0/8. Tailscale clients hit the API directly
+  // without a proxy so they're unaffected.
+  trustProxy:             ['127.0.0.1', '::1', '10.0.0.0/8', '172.16.0.0/12'],
   // R146.28 — lower global JSON body limit from Fastify's 1MB default
   // to 256KB. 410 POST routes use Fastify; only 1 had an explicit
   // bodyLimit before R146.27. Between 256KB and 1MB every request was
