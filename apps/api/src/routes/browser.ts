@@ -18,23 +18,28 @@ import {
 } from '@ops/policy-engine'
 import type { AutonomyLevel }      from '@ops/policy-engine'
 import type { WorkspaceId }        from '@ops/shared-types'
+import { isInternalHost }          from '../services/image-storage.js'
 
 // ─── Validation helpers ───────────────────────────────────────────────────────
 
-const BLOCKED_HOSTS = new Set([
-  'localhost', '127.0.0.1', '0.0.0.0', '::1',
-  '169.254.169.254',  // AWS metadata
-])
-
+// R146.45 — broadened blocklist + reuses isInternalHost from R146.37
+// (image-storage SSRF defense). Previous local check missed:
+//   - internal Docker hostnames (novan-redis-1, novan-postgres-1, etc)
+//   - .local / .internal TLDs
+//   - IPv6 loopback + link-local + ULA (::1, fe80::/10, fc00::/7)
+//   - full 127.0.0.0/8 (not just 127.0.0.1)
+//   - 0.0.0.0/8 reserved range
+// Also explicitly rejects non-http(s) schemes (file:, gopher:, data:)
+// which Playwright will happily navigate.
 function isBlockedUrl(url: string): boolean {
   try {
-    const { hostname } = new URL(url)
-    if (BLOCKED_HOSTS.has(hostname)) return true
-    // Block private CIDR ranges
-    if (/^10\./.test(hostname))          return true
-    if (/^192\.168\./.test(hostname))    return true
-    if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return true
-    return false
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return true
+    // Empty hostname (e.g. file:///path) is unreachable yet doesn't match
+    // any blocklist entry — reject explicitly.
+    if (!parsed.hostname) return true
+    // Defer to the shared SSRF predicate (R146.37 image-storage).
+    return isInternalHost(parsed.hostname)
   } catch {
     return true
   }
