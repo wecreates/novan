@@ -500,7 +500,12 @@ export async function completeCallback(input: CallbackInput): Promise<CallbackRe
     throw new Error(`OAuth token exchange network error: ${e.message}`)
   })
   if (!resp.ok) {
-    throw new Error(`OAuth token exchange ${resp.status}: ${(await resp.text().catch(() => '')).slice(0, 300)}`)
+    // R146.65 — do NOT echo the provider response body into the error
+    // message. A misconfigured provider could include the request body
+    // (client_secret + refresh_token) in its 4xx response; that error
+    // string then flows into errorHandler.send and reaches the operator
+    // UI / logs. Keep the status code; drop the body.
+    throw new Error(`OAuth token exchange failed with status ${resp.status}`)
   }
   const tok = await resp.json() as TokenResponse
   // Slack returns success in nested authed_user.access_token for v2;

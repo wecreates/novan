@@ -76,12 +76,28 @@ const errorHandlerImpl: FastifyPluginAsync = async (app) => {
       })()
     }
 
+    // R146.65 — credential-pattern redactor on outbound error messages.
+    // 5xx in prod was already opaque, but 4xx returned error.message
+    // verbatim. A handler throwing a message that quotes an upstream
+    // response (OAuth body, third-party API echo, DB error with the
+    // failing row) could leak Bearer tokens, refresh_tokens,
+    // client_secrets, or API keys into the operator UI. Apply the same
+    // pattern set R38 wired into pino redaction.
+    const redactErrMsg = (s: string): string => s
+      .replace(/Bearer\s+[A-Za-z0-9._\-]{12,}/gi,            'Bearer [REDACTED]')
+      .replace(/(client_secret|refresh_token|access_token|api[_-]?key|password|secret|token)["'\s:=]+[A-Za-z0-9._/\-+=]{8,}/gi, '$1=[REDACTED]')
+      .replace(/sk-[A-Za-z0-9]{16,}/g, '[REDACTED-openai-key]')
+      .replace(/AIza[A-Za-z0-9_-]{32,}/g, '[REDACTED-google-key]')
+      .replace(/gsk_[A-Za-z0-9]{16,}/g, '[REDACTED-groq-key]')
+    const errMsg = isProd && statusCode >= 500
+      ? 'Internal server error'
+      : redactErrMsg(error.message)
     return reply.status(statusCode).send({
       success:   false,
-      error:     isProd && statusCode >= 500 ? 'Internal server error' : error.message,
+      error:     errMsg,
       code:      (error as { code?: string }).code ?? 'INTERNAL_ERROR',
       requestId: req.id,
-      ...(isProd ? {} : { stack: error.stack }),
+      ...(isProd ? {} : { stack: error.stack ? redactErrMsg(error.stack) : undefined }),
     })
   })
 }
