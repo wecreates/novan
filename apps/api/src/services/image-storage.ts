@@ -31,6 +31,37 @@ export function s3Configured(): boolean {
  *  malicious URL from filling the disk in one call. */
 const MAX_IMAGE_BYTES = 50 * 1024 * 1024
 
+/** R146.37 — SSRF guard. Block obviously-internal targets before the
+ *  fetch even happens. Live-confirmed pre-patch that fetchBytes would
+ *  reach http://127.0.0.1:3001 (the API's own loopback), internal Docker
+ *  hostnames like novan-redis-1, and link-local (169.254.169.254 metadata).
+ *
+ *  Residual risk we explicitly accept:
+ *    - DNS rebind: a hostname that resolves public then re-resolves
+ *      private mid-fetch. Mitigated only by custom dispatcher; out of
+ *      scope here.
+ *    - Redirects to internal targets. fetch() default redirect: 'follow';
+ *      we use redirect: 'error' below so any redirect throws — image
+ *      providers (Gemini/OpenAI/Replicate) all return 200 direct, so
+ *      this doesn't break legit traffic. */
+function isInternalHost(hostname: string): boolean {
+  const h = hostname.toLowerCase()
+  if (h === 'localhost' || h === '' || h.endsWith('.local') || h.endsWith('.internal')) return true
+  if (h.startsWith('novan-') || h === 'postgres' || h === 'redis') return true
+  // IPv4 literal — block private + loopback + link-local + 0.0.0.0
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (m) {
+    const [, a, b] = m.map(Number) as [number, number, number, number, number]
+    if (a === 0 || a === 10 || a === 127) return true
+    if (a === 169 && b === 254) return true
+    if (a === 172 && b >= 16 && b <= 31) return true
+    if (a === 192 && b === 168) return true
+  }
+  // IPv6 literal — block loopback + link-local + ULA + bracketed forms
+  if (h === '::1' || h === '[::1]' || h.startsWith('[fe80:') || h.startsWith('[fc') || h.startsWith('[fd') || h === '::') return true
+  return false
+}
+
 async function fetchBytes(url: string): Promise<Buffer> {
   // Data URL passthrough
   if (url.startsWith('data:')) {
@@ -44,7 +75,16 @@ async function fetchBytes(url: string): Promise<Buffer> {
     }
     return buf
   }
-  const res = await fetch(url, { signal: AbortSignal.timeout(60_000) })
+  // R146.37 — SSRF guard: scheme + host allowlist before fetch.
+  let parsed: URL
+  try { parsed = new URL(url) } catch { throw new Error('invalid url') }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`scheme not allowed: ${parsed.protocol}`)
+  }
+  if (isInternalHost(parsed.hostname)) {
+    throw new Error(`internal host blocked: ${parsed.hostname}`)
+  }
+  const res = await fetch(url, { signal: AbortSignal.timeout(60_000), redirect: 'error' })
   if (!res.ok) throw new Error(`fetch ${res.status}`)
   // Pre-check Content-Length when present. Catches large payloads before
   // we materialize them in memory.
