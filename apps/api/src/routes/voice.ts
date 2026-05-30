@@ -19,7 +19,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
 import { voiceSessions, voiceEvents, voiceDryRuns } from '../db/schema.js'
-import { and, eq, desc } from 'drizzle-orm'
+import { and, eq, desc, sql } from 'drizzle-orm'
 import { v7 as uuidv7 } from 'uuid'
 import {
   PROVIDER_CATALOGUE, configureSpeechProvider, listProviders,
@@ -213,19 +213,20 @@ const voiceRoutes: FastifyPluginAsync = async (fastify) => {
       createdAt:    Date.now(),
     })
     // Side effects: failover/block counters + provider health
-    // R146.31 — scope session lookups/updates by workspace_id (was unscoped:
-    // any auth'd caller could increment counters on another workspace's
-    // session row by guessing the UUID).
+    // R146.31 — scope session lookups/updates by workspace_id.
+    // R146.39 — convert read-then-increment to atomic SQL `x = x + 1`
+    // so concurrent failover/block events on the same session don't
+    // under-count (last-write-wins on the previous TOCTOU pattern).
     const sessionScope = and(eq(voiceSessions.id, req.params.id), eq(voiceSessions.workspaceId, b.workspace_id))
     if (b.kind === 'failover') {
       await db.update(voiceSessions)
-        .set({ failoverCount: (await db.select().from(voiceSessions).where(sessionScope).limit(1).then(r => r[0]?.failoverCount ?? 0) ?? 0) + 1 })
+        .set({ failoverCount: sql`${voiceSessions.failoverCount} + 1` })
         .where(sessionScope).catch((e: Error) => { console.error('[voice]', e.message); return null })
       if (b.provider) await recordProviderHealth(b.workspace_id, b.provider, false, b.latency_ms ?? 0, 'failover').catch((e: Error) => { console.error('[voice]', e.message); return null })
     }
     if (b.kind === 'block') {
-      const cur = await db.select().from(voiceSessions).where(sessionScope).limit(1).then(r => r[0]?.blockedCommands ?? 0) ?? 0
-      await db.update(voiceSessions).set({ blockedCommands: cur + 1 })
+      await db.update(voiceSessions)
+        .set({ blockedCommands: sql`${voiceSessions.blockedCommands} + 1` })
         .where(sessionScope).catch((e: Error) => { console.error('[voice]', e.message); return null })
     }
     if (b.kind === 'tts' && b.provider && typeof b.latency_ms === 'number') {

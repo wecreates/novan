@@ -25,6 +25,20 @@ export const pushRoutes: FastifyPluginAsync = async (app) => {
     if (!ws || !s?.endpoint || !s.keys?.p256dh || !s.keys?.auth) {
       return reply.code(400).send({ success: false, error: 'workspace_id + subscription{endpoint,keys{p256dh,auth}} required' })
     }
+    // R146.39 — reject internal-host endpoints at registration so we never
+    // even persist an SSRF target. sendPushOne also has a defense-in-depth
+    // check, but stopping at the door is cleaner.
+    let parsedEp: URL
+    try { parsedEp = new URL(s.endpoint) } catch {
+      return reply.code(400).send({ success: false, error: 'invalid subscription.endpoint URL' })
+    }
+    if (parsedEp.protocol !== 'https:') {
+      return reply.code(400).send({ success: false, error: 'subscription.endpoint must be https' })
+    }
+    const { isInternalHost } = await import('../services/image-storage.js')
+    if (isInternalHost(parsedEp.hostname)) {
+      return reply.code(400).send({ success: false, error: `internal host blocked: ${parsedEp.hostname}` })
+    }
     const { recordSubscription } = await import('../services/web-push.js')
     await recordSubscription(ws, { endpoint: s.endpoint, keys: { p256dh: s.keys.p256dh, auth: s.keys.auth } }, b.user_agent)
     return reply.send({ success: true })

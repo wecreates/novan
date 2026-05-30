@@ -44,7 +44,7 @@ const MAX_IMAGE_BYTES = 50 * 1024 * 1024
  *      we use redirect: 'error' below so any redirect throws — image
  *      providers (Gemini/OpenAI/Replicate) all return 200 direct, so
  *      this doesn't break legit traffic. */
-function isInternalHost(hostname: string): boolean {
+export function isInternalHost(hostname: string): boolean {
   const h = hostname.toLowerCase()
   if (h === 'localhost' || h === '' || h.endsWith('.local') || h.endsWith('.internal')) return true
   if (h.startsWith('novan-') || h === 'postgres' || h === 'redis') return true

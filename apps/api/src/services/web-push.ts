@@ -208,6 +208,25 @@ export async function sendPushOne(sub: PushSubscription, payload: PushPayload): 
   // This avoids implementing the AES-128-GCM + HKDF dance here.
   // Trade-off: notifications don't carry per-message text; the SW
   // hits /api/v1/push/latest to pull the most recent payload.
+  // R146.39 — SSRF guard. /subscribe took the endpoint URL from request body
+  // and persisted it; sendPushOne then fetch()ed it with a VAPID-signed
+  // Authorization header. An attacker could register
+  // http://novan-redis-1:6379/FLUSHALL as their endpoint and turn any
+  // push broadcast into an outbound POST to internal Docker services.
+  // Same predicate as R146.37 image-storage.
+  let parsedEp: URL
+  try { parsedEp = new URL(sub.endpoint) } catch {
+    return { endpoint: sub.endpoint, ok: false, error: 'invalid endpoint URL' }
+  }
+  if (parsedEp.protocol !== 'https:') {
+    // Real push services (FCM, Mozilla autopush, etc) are ALL https.
+    // Block http entirely — eliminates a whole SSRF class.
+    return { endpoint: sub.endpoint, ok: false, error: 'non-https endpoint rejected' }
+  }
+  const { isInternalHost } = await import('./image-storage.js')
+  if (isInternalHost(parsedEp.hostname)) {
+    return { endpoint: sub.endpoint, ok: false, error: `internal host blocked: ${parsedEp.hostname}` }
+  }
   try {
     const res = await fetch(sub.endpoint, {
       method: 'POST',
@@ -217,6 +236,7 @@ export async function sendPushOne(sub: PushSubscription, payload: PushPayload): 
         Urgency: 'normal',
         Topic: payload.tag ?? 'novan',
       },
+      redirect: 'error',
     })
     return { endpoint: sub.endpoint, ok: res.ok, status: res.status, ...(res.ok ? {} : { error: await res.text().catch(() => '') }) }
     // void body for now — payload pulled via /push/latest by the SW.
