@@ -625,6 +625,11 @@ const runtimeRegistryRoutes: FastifyPluginAsync = async (app) => {
       .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[runtime-registry]', e.message); return null })
     if (!lease) return reply.code(404).send({ success: false, error: 'lease not found' })
 
+    // R146.38 — global SSE concurrent-stream cap.
+    const { sseSlots } = await import('../services/sse-limit.js')
+    if (!sseSlots.tryAcquire()) {
+      return reply.code(503).send({ success: false, error: 'too many open streams, retry shortly' })
+    }
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -635,7 +640,7 @@ const runtimeRegistryRoutes: FastifyPluginAsync = async (app) => {
     // Hydrate from recent history first
     let since = Date.now() - 5 * 60_000
     let alive = true
-    req.raw.on('close', () => { alive = false })
+    req.raw.on('close', () => { alive = false; sseSlots.release() })
 
     async function flush() {
       const rows = await db.select().from(events)

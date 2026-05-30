@@ -20,6 +20,11 @@ export const streamRoutes: FastifyPluginAsync = async (app) => {
     // breaks credentialed SSE (browsers reject wildcard + credentials),
     // so omit it — the plugin's header is applied to streaming responses
     // the same as any other.
+    // R146.38 — global SSE concurrent-stream cap.
+    const { sseSlots } = await import('../services/sse-limit.js')
+    if (!sseSlots.tryAcquire()) {
+      return reply.code(503).send({ success: false, error: 'too many open streams, retry shortly' })
+    }
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -59,6 +64,7 @@ export const streamRoutes: FastifyPluginAsync = async (app) => {
       req.raw.on('close', () => {
         clearInterval(poll)
         clearInterval(heartbeat)
+        sseSlots.release()
         resolve()
       })
     })

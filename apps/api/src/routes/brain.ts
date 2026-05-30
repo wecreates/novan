@@ -259,6 +259,11 @@ const brainRoutes: FastifyPluginAsync = async (fastify) => {
     const ws = req.query.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
 
+    // R146.38 — global SSE concurrent-stream cap.
+    const { sseSlots } = await import('../services/sse-limit.js')
+    if (!sseSlots.tryAcquire()) {
+      return reply.code(503).send({ success: false, error: 'too many open streams, retry shortly' })
+    }
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -268,7 +273,7 @@ const brainRoutes: FastifyPluginAsync = async (fastify) => {
 
     let last = Date.now()
     let alive = true
-    req.raw.on('close', () => { alive = false })
+    req.raw.on('close', () => { alive = false; sseSlots.release() })
 
     // Initial graph snapshot
     const graph = await buildGraph(ws, 'neural')

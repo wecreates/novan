@@ -224,6 +224,13 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
     const vres = validateAttachments(b.attachments)
     if (!vres.ok) return reply.code(400).send({ success: false, error: vres.reason })
 
+    // R146.38 — global SSE concurrent-stream cap. Per-route rate-limit
+    // (30/min) doesn't bound how many streams stay OPEN concurrently;
+    // probe showed 50 long-lived streams opened cleanly.
+    const { sseSlots } = await import('../services/sse-limit.js')
+    if (!sseSlots.tryAcquire()) {
+      return reply.code(503).send({ success: false, error: 'too many open streams, retry shortly' })
+    }
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -236,7 +243,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
     // AbortController.abort() which closes the socket; we observe that
     // via the `close` event and flip cancelled=true.
     let cancelled = false
-    req.raw.on('close', () => { cancelled = true })
+    req.raw.on('close', () => { cancelled = true; sseSlots.release() })
 
     try {
       for await (const ev of chatTurn({

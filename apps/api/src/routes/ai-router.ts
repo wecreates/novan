@@ -623,6 +623,11 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
       endpointId: req.params.id, name: rows[0].name, model, taskType: 'fast_chat', streaming: true,
     })
 
+    // R146.38 — global SSE concurrent-stream cap.
+    const { sseSlots } = await import('../services/sse-limit.js')
+    if (!sseSlots.tryAcquire()) {
+      return reply.code(503).send({ success: false, error: 'too many open streams, retry shortly' })
+    }
     reply.raw.writeHead(200, {
       'Content-Type':  'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -636,7 +641,7 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
     // into remoteChatStream so the underlying provider fetch is cancelled.
     let cancelled = false
     const abortCtl = new AbortController()
-    req.raw.on('close', () => { cancelled = true; abortCtl.abort() })
+    req.raw.on('close', () => { cancelled = true; abortCtl.abort(); sseSlots.release() })
 
     const t0 = Date.now()
     let _fullContent = ''
