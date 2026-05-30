@@ -307,7 +307,12 @@ const studioRoutes: FastifyPluginAsync = async (fastify) => {
   // here — the reference is stored as a URL on the generation row so the
   // selected provider can pull it. Operators paste / drop images in the
   // workspace; the canvas converts them to data URLs client-side.
-  fastify.post<{ Body: { workspace_id?: string; data_url?: string; url?: string; kind?: string } }>('/reference', async (req, reply) => {
+  // R146.28 — per-route bodyLimit override. Server global is 256KB
+  // (set in server.ts) which works for everything else; reference
+  // uploads can be up to 4.5MB base64 image data.
+  fastify.post<{ Body: { workspace_id?: string; data_url?: string; url?: string; kind?: string } }>('/reference', {
+    bodyLimit: 5 * 1024 * 1024,
+  }, async (req, reply) => {
     const ws = req.body.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     const src = req.body.data_url ?? req.body.url

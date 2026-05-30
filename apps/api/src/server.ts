@@ -187,6 +187,15 @@ const app = Fastify({
   requestIdLogLabel:      'requestId',
   disableRequestLogging:  false,
   trustProxy:             true,
+  // R146.28 — lower global JSON body limit from Fastify's 1MB default
+  // to 256KB. 410 POST routes use Fastify; only 1 had an explicit
+  // bodyLimit before R146.27. Between 256KB and 1MB every request was
+  // fully parsed + handled even when the handler immediately rejected
+  // — wasted JSON parsing, useless DB hits, the cost-DoS class R146.27
+  // surfaced on /chat/stream applied generically. 256KB covers ~99%
+  // of routes; the few that legitimately need more (image /reference
+  // accepts up to ~4.5MB base64) opt in via per-route `bodyLimit`.
+  bodyLimit: 256 * 1024,
 })
 
 // ─── Register plugins ──────────────────────────────────────────────────────────
