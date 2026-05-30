@@ -139,16 +139,36 @@ const enhancementRoutes: FastifyPluginAsync = async (fastify) => {
   })
 }
 
+/** R146.51 — small HTML-attribute escape. Used on any string flowing
+ *  into text-context or attribute-context positions in the template. */
+function escHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 /** Render a printable HTML briefing. Operator's browser handles Save-as-PDF. */
 function renderBriefingHtml(title: string, workspaceId: string, data: Record<string, unknown>): string {
-  const safeJson = JSON.stringify(data, null, 2)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const safeJson = escHtml(JSON.stringify(data, null, 2))
   const generated = new Date().toISOString()
+  // R146.51 — escape every dynamic value flowing into HTML text contexts.
+  // Previously workspaceId was interpolated raw (XSS via the query
+  // string), and the inline onclick handlers below were silently broken
+  // by R146.43's CSP (script-src-attr 'none'). Removed the buttons —
+  // Ctrl+P is universal, the Back button just shadowed the browser's
+  // back action. The CSP stays tight; the only loss is two ornamental
+  // buttons.
+  const safeTitle = escHtml(title)
+  const safeWs    = escHtml(workspaceId)
+  const safeGen   = escHtml(generated)
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Novan ${title}</title>
+<title>Novan ${safeTitle}</title>
 <style>
   @page { size: letter; margin: 0.5in; }
   body {
@@ -173,29 +193,17 @@ function renderBriefingHtml(title: string, workspaceId: string, data: Record<str
     white-space: pre-wrap;
     word-break: break-word;
   }
-  .actions { margin: 14px 0; }
-  .actions button {
-    font: inherit;
-    padding: 6px 12px;
-    border: 1px solid #ddd;
-    background: #fff;
-    border-radius: 4px;
-    cursor: pointer;
-    margin-right: 8px;
-  }
+  .hint { color: #666; font-size: 11px; margin: 14px 0; }
   @media print {
-    .actions { display: none; }
+    .hint { display: none; }
     body { padding: 0; }
   }
 </style>
 </head>
 <body>
-  <h1>${title}</h1>
-  <div class="meta">Workspace: ${workspaceId} · Generated: ${generated}</div>
-  <div class="actions">
-    <button onclick="window.print()">Save as PDF</button>
-    <button onclick="window.history.back()">Back</button>
-  </div>
+  <h1>${safeTitle}</h1>
+  <div class="meta">Workspace: ${safeWs} · Generated: ${safeGen}</div>
+  <div class="hint">Press <kbd>Ctrl</kbd>+<kbd>P</kbd> (or <kbd>⌘</kbd>+<kbd>P</kbd>) to save as PDF.</div>
   <h2>Briefing Data (full payload, evidence-based)</h2>
   <pre>${safeJson}</pre>
 </body>

@@ -227,8 +227,21 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     })
   })
 
-  // GET /me — resolve current workspace from Authorization header
-  app.get('/me', async (req, reply) => {
+  // GET /me — resolve current workspace from Authorization header.
+  //
+  // R146.51 — scope note: this handler only resolves ops_ API tokens
+  // (it sha256s the bearer and looks up apiTokens). JWT-auth requests
+  // (Bearer eyJ…) sha256 to a value that's never in the table, so they
+  // get a uniform 401. JWT identity is exposed only via the global
+  // authenticate plugin on per-route req.userId; there is no
+  // JWT-specific /me endpoint. If you need one, factor the
+  // jwtVerify+row.workspaceId resolution out of the plugin.
+  //
+  // Rate-limit added at parity with /verify (20/min/IP). The route is
+  // a token-presence oracle — a probe whose request returns 401 vs 200
+  // discloses whether the candidate hash exists in apiTokens. Global
+  // 200/min was the only cap; tightened here.
+  app.get('/me', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
     const authHeader = req.headers['authorization']
     if (!authHeader?.startsWith('Bearer ')) {
       return reply.status(401).send({ success: false, error: 'Missing Bearer token' })
