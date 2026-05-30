@@ -593,7 +593,13 @@ const runtimeRegistryRoutes: FastifyPluginAsync = async (app) => {
       if (!lease) return reply.code(404).send({ success: false, error: 'lease not found' })
 
       const ok      = req.body.ok ?? true
-      const costUsd = Number(req.body.costUsd ?? 0)
+      // R146.35 — guard NaN + Infinity from untrusted worker callback.
+      // Workers are Tailscale-gated but unauthenticated; a hostile or
+      // buggy worker reporting costUsd=NaN would poison sum() aggregates
+      // forever (Postgres numeric accepts NaN, sum(... + NaN) = NaN).
+      // Infinity would 500 the route. Clamp to [0, 10000] USD per job.
+      const rawCost = Number(req.body.costUsd ?? 0)
+      const costUsd = Number.isFinite(rawCost) ? Math.max(0, Math.min(10_000, rawCost)) : 0
       if (ok) {
         await releaseLease(lease.id, lease.workspaceId, costUsd)
         await emit(lease.workspaceId, 'remote.job.completed', {

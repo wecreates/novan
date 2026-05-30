@@ -262,8 +262,15 @@ const blueprintRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{ Body: { workspace_id?: string; pool_usd?: number } }>('/holding-co/allocate-capital', async (req, reply) => {
     const b = req.body ?? {}
     if (!b.workspace_id || !b.pool_usd) return reply.code(400).send({ success: false, error: 'workspace_id + pool_usd required' })
+    // R146.35 — NaN/Infinity guard. pool_usd was Number()d directly into
+    // allocateCapital which then divides shares — Infinity would silently
+    // emit Infinity allocations, NaN would poison every downstream sum.
+    const pool = Number(b.pool_usd)
+    if (!Number.isFinite(pool) || pool <= 0 || pool > 1e9) {
+      return reply.code(400).send({ success: false, error: 'pool_usd must be a finite positive number ≤ 1e9' })
+    }
     const { allocateCapital } = await import('../services/holding-co.js')
-    return { success: true, data: await allocateCapital({ workspaceId: b.workspace_id, allocationPoolUsd: Number(b.pool_usd) }) }
+    return { success: true, data: await allocateCapital({ workspaceId: b.workspace_id, allocationPoolUsd: pool }) }
   })
 
   // ── Pipeline adapters ────────────────────────────────────────────
