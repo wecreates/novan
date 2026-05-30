@@ -250,26 +250,24 @@ await app.register(authPlugin)
 // prefix. Failed attempt history: R146.23 enabled this unconditionally
 // and broke chat because the PWA hadn't been bootstrapped yet — see
 // runbook gotcha #11 for the full lesson.
+// R146.27 — public path predicates. Original R146.25 used a flat
+// string-prefix list, which over-exempted `/api/v1/webhooks` —
+// matching the public `/trigger` sub-path also matched `POST /`
+// (create), `GET /` (list), `DELETE /:id`, etc, leaving the CRUD
+// surface unauthenticated. Now each rule is a predicate: webhooks
+// explicitly only exempts paths ending in `/trigger`.
+const isPublic = (url: string): boolean => {
+  if (url === '/health'         || url.startsWith('/health/'))         return true
+  if (url === '/api/v1/health'  || url.startsWith('/api/v1/health/'))  return true
+  if (url === '/metrics'        || url.startsWith('/metrics/'))        return true
+  if (url === '/docs'           || url.startsWith('/docs/'))           return true
+  if (url.startsWith('/api/v1/auth/quick-link'))                       return true
+  if (url === '/api/v1/auth/bootstrap')                                return true
+  if (/^\/api\/v1\/webhooks\/[a-z0-9-]+\/trigger$/i.test(url))         return true
+  return false
+}
+
 if (process.env['ENFORCE_GLOBAL_AUTH'] === 'true') {
-  // R146.27 — public path predicates. Original R146.25 used a flat
-  // string-prefix list, which over-exempted `/api/v1/webhooks` —
-  // matching the public `/trigger` sub-path also matched `POST /`
-  // (create), `GET /` (list), `DELETE /:id`, etc, leaving the CRUD
-  // surface unauthenticated. Now each rule is a predicate: webhooks
-  // explicitly only exempts paths ending in `/trigger`. External
-  // HMAC-signed callers still get through; the rest get auth-gated.
-  const isPublic = (url: string): boolean => {
-    if (url === '/health'         || url.startsWith('/health/'))         return true
-    if (url === '/api/v1/health'  || url.startsWith('/api/v1/health/'))  return true
-    if (url === '/metrics'        || url.startsWith('/metrics/'))        return true
-    if (url === '/docs'           || url.startsWith('/docs/'))           return true
-    if (url.startsWith('/api/v1/auth/quick-link'))                       return true
-    if (url === '/api/v1/auth/bootstrap')                                return true   // R146.24 — operator must reach without token
-    // Webhook inbound trigger: matches /api/v1/webhooks/<id>/trigger
-    // ONLY. CRUD endpoints (POST /, GET /, DELETE /:id) require auth.
-    if (/^\/api\/v1\/webhooks\/[a-z0-9-]+\/trigger$/i.test(url))         return true
-    return false
-  }
   type AuthFn = (req: FastifyRequest, reply: FastifyReply) => Promise<void>
   const authenticate = (app as unknown as { authenticate: AuthFn }).authenticate
   app.addHook('onRequest', async (req, reply) => {
@@ -278,42 +276,38 @@ if (process.env['ENFORCE_GLOBAL_AUTH'] === 'true') {
     await authenticate(req, reply)
   })
   app.log.info('[auth] global auth enforcement ENABLED via ENFORCE_GLOBAL_AUTH=true')
-
-  // R146.29 — workspace-ID injection (IDOR) guard. With auth ON, a
-  // Bearer-token holder for workspace A could pass `workspace_id=B`
-  // in body or query and routes would happily write/read in B. The
-  // auth check confirmed "valid token" but not "matches requested
-  // workspace". Verified by live attack: token-for-default created
-  // a conversation in workspace `global` (201, row landed there).
-  //
-  // This preHandler runs AFTER authenticate. It compares
-  // req.workspaceId (set from the token claim) against any
-  // workspace_id present in body or query. Mismatch → 403.
-  //
-  // Public paths are skipped (operator must reach /bootstrap, etc).
-  // Dev-mode auto-auth sets req.workspaceId from the query, so
-  // requests always match naturally; the guard only bites when a
-  // real Bearer token is used to forge a cross-workspace request.
-  app.addHook('preHandler', async (req, reply) => {
-    const url = req.url.split('?')[0] ?? ''
-    if (isPublic(url)) return
-    const authWs = (req as unknown as { workspaceId?: string }).workspaceId
-    if (!authWs) return   // un-authed should have been caught by onRequest above
-    const body  = (req.body  as Record<string, unknown> | undefined) ?? undefined
-    const query = (req.query as Record<string, unknown> | undefined) ?? undefined
-    const requested =
-      (typeof body?.['workspace_id']  === 'string' ? body['workspace_id']  : undefined) ??
-      (typeof query?.['workspace_id'] === 'string' ? query['workspace_id'] : undefined)
-    if (requested !== undefined && requested !== authWs) {
-      req.log.warn({ authWs, requested, url }, '[auth] cross-workspace request rejected')
-      return reply.code(403).send({
-        success: false,
-        error: 'cross-workspace request denied',
-        detail: 'authenticated workspace does not match requested workspace_id',
-      })
-    }
-  })
 }
+
+// R146.30 — workspace-ID injection (IDOR) guard, promoted to always-on.
+// R146.29 was gated by ENFORCE_GLOBAL_AUTH=true; with the flag off
+// (current operator state for PWA continuity) the guard didn't fire and
+// any Bearer-token caller could still forge cross-workspace requests.
+//
+// This preHandler is now always installed. It self-skips when
+// `req.workspaceId` is unset — which covers the un-authed Tailscale-only
+// dev path that the operator's PWA currently uses. When auth IS present
+// (Bearer token or JWT), it compares the auth-claim workspace against
+// any workspace_id in body or query and 403s on mismatch. So the IDOR
+// is closed for any authenticated caller regardless of the flag state.
+app.addHook('preHandler', async (req, reply) => {
+  const url = req.url.split('?')[0] ?? ''
+  if (isPublic(url)) return
+  const authWs = (req as unknown as { workspaceId?: string }).workspaceId
+  if (!authWs) return   // unauthenticated — body/query trust falls to per-route logic
+  const body  = (req.body  as Record<string, unknown> | undefined) ?? undefined
+  const query = (req.query as Record<string, unknown> | undefined) ?? undefined
+  const requested =
+    (typeof body?.['workspace_id']  === 'string' ? body['workspace_id']  : undefined) ??
+    (typeof query?.['workspace_id'] === 'string' ? query['workspace_id'] : undefined)
+  if (requested !== undefined && requested !== authWs) {
+    req.log.warn({ authWs, requested, url }, '[auth] cross-workspace request rejected')
+    return reply.code(403).send({
+      success: false,
+      error: 'cross-workspace request denied',
+      detail: 'authenticated workspace does not match requested workspace_id',
+    })
+  }
+})
 
 // Swagger is optional — wrap so a CJS/JSON quirk in @fastify/swagger-ui doesn't crash boot
 try {
