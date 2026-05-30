@@ -39,7 +39,14 @@ export const pushRoutes: FastifyPluginAsync = async (app) => {
     if (isInternalHost(parsedEp.hostname)) {
       return reply.code(400).send({ success: false, error: `internal host blocked: ${parsedEp.hostname}` })
     }
-    const { recordSubscription } = await import('../services/web-push.js')
+    // R146.62 — per-workspace cap. Without this, spamming /subscribe with
+    // rotating https endpoints grows the events table unbounded. Real
+    // operator use is one subscription per device (≤ ~10 devices ≤ 20).
+    const { recordSubscription, activeSubscriptions } = await import('../services/web-push.js')
+    const active = await activeSubscriptions(ws)
+    if (active.length >= 20) {
+      return reply.code(429).send({ success: false, error: 'too many active subscriptions for this workspace (max 20); revoke unused via /unsubscribe' })
+    }
     await recordSubscription(ws, { endpoint: s.endpoint, keys: { p256dh: s.keys.p256dh, auth: s.keys.auth } }, b.user_agent)
     return reply.send({ success: true })
   })
