@@ -222,6 +222,20 @@ const OPERATIONS: Record<string, OpSpec> = {
       const roots = ['apps', 'packages', 'workers']
       const allowedExt = new Set(['.ts', '.tsx', '.js', '.jsx', '.json', '.sql', '.md', '.yaml', '.yml', '.toml', '.css'])
       const skipDirs = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.turbo', '.launch-logs', '.openclaw', 'coverage'])
+      // R146.57 — ReDoS guard. pattern comes from operator/LLM input.
+      // Without this, a value like `(a+)+$` against a 1MB file (re.test
+      // below, line ~245) triggers catastrophic backtracking and pins
+      // the API event loop until the OOM killer or watchdog notices.
+      if (pattern.length > 500) {
+        throw new Error(`code.search: pattern too long (max 500 chars)`)
+      }
+      // Reject nested quantifiers — the canonical ReDoS shape.
+      // Matches: (X+)+, (X*)+, (X+)*, (X*)*, (X{1,})+ etc. Conservative —
+      // some legit patterns will be rejected too; operators can escape
+      // the inner paren if they really need it.
+      if (/\([^)]*[*+?][^)]*\)\s*[*+?{]/.test(pattern)) {
+        throw new Error(`code.search: pattern has nested quantifier (ReDoS risk); flatten it`)
+      }
       const re = (() => {
         try { return new RegExp(pattern, 'i') } catch { return new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }
       })()
