@@ -202,13 +202,21 @@ export async function browserFill(_ws: string, params: Record<string, unknown>):
 export async function browserText(_ws: string, params: Record<string, unknown>): Promise<unknown> {
   const s = getSession(String(params['sessionId'] ?? ''))
   const selector = String(params['selector'] ?? '').trim()
+  // R146.72 — wrap page text in <untrusted_content> tags. When the
+  // brain's LLM later sees this in its context window, the trust-tag
+  // convention introduced in novan-chat's system prompt tells the
+  // model to treat the contents as data, not instructions. The page
+  // could contain "ignore previous instructions" or any other injection
+  // attempt; tagging it at the source means every downstream LLM that
+  // consumes the brain-task output gets the marker.
+  const wrap = (raw: string): string => `<untrusted_content origin="page:${s.url}">${raw}</untrusted_content>`
   if (selector) {
     const t = await s.page.textContent(selector, { timeout: 5_000 }).catch((e: Error) => { console.error('[brain-task-browser]', e.message); return null })
-    return { sessionId: s.id, selector, text: (t ?? '').slice(0, 5000) }
+    return { sessionId: s.id, selector, text: wrap((t ?? '').slice(0, 5000)) }
   }
   // Whole-page text fallback
   const t = await s.page.evaluate<string>('document.body && document.body.innerText || ""').catch(() => '')
-  return { sessionId: s.id, text: t.slice(0, 5000) }
+  return { sessionId: s.id, text: wrap(t.slice(0, 5000)) }
 }
 
 export async function browserScreenshot(_ws: string, params: Record<string, unknown>): Promise<unknown> {
