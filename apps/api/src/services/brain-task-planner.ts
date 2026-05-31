@@ -130,8 +130,16 @@ function parsePlanJson(text: string): ParsedPlan | null {
   }
   if (!obj || !Array.isArray(obj.plan)) return null
   const allowed = new Set(listAvailableOperations().map(o => o.op))
+  // R146.73 — tag every LLM-planner-emitted step as provenance='planner'.
+  // The planner consumed operator text, but its output is not operator-
+  // typed; the executor's provenance gate uses this to require approval
+  // for ops outside the page-derived allowlist, closing the path where
+  // an attacker who got text into the planner's input could provoke
+  // high-blast-radius ops by phrasing the task plausibly.
   const plan = obj.plan.filter(s => s && typeof s.op === 'string' && allowed.has(s.op)).map(s => ({
-    op: s.op, params: (s.params ?? {}) as Record<string, unknown>,
+    op: s.op,
+    params: (s.params ?? {}) as Record<string, unknown>,
+    provenance: 'planner' as const,
   }))
   return { plan, reason: obj.reason ?? '' }
 }
@@ -178,7 +186,10 @@ const HEURISTICS: HeuristicRule[] = [
 function heuristicPlan(task: string): ParsedPlan {
   for (const r of HEURISTICS) {
     const m = task.match(r.match)
-    if (m) return { plan: r.build(m), reason: r.reason }
+    // R146.73 — heuristic-derived plans share the planner-derived
+    // trust posture; the operator's text fed them, but the op list
+    // is produced by code, not operator-typed.
+    if (m) return { plan: r.build(m).map(s => ({ ...s, provenance: 'planner' as const })), reason: r.reason }
   }
   return { plan: [], reason: `No matching heuristic for: "${task.slice(0, 100)}". Configure GROQ_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY for LLM planning.` }
 }

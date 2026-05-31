@@ -3278,6 +3278,68 @@ const OPERATIONS: Record<string, OpSpec> = {
 export interface TaskOperation {
   op:     string
   params: Record<string, unknown>
+  /**
+   * R146.73 — provenance of this plan step:
+   *   operator  — operator-typed (REPL, /task with explicit plan)
+   *   planner   — LLM planner converted operator text → plan
+   *   page      — derived from page-scrape / browser content
+   *   rollup    — derived from LLM-generated rollup / summary
+   * Anything other than 'operator' is treated as untrusted-input
+   * provenance: ops outside the page-derived allowlist require
+   * OPERATOR_APPROVED, regardless of declared risk tier.
+   */
+  provenance?: 'operator' | 'planner' | 'page' | 'rollup'
+}
+
+// R146.73 — page-derived provenance allowlist. Low-blast-radius
+// read/diagnostic ops only. Anything that writes external state,
+// spends money, modifies credentials, or drives GUI/desktop is
+// excluded. A non-operator plan step calling an op NOT in this set
+// auto-requires OPERATOR_APPROVED, even if the op's declared risk
+// is 'low'. Pairs with R146.72 <untrusted_content> tagging: every
+// boundary input the LLM consumes is marked, and any plan step it
+// emits from those inputs is implicitly non-operator provenance.
+const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
+  'db.query',
+  'code.search',
+  'platform.smoke',
+  'providers.validate',
+  'mind.cycle',
+  'web.fetch',
+  'video.analyze',
+  'browser.open', 'browser.text', 'browser.screenshot', 'browser.list', 'browser.waitFor',
+  'governance.check', 'governance.listRules',
+  'trust.score', 'trust.topBroken',
+  'wisdom.check', 'dna.get',
+  'world.neighbors', 'world.causalChain', 'world.listNodes',
+  'economic.scoreVideo', 'economic.health', 'economic.simulatePricing',
+  'production.log', 'production.activeCancelTokens',
+  'cache.stats',
+  'music.knowledge', 'music.status', 'system.ffmpegAvailable',
+  'mixcraft.status', 'capcut.status',
+  'bridge.status', 'bridge.listJobs',
+  'channel.list', 'schedule.list',
+  'analytics.snapshot', 'analytics.snapshotMany',
+])
+
+/** R146.73 — recursive scan for <untrusted_content tag in any param
+ *  value. The presence of the marker means at least one input crossed
+ *  the trust boundary (page text, LLM rollup, operator-typed label
+ *  summarized by the brain), and the plan step must be gated. */
+function paramsContainUntrustedMarker(val: unknown, depth = 0): boolean {
+  if (depth > 6) return false
+  if (typeof val === 'string') return val.includes('<untrusted_content')
+  if (Array.isArray(val)) {
+    for (const v of val) if (paramsContainUntrustedMarker(v, depth + 1)) return true
+    return false
+  }
+  if (val && typeof val === 'object') {
+    for (const v of Object.values(val as Record<string, unknown>)) {
+      if (paramsContainUntrustedMarker(v, depth + 1)) return true
+    }
+    return false
+  }
+  return false
 }
 
 export interface TaskRunResult {
@@ -3359,6 +3421,28 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
       results.push({ op: step.op, ok: false, error: reason, durationMs: 0 })
       await emit(workspaceId, 'brain_task.money_blocked', {
         taskId, op: step.op, matched: guard.matched, source: guard.source,
+      })
+      continue
+    }
+
+    // R146.73 — provenance + untrusted-input gate. Runs BEFORE the
+    // risk-based approval gate so it can elevate even risk=low ops
+    // when the input crossed an <untrusted_content> boundary or the
+    // step did not originate from operator-typed text.
+    const provenance = step.provenance ?? 'operator'
+    const untrustedInput = paramsContainUntrustedMarker(step.params ?? {})
+    const nonOperatorPath = provenance !== 'operator' || untrustedInput
+    if (nonOperatorPath && !PAGE_DERIVED_ALLOWLIST.has(step.op) && approvalToken !== 'OPERATOR_APPROVED') {
+      const cause = untrustedInput
+        ? `untrusted_content marker in params (provenance=${provenance})`
+        : `provenance=${provenance}`
+      results.push({
+        op: step.op, ok: false,
+        error: `${cause}: op '${step.op}' is not in the page-derived allowlist; requires approvalToken=OPERATOR_APPROVED`,
+        durationMs: 0,
+      })
+      await emit(workspaceId, 'brain_task.provenance_blocked', {
+        taskId, op: step.op, provenance, untrustedInput, risk: spec.risk,
       })
       continue
     }
