@@ -43,8 +43,8 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://default:${REDIS_PASSWORD}@redis:6379
-      AUTH_SECRET: dev-secret-change-in-production
-      CORS_ORIGINS: http://localhost:3000
+      AUTH_SECRET: ${AUTH_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       NODE_ENV: development
       LOG_LEVEL: info
     depends_on:

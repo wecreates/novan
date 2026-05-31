@@ -23,11 +23,14 @@ services:
       LOG_LEVEL:        info
       REPO_ROOT:        /app
 
-      DATABASE_URL:     postgresql://neondb_owner:npg_n2wGjmuWzrU9@ep-bitter-snow-ak0w2voz-pooler.c-3.us-west-2.aws.neon.tech/neondb?sslmode=require
-      REDIS_URL:        rediss://default:gQAAAAAAAewCAAIgcDIzOWIwNjU2NjA3MTY0MzRhODExNmZkOGEwYjJlY2QwNA@lucky-anemone-125954.upstash.io:6379
-
-      AUTH_SECRET:      VSgXZQD6x4S+2boM+cJAvNbEd93oL7af+fy0nSXI6QRribja6DIhSupgEHAjTqUK
-      VAULT_MASTER_KEY: L3ysQ8LdgB0I/R7gXdRzIcERe753TQVkH9N7f+OGfqY=
+      # R146.81 — previously hardcoded Neon + Upstash + AUTH_SECRET +
+      # VAULT_MASTER_KEY. Those values were leaked to git history; they
+      # must be rotated at Neon + Upstash + via openssl rand. Source from
+      # .env going forward, same as docker-compose.production.yml.
+      DATABASE_URL:     ${DATABASE_URL}
+      REDIS_URL:        ${REDIS_URL}
+      AUTH_SECRET:      ${AUTH_SECRET}
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
 
       # Read from gitignored .env at repo root (Docker Compose auto-loads .env)
       GEMINI_API_KEY:   ${GEMINI_API_KEY:-}

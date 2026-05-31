@@ -230,10 +230,18 @@ async function processJob(data: AutoJobData): Promise<void> {
 // ─── Worker registration ──────────────────────────────────────────────────────
 
 let worker: Worker | null = null
+let respawnTimer: NodeJS.Timeout | null = null
 
-export function registerAutonomousWorker(): void {
-  if (worker) return
-  worker = new Worker(
+/** R146.80 — recreate the BullMQ Worker on lifecycle close. Without this,
+ *  if the Worker emits 'closed' (network blip with Redis, OOM-killed
+ *  child, BullMQ internal reconnect failure), it stays dead until the
+ *  next process restart and 'autonomous' queue jobs accumulate forever.
+ *  Backoff: 5s, capped at 60s on repeated close events. */
+let respawnDelayMs = 5_000
+const RESPAWN_DELAY_MAX = 60_000
+
+function createWorker(): Worker {
+  const w = new Worker(
     'autonomous',
     async (job) => { await processJob(job.data as AutoJobData) },
     {
@@ -242,9 +250,33 @@ export function registerAutonomousWorker(): void {
       limiter: { max: 10, duration: 60_000 },
     },
   )
-  worker.on('failed', (job, err) => {
+  w.on('failed', (job, err) => {
     console.error(`[autonomous-worker] Job ${job?.id} failed:`, err.message)
   })
+  w.on('error', (err) => {
+    console.error('[autonomous-worker] worker error:', err.message)
+  })
+  // 'closed' fires after the Worker's Redis connection terminates and
+  // no further jobs will be processed. This is the silent-death path
+  // R146.80 closes.
+  w.on('closed', () => {
+    if (worker !== w) return  // already replaced — stale close event
+    worker = null
+    console.warn(`[autonomous-worker] closed; respawning in ${respawnDelayMs}ms`)
+    if (respawnTimer) clearTimeout(respawnTimer)
+    respawnTimer = setTimeout(() => {
+      worker = createWorker()
+      respawnDelayMs = Math.min(RESPAWN_DELAY_MAX, respawnDelayMs * 2)
+    }, respawnDelayMs)
+  })
+  // Reset backoff on first successful job — proves the new worker is healthy.
+  w.on('completed', () => { respawnDelayMs = 5_000 })
+  return w
+}
+
+export function registerAutonomousWorker(): void {
+  if (worker) return
+  worker = createWorker()
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
