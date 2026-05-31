@@ -3447,6 +3447,78 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
       continue
     }
 
+    // R146.74 — independent tool-call classifier. Separate LLM (fed
+    // ONLY the structured op+params+provenance, never the operator's
+    // text or page content) judges allow/deny before the handler runs.
+    // Skipped for the trivial path (operator-typed, no untrusted input,
+    // allowlisted low-blast op) to avoid burning tokens on db.query
+    // and friends. Cache-hit verdicts are free.
+    const classifierTrivialSkip =
+      provenance === 'operator' &&
+      !untrustedInput &&
+      PAGE_DERIVED_ALLOWLIST.has(step.op) &&
+      spec.risk === 'low'
+    if (!classifierTrivialSkip && approvalToken !== 'OPERATOR_APPROVED') {
+      try {
+        const { classifyToolCall } = await import('./tool-call-classifier.js')
+        const verdict = await classifyToolCall({
+          op: step.op,
+          params: step.params ?? {},
+          provenance,
+          declaredRisk: spec.risk,
+          untrustedInput,
+          ...(task ? { taskSummary: task } : {}),
+        })
+        await emit(workspaceId, 'brain_task.classifier_verdict', {
+          taskId, op: step.op, allow: verdict.allow, confidence: verdict.confidence,
+          reason: verdict.reason.slice(0, 200), cached: verdict.cached,
+          unavailable: verdict.unavailable === true,
+        })
+        if (verdict.unavailable) {
+          // Fail-closed for risky non-operator paths; fail-open for
+          // operator-typed low/medium. We never want a classifier
+          // outage to silently break operator workflows nor silently
+          // let page-derived plans escape.
+          const failClosed =
+            provenance !== 'operator' ||
+            untrustedInput ||
+            spec.risk === 'high' ||
+            spec.risk === 'critical'
+          if (failClosed) {
+            results.push({
+              op: step.op, ok: false,
+              error: `classifier unavailable (fail-closed): provenance=${provenance} risk=${spec.risk} untrusted=${untrustedInput}`,
+              durationMs: 0,
+            })
+            continue
+          }
+        } else if (!verdict.allow) {
+          results.push({
+            op: step.op, ok: false,
+            error: `classifier denied: ${verdict.reason} (confidence=${verdict.confidence.toFixed(2)})`,
+            durationMs: 0,
+          })
+          await emit(workspaceId, 'brain_task.classifier_blocked', {
+            taskId, op: step.op, reason: verdict.reason.slice(0, 200), confidence: verdict.confidence,
+          })
+          continue
+        }
+      } catch (e) {
+        // Classifier import or unexpected throw — same fail-closed
+        // logic as `unavailable`. Operator-typed low/medium proceeds.
+        const msg = (e as Error).message
+        const failClosed =
+          provenance !== 'operator' ||
+          untrustedInput ||
+          spec.risk === 'high' ||
+          spec.risk === 'critical'
+        if (failClosed) {
+          results.push({ op: step.op, ok: false, error: `classifier error (fail-closed): ${msg}`, durationMs: 0 })
+          continue
+        }
+      }
+    }
+
     if ((spec.risk === 'high' || spec.risk === 'critical') && approvalToken !== 'OPERATOR_APPROVED') {
       results.push({ op: step.op, ok: false, error: `risk=${spec.risk} requires approvalToken=OPERATOR_APPROVED`, durationMs: 0 })
       continue
