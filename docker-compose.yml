@@ -60,9 +60,14 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
     ports:
-      - '3000:3000'
+      # Host 3000 → Caddy 8080 (Caddy listens on :8080 per apps/web/Caddyfile).
+      # The compose previously had '3000:3000' which exposed an unbound port.
+      - '3000:8080'
     environment:
-      VITE_API_URL: http://localhost:3001
+      # API_UPSTREAM is what Caddy reverse-proxies /api/* to.
+      API_UPSTREAM: api:3001
+      # VITE_API_URL is build-time; R146.82 removed the localhost fallback
+      # in apps/web/src/api.ts so the SPA uses same-origin and Caddy proxies.
     depends_on:
       - api
 

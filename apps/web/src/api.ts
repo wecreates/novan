@@ -4,7 +4,17 @@
 // SINGLE SOURCE OF TRUTH for API base URL. Previously 12 files
 // re-declared this constant; some used import.meta.env safely, others
 // used unsafe `as unknown as` casts. Importers should use `API_BASE`.
-export const API_BASE = import.meta.env['VITE_API_URL'] ?? 'http://localhost:3001'
+//
+// R146.82 — default to '' (same-origin) so the compiled SPA works
+// behind Caddy on any host. The phone PWA, served at
+// http://<droplet-tailscale-ip>:3000/, would fail with the prior
+// 'http://localhost:3001' default because the phone's localhost is
+// the phone itself, not the droplet. Caddy reverse-proxies /api/* to
+// the API container (apps/web/Caddyfile:12), so same-origin requests
+// resolve correctly from anywhere the SPA is reachable. Local Vite
+// dev (port 5173 with no Caddy) should set VITE_API_URL explicitly
+// in .env.local.
+export const API_BASE = import.meta.env['VITE_API_URL'] ?? ''
 const BASE = API_BASE
 
 let authToken: string | null =
