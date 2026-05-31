@@ -33,8 +33,15 @@ function sha256(input: string): string {
 /** Local-dev auto-auth: when NODE_ENV !== 'production', requests with
  *  no Bearer token transparently get a default operator identity so
  *  the solo-operator UI works without a login flow. Production keeps
- *  the strict Bearer requirement. Read per-request so tests can mock. */
+ *  the strict Bearer requirement. Read per-request so tests can mock.
+ *
+ *  R146.76 — `ENFORCE_GLOBAL_AUTH=true` ALSO disables dev-auto-auth,
+ *  regardless of NODE_ENV. Without this, the deployment can't run dev
+ *  mode (which is needed for the bind-mounted source-reload flow) and
+ *  also enforce Bearer tokens. ENFORCE_GLOBAL_AUTH is the explicit
+ *  operator opt-in; honor it. */
 function devAutoAuthActive(): boolean {
+  if (process.env['ENFORCE_GLOBAL_AUTH'] === 'true') return false
   return process.env['NODE_ENV'] !== 'production'
 }
 
