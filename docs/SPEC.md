@@ -777,7 +777,38 @@ Called from the workspace-creation flow (operator clicks "create workspace" or P
 
 ## 19. Revision Log
 
-### R4 — Architecture overview + eval seeds + first-install flow (current)
+### R5 — Prompt-injection stack + deploy hardening (current)
+
+Captures rounds 146.72-146.83 — the long tail after the initial 4-revision
+build. Most of these are not new architectural ground; they harden the
+runtime against classes of failure the earlier revisions assumed away.
+
+Prompt-injection defense (4 deterministic layers around the brain):
+- §18.17 (role-marker sanitizer) — R146.42, strips `Human:` / `Assistant:` prefixes from any LLM-bound string
+- §18.18 (`<untrusted_content>` tagging) — R146.72, every boundary input the LLM consumes is wrapped with a system-prompt-declared marker. Sites: novan-chat injections (proposals, chain decisions, design briefs, memories), brain-task-browser page text
+- §18.19 (provenance gate) — R146.73, `TaskOperation.provenance: 'operator' | 'planner' | 'page' | 'rollup'`. Non-operator plan steps must hit `PAGE_DERIVED_ALLOWLIST` (read/diagnostic ops only) or auto-require `OPERATOR_APPROVED`. Recursive `<untrusted_content` marker scan forces the same gate even on operator-provenance steps
+- §18.20 (independent tool-call classifier) — R146.74, `tool-call-classifier.ts` runs a second LLM (Groq llama-3.1-8b primary, Anthropic/OpenAI/Gemini fallback) over `{op, sanitized params, provenance, declared_risk, untrusted_input}`. Fed structured metadata only, never the operator's text. Fail-closed for risky non-operator paths, fail-open for operator+low/medium. 1h LRU cache; trivial-skip for operator+allowlisted+low+no-untrusted. Cost ~$0.016/1000 brain-task steps measured
+
+Beyond this stack: RLHF + an output classifier are the next layers; both live outside Novan's source tree.
+
+Runtime hardening:
+- §18.21 (no in-API drain workers) — R146.75 removed `_workflowDrain` + `_notificationsDrain` from `apps/api/src/queues/index.ts`. BullMQ load-balances jobs across all Workers bound to a queue; the in-API drain was silently winning a share of REAL workflow jobs (the real consumer is `workers/workflow-worker/src/worker.ts:103`) and acknowledging them with `{drained:true}`. Pattern: never add a "passive drain" in the producer process unless you've verified no real consumer exists
+- §18.22 (autonomous worker respawn) — R146.80, BullMQ `Worker` emits `'closed'` after Redis connection loss; without re-registering, the queue silently fills. Implementation: 5s backoff doubling to 60s, reset on first successful job
+
+Deploy posture:
+- `ENFORCE_GLOBAL_AUTH=true` overrides dev-auto-auth — R146.76, `plugins/auth.ts` `devAutoAuthActive()` returns false when the flag is set, regardless of NODE_ENV. Lets the operator enforce Bearer tokens while keeping NODE_ENV=development for the bind-mounted source-reload flow (no longer needed after R146.83 but kept as defense-in-depth)
+- `AUTH_SECRET` is now `${AUTH_SECRET}` in compose — R146.78, previously hardcoded `dev-secret-change-in-production` as the JWT signing key, committed to git. Rotated to fresh openssl-rand on the droplet
+- Nightly `pg_dump` cron — R146.79, `scripts/backup-postgres.sh` runs at 03:30 UTC, 14-day retention, healthy-size guard, off-volume storage at `/root/backups/`
+- SPA same-origin API — R146.82, `apps/web/src/api.ts` defaults `API_BASE` to `''` so the phone PWA works through Caddy's reverse-proxy at any host (the prior `'http://localhost:3001'` fallback made the phone target its own localhost)
+- `NODE_ENV=production` — R146.83 engaged, enforces the §10.5 startup gate (CORS_ORIGINS, VAULT_MASTER_KEY, CHANNEL_ENCRYPTION_KEY, AUTH_SECRET required or FATAL)
+
+Operator-side residue (not code, but tracked here):
+- Provider-side rotation needed for credentials that were in git history before sanitization: Neon DB password, Upstash Redis token, old AUTH_SECRET / VAULT_MASTER_KEY from `docker-compose.local.yml`. Removing them from working tree doesn't scrub git history; the only real fix is rotation at the provider
+- `OPERATOR_BOOTSTRAP_SECRET` is a permanent passwordless-mint backdoor. Rotate quarterly as policy
+
+No R1–R4 content removed.
+
+### R4 — Architecture overview + eval seeds + first-install flow
 
 Captures patterns lock-in from rounds 123-127. Adds:
 - §18.13 updated for 13-tab layout (Overview added as default landing)
@@ -854,4 +885,4 @@ Operator-provided 17-section build specification establishing architecture, conv
 
 *This document is the source of truth. When in doubt, follow the document. When the document is wrong, update the document. The document evolves with the system.*
 
-*Last evolved: revision R4 (architecture overview + eval seeds + first-install flow). See §19.*
+*Last evolved: revision R5 (prompt-injection stack + deploy hardening). See §19.*

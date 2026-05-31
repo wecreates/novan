@@ -55,7 +55,7 @@ Operator approves changes to these via explicit code change + human review, not 
 ## Tooling baseline
 
 - **Typecheck:** `pnpm --filter @ops/api typecheck` and `pnpm --filter @ops/web typecheck` both must be green
-- **Tests:** `pnpm --filter @ops/api test -- --run` — 1954/1954 must pass
+- **Tests:** `pnpm --filter @ops/api test -- --run` — 2061/2061 must pass (95 files)
 - **Migration:** add to `packages/db/migrations/NNNN_*.sql` with matching Drizzle schema edit in `packages/db/src/schema.ts`
 - **New service:** under `apps/api/src/services/`; if operator-callable, wire into `services/brain-task.ts` OPERATIONS map
 - **New route:** under `apps/api/src/routes/` and register in `apps/api/src/server.ts`

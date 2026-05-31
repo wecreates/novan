@@ -45,7 +45,13 @@ services:
       REDIS_URL: redis://default:${REDIS_PASSWORD}@redis:6379
       AUTH_SECRET: ${AUTH_SECRET}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
-      NODE_ENV: development
+      # R146.83 — production mode. Engages the R145 startup gate
+      # (CORS_ORIGINS, VAULT_MASTER_KEY, CHANNEL_ENCRYPTION_KEY,
+      # AUTH_SECRET all required — boot FATALs if any are missing).
+      # Also tightens pino logging + suppresses dev error detail in
+      # response bodies. The bind-mounted source-reload flow still
+      # works because tsx watches files regardless of NODE_ENV.
+      NODE_ENV: ${NODE_ENV:-production}
       LOG_LEVEL: info
     depends_on:
       postgres:
