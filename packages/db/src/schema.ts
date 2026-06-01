@@ -4653,3 +4653,39 @@ export const calibrationObservations = pgTable('calibration_observations', {
 }, (t) => [
   index('calibration_ws_subject_idx').on(t.workspaceId, t.subjectType, t.observedAt),
 ])
+
+// ─── Migration 0051 — Autonomy budgets (R146.97) ─────────────────────────────
+// Operator sets "spend up to $X/day per business" and the brain runs
+// autonomously below the ceiling, escalating only when a proposed spend
+// would breach it. Without this the operator is the perpetual bottleneck
+// on every spend decision regardless of size.
+
+export const autonomyBudgets = pgTable('autonomy_budgets', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  businessId:  text('business_id'),                  // null = workspace-wide
+  category:    text('category').notNull(),           // 'ads' | 'content-gen' | 'data' | 'all'
+  period:      text('period').notNull(),             // 'daily' | 'weekly' | 'monthly'
+  ceilingUsd:  real('ceiling_usd').notNull(),
+  enabled:     boolean('enabled').notNull().default(true),
+  notes:       text('notes'),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('autonomy_budgets_ws_idx').on(t.workspaceId),
+  index('autonomy_budgets_biz_idx').on(t.businessId),
+])
+
+export const autonomySpendLog = pgTable('autonomy_spend_log', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  businessId:  text('business_id'),
+  category:    text('category').notNull(),
+  amountUsd:   real('amount_usd').notNull(),
+  op:          text('op').notNull(),
+  reason:      text('reason'),
+  recordedAt:  bigint('recorded_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('autonomy_spend_log_ws_cat_idx').on(t.workspaceId, t.category, t.recordedAt),
+  index('autonomy_spend_log_biz_idx').on(t.businessId, t.recordedAt),
+])

@@ -1692,6 +1692,63 @@ const OPERATIONS: Record<string, OpSpec> = {
   },
 
   // ─── R146.96 — Full episode execution: plan → render → assemble ─────
+  // ─── R146.97 — Autonomy budgets ────────────────────────────────────
+  'autonomy.setBudget': {
+    description: 'Set autonomous spend ceiling. Params: category (ads|content-gen|data|all), period (daily|weekly|monthly), ceilingUsd, businessId?, notes?',
+    risk: 'medium',
+    handler: async (ws, p) => (await import('./autonomy-budget.js')).setBudget({
+      workspaceId: ws,
+      category:    (p['category'] as 'ads' | 'content-gen' | 'data' | 'all') ?? 'all',
+      period:      (p['period']   as 'daily' | 'weekly' | 'monthly') ?? 'daily',
+      ceilingUsd:  Number(p['ceilingUsd'] ?? 0),
+      ...(p['businessId'] ? { businessId: String(p['businessId']) } : {}),
+      ...(p['notes'] ? { notes: String(p['notes']) } : {}),
+    }),
+  },
+  'autonomy.listBudgets': {
+    description: 'List autonomy budgets. Params: businessId?',
+    risk: 'low',
+    handler: async (ws, p) => (await import('./autonomy-budget.js')).listBudgets(ws, p['businessId'] ? String(p['businessId']) : undefined),
+  },
+  'autonomy.disableBudget': {
+    description: 'Disable an autonomy budget by id. Params: id',
+    risk: 'medium',
+    handler: async (ws, p) => {
+      await (await import('./autonomy-budget.js')).disableBudget(ws, String(p['id'] ?? ''))
+      return { ok: true }
+    },
+  },
+  'autonomy.checkSpend': {
+    description: 'Check if a proposed spend can proceed autonomously. Params: category, amountUsd, businessId?',
+    risk: 'low',
+    handler: async (ws, p) => (await import('./autonomy-budget.js')).checkSpend({
+      workspaceId: ws,
+      category:    (p['category'] as 'ads' | 'content-gen' | 'data' | 'all') ?? 'all',
+      amountUsd:   Number(p['amountUsd'] ?? 0),
+      ...(p['businessId'] ? { businessId: String(p['businessId']) } : {}),
+    }),
+  },
+  'autonomy.logSpend': {
+    description: 'Log an autonomous spend after action succeeds. Params: category, amountUsd, op, businessId?, reason?',
+    risk: 'low',
+    handler: async (ws, p) => {
+      await (await import('./autonomy-budget.js')).logSpend({
+        workspaceId: ws,
+        category:    (p['category'] as 'ads' | 'content-gen' | 'data' | 'all') ?? 'all',
+        amountUsd:   Number(p['amountUsd'] ?? 0),
+        op:          String(p['op'] ?? ''),
+        ...(p['businessId'] ? { businessId: String(p['businessId']) } : {}),
+        ...(p['reason'] ? { reason: String(p['reason']) } : {}),
+      })
+      return { ok: true }
+    },
+  },
+  'autonomy.spendSummary': {
+    description: 'Summary of period spend per category + active budgets. Params: businessId?',
+    risk: 'low',
+    handler: async (ws, p) => (await import('./autonomy-budget.js')).spendSummary(ws, p['businessId'] ? String(p['businessId']) : undefined),
+  },
+
   'aiVideo.executeEpisode': {
     description: 'End-to-end execution: render every shot, generate music + voiceover, ffmpeg concat, optional captions + brand. Params: episode (object with characters/scenes/shots), concatOutputPath, parallelShots?, generateMusic?, generateVoiceover?, burnCaptions?, applyBrandKit?',
     risk: 'critical',         // can spend tens or hundreds of dollars; OPERATOR_APPROVED required
@@ -4150,6 +4207,9 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         // cost figures the operator needs to see un-redacted.
         'aiVideo.renderShot', 'aiVideo.renderShotWithFallback',
         'aiVideo.executeEpisode',
+        // R146.97 — autonomy budget ops legitimately return $ ceilings + spend.
+        'autonomy.setBudget', 'autonomy.listBudgets', 'autonomy.disableBudget',
+        'autonomy.checkSpend', 'autonomy.logSpend', 'autonomy.spendSummary',
       ])
       const outGuard = INFO_OPS_NO_OUTPUT_GUARD.has(step.op)
         ? { ok: true as const }

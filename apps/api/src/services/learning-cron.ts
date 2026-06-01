@@ -856,6 +856,71 @@ async function runEventsPrune() {
   } catch (e) { await emit('cron.error', { task: 'events_prune', error: (e as Error).message }) }
 }
 
+// R146.98 — strategic ops crons.
+
+async function runStrategicCeoCycle() {
+  try {
+    const ids = await listWorkspaceIds()
+    const { prioritizeBusinesses, diversificationCheck } = await import('./ceo-strategic.js')
+    for (const ws of ids) {
+      try {
+        const ranked = await prioritizeBusinesses(ws)
+        const div    = await diversificationCheck(ws)
+        await emit('cron.strategic_ceo_completed', { workspaceId: ws, businessesScored: ranked.length, concentrationRisk: div.concentrationRisk })
+      } catch (e) { await emit('cron.error', { task: 'strategic_ceo', workspaceId: ws, error: (e as Error).message }) }
+    }
+  } catch (e) { await emit('cron.error', { task: 'strategic_ceo', error: (e as Error).message }) }
+}
+
+async function runLessonDeprecation() {
+  try {
+    const ids = await listWorkspaceIds()
+    const { deprecateStaleLessons } = await import('./learning-upgrades.js')
+    let totalDeprecated = 0
+    for (const ws of ids) {
+      try {
+        const r = await deprecateStaleLessons(ws, { olderThanDays: 180 })
+        totalDeprecated += r.deprecated
+      } catch (e) { await emit('cron.error', { task: 'lesson_deprecation', workspaceId: ws, error: (e as Error).message }) }
+    }
+    if (totalDeprecated > 0) await emit('cron.lessons_deprecated', { totalDeprecated })
+  } catch (e) { await emit('cron.error', { task: 'lesson_deprecation', error: (e as Error).message }) }
+}
+
+async function runStageTransitionScan() {
+  try {
+    const ids = await listWorkspaceIds()
+    const { db } = await import('../db/client.js')
+    const { businesses } = await import('../db/schema.js')
+    const { eq } = await import('drizzle-orm')
+    const { suggestStageTransition } = await import('./business-arch.js')
+    for (const ws of ids) {
+      try {
+        const bizRows = await db.select().from(businesses).where(eq(businesses.workspaceId, ws))
+        const suggestions: Array<{ businessId: string; suggested: string | null; reason: string }> = []
+        for (const b of bizRows) {
+          const s = await suggestStageTransition(ws, b.id)
+          if (s.suggestedStage) suggestions.push({ businessId: b.id, suggested: s.suggestedStage, reason: s.reason })
+        }
+        if (suggestions.length > 0) await emit('cron.stage_transitions_surfaced', { workspaceId: ws, count: suggestions.length, sample: suggestions.slice(0, 3) })
+      } catch (e) { await emit('cron.error', { task: 'stage_transition_scan', workspaceId: ws, error: (e as Error).message }) }
+    }
+  } catch (e) { await emit('cron.error', { task: 'stage_transition_scan', error: (e as Error).message }) }
+}
+
+async function runStuckLoopScan() {
+  try {
+    const ids = await listWorkspaceIds()
+    const { detectStuckLoop } = await import('./brain-upgrades.js')
+    for (const ws of ids) {
+      try {
+        const r = await detectStuckLoop(ws, { windowMinutes: 60 })
+        if (r.inLoop) await emit('cron.stuck_loop_detected', { workspaceId: ws, loopType: r.loopType, evidence: r.evidence, recommendedEscalation: r.recommendedEscalation })
+      } catch (e) { await emit('cron.error', { task: 'stuck_loop_scan', workspaceId: ws, error: (e as Error).message }) }
+    }
+  } catch (e) { await emit('cron.error', { task: 'stuck_loop_scan', error: (e as Error).message }) }
+}
+
 async function runFeedIngestion() {
   try {
     const ids = await listWorkspaceIds()
@@ -1079,6 +1144,11 @@ const INTERVALS = {
   feeds:        10 * 60_000,   // 10 min — RSS/Atom ingestion (per-feed intervals enforced inside)
   stretchPurge: 60 * 60_000,   // 1 hour — expire stale AI cache rows
   eventsPrune:  24 * 60 * 60_000, // 24 hours — drop events older than EVENTS_RETENTION_DAYS (90 default)
+  // R146.98 — cadences for the new strategic ops
+  strategicCeo:        6 * 60 * 60_000,   // every 6h — prioritize + diversification + reallocation proposal
+  lessonDeprecation:  24 * 60 * 60_000,   // daily — deprecate stale non-evergreen memories
+  stageTransitionScan: 12 * 60 * 60_000,  // 2x daily — surface stage transitions
+  stuckLoopScan:           60 * 60_000,   // hourly — detect & surface stuck loops
   research:     15 * 60_000,   // 15 min — research topic polling (per-topic intervals enforced inside)
   dailyReview:  60 * 60_000,   // 1 hour — emits at most one review/24h via idempotency check
   researchToAction: 30 * 60_000, // 30 min — convert recent findings → roadmap tasks
@@ -1435,6 +1505,11 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runFeedIngestion,    INTERVALS.feeds))
   handles.push(scheduleJittered(runStretchCachePurge,INTERVALS.stretchPurge))
   handles.push(scheduleJittered(runEventsPrune,       INTERVALS.eventsPrune))
+  // R146.98 — wire the new strategic ops as crons so they actually fire.
+  handles.push(scheduleJittered(runStrategicCeoCycle,  INTERVALS.strategicCeo))
+  handles.push(scheduleJittered(runLessonDeprecation,  INTERVALS.lessonDeprecation))
+  handles.push(scheduleJittered(runStageTransitionScan, INTERVALS.stageTransitionScan))
+  handles.push(scheduleJittered(runStuckLoopScan,       INTERVALS.stuckLoopScan))
   handles.push(scheduleJittered(runResearchScans,    INTERVALS.research))
   handles.push(scheduleJittered(runDailyReviews,     INTERVALS.dailyReview))
   handles.push(scheduleJittered(runResearchToAction, INTERVALS.researchToAction))
