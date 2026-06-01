@@ -3669,6 +3669,12 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         // "revenue", "$") because that IS the maturity/health signal.
         // Input guard still protects against money-pattern commands.
         'self.maturity', 'self.health', 'eval.seed',
+        // R146.84 — playbook content legitimately discusses paid ads,
+        // pricing, conversion economics, etc. Slugs like "paid-ads-
+        // fundamentals" tripped the output redactor on the substring
+        // "paid". Input guard remains active; this just exempts the
+        // operator-authored knowledge surface from output scanning.
+        'playbook.list', 'playbook.consult', 'playbook.reload',
       ])
       const outGuard = INFO_OPS_NO_OUTPUT_GUARD.has(step.op)
         ? { ok: true as const }

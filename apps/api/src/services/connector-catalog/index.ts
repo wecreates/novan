@@ -47,6 +47,12 @@ import { figmaDef } from './figma.js'
 import { calcomDef } from './calcom.js'
 import { neonDef } from './neon.js'
 import { asanaDef } from './asana.js'
+// Batch 4 — distribution + monetization gap closure (R146.84)
+import { xTwitterDef }  from './x-twitter.js'
+import { redditDef }    from './reddit.js'
+import { pinterestDef } from './pinterest.js'
+import { mailchimpDef } from './mailchimp.js'
+import { gumroadDef }   from './gumroad.js'
 
 export const CATALOG: ConnectorDef[] = [
   // Original 12 (verified prior turns)
@@ -61,4 +67,8 @@ export const CATALOG: ConnectorDef[] = [
   sentryDef, supabaseDef,
   // Batch 3 (verified via WebFetch — round 2)
   resendDef, sendgridDef, dropboxDef, figmaDef, calcomDef, neonDef, asanaDef,
+  // Batch 4 (R146.84) — closes the organic-distribution + digital-monetization
+  // gaps surfaced by the post-build audit: no X/Reddit/Pinterest organic
+  // surfaces, no email-marketing platform, no digital-goods storefront.
+  xTwitterDef, redditDef, pinterestDef, mailchimpDef, gumroadDef,
 ]
