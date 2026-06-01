@@ -1362,6 +1362,119 @@ const OPERATIONS: Record<string, OpSpec> = {
     },
   },
 
+  // ─── R146.86 — Experiments + Hypotheses + Calibration ────────────────
+  'experiment.create': {
+    description: 'Log an experiment with a falsifiable prediction. Params: title, hypothesis, prediction, metric, intervention, businessId?, baseline?, confidence? (0..1 pre-experiment)',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { createExperiment } = await import('./experiments.js')
+      return createExperiment({
+        workspaceId:  ws,
+        title:        String(p['title'] ?? ''),
+        hypothesis:   String(p['hypothesis'] ?? ''),
+        prediction:   String(p['prediction'] ?? ''),
+        metric:       String(p['metric'] ?? ''),
+        intervention: String(p['intervention'] ?? ''),
+        ...(p['businessId'] ? { businessId: String(p['businessId']) } : {}),
+        ...(p['baseline']   ? { baseline:   p['baseline'] as Record<string, unknown> } : {}),
+        ...(typeof p['confidence'] === 'number' ? { confidence: p['confidence'] as number } : {}),
+      })
+    },
+  },
+  'experiment.list': {
+    description: 'List experiments. Params: status? (running|concluded|abandoned)',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { listExperiments } = await import('./experiments.js')
+      return listExperiments(ws, p['status'] ? String(p['status']) : undefined)
+    },
+  },
+  'experiment.conclude': {
+    description: 'Mark experiment concluded with outcome + verdict. Params: id, outcome (object), verdict (supported|refuted|inconclusive), lessons?, confidencePost?',
+    risk: 'medium',
+    handler: async (ws, p) => {
+      const { concludeExperiment } = await import('./experiments.js')
+      await concludeExperiment({
+        workspaceId: ws,
+        id:          String(p['id'] ?? ''),
+        outcome:     (p['outcome'] as Record<string, unknown>) ?? {},
+        verdict:     (p['verdict'] as 'supported' | 'refuted' | 'inconclusive') ?? 'inconclusive',
+        ...(p['lessons'] ? { lessons: String(p['lessons']) } : {}),
+        ...(typeof p['confidencePost'] === 'number' ? { confidencePost: p['confidencePost'] as number } : {}),
+      })
+      return { ok: true }
+    },
+  },
+  'experiment.abandon': {
+    description: 'Abandon a running experiment (cannot reach a conclusion). Params: id, reason',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { abandonExperiment } = await import('./experiments.js')
+      await abandonExperiment(ws, String(p['id'] ?? ''), String(p['reason'] ?? 'no reason'))
+      return { ok: true }
+    },
+  },
+  'hypothesis.create': {
+    description: 'Author a falsifiable hypothesis. Params: subject, claim, prediction, confidence (0..1), relatedChain?',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { createHypothesis } = await import('./experiments.js')
+      return createHypothesis({
+        workspaceId: ws,
+        subject:     String(p['subject'] ?? ''),
+        claim:       String(p['claim'] ?? ''),
+        prediction:  String(p['prediction'] ?? ''),
+        confidence:  typeof p['confidence'] === 'number' ? p['confidence'] as number : 0.5,
+        ...(p['relatedChain'] ? { relatedChain: String(p['relatedChain']) } : {}),
+      })
+    },
+  },
+  'hypothesis.evidence': {
+    description: 'Add evidence for/against a hypothesis. Params: id, side (for|against), description, weight? (1..5)',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { addEvidence } = await import('./experiments.js')
+      await addEvidence({
+        workspaceId: ws,
+        id:          String(p['id'] ?? ''),
+        side:        (p['side'] as 'for' | 'against') ?? 'for',
+        description: String(p['description'] ?? ''),
+        ...(typeof p['weight'] === 'number' ? { weight: p['weight'] as number } : {}),
+      })
+      return { ok: true }
+    },
+  },
+  'hypothesis.review': {
+    description: 'Conclude a hypothesis. Params: id, verdict (supported|refuted|superseded), notes?',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { reviewHypothesis } = await import('./experiments.js')
+      await reviewHypothesis({
+        workspaceId: ws,
+        id:          String(p['id'] ?? ''),
+        verdict:     (p['verdict'] as 'supported' | 'refuted' | 'superseded') ?? 'refuted',
+        ...(p['notes'] ? { notes: String(p['notes']) } : {}),
+      })
+      return { ok: true }
+    },
+  },
+  'hypothesis.list': {
+    description: 'List hypotheses. Params: status? (open|supported|refuted|superseded)',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { listHypotheses } = await import('./experiments.js')
+      return listHypotheses(ws, p['status'] ? String(p['status']) : undefined)
+    },
+  },
+  'calibration.curve': {
+    description: 'Compute the brain\'s calibration reliability curve + Brier score. Params: daysBack? (default 90)',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { calibrationCurve } = await import('./experiments.js')
+      return calibrationCurve(ws, typeof p['daysBack'] === 'number' ? p['daysBack'] as number : 90)
+    },
+  },
+
   // ─── Media analyzer (R121/R122) — exposed via brain-task so MCP picks
   //     them up automatically from listAvailableOperations(). All locked
   //     refusals (facial-id, voice biometrics, generation, surveillance)
@@ -3762,6 +3875,11 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         // "paid". Input guard remains active; this just exempts the
         // operator-authored knowledge surface from output scanning.
         'playbook.list', 'playbook.consult', 'playbook.reload',
+        // R146.86 — experiment/hypothesis ops legitimately reference revenue,
+        // CAC, LTV, costs etc. as their measured metrics. Input guard active.
+        'experiment.create', 'experiment.list', 'experiment.conclude', 'experiment.abandon',
+        'hypothesis.create', 'hypothesis.evidence', 'hypothesis.review', 'hypothesis.list',
+        'calibration.curve',
       ])
       const outGuard = INFO_OPS_NO_OUTPUT_GUARD.has(step.op)
         ? { ok: true as const }

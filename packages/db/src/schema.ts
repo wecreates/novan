@@ -4587,3 +4587,69 @@ export const cartographerSnapshots = pgTable('cartographer_snapshots', {
 }, (t) => [
   index('cartographer_ws_idx').on(t.workspaceId, t.generatedAt),
 ])
+
+// ─── Migration 0050 — Experiments + Hypotheses + Calibration (R146.86) ─────────
+// Foundation for the brain's learning loop: every change to a business or
+// platform strategy gets logged as an experiment with a falsifiable
+// prediction; we measure the outcome and feed the result back into prompt
+// evolution + reasoning chains. Hypotheses are the brain's own beliefs +
+// the predictions that would falsify them. Calibration tracks how well
+// the brain's confidence estimates match reality over time.
+
+export const experiments = pgTable('experiments', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  businessId:     text('business_id'),
+  title:          text('title').notNull(),
+  hypothesis:     text('hypothesis').notNull(),
+  prediction:     text('prediction').notNull(),
+  metric:         text('metric').notNull(),
+  baseline:       jsonb('baseline'),
+  intervention:   text('intervention').notNull(),
+  startAt:        bigint('start_at',  { mode: 'number' }).notNull(),
+  endAt:          bigint('end_at',    { mode: 'number' }),
+  status:         text('status').notNull().default('running'),
+  outcome:        jsonb('outcome'),
+  verdict:        text('verdict'),
+  lessons:        text('lessons'),
+  confidencePre:  real('confidence_pre'),
+  confidencePost: real('confidence_post'),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:      bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('experiments_ws_status_idx').on(t.workspaceId, t.status),
+  index('experiments_business_idx').on(t.businessId),
+])
+
+export const hypotheses = pgTable('hypotheses', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  subject:         text('subject').notNull(),
+  claim:           text('claim').notNull(),
+  prediction:      text('prediction').notNull(),
+  confidence:      real('confidence').notNull(),
+  evidenceFor:     jsonb('evidence_for').notNull().default([]),
+  evidenceAgainst: jsonb('evidence_against').notNull().default([]),
+  status:          text('status').notNull().default('open'),
+  reviewedAt:      bigint('reviewed_at', { mode: 'number' }),
+  relatedChain:    text('related_chain'),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:       bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('hypotheses_ws_status_idx').on(t.workspaceId, t.status),
+  index('hypotheses_subject_idx').on(t.workspaceId, t.subject),
+])
+
+export const calibrationObservations = pgTable('calibration_observations', {
+  id:                 text('id').primaryKey(),
+  workspaceId:        text('workspace_id').notNull(),
+  subjectType:        text('subject_type').notNull(),
+  subjectId:          text('subject_id').notNull(),
+  claimedConfidence:  real('claimed_confidence').notNull(),
+  outcome:            text('outcome').notNull(),
+  outcomeScore:       real('outcome_score'),
+  observedAt:         bigint('observed_at', { mode: 'number' }).notNull(),
+  notes:              text('notes'),
+}, (t) => [
+  index('calibration_ws_subject_idx').on(t.workspaceId, t.subjectType, t.observedAt),
+])
