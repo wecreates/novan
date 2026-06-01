@@ -1743,6 +1743,76 @@ const OPERATIONS: Record<string, OpSpec> = {
       return { ok: true }
     },
   },
+  // ─── R146.99 — Frontier image-model rendering ──────────────────────
+  'image.render': {
+    description: 'Render image via a specific frontier provider. Params: provider (replicate-flux|replicate-sdxl|openai|stability|gemini-imagen), prompt, width?, height?, numImages?, seed?, referenceImages?, negativePrompt?, guidanceScale?, steps?',
+    risk: 'high',
+    handler: async (ws, p) => {
+      const { renderImage } = await import('./ai-image-providers.js')
+      return renderImage(
+        (p['provider'] as 'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen') ?? 'replicate-flux',
+        {
+          prompt:        String(p['prompt'] ?? ''),
+          ...(typeof p['width']         === 'number' ? { width:         p['width']         as number } : {}),
+          ...(typeof p['height']        === 'number' ? { height:        p['height']        as number } : {}),
+          ...(typeof p['numImages']     === 'number' ? { numImages:     p['numImages']     as number } : {}),
+          ...(typeof p['seed']          === 'number' ? { seed:          p['seed']          as number } : {}),
+          ...(typeof p['guidanceScale'] === 'number' ? { guidanceScale: p['guidanceScale'] as number } : {}),
+          ...(typeof p['steps']         === 'number' ? { steps:         p['steps']         as number } : {}),
+          ...(Array.isArray(p['referenceImages']) ? { referenceImages: (p['referenceImages'] as string[]).map(String) } : {}),
+          ...(p['negativePrompt'] ? { negativePrompt: String(p['negativePrompt']) } : {}),
+          workspaceId: ws,
+        },
+      )
+    },
+  },
+  'image.renderWithFallback': {
+    description: 'Render image with provider fallback chain. Params: primary, fallbacks (array), prompt, width?, height?, numImages?, referenceImages?',
+    risk: 'high',
+    handler: async (ws, p) => {
+      const { renderImageWithFallback } = await import('./ai-image-providers.js')
+      return renderImageWithFallback(
+        (p['primary'] as 'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen') ?? 'replicate-flux',
+        ((p['fallbacks'] as string[]) ?? []) as Array<'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen'>,
+        {
+          prompt: String(p['prompt'] ?? ''),
+          ...(typeof p['width']     === 'number' ? { width:     p['width']     as number } : {}),
+          ...(typeof p['height']    === 'number' ? { height:    p['height']    as number } : {}),
+          ...(typeof p['numImages'] === 'number' ? { numImages: p['numImages'] as number } : {}),
+          ...(Array.isArray(p['referenceImages']) ? { referenceImages: (p['referenceImages'] as string[]).map(String) } : {}),
+          workspaceId: ws,
+        },
+      )
+    },
+  },
+  'image.renderRouted': {
+    description: 'Route image request via image.route() heuristic + render with fallback chain. Params: prompt, style, needsCharacterRef?, needsHighResolution?, budgetUsd?, referenceImages?, width?, height?',
+    risk: 'high',
+    handler: async (ws, p) => {
+      const { routeImageRequest } = await import('./image-upgrades.js')
+      const { renderImageWithFallback } = await import('./ai-image-providers.js')
+      const routing = routeImageRequest({
+        style: (p['style'] as 'photoreal' | 'art' | 'illustration' | 'product' | 'character' | 'logo') ?? 'photoreal',
+        ...(typeof p['needsCharacterRef']   === 'boolean' ? { needsCharacterRef:   p['needsCharacterRef']   as boolean } : {}),
+        ...(typeof p['needsHighResolution'] === 'boolean' ? { needsHighResolution: p['needsHighResolution'] as boolean } : {}),
+        ...(typeof p['budgetUsd']           === 'number'  ? { budgetUsd:           p['budgetUsd']           as number }  : {}),
+      })
+      const renderResult = await renderImageWithFallback(
+        routing.primary   as 'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen',
+        routing.fallbacks as Array<'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen'>,
+        {
+          prompt: String(p['prompt'] ?? ''),
+          ...(typeof p['width']     === 'number' ? { width:     p['width']     as number } : {}),
+          ...(typeof p['height']    === 'number' ? { height:    p['height']    as number } : {}),
+          ...(typeof p['numImages'] === 'number' ? { numImages: p['numImages'] as number } : {}),
+          ...(Array.isArray(p['referenceImages']) ? { referenceImages: (p['referenceImages'] as string[]).map(String) } : {}),
+          workspaceId: ws,
+        },
+      )
+      return { routing, render: renderResult }
+    },
+  },
+
   'autonomy.spendSummary': {
     description: 'Summary of period spend per category + active budgets. Params: businessId?',
     risk: 'low',
@@ -4210,6 +4280,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         // R146.97 — autonomy budget ops legitimately return $ ceilings + spend.
         'autonomy.setBudget', 'autonomy.listBudgets', 'autonomy.disableBudget',
         'autonomy.checkSpend', 'autonomy.logSpend', 'autonomy.spendSummary',
+        // R146.99 — image render ops return cost figures the operator needs.
+        'image.render', 'image.renderWithFallback', 'image.renderRouted',
       ])
       const outGuard = INFO_OPS_NO_OUTPUT_GUARD.has(step.op)
         ? { ok: true as const }

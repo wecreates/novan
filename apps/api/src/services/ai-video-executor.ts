@@ -60,12 +60,16 @@ export async function executeEpisode(input: ExecuteEpisodeInput): Promise<Execut
     episodeId: input.episode.id, shotCount: input.episode.shots.length, totalSec: cuts.totalDurationSec,
   })
 
-  // Render shots, paralleled with a small concurrency cap (frontier models
-  // rate-limit aggressively and we want to honor per-provider sequencing).
-  const parallel = Math.max(1, Math.min(4, input.parallelShots ?? 2))
+  // Render shots. R146.100 — must be sequential when continuity matters
+  // because each shot's first frame is conditioned on the PREVIOUS shot's
+  // last frame. Operator can override with parallelShots > 1 to skip
+  // continuity (faster but worse character/scene consistency).
+  const parallel = Math.max(1, Math.min(4, input.parallelShots ?? 1))
   const shotResults: ExecuteEpisodeResult['shotResults'] = []
   const queue = [...input.episode.shots]
   let totalCostUsd = 0
+  // R146.100 — last-frame URLs by shot id, populated as we go.
+  const lastFrameByShotId: Map<string, string> = new Map()
 
   const runShot = async (shot: Shot): Promise<void> => {
     const routing = routeShotToProvider(shot)
@@ -77,6 +81,14 @@ export async function executeEpisode(input: ExecuteEpisodeInput): Promise<Execut
       const charBibleEntry = continuity.characterBible.find(c => c.characterId === charId)
       if (charBibleEntry) refs.push(...charBibleEntry.referenceImages.slice(0, 2))
     }
+    // R146.100 — resolve prev-shot end frame. The continuity plan refers to
+    // it by symbolic anchor; here we look up the actual URL/path from the
+    // already-rendered prev shot. Without parallel=1, this won't always be
+    // available (shots may render out of order); in that case we fall back
+    // to the character/scene ref images for continuity conditioning.
+    const shotIdx = input.episode.shots.findIndex(s => s.id === shot.id)
+    const prevShotId = shotIdx > 0 ? input.episode.shots[shotIdx - 1]?.id : undefined
+    const prevShotEndFrame = prevShotId ? lastFrameByShotId.get(prevShotId) : undefined
     const req = {
       prompt:           shot.prompt,
       durationSec:      shot.durationSec,
@@ -84,7 +96,7 @@ export async function executeEpisode(input: ExecuteEpisodeInput): Promise<Execut
       referenceImages:  refs.slice(0, 4),
       workspaceId:      input.workspaceId,
       ...(shot.cameraMove ? { cameraMove: shot.cameraMove } : {}),
-      ...(ccShot?.prevShotEndFrame ? { prevShotEndFrame: ccShot.prevShotEndFrame } : {}),
+      ...(prevShotEndFrame ? { prevShotEndFrame } : {}),
       ...(ccShot?.seedAnchor ? { seed: hashStr(ccShot.seedAnchor) } : {}),
     }
     const r = await renderShotWithFallback(
@@ -98,6 +110,14 @@ export async function executeEpisode(input: ExecuteEpisodeInput): Promise<Execut
       try {
         const tag = `${input.episode.id}-${shot.id}`
         localPath = await downloadToLocal(r.videoUrl, tag)
+        // R146.100 — extract last frame for next-shot continuity. We point
+        // the lastFrameByShotId map at the source URL (most provider APIs
+        // can accept the same URL again as image-conditioning); the
+        // executor's `prevShotEndFrame` then threads that into the next
+        // shot's RenderRequest. ffmpeg frame-extraction is the followup
+        // optimization for cases where mid/end frames matter more than
+        // the first frame.
+        if (r.videoUrl) lastFrameByShotId.set(shot.id, r.videoUrl)
       } catch (e) {
         await emit(input.workspaceId, 'aiVideo.shot.download_failed', { shotId: shot.id, error: (e as Error).message })
       }

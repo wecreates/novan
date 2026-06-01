@@ -95,7 +95,11 @@ export async function renderViaRunway(req: RenderRequest): Promise<RenderResult>
       duration:   Math.min(10, Math.max(5, Math.round(req.durationSec))),
       ratio,
       ...(req.seed                 ? { seed: req.seed } : {}),
-      ...(req.referenceImages?.[0] ? { promptImage: req.referenceImages[0] } : {}),
+      // R146.100 — Runway Gen-3 image-to-video: prev-shot end frame anchors
+      // motion continuity; falls back to reference-image for character.
+      ...((req.prevShotEndFrame ?? req.referenceImages?.[0])
+          ? { promptImage: req.prevShotEndFrame ?? req.referenceImages![0] }
+          : {}),
     }
     const startRes = await withTimeout(fetch('https://api.runwayml.com/v1/image_to_video', {
       method: 'POST',
@@ -150,7 +154,20 @@ export async function renderViaVeo(req: RenderRequest): Promise<RenderResult> {
     const model = 'veo-3.0-generate-preview'
     const url = `https://${region}-aiplatform.googleapis.com/v1/projects/${project}/locations/${region}/publishers/google/models/${model}:predictLongRunning`
     const instance: Record<string, unknown> = { prompt: req.prompt.slice(0, 1500) }
-    if (req.referenceImages?.[0]) instance['image'] = { bytesBase64Encoded: '', mimeType: 'image/jpeg' /* operator must upload via separate endpoint then pass GCS URI here */ }
+    // R146.100 — character/scene continuity via Veo image conditioning.
+    // Veo accepts a single starting frame image; we pass the first reference
+    // image (typically the character ref or scene-establishing frame).
+    // For shot-to-shot continuity, the executor seeds this with the prev
+    // shot's last frame URL when req.prevShotEndFrame is set.
+    const continuityRef = req.prevShotEndFrame ?? req.referenceImages?.[0]
+    if (continuityRef) {
+      if (continuityRef.startsWith('gs://') || continuityRef.startsWith('https://')) {
+        instance['image'] = { gcsUri: continuityRef, mimeType: 'image/jpeg' }
+      } else if (continuityRef.startsWith('data:')) {
+        const b64 = continuityRef.split(',')[1] ?? ''
+        instance['image'] = { bytesBase64Encoded: b64, mimeType: 'image/jpeg' }
+      }
+    }
     const body = {
       instances: [instance],
       parameters: {
@@ -271,7 +288,10 @@ export async function renderViaKling(req: RenderRequest): Promise<RenderResult> 
       prompt:           req.prompt.slice(0, 1500),
       duration:         req.durationSec <= 5 ? '5' : '10',
       aspect_ratio:     req.aspectRatio ?? '16:9',
-      ...(req.referenceImages?.[0] ? { image_url: req.referenceImages[0] } : {}),
+      // R146.100 — Kling image-to-video: prev-shot end frame for continuity
+      ...((req.prevShotEndFrame ?? req.referenceImages?.[0])
+          ? { image_url: req.prevShotEndFrame ?? req.referenceImages![0] }
+          : {}),
     }
     const res = await withTimeout(fetch(endpoint, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Key ${key}` },
@@ -310,7 +330,12 @@ export async function renderViaLuma(req: RenderRequest): Promise<RenderResult> {
       prompt:       req.prompt.slice(0, 1500),
       aspect_ratio: req.aspectRatio ?? '16:9',
       loop:         false,
-      ...(req.referenceImages?.[0] ? { keyframes: { frame0: { type: 'image', url: req.referenceImages[0] } } } : {}),
+      // R146.100 — Luma keyframes: frame0 = continuity anchor (prev shot end
+       // or scene/character ref). frame1 could be used for end-keyframe in
+       // advanced flows but we leave it open for the executor.
+      ...((req.prevShotEndFrame ?? req.referenceImages?.[0])
+          ? { keyframes: { frame0: { type: 'image', url: req.prevShotEndFrame ?? req.referenceImages![0] } } }
+          : {}),
     }
     const startRes = await withTimeout(fetch('https://api.lumalabs.ai/dream-machine/v1/generations', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
