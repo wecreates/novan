@@ -1652,6 +1652,64 @@ const OPERATIONS: Record<string, OpSpec> = {
   'aiVideo.planFeatureFilm': { description: 'Plan a feature film (30-180min). Params: logline, targetMinutes, genre?', risk: 'low',
     handler: async (ws, p) => (await import('./ai-video-studio.js')).planFeatureFilm({ workspaceId: ws, logline: String(p['logline'] ?? ''), targetMinutes: Number(p['targetMinutes'] ?? 90), ...(p['genre'] ? { genre: String(p['genre']) } : {}) }) },
 
+  // ─── R146.95 — Frontier model rendering ─────────────────────────────
+  'aiVideo.renderShot': {
+    description: 'Render a single shot via a specific frontier provider. Params: provider (runway|veo|sora|kling|luma), prompt, durationSec, aspectRatio?, seed?, referenceImages?, cameraMove?',
+    risk: 'high',     // spends real money
+    handler: async (ws, p) => {
+      const { renderShot } = await import('./ai-video-providers.js')
+      return renderShot(
+        (p['provider'] as 'runway' | 'veo' | 'sora' | 'kling' | 'luma') ?? 'kling',
+        {
+          prompt:           String(p['prompt'] ?? ''),
+          durationSec:      Number(p['durationSec'] ?? 5),
+          ...(p['aspectRatio']     ? { aspectRatio:     p['aspectRatio']     as '16:9' | '9:16' | '1:1' } : {}),
+          ...(typeof p['seed'] === 'number' ? { seed: p['seed'] as number } : {}),
+          ...(Array.isArray(p['referenceImages']) ? { referenceImages: (p['referenceImages'] as string[]).map(String) } : {}),
+          ...(p['cameraMove']      ? { cameraMove:      p['cameraMove']      as 'static' | 'pan' | 'dolly' | 'crane' | 'tracking' } : {}),
+          workspaceId: ws,
+        },
+      )
+    },
+  },
+  'aiVideo.renderShotWithFallback': {
+    description: 'Render a shot with provider chain fallback. Params: primary, fallbacks (array), prompt, durationSec, aspectRatio?, referenceImages?',
+    risk: 'high',
+    handler: async (ws, p) => {
+      const { renderShotWithFallback } = await import('./ai-video-providers.js')
+      return renderShotWithFallback(
+        (p['primary'] as 'runway' | 'veo' | 'sora' | 'kling' | 'luma') ?? 'kling',
+        ((p['fallbacks'] as string[]) ?? []) as Array<'runway' | 'veo' | 'sora' | 'kling' | 'luma'>,
+        {
+          prompt:      String(p['prompt'] ?? ''),
+          durationSec: Number(p['durationSec'] ?? 5),
+          ...(p['aspectRatio'] ? { aspectRatio: p['aspectRatio'] as '16:9' | '9:16' | '1:1' } : {}),
+          ...(Array.isArray(p['referenceImages']) ? { referenceImages: (p['referenceImages'] as string[]).map(String) } : {}),
+          workspaceId: ws,
+        },
+      )
+    },
+  },
+
+  // ─── R146.96 — Full episode execution: plan → render → assemble ─────
+  'aiVideo.executeEpisode': {
+    description: 'End-to-end execution: render every shot, generate music + voiceover, ffmpeg concat, optional captions + brand. Params: episode (object with characters/scenes/shots), concatOutputPath, parallelShots?, generateMusic?, generateVoiceover?, burnCaptions?, applyBrandKit?',
+    risk: 'critical',         // can spend tens or hundreds of dollars; OPERATOR_APPROVED required
+    handler: async (ws, p) => {
+      const { executeEpisode } = await import('./ai-video-executor.js')
+      return executeEpisode({
+        workspaceId:      ws,
+        episode:          p['episode']         as import('./ai-video-studio.js').Episode,
+        concatOutputPath: String(p['concatOutputPath'] ?? '/srv/renders/episode.mp4'),
+        ...(typeof p['parallelShots'] === 'number' ? { parallelShots: p['parallelShots'] as number } : {}),
+        ...(p['generateMusic']     ? { generateMusic:     p['generateMusic']     as { prompt: string; durationSec?: number } } : {}),
+        ...(p['generateVoiceover'] ? { generateVoiceover: p['generateVoiceover'] as { text: string; voice?: string; style?: 'neutral' | 'narrator' | 'energetic' | 'calm' | 'authoritative' } } : {}),
+        ...(typeof p['burnCaptions']  === 'boolean' ? { burnCaptions:  p['burnCaptions']  as boolean } : {}),
+        ...(typeof p['applyBrandKit'] === 'boolean' ? { applyBrandKit: p['applyBrandKit'] as boolean } : {}),
+      })
+    },
+  },
+
   // ─── Media analyzer (R121/R122) — exposed via brain-task so MCP picks
   //     them up automatically from listAvailableOperations(). All locked
   //     refusals (facial-id, voice biometrics, generation, surveillance)
@@ -4088,6 +4146,10 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'aiVideo.buildContinuityPlan', 'aiVideo.planAssembly',
         'aiVideo.createSeries', 'aiVideo.listEpisodesInSeries',
         'aiVideo.planFeatureFilm',
+        // R146.95-96 — real-money rendering + full execution; outputs include
+        // cost figures the operator needs to see un-redacted.
+        'aiVideo.renderShot', 'aiVideo.renderShotWithFallback',
+        'aiVideo.executeEpisode',
       ])
       const outGuard = INFO_OPS_NO_OUTPUT_GUARD.has(step.op)
         ? { ok: true as const }
