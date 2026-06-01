@@ -1905,6 +1905,93 @@ const OPERATIONS: Record<string, OpSpec> = {
       })
     },
   },
+  // R146.85 — operator-facing "pull up the right URL to connect this platform".
+  // Returns the catalog metadata + an ordered checklist of URLs the operator
+  // must visit in their browser. The chat UI consumes the response as a
+  // `browser.open` action set: each step gets a click-to-open link rendered
+  // inline in the operator's reply, so they tap once and land on the right
+  // page (signup if they don't have an account, login then API-key page if
+  // they do, OAuth-authorize if it's an OAuth connector). The brain MUST
+  // NOT enter credentials itself — global CLAUDE.md rules forbid it.
+  'connector.setup_links': {
+    description: 'Get the ordered list of browser URLs an operator must visit to connect a platform (signup/login/api-key/oauth). Params: connectorId (e.g. "mailchimp", "x-twitter", "printful")',
+    risk: 'low',
+    handler: async (_ws, p) => {
+      const id = String(p['connectorId'] ?? '').trim()
+      if (!id) throw new Error('connector.setup_links: connectorId required')
+      const { CATALOG } = await import('./connector-catalog/index.js')
+      const def = CATALOG.find(d => d.id === id)
+      if (!def) {
+        return {
+          ok: false,
+          error: `unknown connector '${id}'`,
+          available: CATALOG.map(d => d.id),
+        }
+      }
+      const steps: Array<{ step: number; label: string; url: string; required: boolean; openInNewTab: boolean }> = []
+      let step = 1
+      // Step 1 — signup if needed (skip if operator likely already has account)
+      if (def.signupUrl) {
+        steps.push({
+          step: step++,
+          label: `Sign up for ${def.name} (skip if you already have an account)`,
+          url: def.signupUrl,
+          required: false,
+          openInNewTab: true,
+        })
+      }
+      // Step 2 — login
+      if (def.loginUrl) {
+        steps.push({
+          step: step++,
+          label: `Log in to ${def.name}`,
+          url: def.loginUrl,
+          required: true,
+          openInNewTab: true,
+        })
+      }
+      // Step 3 — auth-credential creation, branches on authType
+      if (def.authType === 'api_key' && def.apiKeyCreationUrl) {
+        steps.push({
+          step: step++,
+          label: `Generate a ${def.name} API key (copy it to your clipboard)`,
+          url: def.apiKeyCreationUrl,
+          required: true,
+          openInNewTab: true,
+        })
+      } else if (def.authType === 'oauth' && def.apiKeyCreationUrl) {
+        // For OAuth connectors apiKeyCreationUrl is usually the developer-
+        // app registration page (operator creates an app to get client_id +
+        // client_secret). The Novan-side OAuth flow handles the rest.
+        steps.push({
+          step: step++,
+          label: `Register a developer app on ${def.name} to get client_id + client_secret`,
+          url: def.apiKeyCreationUrl,
+          required: true,
+          openInNewTab: true,
+        })
+      }
+      return {
+        ok: true,
+        connector: {
+          id:                    def.id,
+          name:                  def.name,
+          category:              def.category,
+          authType:              def.authType,
+          permissionExplanation: def.permissionExplanation,
+          freeTierAvailable:     def.freeTierAvailable,
+          docsUrl:               def.docsUrl,
+          pricingUrl:            def.pricingUrl,
+        },
+        steps,
+        // Frontend hint: render each step's url as a clickable button that
+        // calls window.open(url, '_blank'). The chat UI's action-renderer
+        // already supports `browser.open` action; this op's response shape
+        // is consumed by novan-chat's tool-result formatter.
+        renderHint: 'browser-open-checklist',
+      }
+    },
+  },
 
   // ─── Round 112-114 wiring: coding-topology + pipeline-adapters + cartographer + curator + ai-product-agents ─
   'coding.run_full_flow': {
