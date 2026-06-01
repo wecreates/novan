@@ -1475,6 +1475,61 @@ const OPERATIONS: Record<string, OpSpec> = {
     },
   },
 
+  // ─── R146.87 — CEO strategic ops ─────────────────────────────────────
+  'ceo.prioritize': {
+    description: 'Rank businesses by ROI-per-attention-unit. Returns priority-scored list with recommended action per business.',
+    risk: 'low',
+    handler: async (ws) => (await import('./ceo-strategic.js')).prioritizeBusinesses(ws),
+  },
+  'ceo.proposeReallocation': {
+    description: 'Propose capital reallocation across businesses by priority score. Params: monthlyBudgetUsd',
+    risk: 'low',
+    handler: async (ws, p) => (await import('./ceo-strategic.js')).proposeReallocation(ws, Number(p['monthlyBudgetUsd'] ?? 1000)),
+  },
+  'ceo.diversificationCheck': {
+    description: 'Flag concentration risk in the business portfolio (by industry + stage).',
+    risk: 'low',
+    handler: async (ws) => (await import('./ceo-strategic.js')).diversificationCheck(ws),
+  },
+  'ceo.setOkrs': {
+    description: 'Set quarterly OKRs. Params: quarter (e.g. "2026Q2"), objective, keyResults (array of {description, target, current, unit})',
+    risk: 'medium',
+    handler: async (ws, p) => (await import('./ceo-strategic.js')).setOkrs(ws, {
+      quarter:    String(p['quarter'] ?? ''),
+      objective:  String(p['objective'] ?? ''),
+      keyResults: Array.isArray(p['keyResults']) ? (p['keyResults'] as Array<{ description: string; target: number; current: number; unit: string }>) : [],
+    }),
+  },
+  'ceo.readOkrs': {
+    description: 'Read current OKRs. Params: quarter?',
+    risk: 'low',
+    handler: async (ws, p) => (await import('./ceo-strategic.js')).readOkrs(ws, p['quarter'] ? String(p['quarter']) : undefined),
+  },
+  'ceo.retireAgents': {
+    description: 'Retire underperforming agents based on failure rate. Params: minLifetimeDays? (default 7), maxFailureRate? (default 0.6)',
+    risk: 'medium',
+    handler: async (ws, p) => (await import('./ceo-strategic.js')).retireUnderperformingAgents(ws, {
+      ...(typeof p['minLifetimeDays'] === 'number' ? { minLifetimeDays: p['minLifetimeDays'] as number } : {}),
+      ...(typeof p['maxFailureRate']  === 'number' ? { maxFailureRate:  p['maxFailureRate']  as number } : {}),
+    }),
+  },
+  'ceo.adversarialReview': {
+    description: 'Second-LLM adversarial review of a proposed CEO plan. Params: planSummary, rationale, affectedBusinesses?, estimatedSpendUsd?',
+    risk: 'low',
+    handler: async (ws, p) => (await import('./ceo-strategic.js')).adversarialReview({
+      workspaceId: ws,
+      planSummary: String(p['planSummary'] ?? ''),
+      rationale:   String(p['rationale']   ?? ''),
+      ...(Array.isArray(p['affectedBusinesses']) ? { affectedBusinesses: (p['affectedBusinesses'] as string[]).map(String) } : {}),
+      ...(typeof p['estimatedSpendUsd'] === 'number' ? { estimatedSpendUsd: p['estimatedSpendUsd'] as number } : {}),
+    }),
+  },
+  'ceo.operatorUnavailability': {
+    description: 'Read operator-unavailability state + recommended posture. State machine: normal → cooling (2d) → stale (5d) → frozen (14d).',
+    risk: 'low',
+    handler: async (ws) => (await import('./ceo-strategic.js')).operatorUnavailabilityState(ws),
+  },
+
   // ─── Media analyzer (R121/R122) — exposed via brain-task so MCP picks
   //     them up automatically from listAvailableOperations(). All locked
   //     refusals (facial-id, voice biometrics, generation, surveillance)
@@ -3880,6 +3935,11 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'experiment.create', 'experiment.list', 'experiment.conclude', 'experiment.abandon',
         'hypothesis.create', 'hypothesis.evidence', 'hypothesis.review', 'hypothesis.list',
         'calibration.curve',
+        // R146.87 — CEO strategic ops legitimately reference revenue, budget,
+        // and other financial metrics as their input/output domain.
+        'ceo.prioritize', 'ceo.proposeReallocation', 'ceo.diversificationCheck',
+        'ceo.setOkrs', 'ceo.readOkrs', 'ceo.retireAgents',
+        'ceo.adversarialReview', 'ceo.operatorUnavailability',
       ])
       const outGuard = INFO_OPS_NO_OUTPUT_GUARD.has(step.op)
         ? { ok: true as const }
