@@ -625,6 +625,15 @@ validateEnvOrThrow()
 
 // Start the closed learning loop: periodic incident/improvement/suspicious scans + sweeps
 startLearningCron()
+// R146.123 — Ensure the War Room agent roster is seeded for the system
+// workspace on first boot. Idempotent: r115 agentSeedDefaults checks
+// existing rows by shortName before inserting.
+void (async () => {
+  try {
+    const { agentSeedDefaults } = await import('./services/r115-build-batch.js')
+    await agentSeedDefaults('system')
+  } catch (e) { app.log.warn({ err: (e as Error).message }, '[boot] agent seed failed (non-fatal)') }
+})()
 // 24/7 self-monitoring + cron re-arm on drift
 startHeartbeat(60_000)
 // Kick the autonomous mind on boot so cold start isn't silent. Errors

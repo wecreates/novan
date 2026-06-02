@@ -55,6 +55,7 @@ export const TAXONOMY: TreeNode[] = [
       { id: 'brain.research',  label: 'Research',    path: '/research' },
       { id: 'brain.skills',    label: 'Skills',      path: '/skill-library' },
       { id: 'brain.selfcheck', label: 'Self-check',  path: '/self-check' },
+      { id: 'brain.proposals', label: 'Proposals',   path: '/proposals' },
     ],
   },
   {

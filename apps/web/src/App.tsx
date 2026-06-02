@@ -100,6 +100,7 @@ const FrontierLedgerPage        = React.lazy(() => import('./pages/FrontierLedge
 const VoiceLibraryPage          = React.lazy(() => import('./pages/VoiceLibraryPage.js'))
 const PulseShellPage            = React.lazy(() => import('./pages/PulseShellPage.js'))
 const ProposalsPage             = React.lazy(() => import('./pages/ProposalsPage.js'))
+import { GlobalCommandBar } from './components/CommandBar.js'
 
 // R124 — Legal & Compliance pages (consume R122 backend routes).
 const Soc2ControlsPage          = React.lazy(() => import('./pages/legal/Soc2ControlsPage.js'))
@@ -678,6 +679,8 @@ function RouteFallback() {
 
 function AppRoutes() {
   return (
+    <>
+      <GlobalCommandBar />
         <Routes>
           <Route path="/"            element={<Navigate to="/today" replace />} />
           <Route path="/today"          element={<TodayPage />} />
@@ -807,6 +810,7 @@ function AppRoutes() {
           <Route path="/legal/recovery-playbooks"    element={<RecoveryPlaybooksPage />} />
           <Route path="*"          element={<Navigate to="/war-room" replace />} />
         </Routes>
+    </>
   )
 }
 
