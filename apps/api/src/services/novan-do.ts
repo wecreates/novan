@@ -169,7 +169,43 @@ export interface DoIntentResult {
  * Pure routing — never executes destructive work. Returns the plan; the
  * operator (or a subsequent op call) actually runs it.
  */
+/**
+ * R146.121 — Try LLM classification first, fall back to keyword routing.
+ * The LLM sees the actual op manifest so it can suggest real op names
+ * instead of guessing.
+ */
+async function classifyWithLlm(prompt: string): Promise<DoIntentResult | null> {
+  if (!process.env['GROQ_API_KEY'] && !process.env['OPENAI_API_KEY'] && !process.env['ANTHROPIC_API_KEY'] && !process.env['GEMINI_API_KEY']) return null
+  try {
+    const { OPERATIONS } = await import('./brain-task.js')
+    // Compact ops manifest — name + first 60 chars of description
+    const manifest = Object.entries(OPERATIONS).slice(0, 200).map(([n, d]) => `${n}: ${String((d as { description?: string }).description ?? '').slice(0, 80)}`).join('\n')
+    const sys = `You are Novan's intent router. Given an operator request, return STRICT JSON: {"category":"code_change|content|business|connector|research|config|unknown","summary":"...","suggestedOps":["op.name",...],"requiresApproval":bool,"nextStep":"..."}. Pick op names ONLY from this manifest. Max 6 suggestedOps. Be terse.\n\nMANIFEST:\n${manifest}`
+    const { streamChat } = await import('./chat-providers.js')
+    const gen = streamChat('system', [
+      { role: 'system', content: sys },
+      { role: 'user',   content: prompt.slice(0, 1000) },
+    ], { maxTokens: 400 } as Parameters<typeof streamChat>[2])
+    let acc = ''
+    for await (const ch of gen) { acc += ch.delta }
+    const m = acc.match(/\{[\s\S]*\}/)
+    if (!m) return null
+    const parsed = JSON.parse(m[0]) as Partial<DoIntentResult>
+    if (!parsed.category) return null
+    return {
+      category: parsed.category as DoIntentResult['category'],
+      summary: String(parsed.summary ?? ''),
+      suggestedOps: Array.isArray(parsed.suggestedOps) ? parsed.suggestedOps.slice(0, 6).map(String) : [],
+      requiresApproval: parsed.requiresApproval === true,
+      nextStep: String(parsed.nextStep ?? ''),
+    }
+  } catch { return null }
+}
+
 export async function classifyIntent(prompt: string): Promise<DoIntentResult> {
+  // Try LLM first; on any failure fall back to keyword routing
+  const llm = await classifyWithLlm(prompt)
+  if (llm) return llm
   const p = prompt.toLowerCase()
   const { OPERATIONS } = await import('./brain-task.js')
   const matchOps = (terms: string[]): string[] => {
