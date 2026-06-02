@@ -99,6 +99,7 @@ const BrainShowcasePage         = React.lazy(() => import('./pages/BrainShowcase
 const FrontierLedgerPage        = React.lazy(() => import('./pages/FrontierLedgerPage.js'))
 const VoiceLibraryPage          = React.lazy(() => import('./pages/VoiceLibraryPage.js'))
 const PulseShellPage            = React.lazy(() => import('./pages/PulseShellPage.js'))
+const ProposalsPage             = React.lazy(() => import('./pages/ProposalsPage.js'))
 
 // R124 — Legal & Compliance pages (consume R122 backend routes).
 const Soc2ControlsPage          = React.lazy(() => import('./pages/legal/Soc2ControlsPage.js'))
@@ -797,6 +798,7 @@ function AppRoutes() {
           <Route path="/voice/library"               element={<VoiceLibraryPage />} />
           {/* R146.114 — Pulse-style shell (kzzy47/Pulse template) */}
           <Route path="/pulse"                       element={<PulseShellPage />} />
+          <Route path="/proposals"                   element={<ProposalsPage />} />
           <Route path="/brain/pulse"                 element={<PulseShellPage />} />
           {/* R124 — Legal & Compliance (consumes R122 backend routes) */}
           <Route path="/legal/soc2"                  element={<Soc2ControlsPage />} />

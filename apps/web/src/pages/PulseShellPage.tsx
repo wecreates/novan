@@ -259,6 +259,26 @@ function CommandBar({ onClose }: { onClose: () => void }): JSX.Element {
   const [result, setResult] = useState<IntentResult | null>(null)
   const [running, setRunning] = useState<string | null>(null)
   const [runResult, setRunResult] = useState<string | null>(null)
+  const [listening, setListening] = useState(false)
+
+  // R146.122 — Web Speech API mic input (typed loosely; not in lib.dom)
+  const startListening = () => {
+    type SREvent = { results: ArrayLike<ArrayLike<{ transcript: string }>> }
+    type SRec = { lang: string; interimResults: boolean; continuous: boolean; onresult: (e: SREvent) => void; onend: () => void; onerror: () => void; start: () => void }
+    const w = window as unknown as { SpeechRecognition?: new () => SRec; webkitSpeechRecognition?: new () => SRec }
+    const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition
+    if (!SR) { setRunResult('voice: not supported in this browser'); return }
+    const rec = new SR()
+    rec.lang = 'en-US'; rec.interimResults = true; rec.continuous = false
+    rec.onresult = (e) => {
+      let txt = ''
+      for (let i = 0; i < e.results.length; i++) txt += e.results[i]?.[0]?.transcript ?? ''
+      setPrompt(txt)
+    }
+    rec.onend = () => setListening(false)
+    rec.onerror = () => setListening(false)
+    rec.start(); setListening(true)
+  }
 
   const classify = async () => {
     if (!prompt.trim()) return
@@ -298,6 +318,8 @@ function CommandBar({ onClose }: { onClose: () => void }): JSX.Element {
           style={{ width: '100%', padding: '10px 12px', background: '#000', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#fff', fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
           <button onClick={() => void classify()} disabled={busy || !prompt.trim()} style={btnStyle(busy)}>{busy ? 'thinking…' : 'classify (↵)'}</button>
+          <button onClick={startListening} disabled={listening} style={btnStyle(false, true)} title="speak">{listening ? '🎙 listening…' : '🎙 voice'}</button>
+          <button onClick={() => { setPrompt('/proposals'); window.location.href = '/proposals' }} style={btnStyle(false, true)}>review proposals →</button>
           <button onClick={onClose} style={btnStyle(false, true)}>cancel (esc)</button>
         </div>
 
