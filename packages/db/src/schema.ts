@@ -5088,3 +5088,40 @@ export const revenueRuns = pgTable('revenue_runs', {
   index('rr_ws_idx').on(t.workspaceId, t.createdAt),
   index('rr_status_idx').on(t.workspaceId, t.status, t.currentStep),
 ])
+
+// ─── R146.130 — Tier 2 batch ────────────────────────────────────────────
+
+export const operatorDecisions = pgTable('operator_decisions', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  subjectType:  text('subject_type').notNull(),
+  subjectId:    text('subject_id').notNull(),
+  decision:     text('decision').notNull(),
+  reason:       text('reason'),
+  features:     jsonb('features').$type<Record<string, unknown>>().notNull().default({}),
+  decidedBy:    text('decided_by').notNull().default('operator'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('od_ws_subj_idx').on(t.workspaceId, t.subjectType, t.createdAt),
+  index('od_subj_idx').on(t.subjectType, t.subjectId),
+])
+
+export const promptAbTrials = pgTable('prompt_ab_trials', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  promptKey:      text('prompt_key').notNull(),
+  variantA:       text('variant_a').notNull(),
+  variantB:       text('variant_b').notNull(),
+  samplesTarget:  integer('samples_target').notNull().default(20),
+  samplesDone:    integer('samples_done').notNull().default(0),
+  winsA:          integer('wins_a').notNull().default(0),
+  winsB:          integer('wins_b').notNull().default(0),
+  ties:           integer('ties').notNull().default(0),
+  status:         text('status').notNull().default('running'),
+  winner:         text('winner'),
+  startedAt:      bigint('started_at',   { mode: 'number' }).notNull(),
+  completedAt:    bigint('completed_at', { mode: 'number' }),
+}, (t) => [
+  index('pab_ws_idx').on(t.workspaceId, t.startedAt),
+  index('pab_status_idx').on(t.workspaceId, t.status),
+])

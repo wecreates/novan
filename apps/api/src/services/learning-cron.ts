@@ -1251,6 +1251,9 @@ const INTERVALS = {
   // itself targets 04:00 UTC via cron-on-host. This tick is a safety net
   // for environments without host cron.
   nightlyBackup:         24 * 60 * 60_000,
+  // R146.130 — morning briefing push at 7am UTC. 24h tick; gate inside
+  // checks current UTC hour and fires once per day.
+  morningBriefing:       60 * 60_000,
 }
 
 /**
@@ -1515,6 +1518,24 @@ async function runFrontierIntelTick(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'frontier_intel', error: (e as Error).message }) }
 }
 
+// R146.130 — Morning push briefing. Fires hourly but only sends if current
+// UTC hour matches BRIEFING_HOUR (default 7) and not already sent today.
+let lastBriefingDay = -1
+async function runMorningBriefing(): Promise<void> {
+  if (process.env['DISABLE_MORNING_BRIEFING'] === '1') return
+  const targetHour = parseInt(process.env['BRIEFING_HOUR_UTC'] ?? '7', 10)
+  const now = new Date()
+  if (now.getUTCHours() !== targetHour) return
+  const today = Math.floor(now.getTime() / (24 * 60 * 60_000))
+  if (lastBriefingDay === today) return
+  lastBriefingDay = today
+  try {
+    const { sendMorningBriefing } = await import('./r130-tier2.js')
+    const out = await sendMorningBriefing('system')
+    await emit('cron.morning_briefing', out)
+  } catch (e) { await emit('cron.error', { task: 'morning_briefing', error: (e as Error).message }) }
+}
+
 // R146.128 — Nightly database backup. Fires once per 24h; the runBackup
 // op itself is the kill-switch (returns "not configured" if env unset).
 async function runNightlyBackup(): Promise<void> {
@@ -1758,6 +1779,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runOauthRefresh,                INTERVALS.oauthRefresh))
   handles.push(scheduleJittered(runSuggestionsProducer,         INTERVALS.suggestionsProducer))
   handles.push(scheduleJittered(runNightlyBackup,               INTERVALS.nightlyBackup))
+  handles.push(scheduleJittered(runMorningBriefing,             INTERVALS.morningBriefing))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

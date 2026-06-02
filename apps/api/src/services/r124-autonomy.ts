@@ -56,8 +56,13 @@ export async function suggestionsProducerTick(workspaceId: string): Promise<{ cr
   }
 
   let created = 0
+  // R146.130 — consult decision memory to skip patterns the operator
+  // has rejected ≥3 times in the last 30 days.
+  const { shouldSuppress } = await import('./r130-tier2.js')
   for (const [key, b] of buckets.entries()) {
     if (b.count < 3) continue
+    const sup = await shouldSuppress(workspaceId, { subjectType: 'improvement', featuresToMatch: { eventType: b.type } }).catch(() => ({ suppress: false }))
+    if (sup.suppress) continue
     // Dedupe: skip if any open suggestion has this exact title pattern.
     const titleHash = key.slice(0, 80)
     const title = `[autoscan] recurring ${b.type} (×${b.count}/24h)`

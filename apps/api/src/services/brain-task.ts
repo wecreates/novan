@@ -2094,6 +2094,20 @@ export const OPERATIONS: Record<string, OpSpec> = {
   'revenue.get':           { description: 'Get a single revenue run. Params: runId', risk: 'low',
     handler: async (ws, p) => (await import('./r129-revenue-loop.js')).get(ws, String(p['runId'] ?? '')) },
 
+  // ─── R146.130 — decision memory + A/B harness + morning briefing ────
+  'decision.record':       { description: 'Record an operator decision (approve/reject/dismiss/snooze/edit) on a subject. Params: subjectType, subjectId, decision, reason?, features?', risk: 'low',
+    handler: async (ws, p) => (await import('./r130-tier2.js')).recordDecision(ws, p as unknown as Parameters<typeof import('./r130-tier2.js').recordDecision>[1]) },
+  'decision.shouldSuppress':{ description: 'Check if N similar rejections in the last D days warrant suppressing a new suggestion. Params: subjectType, featuresToMatch, windowDays?, thresholdRejections?', risk: 'low',
+    handler: async (ws, p) => (await import('./r130-tier2.js')).shouldSuppress(ws, p as unknown as Parameters<typeof import('./r130-tier2.js').shouldSuppress>[1]) },
+  'prompt.startTrial':     { description: 'Start an A/B trial on a prompt-evolution key. Params: promptKey, variantA, variantB, samplesTarget?', risk: 'medium',
+    handler: async (ws, p) => (await import('./r130-tier2.js')).startTrial(ws, p as unknown as Parameters<typeof import('./r130-tier2.js').startTrial>[1]) },
+  'prompt.recordAbOutcome': { description: 'Record an A/B trial outcome (a/b/tie). Auto-completes trial when samples_target reached. Params: trialId, outcome', risk: 'low',
+    handler: async (ws, p) => (await import('./r130-tier2.js')).recordTrialOutcome(ws, String(p['trialId'] ?? ''), p['outcome'] as 'a'|'b'|'tie') },
+  'prompt.listTrials':     { description: 'List A/B trials. Params: status?, limit?', risk: 'low',
+    handler: async (ws, p) => (await import('./r130-tier2.js')).listTrials(ws, p as { status?: string; limit?: number }) },
+  'briefing.sendNow':      { description: 'Send the morning briefing push now (manual override of cron).', risk: 'low',
+    handler: async (ws) => (await import('./r130-tier2.js')).sendMorningBriefing(ws) },
+
   'autonomy.counts':       { description: 'Live counts for autonomy dashboard: findings(open) · improvements(open) · ops(in_process/on_deck) · proposals(proposed/approved) · connectorsNeedingRefresh · agentsLive.', risk: 'low',
     handler: async (ws) => (await import('./r124-autonomy.js')).autonomyCounts(ws) },
   'suggestions.scan':      { description: 'Scan last 24h of error events and create improvement_suggestions for recurring patterns (≥3 occurrences). Powers Ali queue.', risk: 'low',
