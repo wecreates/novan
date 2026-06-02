@@ -28,8 +28,10 @@ export function GlobalCommandBar(): JSX.Element | null {
       }
       if (e.key === 'Escape' && open) { setOpen(false) }
     }
+    const openFn = () => setOpen(true)
     window.addEventListener('keydown', fn)
-    return () => window.removeEventListener('keydown', fn)
+    window.addEventListener('novan:open-cmdbar', openFn)
+    return () => { window.removeEventListener('keydown', fn); window.removeEventListener('novan:open-cmdbar', openFn) }
   }, [open])
 
   if (!open) return null

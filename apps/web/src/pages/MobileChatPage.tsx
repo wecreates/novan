@@ -199,6 +199,11 @@ export default function MobileChatPage(): JSX.Element {
               title={push.error ?? (push.subscribed ? 'Disable push notifications' : 'Enable push notifications')}
             >🔔 {push.subscribed ? 'On' : 'Off'}</button>
           )}
+          <button
+            onClick={() => window.dispatchEvent(new Event('novan:open-cmdbar'))}
+            className="text-[11px] px-2 py-1 rounded-full border border-amber-300/40 text-amber-200 hover:bg-amber-300/10"
+            title="Open command bar (tell Novan what to do)"
+          >⌘K</button>
           <a href="/today" className="text-[11px] text-white/40 hover:text-white">Full UI →</a>
         </div>
       </header>
