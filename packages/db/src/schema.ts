@@ -5292,3 +5292,64 @@ export const funnelSimulations = pgTable('funnel_simulations', {
   recommended:    text('recommended'),
   createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
 }, (t) => [index('fs_ws_idx').on(t.workspaceId, t.createdAt)])
+
+// ─── R146.136 — A-tier features ───────────────────────────────────────
+
+export const distillationDatasets = pgTable('distillation_datasets', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  kind:         text('kind').notNull(),
+  sampleCount:  integer('sample_count').notNull().default(0),
+  jsonlPath:    text('jsonl_path'),
+  status:       text('status').notNull().default('pending'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('dd_ws_idx').on(t.workspaceId, t.createdAt)])
+
+export const realityDiffs = pgTable('reality_diffs', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  source:       text('source').notNull(),
+  expected:     jsonb('expected').$type<Record<string, unknown>>().notNull().default({}),
+  actual:       jsonb('actual').$type<Record<string, unknown>>().notNull().default({}),
+  divergence:   real('divergence').notNull().default(0),
+  resolved:     boolean('resolved').notNull().default(false),
+  observedAt:   bigint('observed_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rd_ws_idx').on(t.workspaceId, t.observedAt),
+  index('rd_open_idx').on(t.workspaceId, t.resolved),
+])
+
+export const anomalyHypotheses = pgTable('anomaly_hypotheses', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  metric:        text('metric').notNull(),
+  observedValue: real('observed_value').notNull(),
+  expectedValue: real('expected_value').notNull(),
+  hypotheses:    jsonb('hypotheses').$type<Array<{ name: string; prior: number; costToVerify: number; status: string }>>().notNull().default([]),
+  status:        text('status').notNull().default('open'),
+  investigatedFirst: text('investigated_first'),
+  createdAt:     bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('ah_ws_idx').on(t.workspaceId, t.createdAt)])
+
+export const sponsorshipOutreach = pgTable('sponsorship_outreach', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  channelId:        text('channel_id'),
+  prospectBrand:    text('prospect_brand').notNull(),
+  audienceOverlap:  real('audience_overlap').notNull().default(0),
+  draftDm:          text('draft_dm'),
+  rateProposed:     real('rate_proposed'),
+  status:           text('status').notNull().default('drafted'),
+  sentAt:           bigint('sent_at', { mode: 'number' }),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('so_ws_idx').on(t.workspaceId, t.createdAt)])
+
+export const autoDocs = pgTable('auto_docs', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  docKind:        text('doc_kind').notNull(),
+  bodyMd:         text('body_md').notNull(),
+  generatedFrom:  jsonb('generated_from').$type<string[]>().notNull().default([]),
+  supersededBy:   text('superseded_by'),
+  generatedAt:    bigint('generated_at', { mode: 'number' }).notNull(),
+}, (t) => [index('ad_ws_kind_idx').on(t.workspaceId, t.docKind, t.generatedAt)])
