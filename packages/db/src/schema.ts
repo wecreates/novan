@@ -5157,3 +5157,29 @@ export const attributionEdges = pgTable('attribution_edges', {
   index('ae_dst_idx').on(t.workspaceId, t.dstType, t.dstId),
   index('ae_rel_idx').on(t.workspaceId, t.relation),
 ])
+
+// ─── R146.132 — cross-account planner + LLM drift ──────────────────────
+
+export const accountNiches = pgTable('account_niches', {
+  workspaceId:          text('workspace_id').notNull(),
+  connectorAccountId:   text('connector_account_id').notNull(),
+  nicheTags:            jsonb('niche_tags').$type<string[]>().notNull().default([]),
+  postingSlots:         jsonb('posting_slots').$type<number[]>().notNull().default([]),
+  updatedAt:            bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.workspaceId, t.connectorAccountId] }),
+])
+
+export const llmOutputFingerprints = pgTable('llm_output_fingerprints', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  promptKey:     text('prompt_key').notNull(),
+  provider:      text('provider').notNull(),
+  model:         text('model').notNull(),
+  shapeHash:     text('shape_hash').notNull(),
+  shapeSample:   jsonb('shape_sample').$type<Record<string, unknown>>().notNull().default({}),
+  observedAt:    bigint('observed_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('llm_fp_key_idx').on(t.workspaceId, t.promptKey, t.observedAt),
+  index('llm_fp_shape_idx').on(t.workspaceId, t.promptKey, t.shapeHash),
+])

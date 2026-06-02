@@ -2124,6 +2124,18 @@ export const OPERATIONS: Record<string, OpSpec> = {
   'attribution.list':      { description: 'List recent attribution edges. Params: limit?', risk: 'low',
     handler: async (ws, p) => (await import('./r131-quotas-attribution.js')).listEdges(ws, typeof p['limit'] === 'number' ? p['limit'] as number : 50) },
 
+  // ─── R146.132 — cross-account planner + LLM drift ────────────────
+  'account.setNiche':      { description: 'Set niche tags + posting slots for a connector account. Params: connectorAccountId, nicheTags, postingSlots?', risk: 'medium',
+    handler: async (ws, p) => { await (await import('./r132-planner-drift.js')).setAccountNiche(ws, p as unknown as Parameters<typeof import('./r132-planner-drift.js').setAccountNiche>[1]); return { ok: true } } },
+  'account.listNiches':    { description: 'List niche+slot config across all connector accounts.', risk: 'low',
+    handler: async (ws) => (await import('./r132-planner-drift.js')).listAccountNiches(ws) },
+  'plan.acrossAccounts':   { description: 'Plan post slots across accounts: assigns each item to best-fit account + first unused slot. Params: items: [{contentId, tags: string[]}]', risk: 'low',
+    handler: async (ws, p) => (await import('./r132-planner-drift.js')).planAcrossAccounts(ws, (p['items'] ?? []) as Array<{ contentId: string; tags: string[] }>) },
+  'llm.fingerprint':       { description: 'Compute + record the shape fingerprint of an LLM output. Detects drift vs prior. Params: promptKey, provider, model, output', risk: 'low',
+    handler: async (ws, p) => (await import('./r132-planner-drift.js')).recordFingerprint(ws, p as unknown as Parameters<typeof import('./r132-planner-drift.js').recordFingerprint>[1]) },
+  'llm.driftSummary':      { description: 'Summary of recent shape drift across prompts. Params: windowDays?', risk: 'low',
+    handler: async (ws, p) => (await import('./r132-planner-drift.js')).driftSummary(ws, typeof p['windowDays'] === 'number' ? p['windowDays'] as number : 7) },
+
   'autonomy.counts':       { description: 'Live counts for autonomy dashboard: findings(open) · improvements(open) · ops(in_process/on_deck) · proposals(proposed/approved) · connectorsNeedingRefresh · agentsLive.', risk: 'low',
     handler: async (ws) => (await import('./r124-autonomy.js')).autonomyCounts(ws) },
   'suggestions.scan':      { description: 'Scan last 24h of error events and create improvement_suggestions for recurring patterns (≥3 occurrences). Powers Ali queue.', risk: 'low',
