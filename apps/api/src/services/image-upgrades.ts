@@ -9,16 +9,38 @@ import { events } from '../db/schema.js'
 import { and, desc, eq } from 'drizzle-orm'
 import { v7 as uuidv7 } from 'uuid'
 
-export type ImageProvider = 'openai' | 'replicate-flux' | 'replicate-sdxl' | 'stability' | 'gemini-imagen'
+export type ImageProvider = 'openai' | 'replicate-flux' | 'replicate-sdxl' | 'stability' | 'gemini-imagen' | 'pollinations'
 export type ImageStyle = 'photoreal' | 'art' | 'illustration' | 'product' | 'character' | 'logo'
 
 // ─── Multi-provider router (style → provider mapping) ────────────────────
+
+/** R146.104 — Pollinations.ai added as zero-cost free-tier option. Auto-selected
+ *  when (a) operator explicitly sets budgetUsd=0, or (b) no paid keys are
+ *  present in env. Pollinations serves Flux-class outputs via public GET. */
+function hasAnyPaidImageKey(): boolean {
+  return Boolean(
+    process.env['REPLICATE_API_TOKEN'] ||
+    process.env['OPENAI_API_KEY'] ||
+    process.env['STABILITY_API_KEY'] ||
+    process.env['GEMINI_API_KEY']
+  )
+}
 
 export function routeImageRequest(input: { style: ImageStyle; needsCharacterRef?: boolean; needsHighResolution?: boolean; budgetUsd?: number }): {
   primary: ImageProvider
   fallbacks: ImageProvider[]
   rationale: string
 } {
+  // R146.104 — free-tier shortcut: budgetUsd===0 or no paid keys → Pollinations first.
+  if (input.budgetUsd === 0 || !hasAnyPaidImageKey()) {
+    return {
+      primary:   'pollinations',
+      fallbacks: ['gemini-imagen', 'replicate-flux'],
+      rationale: input.budgetUsd === 0
+        ? 'budgetUsd=0 → Pollinations (free, no key)'
+        : 'no paid image keys present → Pollinations (free, no key)',
+    }
+  }
   let primary: ImageProvider = 'replicate-flux'
   const fallbacks: ImageProvider[] = []
   let rationale = ''
@@ -43,10 +65,12 @@ export function routeImageRequest(input: { style: ImageStyle; needsCharacterRef?
     fallbacks.push('replicate-sdxl')
     rationale = 'DALL-E for vector-like clean shapes'
   }
-  if (input.budgetUsd && input.budgetUsd < 0.05) {
+  if (input.budgetUsd !== undefined && input.budgetUsd < 0.05 && input.budgetUsd > 0) {
     primary = 'gemini-imagen'
     rationale = 'tight budget — cheapest serviceable provider'
   }
+  // Always include Pollinations as the bottom-most free fallback.
+  if (!fallbacks.includes('pollinations')) fallbacks.push('pollinations')
   return { primary, fallbacks, rationale }
 }
 

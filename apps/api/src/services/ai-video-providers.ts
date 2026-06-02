@@ -20,6 +20,20 @@
  *     for Runway, ref images for Veo, image-to-video for all)
  */
 import { recordAiUsage } from './ai-cost-tracker.js'
+import { compressPrompt } from './ai-video-stretcher.js'
+
+/** R146.104 — auto-apply stretcher at the provider edge.
+ *  Every render call passes through this gate first; the prompt that
+ *  actually hits the API has hedges + boilerplate stripped. Caller can
+ *  opt out via skipStretch=true on the request. Net effect: ~30-40%
+ *  fewer bytes per call, ~5-15% fewer compute-seconds in some models'
+ *  pricing tiers that meter input length.
+ */
+function applyStretch<T extends { prompt: string; skipStretch?: boolean }>(req: T): T & { prompt: string } {
+  if (req.skipStretch) return req
+  const { compressed } = compressPrompt(req.prompt)
+  return { ...req, prompt: compressed }
+}
 
 export interface RenderRequest {
   prompt:           string
@@ -32,6 +46,8 @@ export interface RenderRequest {
   workspaceId:      string
   // Provider hint for the cost-tracker
   callTag?:         string
+  // R146.104 — opt out of auto prompt compression at the provider edge
+  skipStretch?:     boolean
 }
 
 export interface RenderResult {
@@ -82,6 +98,7 @@ function trackUsage(provider: string, workspaceId: string, costUsd: number, late
 // ─── Runway (Gen-3 Alpha / Gen-4 via api.runwayml.com) ─────────────────────
 
 export async function renderViaRunway(req: RenderRequest): Promise<RenderResult> {
+  req = applyStretch(req)
   const key = process.env['RUNWAY_API_KEY']
   if (!key) return { ok: false, provider: 'runway', costUsd: 0, latencyMs: 0, error: 'no-key' }
   const t0 = Date.now()
@@ -145,6 +162,7 @@ export async function renderViaRunway(req: RenderRequest): Promise<RenderResult>
 // ─── Veo (Google Vertex AI) ─────────────────────────────────────────────
 
 export async function renderViaVeo(req: RenderRequest): Promise<RenderResult> {
+  req = applyStretch(req)
   const project = process.env['GCP_PROJECT_ID']
   const region  = process.env['VEO_REGION'] ?? 'us-central1'
   const token   = process.env['GCP_ACCESS_TOKEN']     // operator must mint via gcloud + set; refresh out-of-process
@@ -218,6 +236,7 @@ export async function renderViaVeo(req: RenderRequest): Promise<RenderResult> {
 // ─── Sora (OpenAI Video API) ────────────────────────────────────────────
 
 export async function renderViaSora(req: RenderRequest): Promise<RenderResult> {
+  req = applyStretch(req)
   const key = process.env['OPENAI_API_KEY']
   if (!key) return { ok: false, provider: 'sora', costUsd: 0, latencyMs: 0, error: 'no-key' }
   const t0 = Date.now()
@@ -279,6 +298,7 @@ export async function renderViaSora(req: RenderRequest): Promise<RenderResult> {
 // ─── Kling (via fal.ai proxy) ───────────────────────────────────────────
 
 export async function renderViaKling(req: RenderRequest): Promise<RenderResult> {
+  req = applyStretch(req)
   const key = process.env['FAL_KEY']
   if (!key) return { ok: false, provider: 'kling', costUsd: 0, latencyMs: 0, error: 'no-key (FAL_KEY)' }
   const t0 = Date.now()
@@ -322,6 +342,7 @@ export async function renderViaKling(req: RenderRequest): Promise<RenderResult> 
 // ─── Luma Dream Machine ─────────────────────────────────────────────────
 
 export async function renderViaLuma(req: RenderRequest): Promise<RenderResult> {
+  req = applyStretch(req)
   const key = process.env['LUMA_API_KEY']
   if (!key) return { ok: false, provider: 'luma', costUsd: 0, latencyMs: 0, error: 'no-key' }
   const t0 = Date.now()
@@ -376,20 +397,72 @@ export async function renderViaLuma(req: RenderRequest): Promise<RenderResult> {
   }
 }
 
+// ─── Hugging Face Inference (FREE TIER — serverless community models) ──
+//
+// R146.104 — best free alternative to paid Kling/Runway/Sora/Veo. The HF
+// Inference API hosts text-to-video models on a free-tier serverless
+// runtime. Token required (HF_API_TOKEN) but signup is free, no card.
+// Default model: cerspense/zeroscope_v2_576w (~3s 576×320 clips). For
+// longer clips swap to damo-vilab/text-to-video-ms-1.7b. Quality is
+// noticeably below frontier Kling/Runway but cost is $0 within free
+// tier.
+//
+// Returns a data: URI (base64 mp4 bytes) since HF returns binary.
+// Callers that need a public URL should upload via storage layer.
+export async function renderViaHuggingFace(req: RenderRequest): Promise<RenderResult> {
+  req = applyStretch(req)
+  const token = process.env['HF_API_TOKEN']
+  if (!token) return { ok: false, provider: 'huggingface', costUsd: 0, latencyMs: 0, error: 'no-key (HF_API_TOKEN)' }
+  const t0 = Date.now()
+  try {
+    const model = process.env['HF_VIDEO_MODEL'] ?? 'cerspense/zeroscope_v2_576w'
+    const url = `https://api-inference.huggingface.co/models/${model}`
+    const res = await withTimeout(fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ inputs: req.prompt.slice(0, 1000), options: { wait_for_model: true } }),
+      signal: AbortSignal.timeout(TIMEOUT_BUDGET_MS),
+    }), TIMEOUT_BUDGET_MS + 5000)
+    const latencyMs = Date.now() - t0
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '')
+      trackUsage('huggingface', req.workspaceId, 0, latencyMs, false)
+      return { ok: false, provider: 'huggingface', costUsd: 0, latencyMs, error: `${res.status}: ${txt.slice(0, 200)}` }
+    }
+    const buf = Buffer.from(await res.arrayBuffer())
+    if (buf.length < 1024) {
+      // HF sometimes returns JSON error body with 200; detect tiny payloads
+      const maybeJson = buf.toString('utf8').slice(0, 200)
+      trackUsage('huggingface', req.workspaceId, 0, latencyMs, false)
+      return { ok: false, provider: 'huggingface', costUsd: 0, latencyMs, error: `tiny-response: ${maybeJson}` }
+    }
+    const videoUrl = `data:video/mp4;base64,${buf.toString('base64')}`
+    trackUsage('huggingface', req.workspaceId, 0, latencyMs, true)
+    return { ok: true, provider: 'huggingface', videoUrl, durationSec: req.durationSec, costUsd: 0, latencyMs }
+  } catch (e) {
+    const latencyMs = Date.now() - t0
+    trackUsage('huggingface', req.workspaceId, 0, latencyMs, false)
+    return { ok: false, provider: 'huggingface', costUsd: 0, latencyMs, error: (e as Error).message }
+  }
+}
+
 // ─── Dispatcher ────────────────────────────────────────────────────────
 
-export async function renderShot(provider: 'runway' | 'veo' | 'sora' | 'kling' | 'luma', req: RenderRequest): Promise<RenderResult> {
+export type VideoProvider = 'runway' | 'veo' | 'sora' | 'kling' | 'luma' | 'huggingface'
+
+export async function renderShot(provider: VideoProvider, req: RenderRequest): Promise<RenderResult> {
   switch (provider) {
-    case 'runway': return renderViaRunway(req)
-    case 'veo':    return renderViaVeo(req)
-    case 'sora':   return renderViaSora(req)
-    case 'kling':  return renderViaKling(req)
-    case 'luma':   return renderViaLuma(req)
+    case 'runway':      return renderViaRunway(req)
+    case 'veo':         return renderViaVeo(req)
+    case 'sora':        return renderViaSora(req)
+    case 'kling':       return renderViaKling(req)
+    case 'luma':        return renderViaLuma(req)
+    case 'huggingface': return renderViaHuggingFace(req)
   }
 }
 
 /** Try primary, fall through to fallbacks on failure or no-key. */
-export async function renderShotWithFallback(primary: 'runway' | 'veo' | 'sora' | 'kling' | 'luma', fallbacks: Array<'runway' | 'veo' | 'sora' | 'kling' | 'luma'>, req: RenderRequest): Promise<RenderResult & { providerChain: string[] }> {
+export async function renderShotWithFallback(primary: VideoProvider, fallbacks: Array<VideoProvider>, req: RenderRequest): Promise<RenderResult & { providerChain: string[] }> {
   const chain: string[] = []
   const order = [primary, ...fallbacks]
   for (const p of order) {

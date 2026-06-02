@@ -1654,12 +1654,12 @@ const OPERATIONS: Record<string, OpSpec> = {
 
   // ─── R146.95 — Frontier model rendering ─────────────────────────────
   'aiVideo.renderShot': {
-    description: 'Render a single shot via a specific frontier provider. Params: provider (runway|veo|sora|kling|luma), prompt, durationSec, aspectRatio?, seed?, referenceImages?, cameraMove?',
+    description: 'Render a single shot via a specific frontier provider. Params: provider (runway|veo|sora|kling|luma|huggingface), prompt, durationSec, aspectRatio?, seed?, referenceImages?, cameraMove?. huggingface = free tier.',
     risk: 'high',     // spends real money
     handler: async (ws, p) => {
       const { renderShot } = await import('./ai-video-providers.js')
       return renderShot(
-        (p['provider'] as 'runway' | 'veo' | 'sora' | 'kling' | 'luma') ?? 'kling',
+        (p['provider'] as 'runway' | 'veo' | 'sora' | 'kling' | 'luma' | 'huggingface') ?? 'kling',
         {
           prompt:           String(p['prompt'] ?? ''),
           durationSec:      Number(p['durationSec'] ?? 5),
@@ -1678,8 +1678,8 @@ const OPERATIONS: Record<string, OpSpec> = {
     handler: async (ws, p) => {
       const { renderShotWithFallback } = await import('./ai-video-providers.js')
       return renderShotWithFallback(
-        (p['primary'] as 'runway' | 'veo' | 'sora' | 'kling' | 'luma') ?? 'kling',
-        ((p['fallbacks'] as string[]) ?? []) as Array<'runway' | 'veo' | 'sora' | 'kling' | 'luma'>,
+        (p['primary'] as 'runway' | 'veo' | 'sora' | 'kling' | 'luma' | 'huggingface') ?? 'kling',
+        ((p['fallbacks'] as string[]) ?? []) as Array<'runway' | 'veo' | 'sora' | 'kling' | 'luma' | 'huggingface'>,
         {
           prompt:      String(p['prompt'] ?? ''),
           durationSec: Number(p['durationSec'] ?? 5),
@@ -1745,12 +1745,12 @@ const OPERATIONS: Record<string, OpSpec> = {
   },
   // ─── R146.99 — Frontier image-model rendering ──────────────────────
   'image.render': {
-    description: 'Render image via a specific frontier provider. Params: provider (replicate-flux|replicate-sdxl|openai|stability|gemini-imagen), prompt, width?, height?, numImages?, seed?, referenceImages?, negativePrompt?, guidanceScale?, steps?',
+    description: 'Render image via a specific frontier provider. Params: provider (replicate-flux|replicate-sdxl|openai|stability|gemini-imagen|pollinations), prompt, width?, height?, numImages?, seed?, referenceImages?, negativePrompt?, guidanceScale?, steps?. pollinations = free, no key.',
     risk: 'high',
     handler: async (ws, p) => {
       const { renderImage } = await import('./ai-image-providers.js')
       return renderImage(
-        (p['provider'] as 'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen') ?? 'replicate-flux',
+        (p['provider'] as 'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen' | 'pollinations') ?? 'replicate-flux',
         {
           prompt:        String(p['prompt'] ?? ''),
           ...(typeof p['width']         === 'number' ? { width:         p['width']         as number } : {}),
@@ -1772,8 +1772,8 @@ const OPERATIONS: Record<string, OpSpec> = {
     handler: async (ws, p) => {
       const { renderImageWithFallback } = await import('./ai-image-providers.js')
       return renderImageWithFallback(
-        (p['primary'] as 'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen') ?? 'replicate-flux',
-        ((p['fallbacks'] as string[]) ?? []) as Array<'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen'>,
+        (p['primary'] as 'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen' | 'pollinations') ?? 'replicate-flux',
+        ((p['fallbacks'] as string[]) ?? []) as Array<'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen' | 'pollinations'>,
         {
           prompt: String(p['prompt'] ?? ''),
           ...(typeof p['width']     === 'number' ? { width:     p['width']     as number } : {}),
@@ -1798,8 +1798,8 @@ const OPERATIONS: Record<string, OpSpec> = {
         ...(typeof p['budgetUsd']           === 'number'  ? { budgetUsd:           p['budgetUsd']           as number }  : {}),
       })
       const renderResult = await renderImageWithFallback(
-        routing.primary   as 'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen',
-        routing.fallbacks as Array<'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen'>,
+        routing.primary   as 'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen' | 'pollinations',
+        routing.fallbacks as Array<'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen' | 'pollinations'>,
         {
           prompt: String(p['prompt'] ?? ''),
           ...(typeof p['width']     === 'number' ? { width:     p['width']     as number } : {}),

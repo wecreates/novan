@@ -16,6 +16,17 @@
  * supported by Flux + SDXL paths via Replicate's model variants.
  */
 import { recordAiUsage } from './ai-cost-tracker.js'
+import { compressPrompt } from './ai-video-stretcher.js'
+
+/** R146.104 — auto-apply stretcher at the image-provider edge. Same gate as
+ *  ai-video-providers.ts: every render call passes the prompt through
+ *  compression unless skipStretch=true. ~30-40% byte reduction, identical
+ *  output quality. */
+function applyStretch<T extends { prompt: string; skipStretch?: boolean }>(req: T): T & { prompt: string } {
+  if (req.skipStretch) return req
+  const { compressed } = compressPrompt(req.prompt)
+  return { ...req, prompt: compressed }
+}
 
 export interface ImageRenderRequest {
   prompt:           string
@@ -30,6 +41,8 @@ export interface ImageRenderRequest {
   steps?:          number      // 4-50, default 28 Flux, 30 SDXL
   workspaceId:     string
   callTag?:        string
+  // R146.104 — opt out of auto prompt compression at the provider edge
+  skipStretch?:    boolean
 }
 
 export interface ImageRenderResult {
@@ -77,6 +90,7 @@ async function pollReplicate(predictionUrl: string, token: string): Promise<{ ou
 // ─── Replicate Flux (Pro / Schnell) ────────────────────────────────────
 
 export async function renderViaFlux(req: ImageRenderRequest, opts: { variant?: 'pro' | 'schnell' | 'dev' } = {}): Promise<ImageRenderResult> {
+  req = applyStretch(req)
   const token = process.env['REPLICATE_API_TOKEN']
   if (!token) return { ok: false, provider: 'replicate-flux', imageUrls: [], costUsd: 0, latencyMs: 0, error: 'no-key' }
   const variant = opts.variant ?? (req.referenceImages?.length ? 'pro' : 'schnell')
@@ -140,6 +154,7 @@ export async function renderViaFlux(req: ImageRenderRequest, opts: { variant?: '
 // ─── Replicate SDXL (with LoRA stack) ───────────────────────────────────
 
 export async function renderViaSDXL(req: ImageRenderRequest): Promise<ImageRenderResult> {
+  req = applyStretch(req)
   const token = process.env['REPLICATE_API_TOKEN']
   if (!token) return { ok: false, provider: 'replicate-sdxl', imageUrls: [], costUsd: 0, latencyMs: 0, error: 'no-key' }
   const t0 = Date.now()
@@ -200,6 +215,7 @@ export async function renderViaSDXL(req: ImageRenderRequest): Promise<ImageRende
 // ─── OpenAI (gpt-image-1 / DALL-E 3) ────────────────────────────────────
 
 export async function renderViaOpenAI(req: ImageRenderRequest): Promise<ImageRenderResult> {
+  req = applyStretch(req)
   const key = process.env['OPENAI_API_KEY']
   if (!key) return { ok: false, provider: 'openai', imageUrls: [], costUsd: 0, latencyMs: 0, error: 'no-key' }
   const t0 = Date.now()
@@ -246,6 +262,7 @@ export async function renderViaOpenAI(req: ImageRenderRequest): Promise<ImageRen
 // ─── Stability AI (SD 3.5 Large) ───────────────────────────────────────
 
 export async function renderViaStability(req: ImageRenderRequest): Promise<ImageRenderResult> {
+  req = applyStretch(req)
   const key = process.env['STABILITY_API_KEY']
   if (!key) return { ok: false, provider: 'stability', imageUrls: [], costUsd: 0, latencyMs: 0, error: 'no-key' }
   const t0 = Date.now()
@@ -283,6 +300,7 @@ export async function renderViaStability(req: ImageRenderRequest): Promise<Image
 // ─── Gemini Imagen 4 ────────────────────────────────────────────────────
 
 export async function renderViaGeminiImagen(req: ImageRenderRequest): Promise<ImageRenderResult> {
+  req = applyStretch(req)
   const key = process.env['GEMINI_API_KEY']
   if (!key) return { ok: false, provider: 'gemini-imagen', imageUrls: [], costUsd: 0, latencyMs: 0, error: 'no-key' }
   const t0 = Date.now()
@@ -345,19 +363,67 @@ function pickOpenAiSize(w: number, h: number): '1024x1024' | '1792x1024' | '1024
   return '1024x1024'
 }
 
+// ─── Pollinations.ai (FREE — no key, no signup, community-funded) ──────
+//
+// R146.104 — best truly-free image alternative to Replicate Flux. The
+// public Pollinations endpoint serves Flux-class outputs via a plain GET:
+//   GET https://image.pollinations.ai/prompt/{urlencoded prompt}?width=..&height=..&seed=..&nologo=true&model=flux
+// Returns image bytes (image/jpeg) directly. No auth, no rate limit
+// signal beyond shared community capacity. costUsd: 0.
+//
+// We return the URL as imageUrls[0]; callers that need bytes resolve
+// it themselves (it's a stable, content-addressed-by-prompt URL).
+export async function renderViaPollinations(req: ImageRenderRequest): Promise<ImageRenderResult> {
+  req = applyStretch(req)
+  const t0 = Date.now()
+  try {
+    const params = new URLSearchParams({
+      width:  String(req.width  ?? 1024),
+      height: String(req.height ?? 1024),
+      model:  'flux',
+      nologo: 'true',
+      ...(req.seed !== undefined ? { seed: String(req.seed) } : {}),
+    })
+    // Prompt goes in the path. Cap at 1500 chars to stay below URL limits.
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(req.prompt.slice(0, 1500))}?${params.toString()}`
+    // HEAD probe to confirm reachability + cache warm; the URL itself is the
+    // download. If HEAD fails we still return the URL — Pollinations serves
+    // on-demand and HEAD support is inconsistent.
+    let reachable = true
+    try {
+      const head = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(20_000) })
+      reachable = head.ok || head.status === 405  // 405 = HEAD not allowed but GET works
+    } catch { reachable = false }
+    const latencyMs = Date.now() - t0
+    if (!reachable) {
+      trackUsage('pollinations', req.workspaceId, 0, latencyMs)
+      return { ok: false, provider: 'pollinations', imageUrls: [], costUsd: 0, latencyMs, error: 'unreachable' }
+    }
+    trackUsage('pollinations', req.workspaceId, 0, latencyMs)
+    return { ok: true, provider: 'pollinations', imageUrls: [url], costUsd: 0, latencyMs, ...(req.seed !== undefined ? { seed: req.seed } : {}) }
+  } catch (e) {
+    const latencyMs = Date.now() - t0
+    trackUsage('pollinations', req.workspaceId, 0, latencyMs)
+    return { ok: false, provider: 'pollinations', imageUrls: [], costUsd: 0, latencyMs, error: (e as Error).message }
+  }
+}
+
 // ─── Dispatcher ────────────────────────────────────────────────────────
 
-export async function renderImage(provider: 'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen', req: ImageRenderRequest): Promise<ImageRenderResult> {
+export type ImageProvider = 'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen' | 'pollinations'
+
+export async function renderImage(provider: ImageProvider, req: ImageRenderRequest): Promise<ImageRenderResult> {
   switch (provider) {
     case 'replicate-flux': return renderViaFlux(req)
     case 'replicate-sdxl': return renderViaSDXL(req)
     case 'openai':         return renderViaOpenAI(req)
     case 'stability':      return renderViaStability(req)
     case 'gemini-imagen':  return renderViaGeminiImagen(req)
+    case 'pollinations':   return renderViaPollinations(req)
   }
 }
 
-export async function renderImageWithFallback(primary: 'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen', fallbacks: Array<'replicate-flux' | 'replicate-sdxl' | 'openai' | 'stability' | 'gemini-imagen'>, req: ImageRenderRequest): Promise<ImageRenderResult & { providerChain: string[] }> {
+export async function renderImageWithFallback(primary: ImageProvider, fallbacks: Array<ImageProvider>, req: ImageRenderRequest): Promise<ImageRenderResult & { providerChain: string[] }> {
   const chain: string[] = []
   for (const p of [primary, ...fallbacks]) {
     chain.push(p)
