@@ -268,6 +268,19 @@ export async function findingsBridgeTick(workspaceId: string): Promise<{ bridged
   const b = await improvementsToOpsBridge(workspaceId, 5)
   const c = await agentDispatcherTick(workspaceId)
   if (a.bridged + b.bridged + c.updated > 0) {
+    // R146.125 — notify on agent promotion
+    if (c.updated > 0) {
+      try {
+        const { notify } = await import('./notifications.js')
+        await notify({
+          workspaceId,
+          type: 'agents.dispatch_tick',
+          severity: 'normal',
+          title: `${c.updated} agent${c.updated === 1 ? '' : 's'} promoted to live`,
+          body: `bridged ${a.bridged} security finding${a.bridged === 1 ? '' : 's'} + ${b.bridged} improvement${b.bridged === 1 ? '' : 's'}; dispatched ${c.updated}`,
+        }).catch(() => null)
+      } catch { /* notify optional */ }
+    }
     await db.insert(events).values({
       id: uuidv7(), workspaceId, type: 'agents.dispatch_tick',
       payload: { findings: a.bridged, improvements: b.bridged, dispatched: c.updated },

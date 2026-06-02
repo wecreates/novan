@@ -85,7 +85,8 @@ const HTTP_DENY_HOSTS = new Set([
 const HTTP_DENY_HOST_SUFFIXES = ['.local', '.internal', '.cluster.local']
 
 function isHostAllowed(host: string): boolean {
-  const h = host.toLowerCase()
+  // URL.hostname keeps IPv6 wrapped in brackets — strip for comparison
+  const h = host.toLowerCase().replace(/^\[|\]$/g, '')
   if (HTTP_DENY_HOSTS.has(h)) return false
   if (HTTP_DENY_HOST_SUFFIXES.some(s => h.endsWith(s))) return false
   // Block private IPv4 ranges (rough SSRF guard)

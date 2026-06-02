@@ -2068,6 +2068,8 @@ export const OPERATIONS: Record<string, OpSpec> = {
       const rows = await db.select().from(codePatches).where(and(...filters)).orderBy(desc(codePatches.createdAt)).limit(limit)
       return { count: rows.length, patches: rows }
     } },
+  'autonomy.counts':       { description: 'Live counts for autonomy dashboard: findings(open) · improvements(open) · ops(in_process/on_deck) · proposals(proposed/approved) · connectorsNeedingRefresh · agentsLive.', risk: 'low',
+    handler: async (ws) => (await import('./r124-autonomy.js')).autonomyCounts(ws) },
   'suggestions.scan':      { description: 'Scan last 24h of error events and create improvement_suggestions for recurring patterns (≥3 occurrences). Powers Ali queue.', risk: 'low',
     handler: async (ws) => (await import('./r124-autonomy.js')).suggestionsProducerTick(ws) },
   'oauth.refreshAll':      { description: 'Pre-refresh every active connector OAuth token within 30 min of expiry. Returns refreshed/checked/skipped counts.', risk: 'medium',

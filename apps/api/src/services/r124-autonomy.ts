@@ -162,6 +162,41 @@ export async function exportPatchDiff(workspaceId: string, patchId: string): Pro
   return { patchId, diff, fileCount: files.length }
 }
 
+// ─── P2.8 — autonomy counts dashboard ─────────────────────────────────
+
+export async function autonomyCounts(workspaceId: string): Promise<{
+  findingsOpen: number; improvementsOpen: number; opsInProcess: number; opsOnDeck: number;
+  proposalsProposed: number; proposalsApproved: number;
+  connectorsNeedingRefresh: number; agentsLive: number;
+}> {
+  const NOW = Date.now()
+  const HORIZON = NOW + 30 * 60_000
+  const counts = async (q: ReturnType<typeof sql>): Promise<number> => {
+    try {
+      const r = await db.execute(q) as unknown as Array<{ count: string | number }>
+      const first = r[0]; if (!first) return 0
+      return typeof first.count === 'string' ? parseInt(first.count, 10) : first.count
+    } catch { return 0 }
+  }
+  const [findings, improvements, inProc, onDeck, proposed, approved, agentsLive] = await Promise.all([
+    counts(sql`SELECT COUNT(*)::int AS count FROM security_findings WHERE workspace_id = ${workspaceId} AND status = 'open'`),
+    counts(sql`SELECT COUNT(*)::int AS count FROM improvement_suggestions WHERE workspace_id = ${workspaceId} AND status = 'open'`),
+    counts(sql`SELECT COUNT(*)::int AS count FROM agent_ops_board WHERE workspace_id = ${workspaceId} AND "column" = 'in_process'`),
+    counts(sql`SELECT COUNT(*)::int AS count FROM agent_ops_board WHERE workspace_id = ${workspaceId} AND "column" = 'on_deck'`),
+    counts(sql`SELECT COUNT(*)::int AS count FROM code_proposals WHERE workspace_id = ${workspaceId} AND status = 'proposed'`),
+    counts(sql`SELECT COUNT(*)::int AS count FROM code_proposals WHERE workspace_id = ${workspaceId} AND status = 'approved'`),
+    counts(sql`SELECT COUNT(*)::int AS count FROM agent_roster WHERE workspace_id = ${workspaceId} AND status = 'live'`),
+  ])
+  // Connectors needing refresh — only those with active status + expiresAt within 30 min
+  const conns = await db.select({ metadata: connectorAccounts.metadata }).from(connectorAccounts).where(eq(connectorAccounts.status, 'active')).limit(500)
+  const connectorsNeedingRefresh = conns.filter(c => {
+    const m = (c.metadata ?? {}) as Record<string, unknown>
+    const e = typeof m['expiresAt'] === 'number' ? m['expiresAt'] : 0
+    return e > 0 && e <= HORIZON
+  }).length
+  return { findingsOpen: findings, improvementsOpen: improvements, opsInProcess: inProc, opsOnDeck: onDeck, proposalsProposed: proposed, proposalsApproved: approved, connectorsNeedingRefresh, agentsLive }
+}
+
 /** Same but takes a proposalId — returns the latest patch's diff. */
 export async function exportLatestPatchDiffForProposal(workspaceId: string, proposalId: string): Promise<{ patchId: string; diff: string; fileCount: number }> {
   const [row] = await db.select().from(codePatches)

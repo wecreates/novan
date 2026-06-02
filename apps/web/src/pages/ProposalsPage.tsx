@@ -47,12 +47,19 @@ async function callOp<T>(op: string, params: Record<string, unknown> = {}): Prom
   } catch { return null }
 }
 
+interface AutonomyCounts {
+  findingsOpen: number; improvementsOpen: number; opsInProcess: number; opsOnDeck: number
+  proposalsProposed: number; proposalsApproved: number; connectorsNeedingRefresh: number; agentsLive: number
+}
+
 export default function ProposalsPage(): JSX.Element {
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [patches, setPatches] = useState<Record<string, Patch[]>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [counts, setCounts] = useState<AutonomyCounts | null>(null)
+  useEffect(() => { void (async () => { setCounts(await callOp<AutonomyCounts>('autonomy.counts')) })() }, [])
 
   const load = async () => {
     const r = await callOp<{ proposals: Proposal[] }>('proposals.list', statusFilter ? { status: statusFilter, limit: 50 } : { limit: 50 })
@@ -81,6 +88,25 @@ export default function ProposalsPage(): JSX.Element {
 
   return (
     <div style={{ padding: 32, color: 'rgba(255,255,255,0.9)', fontFamily: 'ui-monospace, "SF Mono", Consolas, monospace', height: '100%', overflow: 'auto', background: '#000' }}>
+      {counts && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 18, padding: 10, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 6 }}>
+          {[
+            ['findings·open',   counts.findingsOpen,           '#ef4444'],
+            ['improvements',    counts.improvementsOpen,       '#f97316'],
+            ['ops·in-process',  counts.opsInProcess,           '#ffd47a'],
+            ['ops·on-deck',     counts.opsOnDeck,              '#7adfff'],
+            ['proposals·pending', counts.proposalsProposed,    '#c2ff6a'],
+            ['proposals·approved', counts.proposalsApproved,   '#22c55e'],
+            ['oauth·need-refresh', counts.connectorsNeedingRefresh, '#ffd47a'],
+            ['agents·live',     counts.agentsLive,             '#22c55e'],
+          ].map(([l, v, c]) => (
+            <div key={String(l)} style={{ display: 'flex', flexDirection: 'column', minWidth: 90 }}>
+              <span style={{ fontSize: 8, letterSpacing: '0.16em', opacity: 0.5 }}>{String(l).toUpperCase()}</span>
+              <span style={{ fontSize: 16, fontWeight: 700, color: String(c) }}>{Number(v)}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 18 }}>
         <h1 style={{ color: '#ffd47a', fontSize: 18, fontWeight: 600, letterSpacing: '0.18em', margin: 0 }}>CODE PROPOSALS · {proposals.length}</h1>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ background: '#0a0a0e', color: '#ffd47a', border: '1px solid rgba(255,212,122,0.3)', borderRadius: 4, padding: '4px 8px', fontFamily: 'inherit', fontSize: 11 }}>
