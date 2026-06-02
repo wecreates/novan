@@ -446,18 +446,67 @@ export async function renderViaHuggingFace(req: RenderRequest): Promise<RenderRe
   }
 }
 
+// ─── Free realistic pipeline (R146.106) — text → still → SVD img2vid ───
+// Adapter so the free pipeline is callable as a RenderResult-shaped provider.
+
+export async function renderViaFreeRealistic(req: RenderRequest): Promise<RenderResult> {
+  req = applyStretch(req)
+  const t0 = Date.now()
+  try {
+    const { renderRealisticFree } = await import('./ai-video-free-realistic.js')
+    const r = await renderRealisticFree({
+      prompt:      req.prompt,
+      workspaceId: req.workspaceId,
+      ...(req.aspectRatio ? { aspectRatio: req.aspectRatio } : {}),
+      durationSec: req.durationSec,
+      motionLevel: req.cameraMove === 'static' ? 'subtle' : req.cameraMove === 'tracking' || req.cameraMove === 'dolly' ? 'high' : 'moderate',
+      ...(typeof req.seed === 'number' ? { seed: req.seed } : {}),
+      upscale: true,
+    })
+    const latencyMs = Date.now() - t0
+    trackUsage('free-realistic', req.workspaceId, 0, latencyMs, r.ok)
+    if (!r.ok) {
+      const result: RenderResult = {
+        ok: false, provider: 'free-realistic', costUsd: 0, latencyMs,
+        rawMeta: { stagesCompleted: r.stagesCompleted, stageErrors: r.stageErrors },
+      }
+      if (r.error)        result.error        = r.error
+      if (r.thumbnailUrl) result.thumbnailUrl = r.thumbnailUrl
+      return result
+    }
+    const out: RenderResult = {
+      ok: true, provider: 'free-realistic', costUsd: 0, latencyMs,
+      durationSec: r.durationSec ?? req.durationSec,
+      rawMeta: { stagesCompleted: r.stagesCompleted, stageErrors: r.stageErrors, ...r.rawMeta },
+    }
+    if (r.videoUrl)     out.videoUrl     = r.videoUrl
+    if (r.thumbnailUrl) out.thumbnailUrl = r.thumbnailUrl
+    return out
+  } catch (e) {
+    const latencyMs = Date.now() - t0
+    trackUsage('free-realistic', req.workspaceId, 0, latencyMs, false)
+    return { ok: false, provider: 'free-realistic', costUsd: 0, latencyMs, error: (e as Error).message }
+  }
+}
+
 // ─── Dispatcher ────────────────────────────────────────────────────────
 
-export type VideoProvider = 'runway' | 'veo' | 'sora' | 'kling' | 'luma' | 'huggingface'
+export type VideoProvider = 'runway' | 'veo' | 'sora' | 'kling' | 'luma' | 'huggingface' | 'free-realistic'
 
 export async function renderShot(provider: VideoProvider, req: RenderRequest): Promise<RenderResult> {
+  // R146.106 — global free-only override: every paid provider call gets
+  // redirected to the free realistic pipeline.
+  if (process.env['VIDEO_FREE_ONLY'] === '1' && provider !== 'huggingface' && provider !== 'free-realistic') {
+    return renderViaFreeRealistic(req)
+  }
   switch (provider) {
-    case 'runway':      return renderViaRunway(req)
-    case 'veo':         return renderViaVeo(req)
-    case 'sora':        return renderViaSora(req)
-    case 'kling':       return renderViaKling(req)
-    case 'luma':        return renderViaLuma(req)
-    case 'huggingface': return renderViaHuggingFace(req)
+    case 'runway':         return renderViaRunway(req)
+    case 'veo':            return renderViaVeo(req)
+    case 'sora':           return renderViaSora(req)
+    case 'kling':          return renderViaKling(req)
+    case 'luma':           return renderViaLuma(req)
+    case 'huggingface':    return renderViaHuggingFace(req)
+    case 'free-realistic': return renderViaFreeRealistic(req)
   }
 }
 

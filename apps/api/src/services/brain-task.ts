@@ -1659,7 +1659,7 @@ const OPERATIONS: Record<string, OpSpec> = {
     handler: async (ws, p) => {
       const { renderShot } = await import('./ai-video-providers.js')
       return renderShot(
-        (p['provider'] as 'runway' | 'veo' | 'sora' | 'kling' | 'luma' | 'huggingface') ?? 'kling',
+        (p['provider'] as 'runway' | 'veo' | 'sora' | 'kling' | 'luma' | 'huggingface' | 'free-realistic') ?? 'kling',
         {
           prompt:           String(p['prompt'] ?? ''),
           durationSec:      Number(p['durationSec'] ?? 5),
@@ -1678,8 +1678,8 @@ const OPERATIONS: Record<string, OpSpec> = {
     handler: async (ws, p) => {
       const { renderShotWithFallback } = await import('./ai-video-providers.js')
       return renderShotWithFallback(
-        (p['primary'] as 'runway' | 'veo' | 'sora' | 'kling' | 'luma' | 'huggingface') ?? 'kling',
-        ((p['fallbacks'] as string[]) ?? []) as Array<'runway' | 'veo' | 'sora' | 'kling' | 'luma' | 'huggingface'>,
+        (p['primary'] as 'runway' | 'veo' | 'sora' | 'kling' | 'luma' | 'huggingface' | 'free-realistic') ?? 'kling',
+        ((p['fallbacks'] as string[]) ?? []) as Array<'runway' | 'veo' | 'sora' | 'kling' | 'luma' | 'huggingface' | 'free-realistic'>,
         {
           prompt:      String(p['prompt'] ?? ''),
           durationSec: Number(p['durationSec'] ?? 5),
@@ -1875,6 +1875,69 @@ const OPERATIONS: Record<string, OpSpec> = {
         lines:       (p['lines'] as Array<{ characterId: string; text: string; startTimeSec: number }>) ?? [],
       })
     },
+  },
+  // ─── R146.106 — Free-only realistic video pipeline ─────────────────
+  'aiVideo.renderRealisticFree': {
+    description: 'End-to-end FREE realistic video render: Pollinations Flux still → SVD img2vid → optional Real-ESRGAN upscale. $0 cost, ~30-90s latency, photoreal quality. Params: prompt, aspectRatio?, durationSec?, motionLevel? (subtle|moderate|high), upscale?, seed?',
+    risk: 'medium',  // not paid, but autonomous compute
+    handler: async (ws, p) => {
+      const { renderRealisticFree } = await import('./ai-video-free-realistic.js')
+      return renderRealisticFree({
+        prompt:      String(p['prompt'] ?? ''),
+        workspaceId: ws,
+        ...(p['aspectRatio'] ? { aspectRatio: p['aspectRatio'] as '16:9' | '9:16' | '1:1' } : {}),
+        ...(typeof p['durationSec'] === 'number' ? { durationSec: p['durationSec'] as number } : {}),
+        ...(p['motionLevel'] ? { motionLevel: p['motionLevel'] as 'subtle' | 'moderate' | 'high' } : {}),
+        ...(typeof p['seed'] === 'number' ? { seed: p['seed'] as number } : {}),
+        upscale:     p['upscale'] === true,
+        interpolate: p['interpolate'] === true,
+      })
+    },
+  },
+  'aiVideo.setFreeOnly': {
+    description: 'Toggle global VIDEO_FREE_ONLY mode. When true, every video render call is forced through the free realistic pipeline. Params: enabled (boolean).',
+    risk: 'medium',
+    handler: async (_ws, p) => {
+      const enabled = p['enabled'] === true
+      process.env['VIDEO_FREE_ONLY'] = enabled ? '1' : '0'
+      return { ok: true, freeOnly: enabled }
+    },
+  },
+  // ─── R146.105 — Novan Frontier Intelligence (24/7 research + advance) ───
+  'frontier.seedSources': {
+    description: 'Seed default frontier-intel sources (arxiv/HF/GitHub/labs/HN) for this workspace.',
+    risk: 'low',
+    handler: async (ws) => (await import('./frontier-intel.js')).seedDefaultSources(ws),
+  },
+  'frontier.tick': {
+    description: 'Run one frontier-intel cycle: scan due sources, distill new findings, queue prototypes.',
+    risk: 'low',
+    handler: async (ws) => (await import('./frontier-intel.js')).frontierTick(ws),
+  },
+  'frontier.ledger': {
+    description: 'List frontier findings ranked by composite score. Params: limit?, minScore?, status?',
+    risk: 'low',
+    handler: async (ws, p) => (await import('./frontier-intel.js')).listFrontierLedger(ws, {
+      limit:    typeof p['limit']    === 'number' ? p['limit']    as number : 50,
+      minScore: typeof p['minScore'] === 'number' ? p['minScore'] as number : 0,
+      ...(p['status'] ? { status: String(p['status']) } : {}),
+    }),
+  },
+  'frontier.recordAdvance': {
+    description: 'Record that Novan integrated/prototyped/specced a finding ahead of competitors. Params: findingId, ahead (integrated|prototyped|specced), monthsAhead?, notes?',
+    risk: 'low',
+    handler: async (ws, p) => (await import('./frontier-intel.js')).recordAdvance({
+      workspaceId: ws,
+      findingId:   String(p['findingId'] ?? ''),
+      ahead:       (p['ahead'] as 'integrated' | 'prototyped' | 'specced') ?? 'specced',
+      ...(typeof p['monthsAhead'] === 'number' ? { monthsAhead: p['monthsAhead'] as number } : {}),
+      ...(p['notes'] ? { notes: String(p['notes']) } : {}),
+    }),
+  },
+  'frontier.stats': {
+    description: 'Summary stats for the frontier ledger: total findings, queued, prototyping, integrated, avg months ahead.',
+    risk: 'low',
+    handler: async (ws) => (await import('./frontier-intel.js')).frontierStats(ws),
   },
   // ─── R146.103 — Token stretching for AI video ────────────────────
   'aiVideo.stretchShotList': {

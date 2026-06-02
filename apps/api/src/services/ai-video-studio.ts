@@ -152,18 +152,24 @@ function hasAnyPaidVideoKey(): boolean {
 }
 
 export function routeShotToProvider(shot: Shot): { primary: string; fallbacks: string[]; rationale: string } {
+  // R146.106 — operator-forced free-only mode: every shot goes through the
+  // free realistic pipeline (Pollinations Flux → SVD img2vid → optional
+  // upscale). No paid provider gets called regardless of keys present.
+  if (process.env['VIDEO_FREE_ONLY'] === '1') {
+    return { primary: 'free-realistic', fallbacks: ['huggingface'], rationale: 'VIDEO_FREE_ONLY=1 — free realistic pipeline (Pollinations Flux → SVD img2vid)' }
+  }
   if (shot.preferredProvider && shot.preferredProvider !== 'auto') {
     return { primary: shot.preferredProvider, fallbacks: ['runway-gen4', 'luma', 'huggingface'], rationale: 'explicit preference' }
   }
-  // R146.104 — no paid keys → HuggingFace free tier
-  if (!hasAnyPaidVideoKey() && process.env['HF_API_TOKEN']) {
-    return { primary: 'huggingface', fallbacks: [], rationale: 'no paid video keys present → HuggingFace free tier' }
+  // R146.104 — no paid keys → free realistic pipeline first, raw HF as fallback
+  if (!hasAnyPaidVideoKey()) {
+    return { primary: 'free-realistic', fallbacks: ['huggingface'], rationale: 'no paid video keys present → free realistic pipeline' }
   }
   // Character-heavy shots → Veo-3 (best continuity); long static shots → Sora; cinematic motion → Runway
-  if (shot.charactersInShot.length >= 1 && shot.durationSec >= 4) return { primary: 'veo-3', fallbacks: ['runway-gen4', 'kling', 'huggingface'], rationale: 'character + duration → Veo for continuity' }
-  if (shot.cameraMove === 'dolly' || shot.cameraMove === 'tracking') return { primary: 'runway-gen4', fallbacks: ['luma', 'sora', 'huggingface'], rationale: 'cinematic motion' }
-  if (shot.durationSec >= 8) return { primary: 'sora', fallbacks: ['veo-3', 'kling', 'huggingface'], rationale: 'long-duration generation' }
-  return { primary: 'kling', fallbacks: ['luma', 'runway-gen4', 'huggingface'], rationale: 'fast + cheap default for short generic shots' }
+  if (shot.charactersInShot.length >= 1 && shot.durationSec >= 4) return { primary: 'veo-3', fallbacks: ['runway-gen4', 'kling', 'free-realistic', 'huggingface'], rationale: 'character + duration → Veo for continuity' }
+  if (shot.cameraMove === 'dolly' || shot.cameraMove === 'tracking') return { primary: 'runway-gen4', fallbacks: ['luma', 'sora', 'free-realistic', 'huggingface'], rationale: 'cinematic motion' }
+  if (shot.durationSec >= 8) return { primary: 'sora', fallbacks: ['veo-3', 'kling', 'free-realistic', 'huggingface'], rationale: 'long-duration generation' }
+  return { primary: 'kling', fallbacks: ['luma', 'runway-gen4', 'free-realistic', 'huggingface'], rationale: 'fast + cheap default for short generic shots' }
 }
 
 // ─── 4. Continuity layer ─────────────────────────────────────────────────

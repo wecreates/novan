@@ -4689,3 +4689,74 @@ export const autonomySpendLog = pgTable('autonomy_spend_log', {
   index('autonomy_spend_log_ws_cat_idx').on(t.workspaceId, t.category, t.recordedAt),
   index('autonomy_spend_log_biz_idx').on(t.businessId, t.recordedAt),
 ])
+
+// ─── Migration 0052 — Frontier Intelligence (R146.105) ──────────────────────
+// Novan scans top AI research sources 24/7, distills breakthroughs into
+// integration-ready specs, and runs ahead of competitors by prototyping
+// findings before they become productized. The ledger ranks findings by
+// recency × claimed impact × replicability × applicability-to-Novan-stack.
+// Findings that score above a threshold spawn brain tasks automatically.
+
+export const frontierSources = pgTable('frontier_sources', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  kind:         text('kind').notNull(),         // 'arxiv' | 'hf-papers' | 'github-trending' | 'rss' | 'hn' | 'paperswithcode' | 'blog'
+  url:          text('url').notNull(),
+  label:        text('label').notNull(),
+  enabled:      boolean('enabled').notNull().default(true),
+  lastScannedAt: bigint('last_scanned_at', { mode: 'number' }),
+  scanIntervalSec: integer('scan_interval_sec').notNull().default(3600),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('frontier_sources_ws_idx').on(t.workspaceId, t.enabled),
+])
+
+export const frontierFindings = pgTable('frontier_findings', {
+  id:                 text('id').primaryKey(),
+  workspaceId:        text('workspace_id').notNull(),
+  sourceId:           text('source_id'),
+  externalUrl:        text('external_url').notNull(),
+  externalId:         text('external_id'),        // arxiv-id, github-repo, etc — for dedup
+  title:              text('title').notNull(),
+  authors:            text('authors'),
+  publishedAt:        bigint('published_at', { mode: 'number' }),
+  discoveredAt:       bigint('discovered_at', { mode: 'number' }).notNull(),
+  rawAbstract:        text('raw_abstract'),
+  // LLM distillation
+  technique:          text('technique'),          // canonical name
+  claimedCapability:  text('claimed_capability'), // what new ability
+  noveltyVsSOTA:      text('novelty_vs_sota'),
+  replicabilityNote:  text('replicability_note'),
+  integrationVector:  text('integration_vector'), // how it plugs into Novan
+  // Scoring (0-100 each)
+  scoreRecency:       integer('score_recency').notNull().default(0),
+  scoreImpact:        integer('score_impact').notNull().default(0),
+  scoreReplicability: integer('score_replicability').notNull().default(0),
+  scoreApplicability: integer('score_applicability').notNull().default(0),
+  scoreComposite:     integer('score_composite').notNull().default(0),
+  // Lifecycle
+  status:             text('status').notNull().default('new'), // new | distilled | queued | prototyping | integrated | rejected
+  prototypeTaskId:    text('prototype_task_id'),
+  integratedAt:       bigint('integrated_at', { mode: 'number' }),
+  rejectedReason:     text('rejected_reason'),
+  // For semantic recall + dedup
+  embedding:          vector('embedding', { dimensions: 1536 }),
+  createdAt:          bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:          bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('frontier_findings_ws_status_idx').on(t.workspaceId, t.status, t.scoreComposite),
+  index('frontier_findings_ws_pub_idx').on(t.workspaceId, t.publishedAt),
+  uniqueIndex('frontier_findings_ws_extid_idx').on(t.workspaceId, t.externalId),
+])
+
+export const frontierAdvances = pgTable('frontier_advances', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  findingId:    text('finding_id').notNull(),
+  ahead:        text('ahead').notNull(),    // 'integrated' | 'prototyped' | 'specced'
+  monthsAhead:  real('months_ahead').notNull().default(0),
+  notes:        text('notes'),
+  recordedAt:   bigint('recorded_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('frontier_advances_ws_idx').on(t.workspaceId, t.recordedAt),
+])

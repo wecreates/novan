@@ -1220,6 +1220,10 @@ const INTERVALS = {
   mediaVideoWorker:      2 * 60_000,              // 2 min — drain video job queue
   recoveryExecutor:      5 * 60_000,              // 5 min — act on playbook suggestions
   secretsRotationDrain:  3 * 60_000,              // 3 min — drop cached rotated secrets
+
+  // Round 146.105 — Novan Frontier Intelligence: 24/7 scan top AI breakthroughs,
+  // distill, score, and auto-spawn prototypes for high-score findings.
+  frontierIntel:         5 * 60_000,              // 5 min — one source + distill batch + spawn tasks
 }
 
 /**
@@ -1469,6 +1473,21 @@ async function runSecretsRotationDrainTick(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'secrets_rotation_drain', error: (e as Error).message }) }
 }
 
+// R146.105 — Frontier Intelligence: scan top AI breakthrough sources 24/7,
+// distill, score, queue prototypes for the high-scorers.
+async function runFrontierIntelTick(): Promise<void> {
+  if (process.env['DISABLE_FRONTIER_INTEL'] === '1') return
+  try {
+    const { frontierTick, seedDefaultSources } = await import('./frontier-intel.js')
+    // Seed sources for the 'system' workspace on first run (idempotent via unique idx).
+    await seedDefaultSources('system').catch(() => null)
+    const out = await frontierTick('system')
+    if (out.inserted > 0 || out.distilled > 0 || out.spawned > 0) {
+      await emit('cron.frontier_intel_tick', out)
+    }
+  } catch (e) { await emit('cron.error', { task: 'frontier_intel', error: (e as Error).message }) }
+}
+
 async function runCartographerSnapshot(): Promise<void> {
   try {
     const { generateSnapshot } = await import('./codebase-cartographer.js')
@@ -1567,6 +1586,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runMediaVideoWorkerTick,        INTERVALS.mediaVideoWorker))
   handles.push(scheduleJittered(runRecoveryExecutorTick,        INTERVALS.recoveryExecutor))
   handles.push(scheduleJittered(runSecretsRotationDrainTick,    INTERVALS.secretsRotationDrain))
+  handles.push(scheduleJittered(runFrontierIntelTick,           INTERVALS.frontierIntel))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
