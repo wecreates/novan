@@ -103,6 +103,42 @@ describe('image-upgrades.routeImageRequest', () => {
   })
 })
 
+describe('chat-personality (R146.109)', () => {
+  it('produces a voice block when enabled and empty when disabled', async () => {
+    const { buildPersonalityBlock, DEFAULT_VOICE } = await import('../services/chat-personality.js')
+    expect(buildPersonalityBlock({ ...DEFAULT_VOICE, enabled: true }).length).toBeGreaterThan(500)
+    expect(buildPersonalityBlock({ ...DEFAULT_VOICE, enabled: false })).toBe('')
+  })
+  it('voice block bans the corporate-AI tells', async () => {
+    const { buildPersonalityBlock, MAX_HUMAN_PRESET } = await import('../services/chat-personality.js')
+    const block = buildPersonalityBlock(MAX_HUMAN_PRESET)
+    for (const banned of ['As an AI', "I'm here to help", 'Great question', 'Certainly!', 'hope this helps']) {
+      expect(block).toContain(banned)  // they appear in the "never say" enumeration
+    }
+    expect(block).toContain('Contractions always')
+    expect(block).toContain('NEVER say')
+  })
+  it('envVoice respects NOVAN_VOICE=max', async () => {
+    const prev = process.env['NOVAN_VOICE']
+    process.env['NOVAN_VOICE'] = 'max'
+    const { envVoice } = await import('../services/chat-personality.js')
+    const v = envVoice()
+    expect(v.enabled).toBe(true)
+    expect(v.warmth).toBeGreaterThanOrEqual(0.85)
+    expect(v.wit).toBeGreaterThanOrEqual(0.75)
+    if (prev === undefined) delete process.env['NOVAN_VOICE']
+    else process.env['NOVAN_VOICE'] = prev
+  })
+  it('envVoice off when NOVAN_VOICE=0', async () => {
+    const prev = process.env['NOVAN_VOICE']
+    process.env['NOVAN_VOICE'] = '0'
+    const { envVoice } = await import('../services/chat-personality.js')
+    expect(envVoice().enabled).toBe(false)
+    if (prev === undefined) delete process.env['NOVAN_VOICE']
+    else process.env['NOVAN_VOICE'] = prev
+  })
+})
+
 describe('ai-video-studio.routeShotToProvider', () => {
   it('uses canonical provider names (no veo-3/runway-gen4)', async () => {
     const { routeShotToProvider } = await import('../services/ai-video-studio.js')

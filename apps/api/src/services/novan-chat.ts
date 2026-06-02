@@ -292,6 +292,15 @@ async function buildSystemPrompt(workspaceId: string, userMessage: string): Prom
     .limit(5).catch(() => [])
 
   const lines: string[] = []
+  // R146.109 — Human personality layer (voice). Sits BEFORE the operational
+  // identity so the model treats tone as primary. The hard ops requirements
+  // below (no hype, facts vs forecasts, etc.) still apply — voice is style,
+  // not substance.
+  try {
+    const { envVoice, buildPersonalityBlock } = await import('./chat-personality.js')
+    const block = buildPersonalityBlock(envVoice())
+    if (block) { lines.push(block); lines.push('') }
+  } catch (e) { console.error('[novan-chat] personality block failed:', (e as Error).message) }
   lines.push('You are Novan. You are NOT a chatbot, prompt executor, or toy AI. You are a distributed autonomous operational intelligence system.')
   lines.push('')
   lines.push('### Identity traits (target levels 0..1):')

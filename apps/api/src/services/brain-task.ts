@@ -1999,6 +1999,39 @@ const OPERATIONS: Record<string, OpSpec> = {
     risk: 'low',
     handler: async (ws) => (await import('./frontier-max.js')).capabilityStats(ws),
   },
+  // ─── R146.109 — Chat human personality voice ──────────────────────────
+  'chat.getVoice': {
+    description: 'Inspect current Novan chat voice (warmth/wit/directness/brevity/curiosity/opinionatedness 0..1, plus preset name).',
+    risk: 'low',
+    handler: async () => {
+      const { envVoice, describePersonality } = await import('./chat-personality.js')
+      return describePersonality(envVoice())
+    },
+  },
+  'chat.setVoice': {
+    description: 'Tune chat voice at runtime (env override). Params: enabled?, warmth?, wit?, directness?, brevity?, curiosity?, opinionatedness?, nickname? (all 0..1 except nickname). preset="max" or "default" applies a bundle.',
+    risk: 'medium',
+    handler: async (_ws, p) => {
+      const set = (key: string, val: unknown) => {
+        if (val === undefined || val === null) return
+        if (typeof val === 'number' && Number.isFinite(val)) process.env[key] = String(Math.max(0, Math.min(1, val)))
+        else if (typeof val === 'boolean') process.env[key] = val ? '1' : '0'
+        else process.env[key] = String(val)
+      }
+      if (p['preset'] === 'max') process.env['NOVAN_VOICE'] = 'max'
+      else if (p['preset'] === 'default') process.env['NOVAN_VOICE'] = '1'
+      else if (typeof p['enabled'] === 'boolean') process.env['NOVAN_VOICE'] = p['enabled'] ? '1' : '0'
+      set('NOVAN_VOICE_WARMTH',          p['warmth'])
+      set('NOVAN_VOICE_WIT',             p['wit'])
+      set('NOVAN_VOICE_DIRECTNESS',      p['directness'])
+      set('NOVAN_VOICE_BREVITY',         p['brevity'])
+      set('NOVAN_VOICE_CURIOSITY',       p['curiosity'])
+      set('NOVAN_VOICE_OPINIONATEDNESS', p['opinionatedness'])
+      if (p['nickname']) process.env['NOVAN_VOICE_NICKNAME'] = String(p['nickname'])
+      const { envVoice, describePersonality } = await import('./chat-personality.js')
+      return describePersonality(envVoice())
+    },
+  },
   // ─── R146.108 — Consumers + dedup + budget guard + empirical bench ────
   'frontier.consumerTick': {
     description: 'Run one consumer cycle: backfill embeddings, dedup capability names, write prototype + advancement specs to /data/intel/*.md, run one empirical capability benchmark.',
