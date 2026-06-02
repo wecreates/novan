@@ -2019,6 +2019,68 @@ export const OPERATIONS: Record<string, OpSpec> = {
   'novan.http':            { description: 'Outbound HTTP from Novan to any public URL. SSRF-guarded (no loopback / private ranges). Body capped at 64 KiB. Params: method?, url, headers?, body?, timeoutMs?', risk: 'high',
     handler: async (ws, p) => (await import('./novan-do.js')).httpAction(ws, p as unknown as Parameters<typeof import('./novan-do.js').httpAction>[1]) },
 
+  // ─── R146.119 — code proposal lifecycle (list / approve / build / list patches) ─
+  'proposals.list':        { description: 'List code_proposals for this workspace. Params: status? (proposed|approved|rejected|shipped), limit?', risk: 'low',
+    handler: async (ws, p) => {
+      const { db } = await import('../db/client.js')
+      const { codeProposals } = await import('../db/schema.js')
+      const { and, eq, desc } = await import('drizzle-orm')
+      const limit = Math.min(typeof p['limit'] === 'number' ? p['limit'] as number : 25, 100)
+      const where = p['status']
+        ? and(eq(codeProposals.workspaceId, ws), eq(codeProposals.status, String(p['status'])))
+        : eq(codeProposals.workspaceId, ws)
+      const rows = await db.select().from(codeProposals).where(where).orderBy(desc(codeProposals.createdAt)).limit(limit)
+      return { count: rows.length, proposals: rows }
+    } },
+  'proposals.approve':     { description: 'Mark a code_proposal as approved. Required before proposals.build will produce a patch. Params: proposalId, approvedBy?', risk: 'high',
+    handler: async (ws, p) => {
+      const { db } = await import('../db/client.js')
+      const { codeProposals, events } = await import('../db/schema.js')
+      const { and, eq } = await import('drizzle-orm')
+      const { v7: uuidv7 } = await import('uuid')
+      const proposalId = String(p['proposalId'] ?? '')
+      if (!proposalId) throw new Error('proposalId required')
+      const now = Date.now()
+      const updated = await db.update(codeProposals)
+        .set({ status: 'approved', approvalId: String(p['approvedBy'] ?? 'operator'), updatedAt: now })
+        .where(and(eq(codeProposals.workspaceId, ws), eq(codeProposals.id, proposalId)))
+        .returning({ id: codeProposals.id, title: codeProposals.title, risk: codeProposals.riskLevel })
+      if (!updated[0]) throw new Error('proposal not found')
+      await db.insert(events).values({
+        id: uuidv7(), workspaceId: ws, type: 'proposal.approved',
+        payload: { proposalId, title: updated[0].title, risk: updated[0].risk, approvedBy: String(p['approvedBy'] ?? 'operator') },
+        traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
+        source: 'brain-task', version: 1, createdAt: now,
+      }).catch(() => null)
+      return { ok: true, proposalId, status: 'approved' }
+    } },
+  'proposals.build':       { description: 'Generate the patch for an approved proposal (runs code-agent: LLM-or-template → safety → sandbox). Writes a code_patches row; does NOT touch disk. Params: proposalId', risk: 'high',
+    handler: async (ws, p) => (await import('./code-agent.js')).buildPatchFromProposal(ws, String(p['proposalId'] ?? '')) },
+  'patches.list':          { description: 'List code_patches drafts (review-only outputs from code-agent). Params: proposalId?, status?, limit?', risk: 'low',
+    handler: async (ws, p) => {
+      const { db } = await import('../db/client.js')
+      const { codePatches } = await import('../db/schema.js')
+      const { and, eq, desc } = await import('drizzle-orm')
+      const limit = Math.min(typeof p['limit'] === 'number' ? p['limit'] as number : 25, 100)
+      const filters = [eq(codePatches.workspaceId, ws)]
+      if (p['proposalId']) filters.push(eq(codePatches.proposalId, String(p['proposalId'])))
+      if (p['status'])     filters.push(eq(codePatches.status,     String(p['status'])))
+      const rows = await db.select().from(codePatches).where(and(...filters)).orderBy(desc(codePatches.createdAt)).limit(limit)
+      return { count: rows.length, patches: rows }
+    } },
+  'improvements.create':   { description: 'Record an improvement suggestion (manual entry). r117 bridge will route it onto the agent_ops_board. Params: title, body?, priority?, category?', risk: 'low',
+    handler: async (ws, p) => {
+      const { db } = await import('../db/client.js')
+      const { v7: uuidv7 } = await import('uuid')
+      const { sql } = await import('drizzle-orm')
+      const id = uuidv7(); const now = Date.now()
+      await db.execute(sql`
+        INSERT INTO improvement_suggestions (id, workspace_id, title, body, category, priority, status, source, created_at, updated_at)
+        VALUES (${id}, ${ws}, ${String(p['title'] ?? 'untitled')}, ${String(p['body'] ?? '')}, ${String(p['category'] ?? 'misc')}, ${String(p['priority'] ?? 'medium')}, 'open', 'operator', ${now}, ${now})
+      `)
+      return { ok: true, id }
+    } },
+
   // ─── R146.117 — wiring fixes (findings→ops bridge, agent dispatch, IG userId, oauth refresh) ─
   'security.bridgeNow':    { description: 'Bridge open high/critical security findings onto the agent_ops_board (owner: Sam). Dedups via securityFindings.mitigationTaskId.', risk: 'low',
     handler: async (ws, p) => (await import('./r117-wiring-fixes.js')).findingsToOpsBridge(ws, typeof p['limit'] === 'number' ? p['limit'] as number : 10) },
