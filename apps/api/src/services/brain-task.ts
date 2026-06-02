@@ -1819,6 +1819,75 @@ const OPERATIONS: Record<string, OpSpec> = {
     handler: async (ws, p) => (await import('./autonomy-budget.js')).spendSummary(ws, p['businessId'] ? String(p['businessId']) : undefined),
   },
 
+  // ─── R146.102 — Video post-prod gap closures ──────────────────────
+  'aiVideo.projectCost': {
+    description: 'Project cost + render-time for executing an episode before paying. Params: episode (object), parallelShots?, includeMusic?, includeVoiceover?, voiceoverWordCount?',
+    risk: 'low',
+    handler: async (_ws, p) => {
+      const { projectEpisodeCost } = await import('./ai-video-postprod.js')
+      const ep = p['episode'] as Pick<import('./ai-video-studio.js').Episode, 'shots' | 'characters'>
+      return projectEpisodeCost({
+        episode: ep,
+        ...(typeof p['parallelShots']      === 'number'  ? { parallelShots:      p['parallelShots']      as number  } : {}),
+        ...(typeof p['includeMusic']       === 'boolean' ? { includeMusic:       p['includeMusic']       as boolean } : {}),
+        ...(typeof p['includeVoiceover']   === 'boolean' ? { includeVoiceover:   p['includeVoiceover']   as boolean } : {}),
+        ...(typeof p['voiceoverWordCount'] === 'number'  ? { voiceoverWordCount: p['voiceoverWordCount'] as number  } : {}),
+      })
+    },
+  },
+  'aiVideo.extractLastFrame': {
+    description: 'Extract last frame of a video file via ffmpeg. Params: videoPath, outDir?',
+    risk: 'low',
+    handler: async (_ws, p) => {
+      const { extractLastFrame } = await import('./ai-video-postprod.js')
+      return extractLastFrame(String(p['videoPath'] ?? ''), p['outDir'] ? String(p['outDir']) : undefined)
+    },
+  },
+  'aiVideo.renderMultipleTakes': {
+    description: 'Render N takes of a shot with different seeds. Params: shot (object), takeCount, baseSeed?',
+    risk: 'high',
+    handler: async (ws, p) => {
+      const { renderMultipleTakes } = await import('./ai-video-postprod.js')
+      return renderMultipleTakes(
+        ws,
+        p['shot'] as import('./ai-video-studio.js').Shot,
+        Number(p['takeCount'] ?? 3),
+        typeof p['baseSeed'] === 'number' ? p['baseSeed'] as number : undefined,
+      )
+    },
+  },
+  'aiVideo.selectBestTake': {
+    description: 'Score N takes + pick best by ok+size+cost. Params: takes (array of {takeIdx, result, localPath?})',
+    risk: 'low',
+    handler: async (_ws, p) => {
+      const { selectBestTake } = await import('./ai-video-postprod.js')
+      return selectBestTake((p['takes'] as Array<{ takeIdx: number; result: import('./ai-video-providers.js').RenderResult; localPath?: string }>) ?? [])
+    },
+  },
+  'aiVideo.synthesizeCharacterVoices': {
+    description: 'Synthesize voice lines per character via each character\'s voiceCloneRef. Params: characters (array), lines (array of {characterId, text, startTimeSec})',
+    risk: 'medium',
+    handler: async (ws, p) => {
+      const { synthesizePerCharacterVoices } = await import('./ai-video-postprod.js')
+      return synthesizePerCharacterVoices({
+        workspaceId: ws,
+        characters:  (p['characters'] as import('./ai-video-studio.js').Character[]) ?? [],
+        lines:       (p['lines'] as Array<{ characterId: string; text: string; startTimeSec: number }>) ?? [],
+      })
+    },
+  },
+  'aiVideo.mixCharacterVoices': {
+    description: 'Mix per-character voice tracks into single track with timing. Params: lines (array of {audioPath, startTimeSec}), outputPath',
+    risk: 'low',
+    handler: async (_ws, p) => {
+      const { mixCharacterVoices } = await import('./ai-video-postprod.js')
+      return mixCharacterVoices({
+        lines:      (p['lines'] as Array<{ audioPath: string; startTimeSec: number }>) ?? [],
+        outputPath: String(p['outputPath'] ?? ''),
+      })
+    },
+  },
+
   'aiVideo.executeEpisode': {
     description: 'End-to-end execution: render every shot, generate music + voiceover, ffmpeg concat, optional captions + brand. Params: episode (object with characters/scenes/shots), concatOutputPath, parallelShots?, generateMusic?, generateVoiceover?, burnCaptions?, applyBrandKit?',
     risk: 'critical',         // can spend tens or hundreds of dollars; OPERATOR_APPROVED required
@@ -4277,6 +4346,10 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         // cost figures the operator needs to see un-redacted.
         'aiVideo.renderShot', 'aiVideo.renderShotWithFallback',
         'aiVideo.executeEpisode',
+        // R146.102 — postprod ops legitimately report $ projections + take costs.
+        'aiVideo.projectCost', 'aiVideo.extractLastFrame',
+        'aiVideo.renderMultipleTakes', 'aiVideo.selectBestTake',
+        'aiVideo.synthesizeCharacterVoices', 'aiVideo.mixCharacterVoices',
         // R146.97 — autonomy budget ops legitimately return $ ceilings + spend.
         'autonomy.setBudget', 'autonomy.listBudgets', 'autonomy.disableBudget',
         'autonomy.checkSpend', 'autonomy.logSpend', 'autonomy.spendSummary',

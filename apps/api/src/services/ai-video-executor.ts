@@ -24,6 +24,7 @@ import { events } from '../db/schema.js'
 import { v7 as uuidv7 } from 'uuid'
 import { routeShotToProvider, buildContinuityPlan, planAssembly, type Episode, type Shot } from './ai-video-studio.js'
 import { renderShotWithFallback, type RenderResult } from './ai-video-providers.js'
+import { ensureDurableLayout, extractLastFrame, findResumableShots } from './ai-video-postprod.js'
 
 export interface ExecuteEpisodeInput {
   workspaceId:    string
@@ -56,8 +57,13 @@ export async function executeEpisode(input: ExecuteEpisodeInput): Promise<Execut
   const continuity = buildContinuityPlan({ episode: input.episode })
   const cuts = planAssembly({ shots: input.episode.shots })
 
+  // R146.102 — durable output layout + resumable shot detection
+  const layout = await ensureDurableLayout(input.episode.id)
+  const resumable = await findResumableShots(input.episode.id, layout.root.replace(`/${input.episode.id}`, ''), input.episode.shots)
+
   await emit(input.workspaceId, 'aiVideo.execution.started', {
     episodeId: input.episode.id, shotCount: input.episode.shots.length, totalSec: cuts.totalDurationSec,
+    resumableCount: resumable.size, durableRoot: layout.root,
   })
 
   // Render shots. R146.100 — must be sequential when continuity matters
@@ -72,6 +78,17 @@ export async function executeEpisode(input: ExecuteEpisodeInput): Promise<Execut
   const lastFrameByShotId: Map<string, string> = new Map()
 
   const runShot = async (shot: Shot): Promise<void> => {
+    // R146.102 — resumable: if shot already rendered durably, short-circuit
+    const resumablePath = resumable.get(shot.id)
+    if (resumablePath) {
+      shotResults.push({ shotId: shot.id, ok: true, provider: 'resumed', localPath: resumablePath, costUsd: 0, latencyMs: 0, providerChain: ['resumed'] })
+      try {
+        const { framePath } = await extractLastFrame(resumablePath, layout.assetsDir)
+        lastFrameByShotId.set(shot.id, `file://${framePath}`)
+      } catch { /* continuity will fall back to refs */ }
+      await emit(input.workspaceId, 'aiVideo.shot.resumed', { shotId: shot.id, path: resumablePath })
+      return
+    }
     const routing = routeShotToProvider(shot)
     const ccShot = continuity.perShot.find(p => p.shotId === shot.id)
     const refs: string[] = []
@@ -108,16 +125,19 @@ export async function executeEpisode(input: ExecuteEpisodeInput): Promise<Execut
     let localPath: string | undefined
     if (r.ok && r.videoUrl) {
       try {
-        const tag = `${input.episode.id}-${shot.id}`
-        localPath = await downloadToLocal(r.videoUrl, tag)
-        // R146.100 — extract last frame for next-shot continuity. We point
-        // the lastFrameByShotId map at the source URL (most provider APIs
-        // can accept the same URL again as image-conditioning); the
-        // executor's `prevShotEndFrame` then threads that into the next
-        // shot's RenderRequest. ffmpeg frame-extraction is the followup
-        // optimization for cases where mid/end frames matter more than
-        // the first frame.
-        if (r.videoUrl) lastFrameByShotId.set(shot.id, r.videoUrl)
+        // R146.102 — durable per-shot output so retries can skip already-
+        // rendered shots. Path: <root>/<episodeId>/shots/<shotId>.mp4
+        localPath = await downloadToPath(r.videoUrl, layout.shotsDir, `${shot.id}.mp4`)
+        // R146.102 — real frame extraction: ffmpeg pulls the actual last
+        // frame of the rendered shot, which is what providers should
+        // condition on for true continuity. Falls back to videoUrl if
+        // ffmpeg fails (provider gets a moving-frame-from-clip approximation).
+        try {
+          const { framePath } = await extractLastFrame(localPath, layout.assetsDir)
+          lastFrameByShotId.set(shot.id, `file://${framePath}`)
+        } catch {
+          lastFrameByShotId.set(shot.id, r.videoUrl)
+        }
       } catch (e) {
         await emit(input.workspaceId, 'aiVideo.shot.download_failed', { shotId: shot.id, error: (e as Error).message })
       }
@@ -279,6 +299,21 @@ async function downloadToLocal(url: string, tag: string): Promise<string> {
   await writeFile(outPath, buf)
   return outPath
 }
+
+/** R146.102 — download to a specific durable directory + filename. */
+async function downloadToPath(url: string, dir: string, filename: string): Promise<string> {
+  const { writeFile, mkdir } = await import('node:fs/promises')
+  const { join } = await import('node:path')
+  await mkdir(dir, { recursive: true }).catch(() => null)
+  const outPath = join(dir, filename.replace(/[^a-z0-9.-]/gi, '_'))
+  const res = await fetch(url, { signal: AbortSignal.timeout(180_000) })
+  if (!res.ok) throw new Error(`download ${res.status}`)
+  const buf = Buffer.from(await res.arrayBuffer())
+  await writeFile(outPath, buf)
+  return outPath
+}
+
+void downloadToLocal  // kept for compatibility; durable path is the default
 
 async function concatShots(input: { orderedLocalPaths: string[]; outputPath: string; musicPath?: string; voiceoverPath?: string }): Promise<string> {
   if (input.orderedLocalPaths.length === 0) throw new Error('no shots to concat')
