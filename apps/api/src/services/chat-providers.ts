@@ -509,10 +509,21 @@ export interface StreamOpts {
   traceId?:        string
   workflowRunId?:  string
   skipUsageTracking?: boolean
+  // R146.127 — opt out of the global quality directive. Defaults to
+  // FALSE (directive applied). Set true for meta-prompts that have
+  // their own stricter bar (e.g. token-stretcher) or for embedding
+  // calls where it's noise.
+  suppressQualityBar?: boolean
 }
 
 /** Stream with automatic fallback across configured providers. */
 export async function* streamChat(workspaceId: string, msgs: ChatMsg[], opts?: StreamOpts): AsyncGenerator<StreamChunk, StreamResult> {
+  // R146.127 — every generator inherits the quality bar unless explicitly
+  // suppressed (token-stretcher, embeddings, etc).
+  if (!opts?.suppressQualityBar) {
+    const { injectQualityBarIntoMessages } = await import('./ai-quality-directive.js')
+    msgs = injectQualityBarIntoMessages(msgs)
+  }
   // Heartbeat the llm agent — every chat call is real AI activity.
   void import('./agent-state-sync.js').then(m => m.recordAgentActivity(workspaceId, 'llm', { status: 'running' })).catch((e: Error) => { console.error('[chat-providers]', e.message); return null })
   const streamStartedAt = Date.now()      // R146.10 — for ai_usage.latencyMs

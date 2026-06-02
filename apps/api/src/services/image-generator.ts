@@ -217,6 +217,9 @@ async function emit(workspaceId: string, type: string, payload: Record<string, u
 export async function generateImage(input: GenerateInput): Promise<GenerateResult> {
   const id = uuidv7()
   const now = Date.now()
+  // R146.127 — append global quality directive to every image prompt
+  const { injectQualityBarIntoImagePrompt } = await import('./ai-quality-directive.js')
+  input = { ...input, prompt: injectQualityBarIntoImagePrompt(input.prompt) }
   const redactedPrompt = redactSecrets(input.prompt).redacted
 
   // Insert pending row up-front so user has visibility
