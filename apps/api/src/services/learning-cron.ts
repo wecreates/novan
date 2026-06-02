@@ -1236,6 +1236,9 @@ const INTERVALS = {
   // We use a single 5-min tick + a "did this hour already run?" guard so
   // ops can change the schedule via config without restarting the process.
   secondBrainCron:       5 * 60_000,
+  // R146.115 — Shortform pipeline cron: check enabled YT pipelines for new
+  // uploads, clip them. Heavy job; runs hourly.
+  shortformCron:         60 * 60_000,
 }
 
 /**
@@ -1500,6 +1503,16 @@ async function runFrontierIntelTick(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'frontier_intel', error: (e as Error).message }) }
 }
 
+// R146.115 — Shortform cron: poll YT channels, clip new videos.
+async function runShortformCron(): Promise<void> {
+  if (process.env['DISABLE_SHORTFORM'] === '1') return
+  try {
+    const { shortformCronTick } = await import('./r115-build-batch.js')
+    const out = await shortformCronTick('system')
+    if (out.newClips > 0 || out.pipelinesChecked > 0) await emit('cron.shortform_tick', out)
+  } catch (e) { await emit('cron.error', { task: 'shortform', error: (e as Error).message }) }
+}
+
 // R146.114 — Second Brain cron tick. Single 5-min tick that fires the right
 // job (ingest / review / audit) when the configured hour matches the current
 // hour AND we haven't already run it this hour. Falls back silently if the
@@ -1677,6 +1690,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runFrontierMaxTick,             INTERVALS.frontierMax))
   handles.push(scheduleJittered(runFrontierConsumerTick,        INTERVALS.frontierConsumer))
   handles.push(scheduleJittered(runSecondBrainCron,             INTERVALS.secondBrainCron))
+  handles.push(scheduleJittered(runShortformCron,               INTERVALS.shortformCron))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

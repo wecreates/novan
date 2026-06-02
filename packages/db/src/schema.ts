@@ -4887,3 +4887,137 @@ export const secondBrainReviews = pgTable('second_brain_reviews', {
 }, (t) => [
   index('sb_reviews_ws_kind_idx').on(t.workspaceId, t.kind, t.runAt),
 ])
+
+// ─── Migration 0055 — Build batch (R146.115) ───────────────────────────
+// chriswesst War Room + yngsoren EasySlice YT→shorts + robthebank $1M
+// brand launch + mavgpt viral-style scripts + ChatGPT export import.
+
+export const agentRoster = pgTable('agent_roster', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  shortName:    text('short_name').notNull(),
+  role:         text('role').notNull(),
+  avatarHue:    integer('avatar_hue').notNull().default(180),
+  status:       text('status').notNull().default('idle'),
+  currentTask:  text('current_task'),
+  lastActiveAt: bigint('last_active_at', { mode: 'number' }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('agent_roster_ws_short_idx').on(t.workspaceId, t.shortName),
+  index('agent_roster_ws_status_idx').on(t.workspaceId, t.status),
+])
+
+export const agentOpsBoard = pgTable('agent_ops_board', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  title:        text('title').notNull(),
+  ownerAgentId: text('owner_agent_id'),
+  column:       text('column').notNull().default('on_deck'),
+  dueAt:        bigint('due_at', { mode: 'number' }),
+  notes:        text('notes'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ops_board_ws_col_idx').on(t.workspaceId, t.column, t.updatedAt),
+])
+
+export const shortformPipelines = pgTable('shortform_pipelines', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  sourceUrl:     text('source_url').notNull(),
+  sourceTitle:   text('source_title'),
+  targetAccounts: jsonb('target_accounts').$type<Array<{ platform: 'tiktok' | 'instagram' | 'youtube' | 'facebook'; handle: string }>>(),
+  styleProfile:  jsonb('style_profile').$type<Record<string, unknown>>(),
+  enabled:       boolean('enabled').notNull().default(true),
+  lastCheckedAt: bigint('last_checked_at', { mode: 'number' }),
+  createdAt:     bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('sf_pipelines_ws_idx').on(t.workspaceId, t.enabled),
+])
+
+export const shortformClips = pgTable('shortform_clips', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  pipelineId:      text('pipeline_id').notNull(),
+  sourceVideoUrl:  text('source_video_url').notNull(),
+  sourceVideoTitle: text('source_video_title'),
+  startSec:        real('start_sec').notNull(),
+  endSec:          real('end_sec').notNull(),
+  hook:            text('hook'),
+  viralScore:      integer('viral_score').notNull().default(0),
+  rationale:       text('rationale'),
+  outputPath:      text('output_path'),
+  outputUrl:       text('output_url'),
+  postedTo:        jsonb('posted_to').$type<Array<{ platform: string; postId?: string; postedAt: number }>>(),
+  status:          text('status').notNull().default('queued'),
+  error:           text('error'),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('sf_clips_ws_status_idx').on(t.workspaceId, t.status, t.createdAt),
+  index('sf_clips_pipeline_idx').on(t.pipelineId, t.createdAt),
+])
+
+export const viralStyleScripts = pgTable('viral_style_scripts', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  sourceUrl:    text('source_url').notNull(),
+  sourceTitle:  text('source_title'),
+  rank:         integer('rank').notNull(),
+  title:        text('title').notNull(),
+  body:         text('body').notNull(),
+  tags:         jsonb('tags').$type<string[]>(),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('vss_ws_source_idx').on(t.workspaceId, t.sourceUrl, t.rank),
+])
+
+export const businessLaunches = pgTable('business_launches', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  businessId:   text('business_id'),
+  ideaSeed:     text('idea_seed').notNull(),
+  problemStatement: text('problem_statement'),
+  validationNotes:  text('validation_notes'),
+  brandName:    text('brand_name'),
+  brandPalette: jsonb('brand_palette').$type<string[]>(),
+  mockupUrls:   jsonb('mockup_urls').$type<string[]>(),
+  landingPageHtml: text('landing_page_html'),
+  landingPageUrl:  text('landing_page_url'),
+  waitlistFormUrl: text('waitlist_form_url'),
+  prelaunchContentPlan: jsonb('prelaunch_content_plan').$type<Array<{ day: number; channel: string; angle: string }>>(),
+  currentStage: text('current_stage').notNull().default('validation'),
+  stageHistory: jsonb('stage_history').$type<Array<{ stage: string; at: number; summary?: string }>>(),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('bl_ws_stage_idx').on(t.workspaceId, t.currentStage, t.updatedAt),
+])
+
+export const chatgptImports = pgTable('chatgpt_imports', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  source:       text('source').notNull(),
+  filePath:     text('file_path').notNull(),
+  conversationCount: integer('conversation_count').notNull().default(0),
+  ideasExtracted: integer('ideas_extracted').notNull().default(0),
+  status:       text('status').notNull().default('processing'),
+  importedAt:   bigint('imported_at', { mode: 'number' }).notNull(),
+})
+
+export const extractedBusinessIdeas = pgTable('extracted_business_ideas', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  importId:     text('import_id'),
+  source:       text('source').notNull(),
+  title:        text('title').notNull(),
+  pitch:        text('pitch').notNull(),
+  problem:      text('problem'),
+  audience:     text('audience'),
+  revenueModel: text('revenue_model'),
+  feasibilityScore: integer('feasibility_score').notNull().default(0),
+  conversationRef: text('conversation_ref'),
+  status:       text('status').notNull().default('proposed'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ebi_ws_score_idx').on(t.workspaceId, t.feasibilityScore, t.createdAt),
+])

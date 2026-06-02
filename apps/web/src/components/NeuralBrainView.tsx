@@ -35,17 +35,21 @@ export interface BrainRegion {
   position:    [number, number, number]
 }
 
+// R146.115 — anatomically-correct lobe positions. Mapped to a brain-shaped
+// ellipsoid (~2.6 x 1.8 x 2.0). Coordinates approximate the right-side view:
+// x = lateral (left=negative), y = inferior-superior, z = posterior-anterior
+// (front of brain = positive z).
 const DEFAULT_REGIONS: BrainRegion[] = [
-  { name: 'PREFRONTAL',     neurons:   134, firingRate: 1.2, hue:  45, position: [ 0.0,  1.8,  1.2] },
-  { name: 'MOTOR CORTEX',   neurons:    61, firingRate: 0.9, hue: 350, position: [-1.5,  1.4,  0.3] },
-  { name: 'CONCEPT LAYER',  neurons:  2396, firingRate: 0.5, hue:  38, position: [ 1.8,  0.9,  0.6] },
-  { name: 'GLIA',           neurons:   411, firingRate: 2.7, hue: 140, position: [-2.0, -0.2,  0.0] },
-  { name: 'ASSOCIATION',    neurons:   226, firingRate: 0.4, hue: 280, position: [-1.4,  0.2, -0.4] },
-  { name: 'HIPPOCAMPUS',    neurons:   320, firingRate: 1.5, hue: 200, position: [ 0.0,  0.0,  0.0] },
-  { name: 'EXECUTIVE',      neurons:   139, firingRate: 0.4, hue:  60, position: [ 1.4,  0.0, -0.4] },
-  { name: 'SENSORY CORTEX', neurons:    56, firingRate: 1.0, hue: 180, position: [-1.4, -1.4,  0.6] },
-  { name: 'AUDITORY',       neurons:   220, firingRate: 1.0, hue: 320, position: [ 1.4, -1.2,  0.6] },
-  { name: 'CEREBELLUM',     neurons:   180, firingRate: 0.8, hue: 100, position: [ 0.0, -1.8,  0.0] },
+  { name: 'PREFRONTAL',     neurons:   134, firingRate: 1.2, hue:  45, position: [ 0.0,  0.9,  1.7] },  // front, top
+  { name: 'MOTOR CORTEX',   neurons:    61, firingRate: 0.9, hue: 350, position: [-0.7,  1.1,  0.7] },  // top, slightly behind frontal
+  { name: 'CONCEPT LAYER',  neurons:  2396, firingRate: 0.5, hue:  38, position: [ 0.7,  1.1,  0.7] },  // top-right (frontal pole)
+  { name: 'EXECUTIVE',      neurons:   139, firingRate: 0.4, hue:  60, position: [ 0.0,  1.3,  0.2] },  // top-center (parietal-frontal junction)
+  { name: 'ASSOCIATION',    neurons:   226, firingRate: 0.4, hue: 280, position: [-0.5,  0.6,  0.0] },  // mid-left (parietal-temporal)
+  { name: 'HIPPOCAMPUS',    neurons:   320, firingRate: 1.5, hue: 200, position: [ 0.0, -0.3,  0.4] },  // deep midline (hippocampal/limbic core)
+  { name: 'SENSORY CORTEX', neurons:    56, firingRate: 1.0, hue: 180, position: [ 0.0,  1.0, -0.4] },  // parietal (post-central)
+  { name: 'GLIA',           neurons:   411, firingRate: 2.7, hue: 140, position: [ 0.5,  0.6,  0.0] },  // distributed — pinned right-mid for visual balance
+  { name: 'AUDITORY',       neurons:   220, firingRate: 1.0, hue: 320, position: [ 1.2,  0.2,  0.2] },  // right temporal
+  { name: 'CEREBELLUM',     neurons:   180, firingRate: 0.8, hue: 100, position: [ 0.0, -0.8, -1.4] },  // back-bottom, behind brainstem
 ]
 
 // Edges between regions (the "fiber tracts"). Hippocampus connects to most.
@@ -156,6 +160,48 @@ function FiberTracts({ regions, edges }: { regions: BrainRegion[]; edges: Array<
   )
 }
 
+// ─── Anatomical brain shell ─────────────────────────────────────────────
+// R146.115 — a soft translucent ellipsoid with surface noise displacement
+// gives a real-brain silhouette behind the regions. Procedural — no mesh
+// download. The displacement maps gyri/sulci roughly.
+
+function BrainShell() {
+  const ref = useRef<THREE.Mesh>(null)
+  const geom = useMemo(() => {
+    const g = new THREE.SphereGeometry(2.05, 96, 64)
+    // Brain-like proportions (longer front-to-back, slightly flattened bottom)
+    g.scale(1.0, 0.78, 1.3)
+    // Displace each vertex by a small noise — this gives the gyri/sulci texture
+    const pos = g.attributes.position as THREE.BufferAttribute
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i)
+      // Multi-octave noise (cheap sine approximation)
+      const n1 = Math.sin(x * 3.1) * Math.cos(y * 2.7) * Math.sin(z * 3.3) * 0.07
+      const n2 = Math.sin(x * 6.5 + 0.2) * Math.cos(z * 7.1 - 0.4) * 0.04
+      const n3 = Math.sin(y * 9.0) * Math.cos(x * 8.5) * 0.025
+      // Hemisphere split — slight valley along x=0
+      const fissure = Math.max(0, 0.08 - Math.abs(x) * 0.4) * -1
+      const r = Math.sqrt(x * x + y * y + z * z) || 1
+      const d = n1 + n2 + n3 + fissure
+      pos.setXYZ(i, x + (x / r) * d, y + (y / r) * d, z + (z / r) * d)
+    }
+    g.computeVertexNormals()
+    return g
+  }, [])
+
+  return (
+    <mesh ref={ref} geometry={geom}>
+      <meshBasicMaterial
+        color="hsl(38, 100%, 50%)"
+        wireframe
+        transparent
+        opacity={0.08}
+        depthWrite={false}
+      />
+    </mesh>
+  )
+}
+
 // ─── Slow rotation wrapper ──────────────────────────────────────────────
 
 function RotatingBrain({ children }: { children: React.ReactNode }) {
@@ -188,6 +234,7 @@ export function NeuralBrainView({
         <color attach="background" args={['#000']} />
         <ambientLight intensity={0.2} />
         <RotatingBrain>
+          <BrainShell />
           {regions.map(r => <RegionCluster key={r.name} region={r} />)}
           <FiberTracts regions={regions} edges={REGION_EDGES} />
         </RotatingBrain>

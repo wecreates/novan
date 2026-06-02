@@ -27,8 +27,9 @@ import { api } from '../api.js'
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
 import { KronosBrain } from '../components/KronosBrain.js'
 import { NeuralBrainView } from '../components/NeuralBrainView.js'
+import { WarRoomView } from '../components/WarRoomView.js'
 
-// Lazy-load the existing 3D scene as the AGENTS view
+// Lazy-load the existing 3D scene for the (now optional) graph subview
 const BrainHomePage = lazy(() => import('./BrainHomePage.js'))
 
 type Tab = 'AGENTS' | 'BRAIN' | 'DECK' | 'TEAM' | 'USAGE'
@@ -135,12 +136,12 @@ export default function PulseShellPage(): JSX.Element {
 
   const tabContent = useMemo(() => {
     if (tab === 'BRAIN') return <NeuralBrainView brandName="NOVAN" />
-    if (tab === 'AGENTS') return (
-      <Suspense fallback={<CenteredText>loading agents…</CenteredText>}>
+    if (tab === 'AGENTS') return <WarRoomView />
+    if (tab === 'DECK')  return (
+      <Suspense fallback={<CenteredText>loading 3D graph…</CenteredText>}>
         <BrainHomePage />
       </Suspense>
     )
-    if (tab === 'DECK')  return <PlaceholderTab name="DECK"  hint="Project deck — coming soon" />
     if (tab === 'TEAM')  return <PlaceholderTab name="TEAM"  hint="Agent team roster — coming soon" />
     if (tab === 'USAGE') return <PlaceholderTab name="USAGE" hint="Token, cost & quota dashboards — coming soon" />
     return null
