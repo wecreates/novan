@@ -5413,3 +5413,64 @@ export const agentDemotions = pgTable('agent_demotions', {
   action:         text('action').notNull(),
   decidedAt:      bigint('decided_at', { mode: 'number' }).notNull(),
 }, (t) => [index('ad_ws_agent_idx').on(t.workspaceId, t.agentId, t.decidedAt)])
+
+// ─── R146.138 — C-tier features ────────────────────────────────────────
+
+export const workspaceMembers = pgTable('workspace_members', {
+  workspaceId:  text('workspace_id').notNull(),
+  userId:       text('user_id').notNull(),
+  role:         text('role').notNull(),
+  scope:        jsonb('scope').$type<string[]>().notNull().default([]),
+  invitedBy:    text('invited_by'),
+  joinedAt:     bigint('joined_at', { mode: 'number' }).notNull(),
+}, (t) => [primaryKey({ columns: [t.workspaceId, t.userId] })])
+
+export const negotiations = pgTable('negotiations', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  counterparty:  text('counterparty').notNull(),
+  topic:         text('topic').notNull(),
+  positionOpen:  jsonb('position_open').$type<Record<string, unknown>>().notNull().default({}),
+  positionWalk:  jsonb('position_walk').$type<Record<string, unknown>>().notNull().default({}),
+  batna:         text('batna'),
+  transcript:    jsonb('transcript').$type<Array<{ role: string; content: string; at: number }>>().notNull().default([]),
+  status:        text('status').notNull().default('drafted'),
+  createdAt:     bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:     bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [index('neg_ws_idx').on(t.workspaceId, t.createdAt)])
+
+export const a2aContracts = pgTable('a2a_contracts', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  peerWorkspace:  text('peer_workspace').notNull(),
+  capability:     text('capability').notNull(),
+  revenueSplit:   real('revenue_split').notNull().default(0.5),
+  status:         text('status').notNull().default('proposed'),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('a2a_ws_idx').on(t.workspaceId, t.createdAt)])
+
+export const calendarSignals = pgTable('calendar_signals', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  signalDate:      text('signal_date').notNull(),
+  energyLevel:     text('energy_level').notNull(),
+  predictedLoad:   integer('predicted_load').notNull().default(0),
+  recommendations: jsonb('recommendations').$type<string[]>().notNull().default([]),
+  recordedAt:      bigint('recorded_at', { mode: 'number' }).notNull(),
+}, (t) => [index('cs_ws_date_idx').on(t.workspaceId, t.signalDate)])
+
+export const commitments = pgTable('commitments', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  statement:     text('statement').notNull(),
+  deadlineAt:    bigint('deadline_at', { mode: 'number' }).notNull(),
+  forfeitUsd:    real('forfeit_usd').notNull().default(0),
+  forfeitTo:     text('forfeit_to'),
+  signature:     text('signature').notNull(),
+  status:        text('status').notNull().default('active'),
+  resolvedAt:    bigint('resolved_at', { mode: 'number' }),
+  createdAt:     bigint('created_at',  { mode: 'number' }).notNull(),
+}, (t) => [
+  index('cm_ws_idx').on(t.workspaceId, t.createdAt),
+  index('cm_due_idx').on(t.workspaceId, t.status, t.deadlineAt),
+])
