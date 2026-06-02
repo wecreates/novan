@@ -1247,6 +1247,10 @@ const INTERVALS = {
   oauthRefresh:          15 * 60_000,
   // R146.124 — scan recent errors → improvement_suggestions. Hourly.
   suggestionsProducer:   60 * 60_000,
+  // R146.128 — nightly DB backup. 24h interval is fine; the backup script
+  // itself targets 04:00 UTC via cron-on-host. This tick is a safety net
+  // for environments without host cron.
+  nightlyBackup:         24 * 60 * 60_000,
 }
 
 /**
@@ -1511,6 +1515,17 @@ async function runFrontierIntelTick(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'frontier_intel', error: (e as Error).message }) }
 }
 
+// R146.128 — Nightly database backup. Fires once per 24h; the runBackup
+// op itself is the kill-switch (returns "not configured" if env unset).
+async function runNightlyBackup(): Promise<void> {
+  if (process.env['DISABLE_NIGHTLY_BACKUP'] === '1') return
+  try {
+    const { runBackup } = await import('./r128-safety.js')
+    const out = await runBackup()
+    await emit('cron.nightly_backup', { status: out.status, sizeBytes: out.sizeBytes ?? 0 })
+  } catch (e) { await emit('cron.error', { task: 'nightly_backup', error: (e as Error).message }) }
+}
+
 // R146.124 — Pre-refresh OAuth tokens that are within 30 min of expiry.
 async function runOauthRefresh(): Promise<void> {
   if (process.env['DISABLE_OAUTH_REFRESH'] === '1') return
@@ -1742,6 +1757,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runAgentDispatch,               INTERVALS.agentDispatch))
   handles.push(scheduleJittered(runOauthRefresh,                INTERVALS.oauthRefresh))
   handles.push(scheduleJittered(runSuggestionsProducer,         INTERVALS.suggestionsProducer))
+  handles.push(scheduleJittered(runNightlyBackup,               INTERVALS.nightlyBackup))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

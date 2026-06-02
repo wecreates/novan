@@ -151,6 +151,20 @@ export async function shortformPosterTick(workspaceId: string, limit = 10): Prom
         fileBytes = st.size
       } catch { /* leave as 0 */ }
     }
+    // R146.128 — pre-post moderation gate. Caption + script combined.
+    const captionText = `${clip.sourceVideoTitle ?? ''}\n${clip.hook ?? ''}\n${clip.rationale ?? ''}`.trim()
+    if (captionText.length > 0) {
+      try {
+        const { moderate } = await import('./r128-safety.js')
+        const m = await moderate(workspaceId, { contentType: 'shortform', text: captionText, contentRefId: clip.id })
+        if (m.verdict === 'block') {
+          console.warn(`[shortform-poster] BLOCKED clip ${clip.id} — ${m.reasons.join(', ')}`)
+          skipped++
+          continue
+        }
+        if (m.verdict === 'flag') console.warn(`[shortform-poster] flagged clip ${clip.id} — ${m.reasons.join(', ')}`)
+      } catch { /* moderation soft-fail: don't block posting on infra error */ }
+    }
     const newlyPosted: Array<{ platform: string; postId?: string; postedAt: number }> = []
     for (const target of targets) {
       if (already.has(target.platform)) continue

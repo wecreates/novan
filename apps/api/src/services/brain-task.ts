@@ -2068,6 +2068,18 @@ export const OPERATIONS: Record<string, OpSpec> = {
       const rows = await db.select().from(codePatches).where(and(...filters)).orderBy(desc(codePatches.createdAt)).limit(limit)
       return { count: rows.length, patches: rows }
     } },
+  // ─── R146.128 — Tier 1 safety bundle (spend caps + moderation + backup) ─
+  'spend.status':          { description: 'Current spend status for the workspace: dailyUsd · monthlyUsd · caps · blocked flag.', risk: 'low',
+    handler: async (ws) => (await import('./r128-safety.js')).getSpendStatus(ws) },
+  'spend.setCap':          { description: 'Set spend caps. Params: dailyUsdCap?, monthlyUsdCap?, hardBlock?, updatedBy?', risk: 'high',
+    handler: async (ws, p) => { await (await import('./r128-safety.js')).setSpendCap(ws, p as Parameters<typeof import('./r128-safety.js').setSpendCap>[1]); return { ok: true } } },
+  'moderation.scan':       { description: 'Run pre-post moderation on a text. Params: contentType (shortform|caption|image|video), text, contentRefId?, useLlm?', risk: 'low',
+    handler: async (ws, p) => (await import('./r128-safety.js')).moderate(ws, { contentType: String(p['contentType'] ?? 'caption') as 'shortform'|'caption'|'image'|'video', text: String(p['text'] ?? ''), ...(p['contentRefId'] ? { contentRefId: String(p['contentRefId']) } : {}), ...(p['useLlm'] !== undefined ? { useLlm: p['useLlm'] === true } : {}) }) },
+  'backup.run':            { description: 'Trigger a database backup now (writes to BACKUP_DESTINATION_URL). Logs to backup_runs.', risk: 'medium',
+    handler: async () => (await import('./r128-safety.js')).runBackup() },
+  'backup.list':           { description: 'List the last 30 backup runs.', risk: 'low',
+    handler: async (_w, p) => (await import('./r128-safety.js')).listBackups(typeof p['limit'] === 'number' ? p['limit'] as number : 30) },
+
   'autonomy.counts':       { description: 'Live counts for autonomy dashboard: findings(open) · improvements(open) · ops(in_process/on_deck) · proposals(proposed/approved) · connectorsNeedingRefresh · agentsLive.', risk: 'low',
     handler: async (ws) => (await import('./r124-autonomy.js')).autonomyCounts(ws) },
   'suggestions.scan':      { description: 'Scan last 24h of error events and create improvement_suggestions for recurring patterns (≥3 occurrences). Powers Ali queue.', risk: 'low',

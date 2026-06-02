@@ -518,6 +518,15 @@ export interface StreamOpts {
 
 /** Stream with automatic fallback across configured providers. */
 export async function* streamChat(workspaceId: string, msgs: ChatMsg[], opts?: StreamOpts): AsyncGenerator<StreamChunk, StreamResult> {
+  // R146.128 — enforce per-workspace spend cap before any provider call.
+  // Throws SPEND_CAP_EXCEEDED if hard-block + over cap. Soft-warn otherwise.
+  try {
+    const { enforceSpendCap } = await import('./r128-safety.js')
+    await enforceSpendCap(workspaceId)
+  } catch (e) {
+    if ((e as Error).message?.startsWith('SPEND_CAP_EXCEEDED')) throw e
+    /* otherwise: spend-cap subsystem error — fail open, log */
+  }
   // R146.127 — every generator inherits the quality bar unless explicitly
   // suppressed (token-stretcher, embeddings, etc).
   if (!opts?.suppressQualityBar) {

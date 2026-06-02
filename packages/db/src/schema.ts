@@ -5024,3 +5024,42 @@ export const extractedBusinessIdeas = pgTable('extracted_business_ideas', {
 }, (t) => [
   index('ebi_ws_score_idx').on(t.workspaceId, t.feasibilityScore, t.createdAt),
 ])
+
+// ─── R146.128 — Tier 1 safety bundle ───────────────────────────────────
+
+export const spendCaps = pgTable('spend_caps', {
+  workspaceId:    text('workspace_id').primaryKey(),
+  dailyUsdCap:    real('daily_usd_cap').notNull().default(50),
+  monthlyUsdCap:  real('monthly_usd_cap').notNull().default(500),
+  hardBlock:      boolean('hard_block').notNull().default(true),
+  updatedAt:      bigint('updated_at', { mode: 'number' }).notNull(),
+  updatedBy:      text('updated_by').notNull().default('system'),
+})
+
+export const moderationResults = pgTable('moderation_results', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  contentType:     text('content_type').notNull(),
+  contentRefId:    text('content_ref_id'),
+  contentHash:     text('content_hash').notNull(),
+  verdict:         text('verdict').notNull(),
+  reasons:         jsonb('reasons').$type<string[]>().notNull().default([]),
+  categoryScores:  jsonb('category_scores').$type<Record<string, number>>().notNull().default({}),
+  reviewer:        text('reviewer').notNull(),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('mod_ws_idx').on(t.workspaceId, t.createdAt),
+  index('mod_ref_idx').on(t.contentRefId),
+])
+
+export const backupRuns = pgTable('backup_runs', {
+  id:           text('id').primaryKey(),
+  startedAt:    bigint('started_at',  { mode: 'number' }).notNull(),
+  finishedAt:   bigint('finished_at', { mode: 'number' }),
+  status:       text('status').notNull(),
+  destination:  text('destination').notNull(),
+  sizeBytes:    bigint('size_bytes',  { mode: 'number' }),
+  error:        text('error'),
+}, (t) => [
+  index('bk_started_idx').on(t.startedAt),
+])
