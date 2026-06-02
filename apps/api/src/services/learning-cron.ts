@@ -1224,6 +1224,10 @@ const INTERVALS = {
   // Round 146.105 — Novan Frontier Intelligence: 24/7 scan top AI breakthroughs,
   // distill, score, and auto-spawn prototypes for high-score findings.
   frontierIntel:         5 * 60_000,              // 5 min — one source + distill batch + spawn tasks
+  // Round 146.107 — Frontier MAX tick: capability catalog + permanent advancement loop.
+  // Runs every 60s; when MAX mode is OFF this is mostly a no-op (small batches).
+  // When MAX mode is ON the operator-tunable batches go large.
+  frontierMax:           60_000,
 }
 
 /**
@@ -1488,6 +1492,38 @@ async function runFrontierIntelTick(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'frontier_intel', error: (e as Error).message }) }
 }
 
+// R146.107 — Frontier MAX tick: capability catalog + permanent advancement.
+// Self-throttles based on per-workspace settings.scanIntervalMs so it only
+// does real work when due; runs cheap no-op queries otherwise.
+let _lastFrontierMaxRunMs = 0
+let _maxBootstrapped = false
+async function runFrontierMaxTick(): Promise<void> {
+  if (process.env['DISABLE_FRONTIER_INTEL'] === '1') return
+  try {
+    const mod = await import('./frontier-max.js')
+    // Auto-enable MAX mode on first boot (the operator-stated default).
+    // Skip via FRONTIER_MAX_DEFAULT=0 to keep defaults.
+    if (!_maxBootstrapped) {
+      _maxBootstrapped = true
+      if (process.env['FRONTIER_MAX_DEFAULT'] !== '0') {
+        await mod.setMaxMode('system', true).catch(() => null)
+      }
+    }
+    const { getSettings, frontierMaxTick } = mod
+    const settings = await getSettings('system')
+    if (Date.now() - _lastFrontierMaxRunMs < settings.scanIntervalMs) return
+    _lastFrontierMaxRunMs = Date.now()
+    const out = await frontierMaxTick('system')
+    if (out.scan.inserted > 0 || out.distill.distilled > 0 || out.catalog.added > 0 || out.advance.proposed > 0) {
+      await emit('cron.frontier_max_tick', {
+        maxMode: settings.maxMode,
+        scan: out.scan, distill: out.distill, prototype: out.prototype,
+        catalog: out.catalog, advance: out.advance,
+      })
+    }
+  } catch (e) { await emit('cron.error', { task: 'frontier_max', error: (e as Error).message }) }
+}
+
 async function runCartographerSnapshot(): Promise<void> {
   try {
     const { generateSnapshot } = await import('./codebase-cartographer.js')
@@ -1587,6 +1623,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runRecoveryExecutorTick,        INTERVALS.recoveryExecutor))
   handles.push(scheduleJittered(runSecretsRotationDrainTick,    INTERVALS.secretsRotationDrain))
   handles.push(scheduleJittered(runFrontierIntelTick,           INTERVALS.frontierIntel))
+  handles.push(scheduleJittered(runFrontierMaxTick,             INTERVALS.frontierMax))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

@@ -4760,3 +4760,64 @@ export const frontierAdvances = pgTable('frontier_advances', {
 }, (t) => [
   index('frontier_advances_ws_idx').on(t.workspaceId, t.recordedAt),
 ])
+
+// ─── Migration 0053 — Frontier MAX (R146.107) ────────────────────────────
+// Capability catalog: every AI system Novan learns about, builds, and
+// permanently advances. Status transitions:
+//   unknown → learning → basics_known → integrated → advancing → permanent
+// Once a capability is 'permanent', advancement cycles propose realism /
+// efficiency / quality improvements on a continuous loop.
+
+export const frontierCapabilities = pgTable('frontier_capabilities', {
+  id:                  text('id').primaryKey(),
+  workspaceId:         text('workspace_id').notNull(),
+  name:                text('name').notNull(),         // canonical, e.g. 'svd-img2vid', 'speculative-decoding'
+  category:            text('category').notNull(),     // 'video-gen' | 'image-gen' | 'llm-reasoning' | 'retrieval' | 'audio' | 'agent' | 'training' | 'other'
+  status:              text('status').notNull().default('unknown'),
+  description:         text('description'),
+  upstreamFindingIds:  jsonb('upstream_finding_ids').$type<string[]>(),
+  integrationPath:     text('integration_path'),       // service file or op
+  currentVersion:      integer('current_version').notNull().default(0),
+  realismScore:        integer('realism_score').notNull().default(0),     // 0-100, only meaningful for media gen
+  qualityScore:        integer('quality_score').notNull().default(0),     // 0-100
+  efficiencyScore:     integer('efficiency_score').notNull().default(0),  // 0-100
+  lastAdvancedAt:      bigint('last_advanced_at', { mode: 'number' }),
+  advancementCount:    integer('advancement_count').notNull().default(0),
+  createdAt:           bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:           bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('frontier_capabilities_ws_name_idx').on(t.workspaceId, t.name),
+  index('frontier_capabilities_ws_status_idx').on(t.workspaceId, t.status),
+  index('frontier_capabilities_ws_cat_idx').on(t.workspaceId, t.category),
+])
+
+export const frontierAdvancements = pgTable('frontier_advancements', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  capabilityId:     text('capability_id').notNull(),
+  proposedAt:       bigint('proposed_at', { mode: 'number' }).notNull(),
+  kind:             text('kind').notNull(),        // 'realism' | 'efficiency' | 'quality' | 'scope'
+  proposal:         text('proposal'),
+  expectedGain:     integer('expected_gain').notNull().default(0),  // 0-100
+  appliedAt:        bigint('applied_at', { mode: 'number' }),
+  appliedNotes:     text('applied_notes'),
+  realismBefore:    integer('realism_before'),
+  realismAfter:     integer('realism_after'),
+  qualityBefore:    integer('quality_before'),
+  qualityAfter:     integer('quality_after'),
+  efficiencyBefore: integer('efficiency_before'),
+  efficiencyAfter:  integer('efficiency_after'),
+}, (t) => [
+  index('frontier_advancements_ws_cap_idx').on(t.workspaceId, t.capabilityId, t.proposedAt),
+])
+
+export const frontierSettings = pgTable('frontier_settings', {
+  workspaceId:        text('workspace_id').primaryKey(),
+  maxMode:            boolean('max_mode').notNull().default(false),
+  scanIntervalMs:     integer('scan_interval_ms').notNull().default(300_000),
+  distillBatchSize:   integer('distill_batch_size').notNull().default(8),
+  prototypeBatchSize: integer('prototype_batch_size').notNull().default(3),
+  advanceBatchSize:   integer('advance_batch_size').notNull().default(3),
+  parallelSources:    integer('parallel_sources').notNull().default(3),
+  updatedAt:          bigint('updated_at', { mode: 'number' }).notNull(),
+})

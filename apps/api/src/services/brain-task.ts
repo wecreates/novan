@@ -1939,6 +1939,66 @@ const OPERATIONS: Record<string, OpSpec> = {
     risk: 'low',
     handler: async (ws) => (await import('./frontier-intel.js')).frontierStats(ws),
   },
+  // ─── R146.107 — Frontier MAX: capability catalog + permanent advancement ─
+  'frontier.setMax': {
+    description: 'Toggle MAX learning mode. true → 60s tick, 30 distill/batch, 10 prototype/batch, 10 advance/batch, 8 parallel scans, expanded source list. false → defaults. Params: enabled.',
+    risk: 'medium',
+    handler: async (ws, p) => (await import('./frontier-max.js')).setMaxMode(ws, p['enabled'] === true),
+  },
+  'frontier.setSettings': {
+    description: 'Set custom frontier-intel tunables. Params: scanIntervalMs?, distillBatchSize?, prototypeBatchSize?, advanceBatchSize?, parallelSources?, maxMode?',
+    risk: 'medium',
+    handler: async (ws, p) => (await import('./frontier-max.js')).setCustomSettings(ws, {
+      ...(typeof p['maxMode']            === 'boolean' ? { maxMode:            p['maxMode']            as boolean } : {}),
+      ...(typeof p['scanIntervalMs']     === 'number'  ? { scanIntervalMs:     p['scanIntervalMs']     as number  } : {}),
+      ...(typeof p['distillBatchSize']   === 'number'  ? { distillBatchSize:   p['distillBatchSize']   as number  } : {}),
+      ...(typeof p['prototypeBatchSize'] === 'number'  ? { prototypeBatchSize: p['prototypeBatchSize'] as number  } : {}),
+      ...(typeof p['advanceBatchSize']   === 'number'  ? { advanceBatchSize:   p['advanceBatchSize']   as number  } : {}),
+      ...(typeof p['parallelSources']    === 'number'  ? { parallelSources:    p['parallelSources']    as number  } : {}),
+    }),
+  },
+  'frontier.getSettings': {
+    description: 'Read current frontier-intel settings.',
+    risk: 'low',
+    handler: async (ws) => (await import('./frontier-max.js')).getSettings(ws),
+  },
+  'frontier.maxTick': {
+    description: 'Force one full MAX cycle now: parallel scans → distill → prototype → catalog → advance. Returns counts per phase.',
+    risk: 'medium',
+    handler: async (ws) => (await import('./frontier-max.js')).frontierMaxTick(ws),
+  },
+  'frontier.listCapabilities': {
+    description: 'List capability catalog rows. Params: status?, category?, limit?',
+    risk: 'low',
+    handler: async (ws, p) => (await import('./frontier-max.js')).listCapabilities(ws, {
+      ...(p['status']   ? { status:   String(p['status']) }   : {}),
+      ...(p['category'] ? { category: String(p['category']) } : {}),
+      ...(typeof p['limit'] === 'number' ? { limit: p['limit'] as number } : {}),
+    }),
+  },
+  'frontier.listAdvancements': {
+    description: 'List proposed advancements. Params: capabilityId?, limit?',
+    risk: 'low',
+    handler: async (ws, p) => (await import('./frontier-max.js')).listAdvancements(ws,
+      p['capabilityId'] ? String(p['capabilityId']) : undefined,
+      typeof p['limit'] === 'number' ? p['limit'] as number : 50,
+    ),
+  },
+  'frontier.applyAdvancement': {
+    description: 'Mark an advancement as applied with score deltas. Capability gets promoted to permanent after 5 applied. Params: advancementId, realism?, quality?, efficiency?, notes?',
+    risk: 'medium',
+    handler: async (ws, p) => (await import('./frontier-max.js')).applyAdvancement(ws, String(p['advancementId'] ?? ''), {
+      ...(typeof p['realism']    === 'number' ? { realism:    p['realism']    as number } : {}),
+      ...(typeof p['quality']    === 'number' ? { quality:    p['quality']    as number } : {}),
+      ...(typeof p['efficiency'] === 'number' ? { efficiency: p['efficiency'] as number } : {}),
+      ...(p['notes'] ? { notes: String(p['notes']) } : {}),
+    }),
+  },
+  'frontier.capabilityStats': {
+    description: 'Catalog stats: total, by status, by category, avg realism/quality/efficiency.',
+    risk: 'low',
+    handler: async (ws) => (await import('./frontier-max.js')).capabilityStats(ws),
+  },
   // ─── R146.103 — Token stretching for AI video ────────────────────
   'aiVideo.stretchShotList': {
     description: 'Apply all 4 stretching strategies to a shot list (compress prompts, min-viable duration, dedup, efficiency routing). Returns optimized shots + savings report.',
