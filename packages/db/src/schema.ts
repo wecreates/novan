@@ -5226,3 +5226,69 @@ export const podBatchItems = pgTable('pod_batch_items', {
   index('pbi_batch_idx').on(t.batchId, t.status),
   index('pbi_ws_idx').on(t.workspaceId, t.createdAt),
 ])
+
+// ─── R146.135 — S-tier features ────────────────────────────────────────
+
+export const twinSimRuns = pgTable('twin_sim_runs', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  targetRunType:  text('target_run_type').notNull(),
+  targetInput:    jsonb('target_input').$type<Record<string, unknown>>().notNull().default({}),
+  horizonDays:    integer('horizon_days').notNull().default(30),
+  projected:      jsonb('projected').$type<Record<string, unknown>>().notNull().default({}),
+  recommendation: text('recommendation').notNull().default('review'),
+  reasoning:      jsonb('reasoning').$type<string[]>().notNull().default([]),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('tsr_ws_idx').on(t.workspaceId, t.createdAt)])
+
+export const speculativeTests = pgTable('speculative_tests', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  baseClipId:     text('base_clip_id'),
+  variants:       jsonb('variants').$type<Array<{ label: string; hook: string; platform: string; postId?: string; metrics?: Record<string, number> }>>().notNull().default([]),
+  burnerMinutes:  integer('burner_minutes').notNull().default(60),
+  status:         text('status').notNull().default('running'),
+  winnerLabel:    text('winner_label'),
+  promotedTo:     text('promoted_to'),
+  startedAt:      bigint('started_at', { mode: 'number' }).notNull(),
+  scoredAt:       bigint('scored_at',  { mode: 'number' }),
+}, (t) => [index('st_ws_idx').on(t.workspaceId, t.startedAt)])
+
+export const taskAuctions = pgTable('task_auctions', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  taskType:       text('task_type').notNull(),
+  taskPayload:    jsonb('task_payload').$type<Record<string, unknown>>().notNull().default({}),
+  bids:           jsonb('bids').$type<Array<{ agentId: string; costUsd: number; confidence: number; etaSec: number; score: number }>>().notNull().default([]),
+  winnerAgentId:  text('winner_agent_id'),
+  status:         text('status').notNull().default('open'),
+  openedAt:       bigint('opened_at',  { mode: 'number' }).notNull(),
+  awardedAt:      bigint('awarded_at', { mode: 'number' }),
+  executedAt:     bigint('executed_at',{ mode: 'number' }),
+  result:         jsonb('result').$type<Record<string, unknown>>(),
+}, (t) => [
+  index('ta_ws_idx').on(t.workspaceId, t.openedAt),
+  index('ta_status_idx').on(t.workspaceId, t.status),
+])
+
+export const constitutionalAudits = pgTable('constitutional_audits', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  auditKind:      text('audit_kind').notNull(),
+  missionDrift:   real('mission_drift').notNull().default(0),
+  manipulation:   real('manipulation').notNull().default(0),
+  scopeCreep:     real('scope_creep').notNull().default(0),
+  findings:       jsonb('findings').$type<string[]>().notNull().default([]),
+  remediation:    jsonb('remediation').$type<string[]>().notNull().default([]),
+  auditedAt:      bigint('audited_at', { mode: 'number' }).notNull(),
+}, (t) => [index('ca_ws_idx').on(t.workspaceId, t.auditedAt)])
+
+export const funnelSimulations = pgTable('funnel_simulations', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  targetUsdMo:    real('target_usd_mo').notNull(),
+  horizonMonths:  integer('horizon_months').notNull(),
+  paths:          jsonb('paths').$type<Array<{ label: string; probability: number; monthlyTrajectory: number[]; gates: string[] }>>().notNull().default([]),
+  recommended:    text('recommended'),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('fs_ws_idx').on(t.workspaceId, t.createdAt)])
