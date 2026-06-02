@@ -150,6 +150,10 @@ const AccountPage            = React.lazy(() => import('./pages/AccountPage.js')
 const VoiceProfilesPage      = React.lazy(() => import('./pages/VoiceProfilesPage.js'))
 const AgencyPage             = React.lazy(() => import('./pages/AgencyPage.js'))
 const SelfCheckPage          = React.lazy(() => import('./pages/SelfCheckPage.js'))
+// R146.101 — UI for the experiments + autonomy budget + AI video studio
+const AutonomyBudgetPage     = React.lazy(() => import('./pages/AutonomyBudgetPage.js'))
+const ExperimentsPage        = React.lazy(() => import('./pages/ExperimentsPage.js'))
+const AIVideoStudioPage      = React.lazy(() => import('./pages/AIVideoStudioPage.js'))
 
 // ─── Pinned sidebar items ───────────────────────────────────────────
 // Restrained to the surfaces an operator opens daily. Everything else
@@ -772,6 +776,10 @@ function AppRoutes() {
           <Route path="/account"               element={<AccountPage />} />
           <Route path="/voice-profiles"        element={<VoiceProfilesPage />} />
           <Route path="/agency"                element={<AgencyPage />} />
+          {/* R146.101 — operator surfaces for the new ops shipped this week */}
+          <Route path="/autonomy-budgets"      element={<AutonomyBudgetPage />} />
+          <Route path="/experiments"           element={<ExperimentsPage />} />
+          <Route path="/ai-video-studio"       element={<AIVideoStudioPage />} />
           <Route path="/self-check"            element={<SelfCheckPage />} />
           {/* R128 — Mobile PWA chat (start_url for installed PWA) */}
           <Route path="/m/chat"                      element={<MobileChatPage />} />
