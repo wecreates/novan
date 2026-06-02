@@ -143,7 +143,7 @@ export function KronosBrain({
   label = 'NOVAN',
   subLabel,
   hint = 'SPACE to enter',
-  hue = 320,
+  hue = 38,        // R146.114 — default gold/amber to match Pulse/KRONOS aesthetic
   pointCount = 700,
   squish = 0.82,
   rotationSpeed = 0.18,

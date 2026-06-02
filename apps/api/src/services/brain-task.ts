@@ -1999,6 +1999,74 @@ const OPERATIONS: Record<string, OpSpec> = {
     risk: 'low',
     handler: async (ws) => (await import('./frontier-max.js')).capabilityStats(ws),
   },
+  // ─── R146.114 — Second Brain (cryptocita /raw → /wiki pipeline) ──────
+  'secondBrain.drop': {
+    description: 'Drop a source (URL/video/text) into the /raw inbox. Compiled into wiki articles on the next ingest. Params: source (url|video|text|file), url?, title?, content?, tagsHint?',
+    risk: 'low',
+    handler: async (ws, p) => (await import('./second-brain.js')).dropSource({
+      workspaceId: ws,
+      source:      (p['source'] as 'url' | 'video' | 'text' | 'file') ?? 'text',
+      ...(p['url']      ? { url:      String(p['url']) }      : {}),
+      ...(p['title']    ? { title:    String(p['title']) }    : {}),
+      ...(p['content']  ? { content:  String(p['content']) }  : {}),
+      ...(p['tagsHint'] ? { tagsHint: String(p['tagsHint']) } : {}),
+    }),
+  },
+  'secondBrain.compileNow': {
+    description: 'Run the compile step on all queued /raw items now (bypasses cron). Returns counts.',
+    risk: 'medium',
+    handler: async (ws, p) => (await import('./second-brain.js')).dailyIngest(ws, typeof p['limit'] === 'number' ? p['limit'] as number : 30),
+  },
+  'secondBrain.compileOne': {
+    description: 'Compile one specific raw row by id. Params: rawId',
+    risk: 'medium',
+    handler: async (ws, p) => (await import('./second-brain.js')).compileRaw(ws, String(p['rawId'] ?? '')),
+  },
+  'secondBrain.review': {
+    description: 'Run the daily review now: snapshot of what changed in the last 24h.',
+    risk: 'low',
+    handler: async (ws) => (await import('./second-brain.js')).dailyReview(ws),
+  },
+  'secondBrain.audit': {
+    description: 'Run the weekly audit now: surfaces gaps, broken cross-links, thin topics.',
+    risk: 'low',
+    handler: async (ws) => (await import('./second-brain.js')).weeklyAudit(ws),
+  },
+  'secondBrain.listArticles': {
+    description: 'List wiki articles. Params: topic?, limit?',
+    risk: 'low',
+    handler: async (ws, p) => (await import('./second-brain.js')).listArticles(ws, p['topic'] ? String(p['topic']) : undefined, typeof p['limit'] === 'number' ? p['limit'] as number : 50),
+  },
+  'secondBrain.listTopics': {
+    description: 'List topics with article counts.',
+    risk: 'low',
+    handler: async (ws) => (await import('./second-brain.js')).listTopics(ws),
+  },
+  'secondBrain.stats': {
+    description: 'Counts + last review timestamp for the second brain.',
+    risk: 'low',
+    handler: async (ws) => (await import('./second-brain.js')).stats(ws),
+  },
+  'secondBrain.getRules': {
+    description: 'Read the CLAUDE.md-style librarian rules.',
+    risk: 'low',
+    handler: async (ws) => (await import('./second-brain.js')).getConfig(ws),
+  },
+  'secondBrain.setRules': {
+    description: 'Update the CLAUDE.md librarian rules + cron times. Params: rulesMd?, dailyIngestHour?, dailyReviewHour?, weeklyAuditDay?, weeklyAuditHour?, enabled?',
+    risk: 'medium',
+    handler: async (ws, p) => {
+      await (await import('./second-brain.js')).setConfig(ws, {
+        ...(typeof p['rulesMd']         === 'string'  ? { rulesMd:         p['rulesMd']         as string  } : {}),
+        ...(typeof p['dailyIngestHour'] === 'number'  ? { dailyIngestHour: p['dailyIngestHour'] as number  } : {}),
+        ...(typeof p['dailyReviewHour'] === 'number'  ? { dailyReviewHour: p['dailyReviewHour'] as number  } : {}),
+        ...(typeof p['weeklyAuditDay']  === 'number'  ? { weeklyAuditDay:  p['weeklyAuditDay']  as number  } : {}),
+        ...(typeof p['weeklyAuditHour'] === 'number'  ? { weeklyAuditHour: p['weeklyAuditHour'] as number  } : {}),
+        ...(typeof p['enabled']         === 'boolean' ? { enabled:         p['enabled']         as boolean } : {}),
+      })
+      return { ok: true }
+    },
+  },
   // ─── R146.109 — Chat human personality voice ──────────────────────────
   'chat.getVoice': {
     description: 'Inspect current Novan chat voice (warmth/wit/directness/brevity/curiosity/opinionatedness 0..1, plus preset name).',

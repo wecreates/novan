@@ -1231,6 +1231,11 @@ const INTERVALS = {
   // Round 146.108 — Frontier consumers: embedding backfill, dedup, write
   // prototype + advancement specs to disk, empirical capability scoring.
   frontierConsumer:      90_000,
+  // Round 146.114 — Second Brain (cryptocita /raw → /wiki pipeline).
+  // Three jobs: daily ingest (7am), daily review (6pm), weekly audit (Sun 9am).
+  // We use a single 5-min tick + a "did this hour already run?" guard so
+  // ops can change the schedule via config without restarting the process.
+  secondBrainCron:       5 * 60_000,
 }
 
 /**
@@ -1495,6 +1500,35 @@ async function runFrontierIntelTick(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'frontier_intel', error: (e as Error).message }) }
 }
 
+// R146.114 — Second Brain cron tick. Single 5-min tick that fires the right
+// job (ingest / review / audit) when the configured hour matches the current
+// hour AND we haven't already run it this hour. Falls back silently if the
+// table isn't migrated yet.
+const _sbLastRun: Record<string, number> = {}  // key=workspace|kind → epoch hour
+async function runSecondBrainCron(): Promise<void> {
+  if (process.env['DISABLE_SECOND_BRAIN'] === '1') return
+  try {
+    const { getConfig, dailyIngest, dailyReview, weeklyAudit } = await import('./second-brain.js')
+    const cfg = await getConfig('system')
+    if (!cfg.enabled) return
+    const now = new Date()
+    const hour = now.getHours()
+    const dow = now.getDay()
+    const epochHour = Math.floor(Date.now() / 3600_000)
+    const ws = 'system'
+    const fire = async (kind: string, fn: () => Promise<unknown>) => {
+      const key = `${ws}|${kind}`
+      if (_sbLastRun[key] === epochHour) return
+      _sbLastRun[key] = epochHour
+      const r = await fn()
+      await emit('cron.second_brain_' + kind.replace(/-/g, '_'), r as Record<string, unknown>)
+    }
+    if (hour === cfg.dailyIngestHour) await fire('daily-ingest', () => dailyIngest(ws))
+    if (hour === cfg.dailyReviewHour) await fire('daily-review', () => dailyReview(ws))
+    if (hour === cfg.weeklyAuditHour && dow === cfg.weeklyAuditDay) await fire('weekly-audit', () => weeklyAudit(ws))
+  } catch (e) { await emit('cron.error', { task: 'second_brain', error: (e as Error).message }) }
+}
+
 // R146.108 — Frontier consumers: embedding backfill, dedup, write specs to
 // disk, empirical scoring. Closes the loop on prototype_requested +
 // advancement_proposed events emitted by R146.105/107.
@@ -1642,6 +1676,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runFrontierIntelTick,           INTERVALS.frontierIntel))
   handles.push(scheduleJittered(runFrontierMaxTick,             INTERVALS.frontierMax))
   handles.push(scheduleJittered(runFrontierConsumerTick,        INTERVALS.frontierConsumer))
+  handles.push(scheduleJittered(runSecondBrainCron,             INTERVALS.secondBrainCron))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

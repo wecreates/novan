@@ -4821,3 +4821,69 @@ export const frontierSettings = pgTable('frontier_settings', {
   parallelSources:    integer('parallel_sources').notNull().default(3),
   updatedAt:          bigint('updated_at', { mode: 'number' }).notNull(),
 })
+
+// ─── Migration 0054 — Second Brain (R146.114) ───────────────────────────
+// cryptocita-style 4-step wiki pipeline:
+//   1. drop  → operator (or any integration) drops sources into `second_brain_raw`
+//   2. extract → cron compiles raw rows into `second_brain_articles` (wiki notes)
+//   3. direct → CLAUDE.md-style rules live in `second_brain_config.rules_md`
+//   4. automate → daily ingest + daily review + weekly audit crons
+
+export const secondBrainRaw = pgTable('second_brain_raw', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  source:       text('source').notNull(),        // 'url' | 'video' | 'text' | 'file'
+  url:          text('url'),
+  title:        text('title'),
+  content:      text('content'),                 // raw text body (article body, transcript, etc.)
+  tagsHint:     text('tags_hint'),               // operator-supplied hint (optional)
+  status:       text('status').notNull().default('queued'),  // queued | compiled | failed | discarded
+  compiledAt:   bigint('compiled_at', { mode: 'number' }),
+  compileError: text('compile_error'),
+  articleIds:   jsonb('article_ids').$type<string[]>(),       // wiki articles created from this raw item
+  droppedAt:    bigint('dropped_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('sb_raw_ws_status_idx').on(t.workspaceId, t.status, t.droppedAt),
+])
+
+export const secondBrainArticles = pgTable('second_brain_articles', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  topic:        text('topic').notNull(),          // e.g. 'ai-agents', 'video-generation'
+  slug:         text('slug').notNull(),           // file-name-style id
+  title:        text('title').notNull(),
+  body:         text('body').notNull(),           // markdown
+  keyTakeaways: jsonb('key_takeaways').$type<string[]>(),
+  links:        jsonb('links').$type<Array<{ to: string; label: string }>>(),
+  sourceRawIds: jsonb('source_raw_ids').$type<string[]>(),
+  embedding:    vector('embedding', { dimensions: 1536 }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('sb_articles_ws_topic_slug_idx').on(t.workspaceId, t.topic, t.slug),
+  index('sb_articles_ws_topic_idx').on(t.workspaceId, t.topic, t.updatedAt),
+])
+
+export const secondBrainConfig = pgTable('second_brain_config', {
+  workspaceId:        text('workspace_id').primaryKey(),
+  rulesMd:            text('rules_md').notNull().default(''),  // CLAUDE.md content
+  dailyIngestHour:    integer('daily_ingest_hour').notNull().default(7),
+  dailyReviewHour:    integer('daily_review_hour').notNull().default(18),
+  weeklyAuditDay:     integer('weekly_audit_day').notNull().default(0),     // 0=Sun
+  weeklyAuditHour:    integer('weekly_audit_hour').notNull().default(9),
+  enabled:            boolean('enabled').notNull().default(true),
+  updatedAt:          bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
+export const secondBrainReviews = pgTable('second_brain_reviews', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  kind:        text('kind').notNull(),       // 'daily-ingest' | 'daily-review' | 'weekly-audit'
+  summary:     text('summary'),
+  changedArticleIds: jsonb('changed_article_ids').$type<string[]>(),
+  gaps:        jsonb('gaps').$type<string[]>(),
+  brokenLinks: jsonb('broken_links').$type<string[]>(),
+  runAt:       bigint('run_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('sb_reviews_ws_kind_idx').on(t.workspaceId, t.kind, t.runAt),
+])
