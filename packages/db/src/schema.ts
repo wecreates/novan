@@ -5183,3 +5183,46 @@ export const llmOutputFingerprints = pgTable('llm_output_fingerprints', {
   index('llm_fp_key_idx').on(t.workspaceId, t.promptKey, t.observedAt),
   index('llm_fp_shape_idx').on(t.workspaceId, t.promptKey, t.shapeHash),
 ])
+
+// ─── R146.134 — POD mass production ────────────────────────────────────
+
+export const podBatchRuns = pgTable('pod_batch_runs', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  niche:          text('niche').notNull(),
+  designStyle:    text('design_style').notNull().default('modern minimal'),
+  targetCount:    integer('target_count').notNull().default(20),
+  productTypes:   jsonb('product_types').$type<string[]>().notNull().default([]),
+  stores:         jsonb('stores').$type<string[]>().notNull().default([]),
+  status:         text('status').notNull().default('running'),
+  generatedCount: integer('generated_count').notNull().default(0),
+  listedCount:    integer('listed_count').notNull().default(0),
+  failedCount:    integer('failed_count').notNull().default(0),
+  totalCostUsd:   real('total_cost_usd').notNull().default(0),
+  haltReason:     text('halt_reason'),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:      bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('pbr_ws_idx').on(t.workspaceId, t.createdAt),
+  index('pbr_status_idx').on(t.workspaceId, t.status),
+])
+
+export const podBatchItems = pgTable('pod_batch_items', {
+  id:             text('id').primaryKey(),
+  batchId:        text('batch_id').notNull(),
+  workspaceId:    text('workspace_id').notNull(),
+  designPrompt:   text('design_prompt').notNull(),
+  productType:    text('product_type').notNull(),
+  imageUrl:       text('image_url'),
+  imageGenId:     text('image_gen_id'),
+  title:          text('title'),
+  description:    text('description'),
+  listedStores:   jsonb('listed_stores').$type<Array<{ store: string; productId: string; listedAt: number }>>().notNull().default([]),
+  status:         text('status').notNull().default('queued'),
+  error:          text('error'),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:      bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('pbi_batch_idx').on(t.batchId, t.status),
+  index('pbi_ws_idx').on(t.workspaceId, t.createdAt),
+])

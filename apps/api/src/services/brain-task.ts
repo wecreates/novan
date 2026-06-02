@@ -2136,6 +2136,18 @@ export const OPERATIONS: Record<string, OpSpec> = {
   'llm.driftSummary':      { description: 'Summary of recent shape drift across prompts. Params: windowDays?', risk: 'low',
     handler: async (ws, p) => (await import('./r132-planner-drift.js')).driftSummary(ws, typeof p['windowDays'] === 'number' ? p['windowDays'] as number : 7) },
 
+  // ─── R146.134 — POD mass production ──────────────────────────────
+  'pod.runBatch':          { description: 'Kick off a mass POD production batch: generates N designs × M product types, lists to chosen stores. Params: niche, designStyle?, targetCount? (1-200), productTypes? (tshirt/poster/mug/tote/hoodie/sticker), stores? (printful/shopify/etsy)', risk: 'high',
+    handler: async (ws, p) => (await import('./r134-pod-mass.js')).startBatch(ws, p as unknown as Parameters<typeof import('./r134-pod-mass.js').startBatch>[1]) },
+  'pod.batchStatus':       { description: 'Get a POD batch run status (generated/listed/failed counts). Params: batchId', risk: 'low',
+    handler: async (ws, p) => (await import('./r134-pod-mass.js')).batchStatus(ws, String(p['batchId'] ?? '')) },
+  'pod.batchItems':        { description: 'List items in a POD batch. Params: batchId, limit?', risk: 'low',
+    handler: async (ws, p) => (await import('./r134-pod-mass.js')).batchItems(ws, String(p['batchId'] ?? ''), typeof p['limit'] === 'number' ? p['limit'] as number : 200) },
+  'pod.listBatches':       { description: 'List recent POD batch runs. Params: limit?', risk: 'low',
+    handler: async (ws, p) => (await import('./r134-pod-mass.js')).listBatches(ws, typeof p['limit'] === 'number' ? p['limit'] as number : 30) },
+  'pod.haltBatch':         { description: 'Halt a running POD batch. Params: batchId, reason', risk: 'medium',
+    handler: async (ws, p) => { await (await import('./r134-pod-mass.js')).haltBatch(ws, String(p['batchId'] ?? ''), String(p['reason'] ?? 'operator halt')); return { ok: true } } },
+
   'autonomy.counts':       { description: 'Live counts for autonomy dashboard: findings(open) · improvements(open) · ops(in_process/on_deck) · proposals(proposed/approved) · connectorsNeedingRefresh · agentsLive.', risk: 'low',
     handler: async (ws) => (await import('./r124-autonomy.js')).autonomyCounts(ws) },
   'suggestions.scan':      { description: 'Scan last 24h of error events and create improvement_suggestions for recurring patterns (≥3 occurrences). Powers Ali queue.', risk: 'low',

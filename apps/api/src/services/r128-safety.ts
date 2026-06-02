@@ -34,9 +34,12 @@ export interface SpendStatus {
 export async function getSpendStatus(workspaceId: string): Promise<SpendStatus> {
   const now = Date.now()
   const [cap] = await db.select().from(spendCaps).where(eq(spendCaps.workspaceId, workspaceId)).limit(1)
-  const dailyCap   = cap?.dailyUsdCap   ?? 50
-  const monthlyCap = cap?.monthlyUsdCap ?? 500
-  const hardBlock  = cap?.hardBlock     ?? true
+  // R146.134 — default to UNLIMITED (0 = no cap). Operator must opt-in
+  // to enforcement via spend.setCap. Mass-production mode incompatible
+  // with hard ceilings.
+  const dailyCap   = cap?.dailyUsdCap   ?? 0
+  const monthlyCap = cap?.monthlyUsdCap ?? 0
+  const hardBlock  = cap?.hardBlock     ?? false
 
   // Sum costs in window. Indexed on (workspace_id, timestamp).
   const dayTotal = await db.select({ s: sum(aiUsage.costUsd) }).from(aiUsage)
@@ -47,8 +50,9 @@ export async function getSpendStatus(workspaceId: string): Promise<SpendStatus> 
   const dailyUsd   = Number(dayTotal[0]?.s ?? 0)
   const monthlyUsd = Number(monTotal[0]?.s ?? 0)
   let blocked = false; let reason: string | undefined
-  if (dailyUsd   >= dailyCap)   { blocked = true; reason = `daily cap ${dailyUsd.toFixed(2)} >= ${dailyCap.toFixed(2)} USD` }
-  else if (monthlyUsd >= monthlyCap) { blocked = true; reason = `monthly cap ${monthlyUsd.toFixed(2)} >= ${monthlyCap.toFixed(2)} USD` }
+  // 0 = unlimited (skip the comparison entirely)
+  if (dailyCap   > 0 && dailyUsd   >= dailyCap)   { blocked = true; reason = `daily cap ${dailyUsd.toFixed(2)} >= ${dailyCap.toFixed(2)} USD` }
+  else if (monthlyCap > 0 && monthlyUsd >= monthlyCap) { blocked = true; reason = `monthly cap ${monthlyUsd.toFixed(2)} >= ${monthlyCap.toFixed(2)} USD` }
   return { dailyUsd, monthlyUsd, dailyCap, monthlyCap, hardBlock, blocked, ...(reason !== undefined ? { reason } : {}) }
 }
 
