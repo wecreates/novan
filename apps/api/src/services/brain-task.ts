@@ -2186,6 +2186,22 @@ export const OPERATIONS: Record<string, OpSpec> = {
   'docs.latest':           { description: '#10 Get latest auto-doc body. Params: docKind', risk: 'low',
     handler: async (ws, p) => (await import('./r136-a-tier.js')).docsLatest(ws, String(p['docKind'] ?? 'architecture')) },
 
+  // ─── R146.137 — B-tier ────────────────────────────────────────────
+  'injection.scan':        { description: '#11 Scan content for prompt-injection patterns. Params: source (transcript|scraped_page|oauth_payload|user_input), sourceRef?, content', risk: 'low',
+    handler: async (ws, p) => (await import('./r137-b-tier.js')).scanForInjection(ws, { source: (p['source'] ?? 'user_input') as 'transcript'|'scraped_page'|'oauth_payload'|'user_input', ...(p['sourceRef'] ? { sourceRef: String(p['sourceRef']) } : {}), content: String(p['content'] ?? '') }) },
+  'redteam.run':           { description: '#12 Run the AI red team suite (SSRF, prompt injection, moderation bypass, spend-cap bypass) and report.', risk: 'medium',
+    handler: async (ws) => (await import('./r137-b-tier.js')).redteamRun(ws) },
+  'provenance.sign':       { description: '#13 Sign a content manifest. Stores hmac-sha256(canonical(manifest)). Params: postId?, clipId?, manifest', risk: 'low',
+    handler: async (ws, p) => (await import('./r137-b-tier.js')).provenanceSign(ws, { ...(p['postId'] ? { postId: String(p['postId']) } : {}), ...(p['clipId'] ? { clipId: String(p['clipId']) } : {}), manifest: (p['manifest'] ?? {}) as Record<string, unknown> }) },
+  'provenance.verify':     { description: '#13 Verify a post is signed + manifest unmodified. Params: postId', risk: 'low',
+    handler: async (ws, p) => (await import('./r137-b-tier.js')).provenanceVerify(ws, String(p['postId'] ?? '')) },
+  'skill.roiRecord':       { description: '#14 Record cost/revenue for an op call. Params: opName, costUsd, revenueUsd?', risk: 'low',
+    handler: async (ws, p) => { await (await import('./r137-b-tier.js')).skillRoiRecord(ws, { opName: String(p['opName'] ?? ''), costUsd: Number(p['costUsd'] ?? 0), ...(typeof p['revenueUsd'] === 'number' ? { revenueUsd: p['revenueUsd'] as number } : {}) }); return { ok: true } } },
+  'skill.roiRank':         { description: '#14 Rank ops by ROI (revenue/cost). Params: limit?', risk: 'low',
+    handler: async (ws, p) => (await import('./r137-b-tier.js')).skillRoiRank(ws, typeof p['limit'] === 'number' ? p['limit'] as number : 30) },
+  'agent.demoteTick':      { description: '#15 Propose throttle/retire for agents whose ROI is below threshold. Records to agent_demotions.', risk: 'medium',
+    handler: async (ws) => (await import('./r137-b-tier.js')).agentDemotionTick(ws) },
+
   'autonomy.counts':       { description: 'Live counts for autonomy dashboard: findings(open) · improvements(open) · ops(in_process/on_deck) · proposals(proposed/approved) · connectorsNeedingRefresh · agentsLive.', risk: 'low',
     handler: async (ws) => (await import('./r124-autonomy.js')).autonomyCounts(ws) },
   'suggestions.scan':      { description: 'Scan last 24h of error events and create improvement_suggestions for recurring patterns (≥3 occurrences). Powers Ali queue.', risk: 'low',

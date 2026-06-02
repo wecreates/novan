@@ -5353,3 +5353,63 @@ export const autoDocs = pgTable('auto_docs', {
   supersededBy:   text('superseded_by'),
   generatedAt:    bigint('generated_at', { mode: 'number' }).notNull(),
 }, (t) => [index('ad_ws_kind_idx').on(t.workspaceId, t.docKind, t.generatedAt)])
+
+// ─── R146.137 — B-tier features ────────────────────────────────────────
+
+export const injectionScans = pgTable('injection_scans', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  source:       text('source').notNull(),
+  sourceRef:    text('source_ref'),
+  verdict:      text('verdict').notNull(),
+  matched:      jsonb('matched').$type<string[]>().notNull().default([]),
+  contentHash:  text('content_hash').notNull(),
+  scannedAt:    bigint('scanned_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('is_ws_idx').on(t.workspaceId, t.scannedAt),
+  index('is_verdict_idx').on(t.workspaceId, t.verdict, t.scannedAt),
+])
+
+export const redteamRuns = pgTable('redteam_runs', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  attacks:         jsonb('attacks').$type<Array<{ name: string; target: string; vector: string; result: string }>>().notNull().default([]),
+  vulnerabilities: integer('vulnerabilities').notNull().default(0),
+  status:          text('status').notNull().default('running'),
+  startedAt:       bigint('started_at',  { mode: 'number' }).notNull(),
+  finishedAt:      bigint('finished_at', { mode: 'number' }),
+}, (t) => [index('rt_ws_idx').on(t.workspaceId, t.startedAt)])
+
+export const contentProvenance = pgTable('content_provenance', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  postId:      text('post_id'),
+  clipId:      text('clip_id'),
+  manifest:    jsonb('manifest').$type<Record<string, unknown>>().notNull(),
+  signature:   text('signature').notNull(),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('cp_post_idx').on(t.postId),
+  index('cp_clip_idx').on(t.clipId),
+])
+
+export const skillRoi = pgTable('skill_roi', {
+  workspaceId:           text('workspace_id').notNull(),
+  opName:                text('op_name').notNull(),
+  calls:                 integer('calls').notNull().default(0),
+  costUsdTotal:          real('cost_usd_total').notNull().default(0),
+  revenueAttributedUsd:  real('revenue_attributed_usd').notNull().default(0),
+  lastCallAt:            bigint('last_call_at', { mode: 'number' }),
+  updatedAt:             bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [primaryKey({ columns: [t.workspaceId, t.opName] })])
+
+export const agentDemotions = pgTable('agent_demotions', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  agentId:        text('agent_id').notNull(),
+  reason:         text('reason').notNull(),
+  costPerTask:    real('cost_per_task'),
+  valuePerTask:   real('value_per_task'),
+  action:         text('action').notNull(),
+  decidedAt:      bigint('decided_at', { mode: 'number' }).notNull(),
+}, (t) => [index('ad_ws_agent_idx').on(t.workspaceId, t.agentId, t.decidedAt)])
