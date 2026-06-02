@@ -25,6 +25,7 @@ import {
 } from 'lucide-react'
 import { api } from '../api.js'
 import { BreathingOrb, ParticleTrail } from '../components/NovanVisuals.js'
+import { KronosBrain } from '../components/KronosBrain.js'
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
 import { BrainPulseGroup, OrbitRings } from '../components/voice-visuals/BrainR3FVisuals.js'
 import { VoiceHaloVisualizer } from '../components/voice-visuals/VoiceHaloVisualizer.js'
@@ -279,9 +280,31 @@ function countByLobe(graph: BrainGraph | null): Record<string, number> {
 
 // ─── Page ─────────────────────────────────────────────────────────────
 
+// R146.113 — Brain templates. Operator can swap landing visual.
+//   'default': existing 3D lobe canvas + business systems graph
+//   'kronos':  particle-brain landing (press SPACE → falls through to default)
+type BrainTemplate = 'default' | 'kronos'
+const TEMPLATE_STORAGE_KEY = 'novan-brain-template'
+function getInitialTemplate(): BrainTemplate {
+  if (typeof window === 'undefined') return 'default'
+  const v = window.localStorage.getItem(TEMPLATE_STORAGE_KEY)
+  return v === 'kronos' ? 'kronos' : 'default'
+}
+
 export default function BrainHomePage() {
   const { workspaceId } = useWorkspace()
   const navigate = useNavigate()
+  const [template, setTemplate] = useState<BrainTemplate>(getInitialTemplate)
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
+  // Did the operator dismiss the Kronos landing this mount?
+  const [kronosEntered, setKronosEntered] = useState(false)
+
+  const updateTemplate = (t: BrainTemplate) => {
+    setTemplate(t)
+    try { window.localStorage.setItem(TEMPLATE_STORAGE_KEY, t) } catch { /* noop */ }
+    if (t !== 'kronos') setKronosEntered(false)
+    setTemplatePickerOpen(false)
+  }
 
   const graph = useQuery({
     queryKey: ['brain-graph-lobes', workspaceId],
@@ -315,6 +338,48 @@ export default function BrainHomePage() {
 
   return (
     <div className="relative w-full h-full bg-[var(--bg-primary)] overflow-hidden">
+      {/* R146.113 — Kronos landing template: covers the page until SPACE/click.
+          When dismissed (kronosEntered=true), the default scene shows beneath. */}
+      {template === 'kronos' && !kronosEntered && (
+        <div
+          style={{
+            position: 'absolute', inset: 0, zIndex: 50,
+            animation: 'novan-kronos-fade 600ms ease-out',
+          }}
+        >
+          <KronosBrain
+            label="NOVAN"
+            hue={320}
+            onEnter={() => setKronosEntered(true)}
+          />
+          <style>{`@keyframes novan-kronos-fade { from { opacity: 0 } to { opacity: 1 } }`}</style>
+        </div>
+      )}
+      {/* R146.113 — Template picker (top-right gear) */}
+      <div className="absolute top-3 right-3 z-[60]">
+        <button
+          onClick={() => setTemplatePickerOpen(o => !o)}
+          className="px-2.5 py-1 text-[11px] rounded border border-white/20 bg-black/30 backdrop-blur hover:bg-black/50 text-white/80"
+        >
+          template: {template}
+        </button>
+        {templatePickerOpen && (
+          <div className="mt-1 w-44 rounded border border-white/15 bg-black/80 backdrop-blur p-1 text-white/85 text-[12px]">
+            <button
+              onClick={() => updateTemplate('default')}
+              className={`w-full text-left px-2 py-1.5 rounded hover:bg-white/10 ${template === 'default' ? 'bg-white/10' : ''}`}
+            >
+              ⚪ Default — 3D lobes
+            </button>
+            <button
+              onClick={() => updateTemplate('kronos')}
+              className={`w-full text-left px-2 py-1.5 rounded hover:bg-white/10 ${template === 'kronos' ? 'bg-white/10' : ''}`}
+            >
+              💗 Kronos — particle brain
+            </button>
+          </div>
+        )}
+      </div>
       {/* R146.111 — cursor particles over the brain canvas */}
       <ParticleTrail hue={205} density={1} life={1100} size={3} />
       {/* 3D scene */}
