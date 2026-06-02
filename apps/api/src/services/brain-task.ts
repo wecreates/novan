@@ -1876,6 +1876,51 @@ const OPERATIONS: Record<string, OpSpec> = {
       })
     },
   },
+  // ─── R146.103 — Token stretching for AI video ────────────────────
+  'aiVideo.stretchShotList': {
+    description: 'Apply all 4 stretching strategies to a shot list (compress prompts, min-viable duration, dedup, efficiency routing). Returns optimized shots + savings report.',
+    risk: 'low',
+    handler: async (_ws, p) => {
+      const { stretchShotList } = await import('./ai-video-stretcher.js')
+      return stretchShotList((p['shots'] as import('./ai-video-studio.js').Shot[]) ?? [])
+    },
+  },
+  'aiVideo.compressPrompt': {
+    description: 'Compress a single shot prompt — strip hedges, boilerplate, repeats. Params: prompt',
+    risk: 'low',
+    handler: async (_ws, p) => {
+      const { compressPrompt } = await import('./ai-video-stretcher.js')
+      return compressPrompt(String(p['prompt'] ?? ''))
+    },
+  },
+  'aiVideo.budgetAwarePlan': {
+    description: 'Compute optimal shot count + duration mix + provider assignment for a budget. Params: budgetUsd, targetMinutes',
+    risk: 'low',
+    handler: async (_ws, p) => {
+      const { budgetAwareShotPlan } = await import('./ai-video-stretcher.js')
+      return budgetAwareShotPlan(Number(p['budgetUsd'] ?? 50), Number(p['targetMinutes'] ?? 5))
+    },
+  },
+  'aiVideo.selectByEfficiency': {
+    description: 'Pick most-efficient provider for a beat by $/quality-point. Params: prompt',
+    risk: 'low',
+    handler: async (_ws, p) => {
+      const { selectByEfficiency } = await import('./ai-video-stretcher.js')
+      return selectByEfficiency(String(p['prompt'] ?? ''))
+    },
+  },
+  'aiVideo.dedupShots': {
+    description: 'Find near-identical shots that can be rendered once and reused. Params: shots (array), similarityThreshold? (0..1, default 0.85)',
+    risk: 'low',
+    handler: async (_ws, p) => {
+      const { dedupShots } = await import('./ai-video-stretcher.js')
+      return dedupShots(
+        (p['shots'] as import('./ai-video-studio.js').Shot[]) ?? [],
+        typeof p['similarityThreshold'] === 'number' ? p['similarityThreshold'] as number : 0.85,
+      )
+    },
+  },
+
   'aiVideo.mixCharacterVoices': {
     description: 'Mix per-character voice tracks into single track with timing. Params: lines (array of {audioPath, startTimeSec}), outputPath',
     risk: 'low',
@@ -4350,6 +4395,10 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'aiVideo.projectCost', 'aiVideo.extractLastFrame',
         'aiVideo.renderMultipleTakes', 'aiVideo.selectBestTake',
         'aiVideo.synthesizeCharacterVoices', 'aiVideo.mixCharacterVoices',
+        // R146.103 — stretching ops return savings + efficiency metrics.
+        'aiVideo.stretchShotList', 'aiVideo.compressPrompt',
+        'aiVideo.budgetAwarePlan', 'aiVideo.selectByEfficiency',
+        'aiVideo.dedupShots',
         // R146.97 — autonomy budget ops legitimately return $ ceilings + spend.
         'autonomy.setBudget', 'autonomy.listBudgets', 'autonomy.disableBudget',
         'autonomy.checkSpend', 'autonomy.logSpend', 'autonomy.spendSummary',
