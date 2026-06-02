@@ -1504,12 +1504,19 @@ async function runFrontierIntelTick(): Promise<void> {
 }
 
 // R146.115 — Shortform cron: poll YT channels, clip new videos.
+// R146.116 — also runs the auto-poster for approved pipelines.
 async function runShortformCron(): Promise<void> {
   if (process.env['DISABLE_SHORTFORM'] === '1') return
   try {
     const { shortformCronTick } = await import('./r115-build-batch.js')
     const out = await shortformCronTick('system')
     if (out.newClips > 0 || out.pipelinesChecked > 0) await emit('cron.shortform_tick', out)
+    // After clipping, post anything that's approved
+    try {
+      const { shortformPosterTick } = await import('./r116-gap-fixes.js')
+      const post = await shortformPosterTick('system', 10)
+      if (post.scanned > 0) await emit('cron.shortform_poster_tick', post)
+    } catch (e) { await emit('cron.error', { task: 'shortform_poster', error: (e as Error).message }) }
   } catch (e) { await emit('cron.error', { task: 'shortform', error: (e as Error).message }) }
 }
 

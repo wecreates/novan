@@ -4926,9 +4926,12 @@ export const shortformPipelines = pgTable('shortform_pipelines', {
   workspaceId:   text('workspace_id').notNull(),
   sourceUrl:     text('source_url').notNull(),
   sourceTitle:   text('source_title'),
-  targetAccounts: jsonb('target_accounts').$type<Array<{ platform: 'tiktok' | 'instagram' | 'youtube' | 'facebook'; handle: string }>>(),
+  targetAccounts: jsonb('target_accounts').$type<Array<{ platform: 'tiktok' | 'instagram' | 'youtube' | 'facebook'; handle: string; connectorAccountId?: string }>>(),
   styleProfile:  jsonb('style_profile').$type<Record<string, unknown>>(),
   enabled:       boolean('enabled').notNull().default(true),
+  // R146.116 — must be flipped to true by the operator before the auto-poster
+  // sends OPERATOR_APPROVED publishes through IG/TikTok/YT connectors.
+  autoPostApproved: boolean('auto_post_approved').notNull().default(false),
   lastCheckedAt: bigint('last_checked_at', { mode: 'number' }),
   createdAt:     bigint('created_at', { mode: 'number' }).notNull(),
 }, (t) => [

@@ -71,14 +71,19 @@ function AgentChip({ a }: { a: Agent }) {
 function OpsCard({ task, onMove }: { task: OpsTask; onMove: (to: OpsTask['column']) => void }) {
   const nextCol = task.column === 'on_deck' ? 'in_process' : task.column === 'in_process' ? 'completed' : null
   return (
-    <div style={{
-      padding: '10px 12px',
-      background: 'rgba(255,255,255,0.02)',
-      border: '1px solid rgba(255,255,255,0.06)',
-      borderLeft: `3px solid ${task.column === 'on_deck' ? '#a855f7' : task.column === 'in_process' ? '#ef4444' : '#22c55e'}`,
-      borderRadius: 6, marginBottom: 6,
-      fontFamily: 'ui-monospace, "SF Mono", Consolas, monospace',
-    }}>
+    <div
+      draggable
+      onDragStart={(e) => { e.dataTransfer.setData('text/x-novan-task', task.id); e.dataTransfer.effectAllowed = 'move' }}
+      style={{
+        padding: '10px 12px',
+        background: 'rgba(255,255,255,0.02)',
+        border: '1px solid rgba(255,255,255,0.06)',
+        borderLeft: `3px solid ${task.column === 'on_deck' ? '#a855f7' : task.column === 'in_process' ? '#ef4444' : '#22c55e'}`,
+        borderRadius: 6, marginBottom: 6,
+        fontFamily: 'ui-monospace, "SF Mono", Consolas, monospace',
+        cursor: 'grab',
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
         <div style={{ flex: 1, fontSize: 11, color: 'rgba(255,255,255,0.88)' }}>{task.title}</div>
         {nextCol && (
@@ -130,6 +135,13 @@ export function WarRoomView(): JSX.Element {
     await refresh()
   }
 
+  const onColumnDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }
+  const onColumnDrop = (col: OpsTask['column']) => (e: React.DragEvent) => {
+    e.preventDefault()
+    const taskId = e.dataTransfer.getData('text/x-novan-task')
+    if (taskId) void moveTask(taskId, col)
+  }
+
   return (
     <div style={{
       width: '100%', height: '100%', background: '#000', color: 'rgba(255,255,255,0.9)',
@@ -158,7 +170,11 @@ export function WarRoomView(): JSX.Element {
       <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.18em', marginBottom: 8 }}>OPERATIONS BOARD</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
         {(['on_deck', 'in_process', 'completed'] as const).map(col => (
-          <div key={col} style={{ background: 'rgba(255,255,255,0.015)', borderRadius: 8, padding: 10 }}>
+          <div key={col}
+            onDragOver={onColumnDragOver}
+            onDrop={onColumnDrop(col)}
+            style={{ background: 'rgba(255,255,255,0.015)', borderRadius: 8, padding: 10, minHeight: 120 }}
+          >
             <div style={{ fontSize: 10, letterSpacing: '0.2em', marginBottom: 8, color: col === 'on_deck' ? '#a855f7' : col === 'in_process' ? '#ef4444' : '#22c55e' }}>
               {col.replace('_', ' ').toUpperCase()} · {board[col].length}
             </div>

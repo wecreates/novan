@@ -1999,6 +1999,16 @@ const OPERATIONS: Record<string, OpSpec> = {
     risk: 'low',
     handler: async (ws) => (await import('./frontier-max.js')).capabilityStats(ws),
   },
+  // ─── R146.116 — gap closes (poster, TEAM, USAGE) ────────────────────
+  'shortform.posterTick':  { description: 'Run the auto-poster now: post rendered clips with autoPostApproved=true to their target platforms via existing IG/TikTok/YT connectors. Soft-fails per-clip.', risk: 'high',
+    handler: async (ws, p) => (await import('./r116-gap-fixes.js')).shortformPosterTick(ws, typeof p['limit'] === 'number' ? p['limit'] as number : 10) },
+  'shortform.approve':     { description: 'Flip auto_post_approved on/off for a pipeline. Required before clips post anywhere. Params: pipelineId, approved', risk: 'medium',
+    handler: async (ws, p) => (await import('./r116-gap-fixes.js')).setPipelineAutoPostApproved(ws, String(p['pipelineId'] ?? ''), p['approved'] === true) },
+  'team.orgChart':         { description: 'Read the agent org chart (ceo + reports). Powers the TEAM tab.', risk: 'low',
+    handler: async (ws) => (await import('./r116-gap-fixes.js')).teamOrgChart(ws) },
+  'usage.buckets':         { description: 'Token spend totals + per-provider + per-hour for the last N hours (default 168). Powers the USAGE tab.', risk: 'low',
+    handler: async (ws, p) => (await import('./r116-gap-fixes.js')).usageBuckets(ws, typeof p['windowHours'] === 'number' ? p['windowHours'] as number : 168) },
+
   // ─── R146.115 — Build batch: War Room + shortform + viral + launch + ChatGPT ─
   'agents.seedDefaults':   { description: 'Seed the chriswesst-style 7-agent roster (Scan/Owl/Quilly/Larry/Ali/Sam/Cleo).', risk: 'low',
     handler: async (ws) => (await import('./r115-build-batch.js')).agentSeedDefaults(ws) },

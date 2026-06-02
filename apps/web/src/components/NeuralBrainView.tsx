@@ -166,39 +166,66 @@ function FiberTracts({ regions, edges }: { regions: BrainRegion[]; edges: Array<
 // download. The displacement maps gyri/sulci roughly.
 
 function BrainShell() {
-  const ref = useRef<THREE.Mesh>(null)
-  const geom = useMemo(() => {
-    const g = new THREE.SphereGeometry(2.05, 96, 64)
-    // Brain-like proportions (longer front-to-back, slightly flattened bottom)
-    g.scale(1.0, 0.78, 1.3)
-    // Displace each vertex by a small noise — this gives the gyri/sulci texture
+  const ref = useRef<THREE.Group>(null)
+  // R146.116 — improved procedural brain shape. Two cerebrum hemispheres
+  // joined by a faint corpus-callosum fissure + a separate posterior
+  // cerebellum bulge below + temporal lobes that hang lower than the
+  // crown. Surface noise stays for gyri/sulci texture.
+  const { cerebrum, cerebellum } = useMemo(() => {
+    // Cerebrum: a single ellipsoid, then we displace temporal/occipital
+    // outward and add the longitudinal fissure.
+    const g = new THREE.SphereGeometry(2.05, 128, 80)
+    g.scale(1.0, 0.78, 1.32)  // wider front-to-back, flatter top-to-bottom
     const pos = g.attributes.position as THREE.BufferAttribute
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i)
-      // Multi-octave noise (cheap sine approximation)
+      const r = Math.sqrt(x * x + y * y + z * z) || 1
+      // Surface noise (gyri/sulci feel)
       const n1 = Math.sin(x * 3.1) * Math.cos(y * 2.7) * Math.sin(z * 3.3) * 0.07
       const n2 = Math.sin(x * 6.5 + 0.2) * Math.cos(z * 7.1 - 0.4) * 0.04
       const n3 = Math.sin(y * 9.0) * Math.cos(x * 8.5) * 0.025
-      // Hemisphere split — slight valley along x=0
-      const fissure = Math.max(0, 0.08 - Math.abs(x) * 0.4) * -1
-      const r = Math.sqrt(x * x + y * y + z * z) || 1
-      const d = n1 + n2 + n3 + fissure
+      // Longitudinal fissure between hemispheres (recess along sagittal plane)
+      const fissure = -Math.max(0, 0.12 - Math.abs(x) * 0.55)
+      // Temporal-lobe outward bulge (lateral + lower-front)
+      const tempBulge = Math.max(0, 0.18 * Math.exp(-((Math.abs(x) - 0.95) ** 2 / 0.15) - ((y + 0.2) ** 2 / 0.30) - ((z - 0.3) ** 2 / 0.50)))
+      // Occipital bulge (back of head, slightly lower)
+      const occipBulge = Math.max(0, 0.12 * Math.exp(-((z + 1.1) ** 2 / 0.30) - (y ** 2 / 0.50) - (x ** 2 / 0.40)))
+      // Frontal bulge (front, top)
+      const frontBulge = Math.max(0, 0.10 * Math.exp(-((z - 1.2) ** 2 / 0.30) - ((y - 0.5) ** 2 / 0.40) - (x ** 2 / 0.45)))
+      const d = n1 + n2 + n3 + fissure + tempBulge + occipBulge + frontBulge
       pos.setXYZ(i, x + (x / r) * d, y + (y / r) * d, z + (z / r) * d)
     }
     g.computeVertexNormals()
-    return g
+
+    // Cerebellum — separate smaller mass behind and below, tucked under the
+    // occipital lobe. Two side-by-side hemispheres with their own surface noise.
+    const cg = new THREE.SphereGeometry(0.85, 64, 48)
+    cg.scale(1.0, 0.55, 0.80)
+    cg.translate(0, -0.85, -1.55)
+    const cp = cg.attributes.position as THREE.BufferAttribute
+    for (let i = 0; i < cp.count; i++) {
+      const x = cp.getX(i), y = cp.getY(i), z = cp.getZ(i)
+      const r = Math.sqrt(x * x + (y + 0.85) ** 2 + (z + 1.55) ** 2) || 1
+      // Cerebellar folia — finer ribbed surface
+      const folia = Math.sin(z * 22) * 0.018 + Math.sin(x * 18 + y * 6) * 0.012
+      // Vermis groove between cerebellar hemispheres
+      const vermis = -Math.max(0, 0.05 - Math.abs(x) * 0.6)
+      const d = folia + vermis
+      cp.setXYZ(i, x + (x / r) * d, y + ((y + 0.85) / r) * d, z + ((z + 1.55) / r) * d)
+    }
+    cg.computeVertexNormals()
+    return { cerebrum: g, cerebellum: cg }
   }, [])
 
   return (
-    <mesh ref={ref} geometry={geom}>
-      <meshBasicMaterial
-        color="hsl(38, 100%, 50%)"
-        wireframe
-        transparent
-        opacity={0.08}
-        depthWrite={false}
-      />
-    </mesh>
+    <group ref={ref}>
+      <mesh geometry={cerebrum}>
+        <meshBasicMaterial color="hsl(38, 100%, 50%)" wireframe transparent opacity={0.09} depthWrite={false} />
+      </mesh>
+      <mesh geometry={cerebellum}>
+        <meshBasicMaterial color="hsl(100, 90%, 50%)" wireframe transparent opacity={0.11} depthWrite={false} />
+      </mesh>
+    </group>
   )
 }
 

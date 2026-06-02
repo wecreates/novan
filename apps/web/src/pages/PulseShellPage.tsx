@@ -23,7 +23,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Suspense, lazy } from 'react'
-import { api } from '../api.js'
+import { api, API_BASE as BASE } from '../api.js'
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
 import { KronosBrain } from '../components/KronosBrain.js'
 import { NeuralBrainView } from '../components/NeuralBrainView.js'
@@ -142,8 +142,8 @@ export default function PulseShellPage(): JSX.Element {
         <BrainHomePage />
       </Suspense>
     )
-    if (tab === 'TEAM')  return <PlaceholderTab name="TEAM"  hint="Agent team roster — coming soon" />
-    if (tab === 'USAGE') return <PlaceholderTab name="USAGE" hint="Token, cost & quota dashboards — coming soon" />
+    if (tab === 'TEAM')  return <TeamTab />
+    if (tab === 'USAGE') return <UsageTab />
     return null
   }, [tab])
 
@@ -242,6 +242,139 @@ function CenteredText({ children }: { children: React.ReactNode }) {
       color: 'rgba(255,255,255,0.4)', fontSize: 12, letterSpacing: '0.2em',
     }}>{children}</div>
   )
+}
+
+// ─── TEAM tab — org chart from agent roster ────────────────────────────
+
+interface OrgAgent { id: string; shortName: string; role: string; avatarHue: number; status: string; currentTask?: string | null }
+function TeamTab(): JSX.Element {
+  const [data, setData] = useState<{ ceo: OrgAgent | null; reports: OrgAgent[]; total: number } | null>(null)
+  useEffect(() => {
+    void (async () => {
+      try {
+        const r = await fetch(`${BASE}/api/brain/op`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'team.orgChart', params: {} }), credentials: 'include' })
+        if (r.ok) {
+          const d = await r.json() as { result?: { ceo: OrgAgent | null; reports: OrgAgent[]; total: number } }
+          if (d.result) setData(d.result)
+        }
+      } catch { /* noop */ }
+    })()
+  }, [])
+  if (!data) return <CenteredText>loading team…</CenteredText>
+  return (
+    <div style={{ padding: 32, color: 'rgba(255,255,255,0.9)', fontFamily: 'ui-monospace, "SF Mono", Consolas, monospace', height: '100%', overflow: 'auto', background: '#000' }}>
+      <h1 style={{ color: '#ffd47a', fontSize: 18, fontWeight: 600, letterSpacing: '0.18em', margin: 0 }}>ORG CHART · {data.total} AGENTS</h1>
+      {data.ceo && (
+        <div style={{ marginTop: 32, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <OrgNode a={data.ceo} large />
+          <div style={{ width: 1, height: 32, background: 'rgba(255,255,255,0.15)' }} />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, justifyContent: 'center', maxWidth: 1000 }}>
+            {data.reports.map(r => <OrgNode key={r.id} a={r} />)}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function OrgNode({ a, large }: { a: OrgAgent; large?: boolean }) {
+  const color = `hsl(${a.avatarHue}, 70%, 60%)`
+  return (
+    <div style={{ width: large ? 200 : 156, padding: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, textAlign: 'center', position: 'relative' }}>
+      <div style={{ width: large ? 56 : 40, height: large ? 56 : 40, borderRadius: '50%', background: `linear-gradient(135deg, ${color}, hsl(${a.avatarHue + 30}, 60%, 30%))`, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: large ? 20 : 14, fontWeight: 700, color: '#000', boxShadow: `0 0 12px ${color}66` }}>
+        {a.shortName[0]}
+      </div>
+      <div style={{ marginTop: 8, fontSize: large ? 14 : 12, fontWeight: 600 }}>{a.shortName}</div>
+      <div style={{ fontSize: 9, opacity: 0.5, letterSpacing: '0.08em', marginTop: 4 }}>{a.role}</div>
+      <div style={{ marginTop: 6, fontSize: 9, opacity: 0.65, minHeight: 12 }}>{a.currentTask || '—'}</div>
+      <div style={{ position: 'absolute', top: 8, right: 8, width: 6, height: 6, borderRadius: 3, background: a.status === 'live' ? '#22c55e' : '#525252' }} />
+    </div>
+  )
+}
+
+// ─── USAGE tab — real ai_usage data ────────────────────────────────────
+
+interface UsageData {
+  totals: { calls: number; tokens: number; costUsd: number }
+  byProvider: Array<{ provider: string; calls: number; tokens: number; costUsd: number }>
+  byHour: Array<{ hour: number; calls: number; tokens: number; costUsd: number }>
+}
+function UsageTab(): JSX.Element {
+  const [data, setData] = useState<UsageData | null>(null)
+  useEffect(() => {
+    void (async () => {
+      try {
+        const r = await fetch(`${BASE}/api/brain/op`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'usage.buckets', params: { windowHours: 168 } }), credentials: 'include' })
+        if (r.ok) {
+          const d = await r.json() as { result?: UsageData }
+          if (d.result) setData(d.result)
+        }
+      } catch { /* noop */ }
+    })()
+  }, [])
+  if (!data) return <CenteredText>loading usage…</CenteredText>
+  // Build cost sparkline
+  const maxHourCost = Math.max(0.0001, ...data.byHour.map(h => h.costUsd))
+  return (
+    <div style={{ padding: 32, color: 'rgba(255,255,255,0.9)', fontFamily: 'ui-monospace, "SF Mono", Consolas, monospace', height: '100%', overflow: 'auto', background: '#000' }}>
+      <h1 style={{ color: '#ffd47a', fontSize: 18, fontWeight: 600, letterSpacing: '0.18em', margin: 0 }}>USAGE · LAST 7 DAYS</h1>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 16 }}>
+        <Stat label="LLM CALLS"  value={data.totals.calls.toLocaleString()}     accent="#7adfff" />
+        <Stat label="TOKENS"     value={fmtTokens(data.totals.tokens)}          accent="#c2ff6a" />
+        <Stat label="COST"       value={`$${data.totals.costUsd.toFixed(2)}`}  accent="#ffd47a" />
+      </div>
+
+      {data.byHour.length > 1 && (
+        <div style={{ marginTop: 24, padding: 12, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 6 }}>
+          <div style={{ fontSize: 10, opacity: 0.5, letterSpacing: '0.18em', marginBottom: 8 }}>COST · HOURLY</div>
+          <svg width="100%" height="80" viewBox={`0 0 ${data.byHour.length * 6} 80`} preserveAspectRatio="none">
+            {data.byHour.map((h, i) => {
+              const barH = (h.costUsd / maxHourCost) * 70
+              return <rect key={h.hour} x={i * 6} y={80 - barH} width={5} height={barH} fill="#ffd47a" opacity={0.7} />
+            })}
+          </svg>
+        </div>
+      )}
+
+      <div style={{ marginTop: 24 }}>
+        <div style={{ fontSize: 10, opacity: 0.5, letterSpacing: '0.18em', marginBottom: 8 }}>BY PROVIDER</div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead><tr style={{ opacity: 0.5, fontSize: 10, letterSpacing: '0.12em' }}>
+            <th style={{ textAlign: 'left', padding: '6px 8px' }}>PROVIDER</th>
+            <th style={{ textAlign: 'right', padding: '6px 8px' }}>CALLS</th>
+            <th style={{ textAlign: 'right', padding: '6px 8px' }}>TOKENS</th>
+            <th style={{ textAlign: 'right', padding: '6px 8px' }}>COST</th>
+          </tr></thead>
+          <tbody>
+            {data.byProvider.map(p => (
+              <tr key={p.provider} style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                <td style={{ padding: '8px 8px' }}>{p.provider}</td>
+                <td style={{ padding: '8px 8px', textAlign: 'right', opacity: 0.7 }}>{p.calls.toLocaleString()}</td>
+                <td style={{ padding: '8px 8px', textAlign: 'right', opacity: 0.7 }}>{fmtTokens(p.tokens)}</td>
+                <td style={{ padding: '8px 8px', textAlign: 'right', color: '#ffd47a' }}>${p.costUsd.toFixed(4)}</td>
+              </tr>
+            ))}
+            {data.byProvider.length === 0 && <tr><td colSpan={4} style={{ padding: 16, textAlign: 'center', opacity: 0.4 }}>no usage in this window</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function Stat({ label, value, accent }: { label: string; value: string; accent: string }) {
+  return (
+    <div style={{ padding: 16, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 6 }}>
+      <div style={{ fontSize: 10, opacity: 0.5, letterSpacing: '0.18em' }}>{label}</div>
+      <div style={{ fontSize: 24, fontWeight: 700, color: accent, marginTop: 4 }}>{value}</div>
+    </div>
+  )
+}
+
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}K`
+  return n.toLocaleString()
 }
 
 function PlaceholderTab({ name, hint }: { name: string; hint: string }) {
