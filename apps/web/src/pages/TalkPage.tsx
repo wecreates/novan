@@ -19,6 +19,7 @@ import { api } from '../api.js'
 import { safeHref } from '../components/Markdown.js'
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
 import { useVoicePlayback } from '../hooks/useVoicePlayback.js'
+import { BreathingOrb, ParticleTrail, TypewriterText, AnimatedBubble } from '../components/NovanVisuals.js'
 
 interface Conversation {
   id: string; title: string; messageCount: number
@@ -458,7 +459,9 @@ export default function TalkPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-3rem)]">
+    <div className="flex h-[calc(100vh-3rem)] relative">
+      {/* R146.111 — ambient particle trail follows cursor across the whole page */}
+      <ParticleTrail hue={streaming ? 150 : 200} density={2} life={900} size={3.5} />
       {/* Sidebar */}
       <aside className="w-64 border-r border-border bg-surface flex flex-col">
         <div className="p-3 border-b border-border flex items-center gap-2">
@@ -599,10 +602,10 @@ export default function TalkPage() {
                         {showSuperseded ? `Hide ${supersededCount} superseded` : `Show ${supersededCount} superseded`}
                       </button>
                     )}
-                    {visible.map(m => {
+                    {visible.map((m, idx) => {
                       const msgActions = (actions.data?.data ?? []).filter(a => a.messageId === m.id)
                       return (
-                        <div key={m.id} className="group">
+                        <AnimatedBubble key={m.id} delay={Math.min(idx * 40, 240)} className="group">
                           <MessageBubble m={m} />
                           <div className="ml-4 mt-1 flex items-center gap-2">
                             {m.role === 'assistant' && m.id === lastAsstId && !streaming && (
@@ -631,15 +634,19 @@ export default function TalkPage() {
                               ))}
                             </div>
                           )}
-                        </div>
+                        </AnimatedBubble>
                       )
                     })}
                   </>
                 )
               })()}
               {streaming && (
-                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm">
-                  <div className="flex items-center gap-2 text-[10px] text-emerald-300 mb-1">
+                <AnimatedBubble className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm relative overflow-hidden">
+                  {/* R146.111 — breathing orb anchor in the streaming bubble */}
+                  <div className="absolute -top-6 -right-6 opacity-50 pointer-events-none">
+                    <BreathingOrb size={80} hue={150} state="speaking" />
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-emerald-300 mb-1 relative">
                     <Loader2 className="w-3 h-3 animate-spin" /> Novan (streaming…)
                     {streamingMeta?.citations !== undefined && <span className="text-muted">· {streamingMeta.citations} citations</span>}
                     <button onClick={stopStream}
@@ -648,8 +655,10 @@ export default function TalkPage() {
                       <Square className="w-3 h-3" />stop
                     </button>
                   </div>
-                  <pre className="whitespace-pre-wrap font-sans">{streamingContent || '…'}</pre>
-                </div>
+                  <div className="whitespace-pre-wrap font-sans relative">
+                    <TypewriterText text={streamingContent || '…'} speed={110} />
+                  </div>
+                </AnimatedBubble>
               )}
             </>
           )}

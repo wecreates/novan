@@ -24,6 +24,7 @@ import {
   Brush, Layers as LayersIcon, Network as NetIcon,
 } from 'lucide-react'
 import { api } from '../api.js'
+import { BreathingOrb, ParticleTrail } from '../components/NovanVisuals.js'
 import { useWorkspace } from '../contexts/WorkspaceContext.js'
 import { BrainPulseGroup, OrbitRings } from '../components/voice-visuals/BrainR3FVisuals.js'
 import { VoiceHaloVisualizer } from '../components/voice-visuals/VoiceHaloVisualizer.js'
@@ -212,14 +213,20 @@ function LobeLabel({ lobe, count, isCore }: { lobe: LobeDef; count: number; isCo
         className="absolute pointer-events-none select-none"
         style={{ left: `${lobe.position.x}%`, top: `${lobe.position.y}%`, transform: 'translate(-50%, -50%)' }}
       >
-        <div className="text-center">
-          <div
-            className="text-[22px] font-medium tracking-tight text-white drop-shadow-lg"
-            style={{ textShadow: `0 0 24px ${accent}88` }}
-          >
-            {lobe.name}
+        <div className="relative flex flex-col items-center">
+          {/* R146.111 — soft breathing orb behind the brain core */}
+          <div className="absolute inset-0 flex items-center justify-center -z-10" style={{ width: 220, height: 220, left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}>
+            <BreathingOrb size={220} hue={210} state="idle" />
           </div>
-          <div className="text-[11px] text-white/55 mt-0.5">{count} active</div>
+          <div className="text-center relative">
+            <div
+              className="text-[22px] font-medium tracking-tight text-white drop-shadow-lg"
+              style={{ textShadow: `0 0 24px ${accent}88` }}
+            >
+              {lobe.name}
+            </div>
+            <div className="text-[11px] text-white/55 mt-0.5">{count} active</div>
+          </div>
         </div>
       </div>
     )
@@ -308,6 +315,8 @@ export default function BrainHomePage() {
 
   return (
     <div className="relative w-full h-full bg-[var(--bg-primary)] overflow-hidden">
+      {/* R146.111 — cursor particles over the brain canvas */}
+      <ParticleTrail hue={205} density={1} life={1100} size={3} />
       {/* 3D scene */}
       <Canvas
         dpr={[1, 2]}
