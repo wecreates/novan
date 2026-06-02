@@ -1243,6 +1243,10 @@ const INTERVALS = {
   // suggestions onto the agent_ops_board, then reflect board state in the
   // agent_roster status. Cheap, runs every 5 min.
   agentDispatch:         5 * 60_000,
+  // R146.124 — pre-refresh OAuth tokens 30 min before expiry. Cheap.
+  oauthRefresh:          15 * 60_000,
+  // R146.124 — scan recent errors → improvement_suggestions. Hourly.
+  suggestionsProducer:   60 * 60_000,
 }
 
 /**
@@ -1507,6 +1511,27 @@ async function runFrontierIntelTick(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'frontier_intel', error: (e as Error).message }) }
 }
 
+// R146.124 — Pre-refresh OAuth tokens that are within 30 min of expiry.
+async function runOauthRefresh(): Promise<void> {
+  if (process.env['DISABLE_OAUTH_REFRESH'] === '1') return
+  try {
+    const { oauthRefreshTick } = await import('./r124-autonomy.js')
+    const out = await oauthRefreshTick()
+    if (out.refreshed > 0) await emit('cron.oauth_refresh', out)
+  } catch (e) { await emit('cron.error', { task: 'oauth_refresh', error: (e as Error).message }) }
+}
+
+// R146.124 — Producer for improvement_suggestions: scan recent error
+// events and bucket recurring ones for Ali's queue.
+async function runSuggestionsProducer(): Promise<void> {
+  if (process.env['DISABLE_SUGGESTIONS_PRODUCER'] === '1') return
+  try {
+    const { suggestionsProducerTick } = await import('./r124-autonomy.js')
+    const out = await suggestionsProducerTick('system')
+    if (out.created > 0) await emit('cron.suggestions_producer', out)
+  } catch (e) { await emit('cron.error', { task: 'suggestions_producer', error: (e as Error).message }) }
+}
+
 // R146.117 — Agent dispatch tick: findings → ops_board → agent_roster status.
 async function runAgentDispatch(): Promise<void> {
   if (process.env['DISABLE_AGENT_DISPATCH'] === '1') return
@@ -1715,6 +1740,8 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runSecondBrainCron,             INTERVALS.secondBrainCron))
   handles.push(scheduleJittered(runShortformCron,               INTERVALS.shortformCron))
   handles.push(scheduleJittered(runAgentDispatch,               INTERVALS.agentDispatch))
+  handles.push(scheduleJittered(runOauthRefresh,                INTERVALS.oauthRefresh))
+  handles.push(scheduleJittered(runSuggestionsProducer,         INTERVALS.suggestionsProducer))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

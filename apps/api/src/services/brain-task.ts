@@ -2068,6 +2068,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       const rows = await db.select().from(codePatches).where(and(...filters)).orderBy(desc(codePatches.createdAt)).limit(limit)
       return { count: rows.length, patches: rows }
     } },
+  'suggestions.scan':      { description: 'Scan last 24h of error events and create improvement_suggestions for recurring patterns (≥3 occurrences). Powers Ali queue.', risk: 'low',
+    handler: async (ws) => (await import('./r124-autonomy.js')).suggestionsProducerTick(ws) },
+  'oauth.refreshAll':      { description: 'Pre-refresh every active connector OAuth token within 30 min of expiry. Returns refreshed/checked/skipped counts.', risk: 'medium',
+    handler: async () => (await import('./r124-autonomy.js')).oauthRefreshTick() },
+  'patches.exportDiff':    { description: 'Export a code_patches row as a git apply-compatible unified diff. Params: patchId', risk: 'low',
+    handler: async (ws, p) => (await import('./r124-autonomy.js')).exportPatchDiff(ws, String(p['patchId'] ?? '')) },
+  'patches.exportForProposal': { description: 'Export the latest patch for a proposal as a unified diff. Params: proposalId', risk: 'low',
+    handler: async (ws, p) => (await import('./r124-autonomy.js')).exportLatestPatchDiffForProposal(ws, String(p['proposalId'] ?? '')) },
   'improvements.create':   { description: 'Record an improvement suggestion (manual entry). r117 bridge will route it onto the agent_ops_board. Params: title, body?, priority?, category?', risk: 'low',
     handler: async (ws, p) => {
       const { db } = await import('../db/client.js')

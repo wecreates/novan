@@ -140,7 +140,18 @@ export default function ProposalsPage(): JSX.Element {
                       <div style={{ opacity: 0.5, letterSpacing: '0.1em', fontSize: 9, marginBottom: 4 }}>PATCHES ({ps.length})</div>
                       {ps.map(patch => (
                         <div key={patch.id} style={{ marginLeft: 8, marginTop: 6, padding: 8, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 4 }}>
-                          <div style={{ fontSize: 10, opacity: 0.6 }}>{patch.agent} · {patch.status} · {patch.tokensUsed} tok · ${patch.costUsdUsed.toFixed(4)}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{ fontSize: 10, opacity: 0.6, flex: 1 }}>{patch.agent} · {patch.status} · {patch.tokensUsed} tok · ${patch.costUsdUsed.toFixed(4)}</div>
+                            <button onClick={async () => {
+                              const r = await callOp<{ diff: string }>('patches.exportDiff', { patchId: patch.id })
+                              if (!r) return
+                              const blob = new Blob([r.diff], { type: 'text/x-diff' })
+                              const url = URL.createObjectURL(blob)
+                              const a = document.createElement('a')
+                              a.href = url; a.download = `${p.id.slice(0, 8)}.patch`; a.click()
+                              URL.revokeObjectURL(url)
+                            }} style={{ padding: '3px 8px', background: 'transparent', color: '#7adfff', border: '1px solid rgba(122,223,255,0.3)', borderRadius: 3, fontFamily: 'inherit', fontSize: 10, cursor: 'pointer' }}>↓ .patch</button>
+                          </div>
                           {patch.blockReason && <div style={{ fontSize: 10, color: '#ef4444', marginTop: 4 }}>blocked: {patch.blockReason}</div>}
                           {patch.files.map((f, i) => (
                             <details key={i} style={{ marginTop: 6 }}>
