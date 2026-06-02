@@ -568,6 +568,16 @@ export async function completeCallback(input: CallbackInput): Promise<CallbackRe
     source: 'api/connector-oauth', version: 1, createdAt: Date.now(),
   }).catch((e: Error) => { console.error('[connector-oauth]', e.message); return null })
 
+  // R146.117 — Instagram: stamp igUserId from Meta /me. Best-effort, no-op
+  // for any other connector. Silent on failure — the shortform poster will
+  // retry on first post and surface the error there.
+  if (pending.connectorId === 'instagram') {
+    try {
+      const { ensureIgUserId } = await import('./r117-wiring-fixes.js')
+      await ensureIgUserId(account.id).catch(() => null)
+    } catch { /* connectors module not loaded at boot — skip */ }
+  }
+
   return {
     accountId:     account.id,
     secretRef,

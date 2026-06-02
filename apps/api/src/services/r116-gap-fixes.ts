@@ -23,19 +23,11 @@ import { and, desc, eq, gte, sql } from 'drizzle-orm'
 interface PostResult { platform: string; ok: boolean; postId?: string; error?: string }
 
 async function resolveAccessToken(connectorAccountId: string): Promise<string | null> {
+  // R146.117 — delegate to r117 refreshIfNeeded which handles JSON-unwrap
+  // AND token-near-expiry refresh in one call.
   try {
-    const [acct] = await db.select().from(connectorAccounts).where(eq(connectorAccounts.id, connectorAccountId)).limit(1)
-    if (!acct?.secretRef) return null
-    const { revealSecret } = await import('./secrets-vault.js')
-    const v = await revealSecret(acct.secretRef, 'shortform-poster', 'auto-post')
-    if (!v) return null
-    // revealSecret may return an OAuth token JSON blob; the connectors want
-    // just the access_token string. Try to parse; fall through to raw.
-    try {
-      const parsed = JSON.parse(v) as { access_token?: string } | string
-      if (typeof parsed === 'object' && parsed.access_token) return parsed.access_token
-    } catch { /* not JSON — assume it's already the bare token */ }
-    return v
+    const { refreshIfNeeded } = await import('./r117-wiring-fixes.js')
+    return await refreshIfNeeded(connectorAccountId)
   } catch { return null }
 }
 
@@ -79,8 +71,16 @@ async function postToInstagram(clip: typeof shortformClips.$inferSelect, target:
   try {
     const [acct] = await db.select().from(connectorAccounts).where(eq(connectorAccounts.id, target.connectorAccountId)).limit(1)
     const meta = (acct?.metadata ?? {}) as Record<string, unknown>
-    const igUserId = String(meta['igUserId'] ?? '')
-    if (!igUserId) return { platform: 'instagram', ok: false, error: 'connector account missing igUserId in metadata' }
+    let igUserId = String(meta['igUserId'] ?? '')
+    if (!igUserId) {
+      // R146.117 — try the Meta Graph fetch once before failing
+      try {
+        const { ensureIgUserId } = await import('./r117-wiring-fixes.js')
+        const r = await ensureIgUserId(target.connectorAccountId)
+        if (r.ok && r.igUserId) igUserId = r.igUserId
+      } catch { /* fall through to error below */ }
+    }
+    if (!igUserId) return { platform: 'instagram', ok: false, error: 'connector account missing igUserId (Meta /me fetch failed)' }
     const { createMediaContainer, publishMediaContainer } = await import('./connector-instagram.js')
     const create = await createMediaContainer({
       workspaceId: clip.workspaceId,

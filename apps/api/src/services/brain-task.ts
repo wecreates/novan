@@ -2009,6 +2009,20 @@ const OPERATIONS: Record<string, OpSpec> = {
   'usage.buckets':         { description: 'Token spend totals + per-provider + per-hour for the last N hours (default 168). Powers the USAGE tab.', risk: 'low',
     handler: async (ws, p) => (await import('./r116-gap-fixes.js')).usageBuckets(ws, typeof p['windowHours'] === 'number' ? p['windowHours'] as number : 168) },
 
+  // ─── R146.117 — wiring fixes (findings→ops bridge, agent dispatch, IG userId, oauth refresh) ─
+  'security.bridgeNow':    { description: 'Bridge open high/critical security findings onto the agent_ops_board (owner: Sam). Dedups via securityFindings.mitigationTaskId.', risk: 'low',
+    handler: async (ws, p) => (await import('./r117-wiring-fixes.js')).findingsToOpsBridge(ws, typeof p['limit'] === 'number' ? p['limit'] as number : 10) },
+  'improvements.bridgeNow':{ description: 'Bridge improvement_suggestions onto the agent_ops_board (owner: Ali). Best-effort if table missing.', risk: 'low',
+    handler: async (ws, p) => (await import('./r117-wiring-fixes.js')).improvementsToOpsBridge(ws, typeof p['limit'] === 'number' ? p['limit'] as number : 5) },
+  'agents.dispatchTick':   { description: 'Reflect ops_board state in agent_roster: status=live + currentTask for in_process owners; else preview the next on_deck.', risk: 'low',
+    handler: async (ws) => (await import('./r117-wiring-fixes.js')).agentDispatcherTick(ws) },
+  'agents.bridgeAll':      { description: 'Run security + improvements bridge + dispatcher in one tick (same op the cron runs).', risk: 'low',
+    handler: async (ws) => (await import('./r117-wiring-fixes.js')).findingsBridgeTick(ws) },
+  'instagram.ensureUserId':{ description: 'Fetch igUserId from Meta /me and stamp connectorAccounts.metadata. Params: connectorAccountId', risk: 'low',
+    handler: async (_ws, p) => (await import('./r117-wiring-fixes.js')).ensureIgUserId(String(p['connectorAccountId'] ?? '')) },
+  'oauth.refreshIfNeeded': { description: 'Refresh a connector OAuth token if within 5min of expiry. Returns the (possibly refreshed) access token. Params: connectorAccountId', risk: 'medium',
+    handler: async (_ws, p) => ({ token: await (await import('./r117-wiring-fixes.js')).refreshIfNeeded(String(p['connectorAccountId'] ?? '')) }) },
+
   // ─── R146.115 — Build batch: War Room + shortform + viral + launch + ChatGPT ─
   'agents.seedDefaults':   { description: 'Seed the chriswesst-style 7-agent roster (Scan/Owl/Quilly/Larry/Ali/Sam/Cleo).', risk: 'low',
     handler: async (ws) => (await import('./r115-build-batch.js')).agentSeedDefaults(ws) },

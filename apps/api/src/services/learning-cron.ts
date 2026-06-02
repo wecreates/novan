@@ -1239,6 +1239,10 @@ const INTERVALS = {
   // R146.115 — Shortform pipeline cron: check enabled YT pipelines for new
   // uploads, clip them. Heavy job; runs hourly.
   shortformCron:         60 * 60_000,
+  // R146.117 — Agent dispatch tick: bridge security findings + improvement
+  // suggestions onto the agent_ops_board, then reflect board state in the
+  // agent_roster status. Cheap, runs every 5 min.
+  agentDispatch:         5 * 60_000,
 }
 
 /**
@@ -1503,6 +1507,18 @@ async function runFrontierIntelTick(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'frontier_intel', error: (e as Error).message }) }
 }
 
+// R146.117 — Agent dispatch tick: findings → ops_board → agent_roster status.
+async function runAgentDispatch(): Promise<void> {
+  if (process.env['DISABLE_AGENT_DISPATCH'] === '1') return
+  try {
+    const { findingsBridgeTick } = await import('./r117-wiring-fixes.js')
+    const out = await findingsBridgeTick('system')
+    if (out.bridged + out.improvedBridged + out.dispatched > 0) {
+      await emit('cron.agent_dispatch', out)
+    }
+  } catch (e) { await emit('cron.error', { task: 'agent_dispatch', error: (e as Error).message }) }
+}
+
 // R146.115 — Shortform cron: poll YT channels, clip new videos.
 // R146.116 — also runs the auto-poster for approved pipelines.
 async function runShortformCron(): Promise<void> {
@@ -1698,6 +1714,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runFrontierConsumerTick,        INTERVALS.frontierConsumer))
   handles.push(scheduleJittered(runSecondBrainCron,             INTERVALS.secondBrainCron))
   handles.push(scheduleJittered(runShortformCron,               INTERVALS.shortformCron))
+  handles.push(scheduleJittered(runAgentDispatch,               INTERVALS.agentDispatch))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
