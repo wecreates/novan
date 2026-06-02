@@ -5474,3 +5474,45 @@ export const commitments = pgTable('commitments', {
   index('cm_ws_idx').on(t.workspaceId, t.createdAt),
   index('cm_due_idx').on(t.workspaceId, t.status, t.deadlineAt),
 ])
+
+// ─── R146.139 — AI foundation: semantic memory + eval ──────────────────
+
+export const memoryChunks = pgTable('memory_chunks', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  content:         text('content').notNull(),
+  sourceType:      text('source_type').notNull(),
+  sourceId:        text('source_id'),
+  metadata:        jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  embedding:       vector('embedding', { dimensions: 768 }),
+  pinned:          boolean('pinned').notNull().default(false),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+  accessedCount:   integer('accessed_count').notNull().default(0),
+  lastAccessedAt:  bigint('last_accessed_at', { mode: 'number' }),
+}, (t) => [
+  index('mc_ws_idx').on(t.workspaceId, t.createdAt),
+  index('mc_pinned_idx').on(t.workspaceId, t.pinned),
+])
+
+export const promptEvalCases = pgTable('prompt_eval_cases', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  promptKey:    text('prompt_key').notNull(),
+  input:        jsonb('input').$type<Record<string, unknown>>().notNull(),
+  expected:     jsonb('expected').$type<Record<string, unknown>>(),
+  rubric:       text('rubric'),
+  weight:       real('weight').notNull().default(1.0),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('pec_key_idx').on(t.workspaceId, t.promptKey)])
+
+export const promptEvalRuns = pgTable('prompt_eval_runs', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  promptKey:     text('prompt_key').notNull(),
+  promptVersion: text('prompt_version'),
+  casesTotal:    integer('cases_total').notNull().default(0),
+  casesPassed:   integer('cases_passed').notNull().default(0),
+  score:         real('score').notNull().default(0),
+  details:       jsonb('details').$type<Array<{ caseId: string; passed: boolean; actual: unknown; reason: string }>>().notNull().default([]),
+  ranAt:         bigint('ran_at', { mode: 'number' }).notNull(),
+}, (t) => [index('per_key_idx').on(t.workspaceId, t.promptKey, t.ranAt)])
