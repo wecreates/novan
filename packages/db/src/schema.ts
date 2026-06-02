@@ -5125,3 +5125,35 @@ export const promptAbTrials = pgTable('prompt_ab_trials', {
   index('pab_ws_idx').on(t.workspaceId, t.startedAt),
   index('pab_status_idx').on(t.workspaceId, t.status),
 ])
+
+// ─── R146.131 — platform quotas + attribution ──────────────────────────
+
+export const platformQuotaUsage = pgTable('platform_quota_usage', {
+  workspaceId:  text('workspace_id').notNull(),
+  platform:     text('platform').notNull(),
+  bucketDay:    text('bucket_day').notNull(),
+  action:       text('action').notNull(),
+  count:        integer('count').notNull().default(0),
+  dailyCap:     integer('daily_cap').notNull().default(25),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.workspaceId, t.platform, t.bucketDay, t.action] }),
+  index('pqu_ws_day_idx').on(t.workspaceId, t.bucketDay),
+])
+
+export const attributionEdges = pgTable('attribution_edges', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  srcType:      text('src_type').notNull(),
+  srcId:        text('src_id').notNull(),
+  dstType:      text('dst_type').notNull(),
+  dstId:        text('dst_id').notNull(),
+  relation:     text('relation').notNull(),
+  weight:       real('weight').notNull().default(1.0),
+  metadata:     jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ae_src_idx').on(t.workspaceId, t.srcType, t.srcId),
+  index('ae_dst_idx').on(t.workspaceId, t.dstType, t.dstId),
+  index('ae_rel_idx').on(t.workspaceId, t.relation),
+])

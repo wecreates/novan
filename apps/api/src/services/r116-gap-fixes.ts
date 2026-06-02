@@ -168,6 +168,13 @@ export async function shortformPosterTick(workspaceId: string, limit = 10): Prom
     const newlyPosted: Array<{ platform: string; postId?: string; postedAt: number }> = []
     for (const target of targets) {
       if (already.has(target.platform)) continue
+      // R146.131 — daily quota check + atomic consume
+      try {
+        const { quotaConsume } = await import('./r131-quotas-attribution.js')
+        await quotaConsume(workspaceId, target.platform, target.platform === 'youtube' ? 'upload' : 'post')
+      } catch (e) {
+        if ((e as Error).message?.startsWith('QUOTA_EXCEEDED')) { skipped++; continue }
+      }
       let result: PostResult
       if      (target.platform === 'tiktok')    result = await postToTikTok(clip, target, fileBytes)
       else if (target.platform === 'instagram') result = await postToInstagram(clip, target)
@@ -178,6 +185,18 @@ export async function shortformPosterTick(workspaceId: string, limit = 10): Prom
         const entry: { platform: string; postId?: string; postedAt: number } = { platform: result.platform, postedAt: Date.now() }
         if (result.postId) entry.postId = result.postId
         newlyPosted.push(entry)
+        // R146.131 — record attribution edge clip → post
+        if (result.postId) {
+          try {
+            const { linkEdge } = await import('./r131-quotas-attribution.js')
+            await linkEdge(workspaceId, {
+              srcType: 'clip', srcId: clip.id,
+              dstType: 'post', dstId: result.postId,
+              relation: 'published_to',
+              metadata: { platform: result.platform },
+            })
+          } catch { /* attribution best-effort */ }
+        }
       } else {
         failed++
         console.error(`[shortform-poster] ${result.platform} failed for clip ${clip.id}: ${result.error}`)

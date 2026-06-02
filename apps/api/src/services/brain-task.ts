@@ -2108,6 +2108,22 @@ export const OPERATIONS: Record<string, OpSpec> = {
   'briefing.sendNow':      { description: 'Send the morning briefing push now (manual override of cron).', risk: 'low',
     handler: async (ws) => (await import('./r130-tier2.js')).sendMorningBriefing(ws) },
 
+  // ─── R146.131 — platform quotas + revenue attribution ──────────────
+  'quota.check':           { description: 'Check daily quota usage for a platform/action. Params: platform, action', risk: 'low',
+    handler: async (ws, p) => (await import('./r131-quotas-attribution.js')).quotaCheck(ws, String(p['platform'] ?? ''), String(p['action'] ?? '')) },
+  'quota.summary':         { description: 'Show todays usage across all known platforms.', risk: 'low',
+    handler: async (ws) => (await import('./r131-quotas-attribution.js')).quotaSummary(ws) },
+  'quota.setCap':          { description: 'Override the daily cap for one (platform, action). Params: platform, action, cap', risk: 'medium',
+    handler: async (ws, p) => { await (await import('./r131-quotas-attribution.js')).setQuotaCap(ws, String(p['platform'] ?? ''), String(p['action'] ?? ''), Number(p['cap'] ?? 0)); return { ok: true } } },
+  'attribution.link':      { description: 'Create an attribution edge (e.g. clip → post, post → channel, sale → product). Params: srcType, srcId, dstType, dstId, relation, weight?, metadata?', risk: 'low',
+    handler: async (ws, p) => (await import('./r131-quotas-attribution.js')).linkEdge(ws, p as unknown as Parameters<typeof import('./r131-quotas-attribution.js').linkEdge>[1]) },
+  'attribution.traceFwd':  { description: 'Trace forward from a node up to maxDepth (default 4). Params: srcType, srcId, maxDepth?', risk: 'low',
+    handler: async (ws, p) => (await import('./r131-quotas-attribution.js')).traceForward(ws, p['srcType'] as 'clip'|'post'|'channel'|'business'|'product'|'sale', String(p['srcId'] ?? ''), typeof p['maxDepth'] === 'number' ? p['maxDepth'] as number : 4) },
+  'attribution.traceBack': { description: 'Trace backward from a sale/revenue node to upstream contributors. Params: dstType, dstId, maxDepth?', risk: 'low',
+    handler: async (ws, p) => (await import('./r131-quotas-attribution.js')).traceBackward(ws, p['dstType'] as 'clip'|'post'|'channel'|'business'|'product'|'sale', String(p['dstId'] ?? ''), typeof p['maxDepth'] === 'number' ? p['maxDepth'] as number : 4) },
+  'attribution.list':      { description: 'List recent attribution edges. Params: limit?', risk: 'low',
+    handler: async (ws, p) => (await import('./r131-quotas-attribution.js')).listEdges(ws, typeof p['limit'] === 'number' ? p['limit'] as number : 50) },
+
   'autonomy.counts':       { description: 'Live counts for autonomy dashboard: findings(open) · improvements(open) · ops(in_process/on_deck) · proposals(proposed/approved) · connectorsNeedingRefresh · agentsLive.', risk: 'low',
     handler: async (ws) => (await import('./r124-autonomy.js')).autonomyCounts(ws) },
   'suggestions.scan':      { description: 'Scan last 24h of error events and create improvement_suggestions for recurring patterns (≥3 occurrences). Powers Ali queue.', risk: 'low',
