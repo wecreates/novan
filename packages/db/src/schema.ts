@@ -5063,3 +5063,28 @@ export const backupRuns = pgTable('backup_runs', {
 }, (t) => [
   index('bk_started_idx').on(t.startedAt),
 ])
+
+// ─── R146.129 — Revenue execution loop ──────────────────────────────────
+
+export const revenueRuns = pgTable('revenue_runs', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  ideaTitle:       text('idea_title').notNull(),
+  ideaPitch:       text('idea_pitch').notNull(),
+  currentStep:     text('current_step').notNull().default('idea'),
+  // idea → scored → feasibility_pass | feasibility_fail → business_created → channels_proposed → content_drafted → moderation_pass | moderation_blocked → published | halted
+  status:          text('status').notNull().default('running'),
+  // running | awaiting_approval | completed | halted | failed
+  businessId:      text('business_id'),
+  channelIds:      jsonb('channel_ids').$type<string[]>().notNull().default([]),
+  contentIds:      jsonb('content_ids').$type<string[]>().notNull().default([]),
+  scores:          jsonb('scores').$type<Record<string, unknown>>().notNull().default({}),
+  feasibility:     jsonb('feasibility').$type<Record<string, unknown>>().notNull().default({}),
+  haltReason:      text('halt_reason'),
+  approvalsPending: jsonb('approvals_pending').$type<string[]>().notNull().default([]),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:       bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rr_ws_idx').on(t.workspaceId, t.createdAt),
+  index('rr_status_idx').on(t.workspaceId, t.status, t.currentStep),
+])

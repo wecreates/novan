@@ -2080,6 +2080,20 @@ export const OPERATIONS: Record<string, OpSpec> = {
   'backup.list':           { description: 'List the last 30 backup runs.', risk: 'low',
     handler: async (_w, p) => (await import('./r128-safety.js')).listBackups(typeof p['limit'] === 'number' ? p['limit'] as number : 30) },
 
+  // ─── R146.129 — revenue execution loop (idea → published) ──────────
+  'revenue.start':         { description: 'Start a revenue execution run from an idea. Params: ideaTitle, ideaPitch', risk: 'medium',
+    handler: async (ws, p) => (await import('./r129-revenue-loop.js')).start(ws, { ideaTitle: String(p['ideaTitle'] ?? ''), ideaPitch: String(p['ideaPitch'] ?? '') }) },
+  'revenue.advance':       { description: 'Advance the state machine by one step (idempotent). Params: runId', risk: 'high',
+    handler: async (ws, p) => (await import('./r129-revenue-loop.js')).advance(ws, String(p['runId'] ?? '')) },
+  'revenue.approve':       { description: 'Approve a HIL gate (business/channels/content/publish). Params: runId, gate', risk: 'high',
+    handler: async (ws, p) => { await (await import('./r129-revenue-loop.js')).approve(ws, String(p['runId'] ?? ''), String(p['gate'] ?? '')); return { ok: true } } },
+  'revenue.halt':          { description: 'Halt a run (preserves state). Params: runId, reason', risk: 'medium',
+    handler: async (ws, p) => { await (await import('./r129-revenue-loop.js')).halt(ws, String(p['runId'] ?? ''), String(p['reason'] ?? 'operator halt')); return { ok: true } } },
+  'revenue.list':          { description: 'List revenue runs. Params: limit?', risk: 'low',
+    handler: async (ws, p) => (await import('./r129-revenue-loop.js')).list(ws, typeof p['limit'] === 'number' ? p['limit'] as number : 30) },
+  'revenue.get':           { description: 'Get a single revenue run. Params: runId', risk: 'low',
+    handler: async (ws, p) => (await import('./r129-revenue-loop.js')).get(ws, String(p['runId'] ?? '')) },
+
   'autonomy.counts':       { description: 'Live counts for autonomy dashboard: findings(open) · improvements(open) · ops(in_process/on_deck) · proposals(proposed/approved) · connectorsNeedingRefresh · agentsLive.', risk: 'low',
     handler: async (ws) => (await import('./r124-autonomy.js')).autonomyCounts(ws) },
   'suggestions.scan':      { description: 'Scan last 24h of error events and create improvement_suggestions for recurring patterns (≥3 occurrences). Powers Ali queue.', risk: 'low',
