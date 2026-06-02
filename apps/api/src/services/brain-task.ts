@@ -1999,6 +1999,32 @@ const OPERATIONS: Record<string, OpSpec> = {
     risk: 'low',
     handler: async (ws) => (await import('./frontier-max.js')).capabilityStats(ws),
   },
+  // ─── R146.108 — Consumers + dedup + budget guard + empirical bench ────
+  'frontier.consumerTick': {
+    description: 'Run one consumer cycle: backfill embeddings, dedup capability names, write prototype + advancement specs to /data/intel/*.md, run one empirical capability benchmark.',
+    risk: 'medium',
+    handler: async (ws) => (await import('./frontier-consumers.js')).consumerTick(ws),
+  },
+  'frontier.dedupCapabilities': {
+    description: 'Merge duplicate capability rows by canonical name (handles RAG↔retrieval-augmented-generation etc).',
+    risk: 'medium',
+    handler: async (ws) => (await import('./frontier-consumers.js')).dedupCapabilities(ws),
+  },
+  'frontier.backfillEmbeddings': {
+    description: 'Fill missing embedding columns on frontier_findings. Params: limit?',
+    risk: 'low',
+    handler: async (ws, p) => (await import('./frontier-consumers.js')).backfillFindingEmbeddings(ws, typeof p['limit'] === 'number' ? p['limit'] as number : 20),
+  },
+  'frontier.benchCapability': {
+    description: 'Empirically score one image-gen/video-gen capability via a real probe call. Rotates by oldest lastAdvancedAt.',
+    risk: 'medium',
+    handler: async (ws) => (await import('./frontier-consumers.js')).empiricallyScoreCapabilities(ws),
+  },
+  'frontier.budgetCheck': {
+    description: 'Check whether frontier loop can spend ~$amount more this period. Params: amountUsd?',
+    risk: 'low',
+    handler: async (ws, p) => (await import('./frontier-consumers.js')).frontierBudgetAllowed(ws, typeof p['amountUsd'] === 'number' ? p['amountUsd'] as number : 1.0),
+  },
   // ─── R146.103 — Token stretching for AI video ────────────────────
   'aiVideo.stretchShotList': {
     description: 'Apply all 4 stretching strategies to a shot list (compress prompts, min-viable duration, dedup, efficiency routing). Returns optimized shots + savings report.',

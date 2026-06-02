@@ -317,10 +317,10 @@ export function stretchShotList(shots: Shot[]): { shots: Shot[]; report: Stretch
   work = work.map(s => {
     if (s.preferredProvider && s.preferredProvider !== 'auto') return s
     const eff = selectByEfficiency(s.prompt)
-    // Map to Shot's preferredProvider union (it doesn't include 'luma' or
-    // 'runway-gen4' overlap; runway → runway-gen4)
-    const mapped: 'sora' | 'veo' | 'runway-gen4' | 'kling' | 'luma' | 'auto' =
-      eff.primary === 'runway' ? 'runway-gen4'
+    // R146.108 — Shot.preferredProvider now uses canonical names matching
+    // the renderShot dispatcher (no more 'runway-gen4' / 'veo-3' aliases).
+    const mapped: 'sora' | 'veo' | 'runway' | 'kling' | 'luma' | 'auto' =
+      eff.primary === 'runway' ? 'runway'
     : eff.primary === 'kling'  ? 'kling'
     : eff.primary === 'luma'   ? 'luma'
     : eff.primary === 'veo'    ? 'veo'

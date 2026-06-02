@@ -2,7 +2,7 @@
 FROM node:20-alpine
 
 # pnpm + native build tools (in case any dep needs gyp)
-RUN apk add --no-cache python3 make g++ postgresql-client \
+RUN apk add --no-cache python3 make g++ postgresql-client ffmpeg \
  && corepack enable \
  && corepack prepare pnpm@9.12.0 --activate
 

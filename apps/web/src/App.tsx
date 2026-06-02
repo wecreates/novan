@@ -96,6 +96,7 @@ const QuickLinkRedeemPage       = React.lazy(() => import('./pages/QuickLinkRede
 
 // R125 — Brain showcase (presentation / "show-off" mode).
 const BrainShowcasePage         = React.lazy(() => import('./pages/BrainShowcasePage.js'))
+const FrontierLedgerPage        = React.lazy(() => import('./pages/FrontierLedgerPage.js'))
 
 // R124 — Legal & Compliance pages (consume R122 backend routes).
 const Soc2ControlsPage          = React.lazy(() => import('./pages/legal/Soc2ControlsPage.js'))
@@ -788,6 +789,8 @@ function AppRoutes() {
           <Route path="/m/auth"                      element={<QuickLinkRedeemPage />} />
           {/* R125 — Brain showcase / presentation mode */}
           <Route path="/brain/showcase"              element={<BrainShowcasePage />} />
+          {/* R146.108 — Frontier ledger / capability catalog UI */}
+          <Route path="/brain/frontier"              element={<FrontierLedgerPage />} />
           {/* R124 — Legal & Compliance (consumes R122 backend routes) */}
           <Route path="/legal/soc2"                  element={<Soc2ControlsPage />} />
           <Route path="/legal/operational-readiness" element={<OperationalReadinessPage />} />

@@ -1228,6 +1228,9 @@ const INTERVALS = {
   // Runs every 60s; when MAX mode is OFF this is mostly a no-op (small batches).
   // When MAX mode is ON the operator-tunable batches go large.
   frontierMax:           60_000,
+  // Round 146.108 — Frontier consumers: embedding backfill, dedup, write
+  // prototype + advancement specs to disk, empirical capability scoring.
+  frontierConsumer:      90_000,
 }
 
 /**
@@ -1492,6 +1495,20 @@ async function runFrontierIntelTick(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'frontier_intel', error: (e as Error).message }) }
 }
 
+// R146.108 — Frontier consumers: embedding backfill, dedup, write specs to
+// disk, empirical scoring. Closes the loop on prototype_requested +
+// advancement_proposed events emitted by R146.105/107.
+async function runFrontierConsumerTick(): Promise<void> {
+  if (process.env['DISABLE_FRONTIER_INTEL'] === '1') return
+  try {
+    const { consumerTick } = await import('./frontier-consumers.js')
+    const out = await consumerTick('system')
+    if (out.embed.embedded > 0 || out.dedup.merged > 0 || out.proto.written > 0 || out.advance.written > 0 || out.bench.scored > 0 || !out.budget.allowed) {
+      await emit('cron.frontier_consumer_tick', out)
+    }
+  } catch (e) { await emit('cron.error', { task: 'frontier_consumer', error: (e as Error).message }) }
+}
+
 // R146.107 — Frontier MAX tick: capability catalog + permanent advancement.
 // Self-throttles based on per-workspace settings.scanIntervalMs so it only
 // does real work when due; runs cheap no-op queries otherwise.
@@ -1624,6 +1641,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runSecretsRotationDrainTick,    INTERVALS.secretsRotationDrain))
   handles.push(scheduleJittered(runFrontierIntelTick,           INTERVALS.frontierIntel))
   handles.push(scheduleJittered(runFrontierMaxTick,             INTERVALS.frontierMax))
+  handles.push(scheduleJittered(runFrontierConsumerTick,        INTERVALS.frontierConsumer))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

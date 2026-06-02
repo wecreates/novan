@@ -355,6 +355,7 @@ export async function advanceCapabilities(workspaceId: string, limit = 3): Promi
 
 export async function frontierMaxTick(workspaceId: string): Promise<{
   settings: FrontierSettings
+  budget:    { allowed: boolean; reason: string }
   scan:   { scanned: number; raw: number; inserted: number }
   distill:{ distilled: number; queued: number }
   prototype: { spawned: number }
@@ -363,6 +364,14 @@ export async function frontierMaxTick(workspaceId: string): Promise<{
 }> {
   const settings = await getSettings(workspaceId)
   const { scanSourceOnce, distillPending, spawnPrototypeTasks } = await import('./frontier-intel.js')
+
+  // R146.108 — autonomy-budget guard: distill+advance phases call LLMs.
+  // MAX mode can do up to ~40 LLM calls per tick; if data-category budget is
+  // exhausted we still do free phases (scan + catalog + dedup) but skip
+  // LLM-cost phases. This prevents MAX mode from blowing the ceiling.
+  const { frontierBudgetAllowed } = await import('./frontier-consumers.js')
+  const projected = settings.distillBatchSize * 0.0005 + settings.advanceBatchSize * 0.0005
+  const budget = await frontierBudgetAllowed(workspaceId, projected)
 
   // Phase 1: parallel scan up to settings.parallelSources due sources.
   const now = Date.now()
@@ -380,16 +389,20 @@ export async function frontierMaxTick(workspaceId: string): Promise<{
     { scanned: 0, raw: 0, inserted: 0 },
   )
 
-  // Phase 2: distill batch.
-  const distill = await distillPending(workspaceId, settings.distillBatchSize)
-  // Phase 3: prototype spawn.
+  // Phase 2: distill batch (LLM-cost — skip if budget exhausted).
+  const distill = budget.allowed
+    ? await distillPending(workspaceId, settings.distillBatchSize)
+    : { distilled: 0, queued: 0 }
+  // Phase 3: prototype spawn (free — just event emit).
   const prototype = await spawnPrototypeTasks(workspaceId, settings.prototypeBatchSize)
-  // Phase 4: catalog promotion.
+  // Phase 4: catalog promotion (free — DB only).
   const catalog = await catalogFromFindings(workspaceId, 50)
-  // Phase 5: permanent advancement.
-  const advance = await advanceCapabilities(workspaceId, settings.advanceBatchSize)
+  // Phase 5: permanent advancement (LLM-cost — skip if budget exhausted).
+  const advance = budget.allowed
+    ? await advanceCapabilities(workspaceId, settings.advanceBatchSize)
+    : { proposed: 0, emitted: 0 }
 
-  return { settings, scan, distill, prototype, catalog, advance }
+  return { settings, budget, scan, distill, prototype, catalog, advance }
 }
 
 // ─── Reporting ───────────────────────────────────────────────────────────

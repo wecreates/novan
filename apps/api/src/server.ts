@@ -592,6 +592,35 @@ await app.register(blueprintRoutes,        { prefix: '/api/v1/blueprint' })
 // Environment validation — fails fast in production if VAULT_MASTER_KEY missing/invalid
 validateEnvOrThrow()
 
+// R146.108 — Frontier intel startup key check: warn if no embedding /
+// distill provider is configured, otherwise the loop silently no-ops.
+;(() => {
+  const hasEmbed   = Boolean(process.env['OLLAMA_URL'] || process.env['OPENAI_API_KEY'] || process.env['GEMINI_API_KEY'])
+  const hasDistill = Boolean(process.env['GROQ_API_KEY'] || process.env['GEMINI_API_KEY'] || process.env['ANTHROPIC_API_KEY'])
+  if (!hasEmbed)   app.log.warn('[frontier-intel] NO embedding provider — findings will not get embeddings. Set OLLAMA_URL or OPENAI_API_KEY or GEMINI_API_KEY.')
+  if (!hasDistill) app.log.warn('[frontier-intel] NO LLM provider for distillation/advancement — frontier loop will scan but not distill. Set GROQ_API_KEY (free tier) or GEMINI_API_KEY or ANTHROPIC_API_KEY.')
+  if (!process.env['HF_API_TOKEN']) app.log.warn('[video-free-realistic] HF_API_TOKEN not set — free realistic video will only produce stills (no SVD img2vid). Set HF_API_TOKEN (free signup).')
+})()
+
+// R146.108 — serve generated media files (free realistic video output).
+// Path-traversal guarded; only allows files matching the safe-name pattern.
+{
+  const mediaRoot = process.env['MEDIA_LOCAL_DIR'] ?? '/data/media'
+  const mediaPrefix = (process.env['MEDIA_PUBLIC_BASE'] ?? '/media').replace(/\/$/, '')
+  app.get(`${mediaPrefix}/:filename`, async (req, reply) => {
+    const fname = (req.params as { filename: string }).filename
+    // Strict allow-list: only video files we wrote, no traversal.
+    if (!/^[a-z0-9-]+\.(mp4|webm)$/i.test(fname)) return reply.code(404).send()
+    const full = `${mediaRoot}/${fname}`
+    try {
+      const fs = await import('node:fs/promises')
+      const buf = await fs.readFile(full)
+      const ext = fname.endsWith('.webm') ? 'video/webm' : 'video/mp4'
+      return reply.type(ext).header('cache-control', 'public, max-age=31536000, immutable').send(buf)
+    } catch { return reply.code(404).send() }
+  })
+}
+
 // Start the closed learning loop: periodic incident/improvement/suspicious scans + sweeps
 startLearningCron()
 // 24/7 self-monitoring + cron re-arm on drift
