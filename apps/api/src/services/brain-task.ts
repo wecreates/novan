@@ -83,7 +83,7 @@ async function safeQuery(_ws: string, params: Record<string, unknown>): Promise<
   return { table, rowCount: (result as Array<unknown>).length, rows: result }
 }
 
-const OPERATIONS: Record<string, OpSpec> = {
+export const OPERATIONS: Record<string, OpSpec> = {
   // ─── Diagnostic / read ─────────────────────────────────────────
   'db.query': {
     description: 'SELECT from a whitelisted table. Params: table, limit?, minutes?',
@@ -2008,6 +2008,16 @@ const OPERATIONS: Record<string, OpSpec> = {
     handler: async (ws) => (await import('./r116-gap-fixes.js')).teamOrgChart(ws) },
   'usage.buckets':         { description: 'Token spend totals + per-provider + per-hour for the last N hours (default 168). Powers the USAGE tab.', risk: 'low',
     handler: async (ws, p) => (await import('./r116-gap-fixes.js')).usageBuckets(ws, typeof p['windowHours'] === 'number' ? p['windowHours'] as number : 168) },
+
+  // ─── R146.118 — universal "do anything" surface ─────────────────────
+  'novan.capabilities':    { description: 'List every brain op the platform exposes (name + description + risk). Use this to discover what Novan can do.', risk: 'low',
+    handler: async () => (await import('./novan-do.js')).listCapabilities() },
+  'novan.classifyIntent':  { description: 'Classify a free-form request into a category + suggested ops. Pure routing, executes nothing. Params: prompt', risk: 'low',
+    handler: async (_w, p) => (await import('./novan-do.js')).classifyIntent(String(p['prompt'] ?? '')) },
+  'novan.proposeCode':     { description: 'Draft a code change as a code_proposal. Operator must approve before code-agent ships. Params: title, summary, filesToCreate?, filesToModify?, testsRequired?, riskLevel?, reasoning?', risk: 'medium',
+    handler: async (ws, p) => (await import('./novan-do.js')).proposeCodeChange(ws, p as unknown as Parameters<typeof import('./novan-do.js').proposeCodeChange>[1]) },
+  'novan.http':            { description: 'Outbound HTTP from Novan to any public URL. SSRF-guarded (no loopback / private ranges). Body capped at 64 KiB. Params: method?, url, headers?, body?, timeoutMs?', risk: 'high',
+    handler: async (ws, p) => (await import('./novan-do.js')).httpAction(ws, p as unknown as Parameters<typeof import('./novan-do.js').httpAction>[1]) },
 
   // ─── R146.117 — wiring fixes (findings→ops bridge, agent dispatch, IG userId, oauth refresh) ─
   'security.bridgeNow':    { description: 'Bridge open high/critical security findings onto the agent_ops_board (owner: Sam). Dedups via securityFindings.mitigationTaskId.', risk: 'low',
