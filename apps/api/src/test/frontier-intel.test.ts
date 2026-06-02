@@ -103,6 +103,36 @@ describe('image-upgrades.routeImageRequest', () => {
   })
 })
 
+describe('voice-free-catalog (R146.110)', () => {
+  it('exposes voices from every source with stable ids', async () => {
+    const { listFreeVoices } = await import('../services/voice-free-catalog.js')
+    const all = listFreeVoices()
+    expect(all.length).toBeGreaterThan(80)  // 11 pollinations + 50+ SE + 30+ HF + 1 browser
+    const sources = new Set(all.map(v => v.source))
+    for (const s of ['pollinations', 'streamelements', 'huggingface', 'browser']) {
+      expect(sources.has(s as never)).toBe(true)
+    }
+    // Every id is unique
+    const ids = new Set(all.map(v => v.id))
+    expect(ids.size).toBe(all.length)
+    // Every id starts with the source name
+    for (const v of all) expect(v.id.startsWith(`${v.source}:`)).toBe(true)
+  })
+  it('findFreeVoice resolves known ids and returns null for unknown', async () => {
+    const { findFreeVoice } = await import('../services/voice-free-catalog.js')
+    expect(findFreeVoice('pollinations:alloy')?.voiceId).toBe('alloy')
+    expect(findFreeVoice('streamelements:Brian')?.language).toBe('en-GB')
+    expect(findFreeVoice('definitely-not-a-voice')).toBeNull()
+  })
+  it('huggingface voices are flagged as needing a key', async () => {
+    const { listFreeVoices } = await import('../services/voice-free-catalog.js')
+    const hf = listFreeVoices().filter(v => v.source === 'huggingface')
+    expect(hf.every(v => v.needsKey)).toBe(true)
+    const others = listFreeVoices().filter(v => v.source === 'pollinations' || v.source === 'streamelements')
+    expect(others.every(v => !v.needsKey)).toBe(true)
+  })
+})
+
 describe('chat-personality (R146.109)', () => {
   it('produces a voice block when enabled and empty when disabled', async () => {
     const { buildPersonalityBlock, DEFAULT_VOICE } = await import('../services/chat-personality.js')

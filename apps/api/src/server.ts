@@ -115,6 +115,7 @@ import platformRoutes           from './routes/platform.js'
 import voiceRoutes              from './routes/voice.js'
 import intelOpsRoutes           from './routes/intel-ops.js'
 import ttsRoutes                from './routes/tts.js'
+import freeVoiceRoutes          from './routes/free-voice.js'
 import agencyRoutes             from './routes/agency.js'
 import { validateEnvOrThrow }   from './services/secrets-vault.js'
 import { startLearningCron, bootKick } from './services/learning-cron.js'
@@ -579,6 +580,7 @@ await app.register(platformRoutes,         { prefix: '/api/v1/platform' })
 await app.register(voiceRoutes,            { prefix: '/api/v1/voice' })
 await app.register(intelOpsRoutes,         { prefix: '/api/v1/intel-ops' })
 await app.register(ttsRoutes,              { prefix: '/api/v1/tts' })
+await app.register(freeVoiceRoutes,         { prefix: '/api/v1/free-voice' })
 await app.register(agencyRoutes,           { prefix: '/api/v1/agency' })
 // MCP (Model Context Protocol) — exposes Novan ops as tools for external
 // agents (Claude Desktop, Cursor, Cline, custom GPTs). Mounted at /mcp
