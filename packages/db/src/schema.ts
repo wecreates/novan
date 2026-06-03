@@ -5667,3 +5667,30 @@ export const mcpClients = pgTable('mcp_clients', {
   lastUsedAt:  bigint('last_used_at', { mode: 'number' }),
   createdAt:   bigint('created_at',   { mode: 'number' }).notNull(),
 }, (t) => [index('mcp_ws_idx').on(t.workspaceId)])
+
+// ─── R146.145 — B2-tier AI ─────────────────────────────────────────────
+
+export const embeddingCache = pgTable('embedding_cache', {
+  textHash:   text('text_hash').primaryKey(),
+  provider:   text('provider').notNull(),
+  embedding:  vector('embedding', { dimensions: 768 }).notNull(),
+  createdAt:  bigint('created_at', { mode: 'number' }).notNull(),
+  hitCount:   integer('hit_count').notNull().default(0),
+})
+
+export const opModelPins = pgTable('op_model_pins', {
+  workspaceId: text('workspace_id').notNull(),
+  opName:      text('op_name').notNull(),
+  provider:    text('provider').notNull(),
+  model:       text('model').notNull(),
+  pinnedAt:    bigint('pinned_at', { mode: 'number' }).notNull(),
+}, (t) => [primaryKey({ columns: [t.workspaceId, t.opName] })])
+
+export const adaptiveTemperatures = pgTable('adaptive_temperatures', {
+  workspaceId:  text('workspace_id').notNull(),
+  taskType:     text('task_type').notNull(),
+  temperature:  real('temperature').notNull().default(0.7),
+  samples:      integer('samples').notNull().default(0),
+  avgScore:     real('avg_score').notNull().default(0),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [primaryKey({ columns: [t.workspaceId, t.taskType] })])
