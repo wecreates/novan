@@ -5549,3 +5549,34 @@ export const promptTemplatesV2 = pgTable('prompt_templates_v2', {
   index('ptv2_ws_idx').on(t.workspaceId, t.name),
   index('ptv2_active_idx').on(t.workspaceId, t.active),
 ])
+
+// ─── R146.141 — AI B-tier ──────────────────────────────────────────────
+
+export const agentDebates = pgTable('agent_debates', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  question:      text('question').notNull(),
+  participants:  jsonb('participants').$type<Array<{ name: string; prior: string }>>().notNull().default([]),
+  rounds:        jsonb('rounds').$type<Array<Array<{ name: string; content: string }>>>().notNull().default([]),
+  synthesis:     text('synthesis'),
+  confidence:    real('confidence'),
+  createdAt:     bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('adb_ws_idx').on(t.workspaceId, t.createdAt)])
+
+export const operatorProfile = pgTable('operator_profile', {
+  workspaceId:  text('workspace_id').primaryKey(),
+  facts:        jsonb('facts').$type<Array<{ key: string; value: string; pinnedAt: number }>>().notNull().default([]),
+  preferences:  jsonb('preferences').$type<Record<string, unknown>>().notNull().default({}),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
+export const syntheticDataRuns = pgTable('synthetic_data_runs', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  taskKind:       text('task_kind').notNull(),
+  seedExamples:   jsonb('seed_examples').$type<Array<Record<string, unknown>>>().notNull().default([]),
+  generatedCount: integer('generated_count').notNull().default(0),
+  outputPath:     text('output_path'),
+  status:         text('status').notNull().default('pending'),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('sdr_ws_idx').on(t.workspaceId, t.createdAt)])
