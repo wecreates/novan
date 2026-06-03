@@ -300,6 +300,8 @@ const isPublic = (url: string): boolean => {
   if (url.startsWith('/api/v1/auth/quick-link'))                       return true
   if (url === '/api/v1/auth/bootstrap')                                return true
   if (/^\/api\/v1\/webhooks\/[a-z0-9-]+\/trigger$/i.test(url))         return true
+  // R146.188 — admin brain bridge has its own loopback+token auth.
+  if (url === '/admin/brain' || url === '/admin/brain/ops')            return true
   return false
 }
 
