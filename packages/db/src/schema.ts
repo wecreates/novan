@@ -6547,3 +6547,27 @@ export const publishPlan = pgTable('publish_plan', {
   uniqueIndex('pp_run_idx').on(t.runId),
   index('pp_ws_idx').on(t.workspaceId, t.status, t.createdAt),
 ])
+
+// ─── R146.171 — Audio sync ─────────────────────────────────────────
+export const audioSyncJob = pgTable('audio_sync_job', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  runId:        text('run_id'),
+  shotId:       text('shot_id'),
+  kind:         text('kind').notNull(),
+  inputVideo:   text('input_video'),
+  inputAudio:   text('input_audio'),
+  scriptText:   text('script_text'),
+  sceneDesc:    text('scene_desc'),
+  outputPath:   text('output_path'),
+  provider:     text('provider'),
+  costUsd:      real('cost_usd').notNull().default(0),
+  status:       text('status').notNull().default('queued'),
+  error:        text('error'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  endedAt:      bigint('ended_at', { mode: 'number' }),
+}, (t) => [
+  index('asj_ws_idx').on(t.workspaceId, t.createdAt),
+  index('asj_run_idx').on(t.runId, t.createdAt),
+  index('asj_status_idx').on(t.workspaceId, t.status),
+])

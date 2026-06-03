@@ -5531,6 +5531,40 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return imageToVideo(ws, params as unknown as Parameters<typeof imageToVideo>[1])
     },
   },
+
+  // ─── R146.171 — Audio sync layer ──────────────────────────────────
+  'audio.lipSync': {
+    description: 'Lip-sync an audio track onto a video via Sieve. Params: { videoUrl, audioUrl, runId?, shotId? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { lipSyncToVideo } = await import('./r171-audio-sync.js')
+      return lipSyncToVideo(ws, params as unknown as Parameters<typeof lipSyncToVideo>[1])
+    },
+  },
+  'audio.foley': {
+    description: 'Generate ambient SFX for a scene via ElevenLabs. Params: { sceneDesc, durationSec?, runId?, shotId? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { foleyForScene } = await import('./r171-audio-sync.js')
+      return foleyForScene(ws, params as unknown as Parameters<typeof foleyForScene>[1])
+    },
+  },
+  'audio.narrateSync': {
+    description: 'Voiceover script + lip-sync to video in one call. Params: { videoUrl, script, voice?, runId?, shotId? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { narrateAndSync } = await import('./r171-audio-sync.js')
+      return narrateAndSync(ws, params as unknown as Parameters<typeof narrateAndSync>[1])
+    },
+  },
+  'audio.jobs': {
+    description: 'List audio sync jobs. Params: { runId?, status?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { audioJobsList } = await import('./r171-audio-sync.js')
+      return audioJobsList(ws, (params as Parameters<typeof audioJobsList>[1]) ?? {})
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────
