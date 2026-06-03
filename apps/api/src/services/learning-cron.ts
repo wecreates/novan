@@ -1264,6 +1264,8 @@ const INTERVALS = {
   audienceMaint:         60 * 60_000,
   // R146.164 — Cart recovery sweep hourly.
   cartRecovery:          60 * 60_000,
+  // R146.168 — Loop closure sweep hourly.
+  loopClosure:           60 * 60_000,
 }
 
 /**
@@ -1592,6 +1594,24 @@ async function runSocialCommentHarvest(): Promise<void> {
     }
     if (totalNew > 0) await emit('cron.social_comment_harvest', { workspaces: ids.length, new: totalNew })
   } catch (e) { await emit('cron.error', { task: 'social_comment_harvest', error: (e as Error).message }) }
+}
+
+// R146.168 — Loop closure: lessons → prompts + funnel → outcomes.
+async function runLoopClosure(): Promise<void> {
+  if (process.env['DISABLE_LOOP_CLOSURE'] === '1') return
+  try {
+    const ids = await listWorkspaceIds()
+    const { closeLoops } = await import('./r168-loop-closure.js')
+    let lessons = 0, outcomes = 0
+    for (const ws of ids) {
+      try {
+        const r = await closeLoops(ws)
+        lessons += r.lessonsSeeded
+        outcomes += r.outcomesFilled
+      } catch (e) { await emit('cron.error', { task: 'loop_closure', workspace: ws, error: (e as Error).message }) }
+    }
+    if (lessons > 0 || outcomes > 0) await emit('cron.loop_closure', { workspaces: ids.length, lessons, outcomes })
+  } catch (e) { await emit('cron.error', { task: 'loop_closure', error: (e as Error).message }) }
 }
 
 // R146.164 — Cart recovery: per-workspace sweep for ≥1h abandoned carts.
@@ -1923,6 +1943,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runSocialCommentImprove,        INTERVALS.socialCommentImprove))
   handles.push(scheduleJittered(runAudienceMaint,               INTERVALS.audienceMaint))
   handles.push(scheduleJittered(runCartRecovery,                INTERVALS.cartRecovery))
+  handles.push(scheduleJittered(runLoopClosure,                 INTERVALS.loopClosure))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

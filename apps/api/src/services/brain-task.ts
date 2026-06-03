@@ -5477,6 +5477,32 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return publishPlanList(ws, (params as Parameters<typeof publishPlanList>[1]) ?? {})
     },
   },
+
+  // ─── R146.168 — Loop closure: lessons→prompts + funnel→PAI ────────
+  'loop.lessonsToPrompts': {
+    description: 'Seed high-confidence PAI lessons into the prompt-evolution registry. Params: { minConfidence?, maxPerTopic? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { lessonsToPrompts } = await import('./r168-loop-closure.js')
+      return lessonsToPrompts(ws, (params as Parameters<typeof lessonsToPrompts>[1]) ?? {})
+    },
+  },
+  'loop.funnelToOutcome': {
+    description: 'Auto-fill outcomeScore on done PAI runs from attributed funnel revenue. Params: { sinceDays? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { funnelToOutcome } = await import('./r168-loop-closure.js')
+      return funnelToOutcome(ws, (params as { sinceDays?: number }) ?? {})
+    },
+  },
+  'loop.close': {
+    description: 'Run both closures in sequence.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { closeLoops } = await import('./r168-loop-closure.js')
+      return closeLoops(ws)
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────
