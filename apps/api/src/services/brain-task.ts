@@ -2570,6 +2570,20 @@ export const OPERATIONS: Record<string, OpSpec> = {
   'citations.forChunk':    { description: 'SB2#15 List citations a chunk makes. Params: chunkId', risk: 'low',
     handler: async (ws, p) => (await import('./r153-sb2-b-tier.js')).citationsForChunk(ws, String(p['chunkId'] ?? '')) },
 
+  // ─── R146.154 — SB2 C-tier (#16-20) — final ───────────────────────
+  'sentiment.timeline':    { description: 'SB2#16 Daily sentiment over N days from recent notes. Surfaces trend shifts. Params: days?', risk: 'low',
+    handler: async (ws, p) => (await import('./r154-sb2-c-tier.js')).sentimentTimeline(ws, { ...(typeof p['days'] === 'number' ? { days: p['days'] as number } : {}) }) },
+  'devils.advocate':       { description: 'SB2#17 Generate N strong counter-arguments to a conclusion. Params: conclusion, n?', risk: 'low',
+    handler: async (ws, p) => (await import('./r154-sb2-c-tier.js')).devilsAdvocate(ws, { conclusion: String(p['conclusion'] ?? ''), ...(typeof p['n'] === 'number' ? { n: p['n'] as number } : {}) }) },
+  'advisor.ask':           { description: 'SB2#18 Ask an advisor archetype (munger|jobs|bezos|drucker|graham). Params: archetype, question', risk: 'low',
+    handler: async (ws, p) => (await import('./r154-sb2-c-tier.js')).advisorAsk(ws, { archetype: String(p['archetype'] ?? ''), question: String(p['question'] ?? '') }) },
+  'advisor.list':          { description: 'SB2#18 List available advisor archetypes.', risk: 'low',
+    handler: async () => ({ archetypes: (await import('./r154-sb2-c-tier.js')).advisorList() }) },
+  'counterfactual.run':    { description: 'SB2#19 Simulate alternative outcomes for a past decision. Params: decisionId', risk: 'low',
+    handler: async (ws, p) => (await import('./r154-sb2-c-tier.js')).counterFactual(ws, { decisionId: String(p['decisionId'] ?? '') }) },
+  'concept.lifecycle':     { description: 'SB2#20 Concept lifecycle viz: first seen, peak, current, weekly sparkline. Params: concept', risk: 'low',
+    handler: async (ws, p) => (await import('./r154-sb2-c-tier.js')).conceptLifecycle(ws, { concept: String(p['concept'] ?? '') }) },
+
   'autonomy.counts':       { description: 'Live counts for autonomy dashboard: findings(open) · improvements(open) · ops(in_process/on_deck) · proposals(proposed/approved) · connectorsNeedingRefresh · agentsLive.', risk: 'low',
     handler: async (ws) => (await import('./r124-autonomy.js')).autonomyCounts(ws) },
   'suggestions.scan':      { description: 'Scan last 24h of error events and create improvement_suggestions for recurring patterns (≥3 occurrences). Powers Ali queue.', risk: 'low',
