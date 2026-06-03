@@ -5609,3 +5609,61 @@ export const batchJobs = pgTable('batch_jobs', {
   createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
   updatedAt:        bigint('updated_at', { mode: 'number' }).notNull(),
 }, (t) => [index('bj_ws_idx').on(t.workspaceId, t.createdAt)])
+
+// ─── R146.143 — S-tier AI 21-25 ────────────────────────────────────────
+
+export const workflows = pgTable('workflows', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  name:        text('name').notNull(),
+  steps:       jsonb('steps').$type<Array<{ name: string; opName: string; params: Record<string, unknown>; retryOn?: string }>>().notNull().default([]),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('wf_ws_idx').on(t.workspaceId, t.createdAt)])
+
+export const agentWorkflowRuns = pgTable('agent_workflow_runs', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  workflowId:  text('workflow_id').notNull(),
+  currentStep: integer('current_step').notNull().default(0),
+  stepOutputs: jsonb('step_outputs').$type<Array<{ stepName: string; ok: boolean; result?: unknown; error?: string }>>().notNull().default([]),
+  status:      text('status').notNull().default('running'),
+  error:       text('error'),
+  startedAt:   bigint('started_at', { mode: 'number' }).notNull(),
+  updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('awfr_ws_idx').on(t.workspaceId, t.startedAt),
+  index('awfr_status_idx').on(t.workspaceId, t.status),
+])
+
+export const finetuneCycles = pgTable('finetune_cycles', {
+  id:                 text('id').primaryKey(),
+  workspaceId:        text('workspace_id').notNull(),
+  baseModel:          text('base_model').notNull(),
+  distillDatasetId:   text('distill_dataset_id'),
+  finetuneJobId:      text('finetune_job_id'),
+  abTrialId:          text('ab_trial_id'),
+  promoted:           boolean('promoted').notNull().default(false),
+  status:             text('status').notNull().default('queued'),
+  createdAt:          bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:          bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [index('ftc_ws_idx').on(t.workspaceId, t.createdAt)])
+
+export const voiceChatSessions = pgTable('voice_chat_sessions', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  transcript:  text('transcript').notNull().default(''),
+  audioPath:   text('audio_path'),
+  status:      text('status').notNull().default('open'),
+  startedAt:   bigint('started_at', { mode: 'number' }).notNull(),
+  endedAt:     bigint('ended_at',   { mode: 'number' }),
+}, (t) => [index('vcs_ws_idx').on(t.workspaceId, t.startedAt)])
+
+export const mcpClients = pgTable('mcp_clients', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  name:        text('name').notNull(),
+  apiKeyHash:  text('api_key_hash').notNull(),
+  allowedOps:  jsonb('allowed_ops').$type<string[]>().notNull().default([]),
+  lastUsedAt:  bigint('last_used_at', { mode: 'number' }),
+  createdAt:   bigint('created_at',   { mode: 'number' }).notNull(),
+}, (t) => [index('mcp_ws_idx').on(t.workspaceId)])
