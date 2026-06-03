@@ -2554,6 +2554,22 @@ export const OPERATIONS: Record<string, OpSpec> = {
   'crossref.verify':       { description: 'SB2#10 Search memory for contradictions to a chunk. Params: chunkId', risk: 'medium',
     handler: async (ws, p) => (await import('./r152-sb2-a-tier.js')).crossRefVerify(ws, String(p['chunkId'] ?? '')) },
 
+  // ─── R146.153 — SB2 B-tier (#11-15) ───────────────────────────────
+  'links.suggest':         { description: 'SB2#11 Suggest existing chunks to link to from draft text. Params: draftText, k?', risk: 'low',
+    handler: async (ws, p) => (await import('./r153-sb2-b-tier.js')).linkSuggest(ws, { draftText: String(p['draftText'] ?? ''), ...(typeof p['k'] === 'number' ? { k: p['k'] as number } : {}) }) },
+  'tag.rollup':            { description: 'SB2#12 Rolling summary of all chunks under a tag. Params: tag, maxChunks?', risk: 'low',
+    handler: async (ws, p) => (await import('./r153-sb2-b-tier.js')).tagRollup(ws, { tag: String(p['tag'] ?? ''), ...(typeof p['maxChunks'] === 'number' ? { maxChunks: p['maxChunks'] as number } : {}) }) },
+  'gap.inversion':         { description: 'SB2#13 Find adjacent concepts that a tag doesnt link to (blind spots). Params: tag, topAdjacent?', risk: 'low',
+    handler: async (ws, p) => (await import('./r153-sb2-b-tier.js')).gapInversion(ws, { tag: String(p['tag'] ?? ''), ...(typeof p['topAdjacent'] === 'number' ? { topAdjacent: p['topAdjacent'] as number } : {}) }) },
+  'chunk.merge':           { description: 'SB2#14 Merge two chunks; redirects all links. Params: keepId, mergeId, mergedTitle?', risk: 'high',
+    handler: async (ws, p) => (await import('./r153-sb2-b-tier.js')).chunkMerge(ws, { keepId: String(p['keepId'] ?? ''), mergeId: String(p['mergeId'] ?? ''), ...(p['mergedTitle'] ? { mergedTitle: String(p['mergedTitle']) } : {}) }) },
+  'chunk.split':           { description: 'SB2#14 Split a chunk on a marker (default \\n## ). Params: chunkId, splitMarker?', risk: 'medium',
+    handler: async (ws, p) => (await import('./r153-sb2-b-tier.js')).chunkSplit(ws, { chunkId: String(p['chunkId'] ?? ''), ...(p['splitMarker'] ? { splitMarker: String(p['splitMarker']) } : {}) }) },
+  'citations.extract':     { description: 'SB2#15 Extract [cite:<chunkId>] markers and persist as cite-type links. Params: chunkId', risk: 'low',
+    handler: async (ws, p) => (await import('./r153-sb2-b-tier.js')).citationsExtract(ws, String(p['chunkId'] ?? '')) },
+  'citations.forChunk':    { description: 'SB2#15 List citations a chunk makes. Params: chunkId', risk: 'low',
+    handler: async (ws, p) => (await import('./r153-sb2-b-tier.js')).citationsForChunk(ws, String(p['chunkId'] ?? '')) },
+
   'autonomy.counts':       { description: 'Live counts for autonomy dashboard: findings(open) · improvements(open) · ops(in_process/on_deck) · proposals(proposed/approved) · connectorsNeedingRefresh · agentsLive.', risk: 'low',
     handler: async (ws) => (await import('./r124-autonomy.js')).autonomyCounts(ws) },
   'suggestions.scan':      { description: 'Scan last 24h of error events and create improvement_suggestions for recurring patterns (≥3 occurrences). Powers Ali queue.', risk: 'low',
