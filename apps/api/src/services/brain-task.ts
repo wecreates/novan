@@ -5878,6 +5878,81 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return dailyCountsSummary(ws, (params as Parameters<typeof dailyCountsSummary>[1]) ?? {})
     },
   },
+
+  // ─── R146.178 — Managed accounts + warmup + sign-in ───────────────
+  'account.add': {
+    description: 'Register a managed account (creds stored in vault). Params: { platform, handle, username, password, totpSeed?, requires2fa?, displayName?, businessId?, role? }',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const { accountAdd } = await import('./r178-managed-accounts.js')
+      return accountAdd(ws, params as unknown as Parameters<typeof accountAdd>[1])
+    },
+  },
+  'account.list': {
+    description: 'List managed accounts (no creds returned). Params: { status?, platform?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { accountList } = await import('./r178-managed-accounts.js')
+      return accountList(ws, (params as Parameters<typeof accountList>[1]) ?? {})
+    },
+  },
+  'account.pause': {
+    description: 'Pause an account. Params: { accountId }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { accountPause } = await import('./r178-managed-accounts.js')
+      return accountPause(ws, (params as { accountId: string }).accountId)
+    },
+  },
+  'account.warmupPlan': {
+    description: 'Create a warmup plan for an account using the platform curve. Params: { accountId }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { warmupPlanCreate } = await import('./r178-managed-accounts.js')
+      return warmupPlanCreate(ws, (params as { accountId: string }).accountId)
+    },
+  },
+  'account.warmupTick': {
+    description: 'Mark todays warmup day complete with executed counts. Params: { accountId, completed (Record<string, number>) }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { warmupTick } = await import('./r178-managed-accounts.js')
+      const p = params as { accountId: string; completed: Record<string, number> }
+      return warmupTick(ws, p.accountId, p.completed ?? {})
+    },
+  },
+  'account.warmupStatus': {
+    description: 'Account + warmup plan + per-day progress. Params: { accountId }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { warmupStatus } = await import('./r178-managed-accounts.js')
+      return warmupStatus(ws, (params as { accountId: string }).accountId)
+    },
+  },
+  'account.signIn': {
+    description: 'Humanized sign-in via stored vault creds. Returns requires_human:true on CAPTCHA/2FA. Params: { accountId, sessionId }',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const { accountSignIn } = await import('./r178-managed-accounts.js')
+      return accountSignIn(ws, params as unknown as Parameters<typeof accountSignIn>[1])
+    },
+  },
+  'account.signUpOpen': {
+    description: 'Open the platform signup page (no auto-fill). Operator finishes by hand. Requires confirm="I_AUTHORIZE_ACCOUNT_CREATION". Params: { platform, sessionId, confirm }',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const { accountSignUpOpen } = await import('./r178-managed-accounts.js')
+      return accountSignUpOpen(ws, params as unknown as Parameters<typeof accountSignUpOpen>[1])
+    },
+  },
+  'account.maxDailyTargets': {
+    description: 'Todays max sustainable action targets for an account. Returns warming-curve while warming; full caps when active. Params: { accountId }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { maxDailyTargets } = await import('./r178-managed-accounts.js')
+      return maxDailyTargets(ws, (params as { accountId: string }).accountId)
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────

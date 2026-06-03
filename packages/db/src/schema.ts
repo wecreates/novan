@@ -6862,3 +6862,58 @@ export const browserActionLog = pgTable('browser_action_log', {
   index('bal_session_idx').on(t.sessionId, t.startedAt),
   index('bal_account_idx').on(t.accountId, t.startedAt),
 ])
+
+// ─── R146.178 — Managed accounts + warmup ───────────────────────────
+export const managedAccount = pgTable('managed_account', {
+  id:                  text('id').primaryKey(),
+  workspaceId:         text('workspace_id').notNull(),
+  businessId:          text('business_id'),
+  platform:            text('platform').notNull(),
+  handle:              text('handle').notNull(),
+  displayName:         text('display_name'),
+  role:                text('role').notNull().default('primary'),
+  vaultUserSecretId:   text('vault_user_secret_id').notNull(),
+  vaultPassSecretId:   text('vault_pass_secret_id').notNull(),
+  vaultTotpSecretId:   text('vault_totp_secret_id'),
+  requires2fa:         boolean('requires_2fa').notNull().default(false),
+  status:              text('status').notNull().default('creating'),
+  warmupDayIndex:      integer('warmup_day_index').notNull().default(0),
+  warmupStartedAt:     bigint('warmup_started_at', { mode: 'number' }),
+  warmupCompletedAt:   bigint('warmup_completed_at', { mode: 'number' }),
+  lastSigninAt:        bigint('last_signin_at', { mode: 'number' }),
+  lastHealthAt:        bigint('last_health_at', { mode: 'number' }),
+  health:              text('health').notNull().default('unknown'),
+  signals:             jsonb('signals').$type<Record<string, unknown>>().notNull().default({}),
+  createdAt:           bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:           bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('ma_ws_platform_handle_idx').on(t.workspaceId, t.platform, t.handle),
+  index('ma_ws_status_idx').on(t.workspaceId, t.status),
+])
+
+export const warmupPlan = pgTable('warmup_plan', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  accountId:    text('account_id').notNull(),
+  platform:     text('platform').notNull(),
+  dayCount:     integer('day_count').notNull(),
+  curve:        jsonb('curve').$type<Array<{ day: number; targets: Array<{ kind: string; count: number }> }>>().notNull().default([]),
+  startedAt:    bigint('started_at', { mode: 'number' }).notNull(),
+  completedAt:  bigint('completed_at', { mode: 'number' }),
+  status:       text('status').notNull().default('running'),
+}, (t) => [
+  index('wp_ws_idx').on(t.workspaceId),
+  index('wp_account_idx').on(t.accountId),
+])
+
+export const warmupDay = pgTable('warmup_day', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  planId:       text('plan_id').notNull(),
+  dayIndex:     integer('day_index').notNull(),
+  targets:      jsonb('targets').$type<Array<{ kind: string; count: number }>>().notNull().default([]),
+  completed:    jsonb('completed').$type<Record<string, number>>().notNull().default({}),
+  status:       text('status').notNull().default('pending'),
+  executedAt:   bigint('executed_at', { mode: 'number' }),
+  error:        text('error'),
+}, (t) => [uniqueIndex('wd_plan_day_idx').on(t.planId, t.dayIndex)])
