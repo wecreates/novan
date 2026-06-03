@@ -678,6 +678,45 @@ app.get<{ Params: { workspaceId: string; sceneName: string } }>('/xr/:workspaceI
   }
 })
 
+// R146.187 — Localhost-only admin bridge for SSH-shell collaboration.
+// Auth: requires X-Admin-Token header == env ADMIN_LOOPBACK_TOKEN
+// AND remoteAddress in {127.0.0.1, ::1, 172.x.0.1 (docker)}.
+// Lets the operator (or me via SSH) invoke any registered brain op
+// without a full JWT. Disabled if ADMIN_LOOPBACK_TOKEN is unset.
+app.post<{ Body: { op?: string; workspaceId?: string; params?: Record<string, unknown> } }>('/admin/brain', async (req, reply) => {
+  const token = process.env['ADMIN_LOOPBACK_TOKEN']
+  if (!token) return reply.code(404).send({ error: 'admin bridge disabled' })
+  const remote = req.ip ?? req.socket?.remoteAddress ?? ''
+  const isLoopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1' || /^172\.\d+\.0\.1$/.test(remote)
+  if (!isLoopback) return reply.code(403).send({ error: 'loopback only' })
+  if ((req.headers['x-admin-token'] ?? '') !== token) return reply.code(401).send({ error: 'bad token' })
+  const body = req.body ?? {}
+  if (!body.op || !body.workspaceId) return reply.code(400).send({ error: 'op + workspaceId required' })
+  try {
+    const { OPERATIONS } = await import('./services/brain-task.js')
+    const spec = (OPERATIONS as Record<string, { handler: (ws: string, params: Record<string, unknown>) => Promise<unknown> }>)[body.op]
+    if (!spec) return reply.code(404).send({ error: `unknown op: ${body.op}` })
+    const result = await spec.handler(body.workspaceId, body.params ?? {})
+    return reply.send({ ok: true, op: body.op, result })
+  } catch (e) {
+    return reply.code(500).send({ ok: false, error: (e as Error).message.slice(0, 500) })
+  }
+})
+
+app.get('/admin/brain/ops', async (req, reply) => {
+  const token = process.env['ADMIN_LOOPBACK_TOKEN']
+  if (!token) return reply.code(404).send({ error: 'admin bridge disabled' })
+  const remote = req.ip ?? req.socket?.remoteAddress ?? ''
+  const isLoopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1' || /^172\.\d+\.0\.1$/.test(remote)
+  if (!isLoopback) return reply.code(403).send({ error: 'loopback only' })
+  if ((req.headers['x-admin-token'] ?? '') !== token) return reply.code(401).send({ error: 'bad token' })
+  const { OPERATIONS } = await import('./services/brain-task.js')
+  const ops = Object.entries(OPERATIONS).map(([name, spec]: [string, unknown]) => ({
+    name, description: (spec as { description?: string }).description ?? '', risk: (spec as { risk?: string }).risk ?? 'low',
+  }))
+  return reply.send({ count: ops.length, ops })
+})
+
 // /metrics is registered by metricsRoutes plugin (queue depths + R119 registry).
 await app.register(workflowRoutes, { prefix: '/api/v1/workflows' })
 await app.register(maintenanceRoutes, { prefix: '/api/v1' })
