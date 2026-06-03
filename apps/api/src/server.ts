@@ -664,6 +664,20 @@ app.post<{ Params: { workspaceId: string; source: string }; Body: unknown }>('/b
   }
 })
 
+// R146.185 — XR scene viewer. GET /xr/:workspaceId/:sceneName → A-Frame HTML.
+app.get<{ Params: { workspaceId: string; sceneName: string } }>('/xr/:workspaceId/:sceneName', async (req, reply) => {
+  const { workspaceId, sceneName } = req.params
+  try {
+    const { xrSceneGet, xrAutoDashboard, renderXrHtml } = await import('./services/r185-tier-b.js')
+    let scene = await xrSceneGet(workspaceId, sceneName)
+    if (!scene && sceneName === 'dashboard') scene = await xrAutoDashboard(workspaceId)
+    if (!scene) return reply.code(404).type('text/html').send('<h1>Scene not found</h1>')
+    return reply.type('text/html').send(renderXrHtml(scene))
+  } catch (e) {
+    return reply.code(500).send(`Error: ${(e as Error).message}`)
+  }
+})
+
 // /metrics is registered by metricsRoutes plugin (queue depths + R119 registry).
 await app.register(workflowRoutes, { prefix: '/api/v1/workflows' })
 await app.register(maintenanceRoutes, { prefix: '/api/v1' })

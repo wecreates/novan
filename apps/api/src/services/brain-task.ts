@@ -6271,6 +6271,88 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return bioSummary(ws, params as unknown as Parameters<typeof bioSummary>[1])
     },
   },
+
+  // ─── R146.185 — Tier B (FRIDAY + predictive + tactical + XR + vehicle) ──
+  'companion.create': {
+    description: 'Create a FRIDAY-style companion AI. Params: { name, basePersona?, modelTier? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { companionCreate } = await import('./r185-tier-b.js')
+      return companionCreate(ws, params as unknown as Parameters<typeof companionCreate>[1])
+    },
+  },
+  'companion.list': {
+    description: 'List active companions.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { companionList } = await import('./r185-tier-b.js')
+      return companionList(ws)
+    },
+  },
+  'signal.classify': {
+    description: 'Classify any incoming signal (email/dm/comment/call/sms). Params: { source, content, externalRef? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { signalClassify } = await import('./r185-tier-b.js')
+      return signalClassify(ws, params as unknown as Parameters<typeof signalClassify>[1])
+    },
+  },
+  'signal.list': {
+    description: 'List classified signals. Params: { kind?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { signalList } = await import('./r185-tier-b.js')
+      return signalList(ws, (params as Parameters<typeof signalList>[1]) ?? {})
+    },
+  },
+  'tactical.sim': {
+    description: 'Monte Carlo over a scenario. Params: { scenario, assumptions: {key: number}, trials?, variance?, durationDays? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { tacticalSim } = await import('./r185-tier-b.js')
+      return tacticalSim(ws, params as unknown as Parameters<typeof tacticalSim>[1])
+    },
+  },
+  'tactical.whatIf': {
+    description: 'Baseline vs scenario comparison from current portfolio. Params: { scenarioLabel, pauseAccountId?, durationDays? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { tacticalWhatIf } = await import('./r185-tier-b.js')
+      return tacticalWhatIf(ws, params as unknown as Parameters<typeof tacticalWhatIf>[1])
+    },
+  },
+  'xr.scene.save': {
+    description: 'Save an A-Frame XR scene. Params: { name, sceneJson, arEnabled?, vrEnabled? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { xrSceneSave } = await import('./r185-tier-b.js')
+      return xrSceneSave(ws, params as unknown as Parameters<typeof xrSceneSave>[1])
+    },
+  },
+  'xr.scene.get': {
+    description: 'Get a scene by name. Params: { name }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { xrSceneGet } = await import('./r185-tier-b.js')
+      return xrSceneGet(ws, (params as { name: string }).name)
+    },
+  },
+  'xr.dashboard.auto': {
+    description: 'Auto-build the portfolio dashboard scene. Served at /xr/:ws/dashboard.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { xrAutoDashboard } = await import('./r185-tier-b.js')
+      return xrAutoDashboard(ws)
+    },
+  },
+  'vehicle.status': {
+    description: 'Read Tesla vehicle data via R184 endpoint kind=tesla. Params: { endpointId }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { vehicleStatus } = await import('./r185-tier-b.js')
+      return vehicleStatus(ws, (params as { endpointId: string }).endpointId)
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────

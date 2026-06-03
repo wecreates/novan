@@ -7138,3 +7138,52 @@ export const biometricEvent = pgTable('biometric_event', {
   index('be_ws_kind_idx').on(t.workspaceId, t.kind, t.recordedAt),
   index('be_ws_source_idx').on(t.workspaceId, t.source, t.recordedAt),
 ])
+
+// ─── R146.185 — Tier B Jarvis-gap features ─────────────────────────
+export const companionSession = pgTable('companion_session', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  name:         text('name').notNull(),
+  personaId:    text('persona_id'),
+  modelTier:    text('model_tier').notNull().default('light'),
+  status:       text('status').notNull().default('active'),
+  lastUsedAt:   bigint('last_used_at', { mode: 'number' }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [uniqueIndex('cs_ws_name_idx').on(t.workspaceId, t.name)])
+
+export const signalClassification = pgTable('signal_classification', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  source:          text('source').notNull(),
+  externalRef:     text('external_ref'),
+  contentExcerpt:  text('content_excerpt').notNull(),
+  kind:            text('kind').notNull(),
+  score:           real('score').notNull().default(0),
+  evidence:        jsonb('evidence').$type<Record<string, unknown>>().notNull().default({}),
+  classifiedAt:    bigint('classified_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('scn_ws_idx').on(t.workspaceId, t.classifiedAt),
+  index('scn_ws_kind_idx').on(t.workspaceId, t.kind),
+])
+
+export const tacticalSimRun = pgTable('tactical_sim_run', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  scenario:     text('scenario').notNull(),
+  assumptions:  jsonb('assumptions').$type<Record<string, unknown>>().notNull().default({}),
+  trials:       integer('trials').notNull().default(1000),
+  results:      jsonb('results').$type<Record<string, unknown>>().notNull().default({}),
+  status:       text('status').notNull().default('done'),
+  ranAt:        bigint('ran_at', { mode: 'number' }).notNull(),
+}, (t) => [index('tsr_ws_idx').on(t.workspaceId, t.ranAt)])
+
+export const xrScene = pgTable('xr_scene', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  name:         text('name').notNull(),
+  sceneJson:    jsonb('scene_json').$type<Record<string, unknown>>().notNull().default({}),
+  arEnabled:    boolean('ar_enabled').notNull().default(true),
+  vrEnabled:    boolean('vr_enabled').notNull().default(true),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [uniqueIndex('xr_ws_name_idx').on(t.workspaceId, t.name)])
