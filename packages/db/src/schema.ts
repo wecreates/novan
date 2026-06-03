@@ -6340,3 +6340,74 @@ export const competitorWinner = pgTable('competitor_winner', {
   index('cw_comp_idx').on(t.competitorId, t.recordedAt),
   index('cw_theme_idx').on(t.workspaceId, t.theme),
 ])
+
+// ─── R146.164 — Funnel CRO ─────────────────────────────────────────
+export const funnelEvent = pgTable('funnel_event', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  businessId:  text('business_id'),
+  sessionId:   text('session_id').notNull(),
+  kind:        text('kind').notNull(),
+  source:      text('source'),
+  medium:      text('medium'),
+  campaign:    text('campaign'),
+  page:        text('page'),
+  ref:         text('ref'),
+  amountCents: integer('amount_cents'),
+  meta:        jsonb('meta').$type<Record<string, unknown>>().notNull().default({}),
+  captureId:   text('capture_id'),
+  at:          bigint('at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('fe_ws_idx').on(t.workspaceId, t.at),
+  index('fe_session_idx').on(t.sessionId, t.at),
+  index('fe_kind_idx').on(t.workspaceId, t.kind, t.at),
+])
+
+export const funnelSession = pgTable('funnel_session', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  businessId:     text('business_id'),
+  firstTouchAt:   bigint('first_touch_at', { mode: 'number' }).notNull(),
+  lastTouchAt:    bigint('last_touch_at', { mode: 'number' }).notNull(),
+  firstSource:    text('first_source'),
+  firstCampaign:  text('first_campaign'),
+  captureId:      text('capture_id'),
+  purchased:      boolean('purchased').notNull().default(false),
+  revenueCents:   integer('revenue_cents').notNull().default(0),
+  viewCount:      integer('view_count').notNull().default(0),
+  clickCount:     integer('click_count').notNull().default(0),
+}, (t) => [
+  index('fs_ws_idx').on(t.workspaceId, t.lastTouchAt),
+  index('fs_purchased_idx').on(t.workspaceId, t.purchased, t.lastTouchAt),
+])
+
+export const banditExperiment = pgTable('bandit_experiment', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  name:         text('name').notNull(),
+  variants:     jsonb('variants').$type<Array<{ id: string; label: string; alpha: number; beta: number; impressions: number; conversions: number }>>().notNull().default([]),
+  status:       text('status').notNull().default('running'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  concludedAt:  bigint('concluded_at', { mode: 'number' }),
+  winner:       text('winner'),
+}, (t) => [
+  uniqueIndex('be_ws_name_idx').on(t.workspaceId, t.name),
+  index('be_ws_status_idx').on(t.workspaceId, t.status),
+])
+
+export const cartAbandonment = pgTable('cart_abandonment', {
+  id:                   text('id').primaryKey(),
+  workspaceId:          text('workspace_id').notNull(),
+  businessId:           text('business_id'),
+  sessionId:            text('session_id'),
+  email:                text('email'),
+  cartValueCents:       integer('cart_value_cents').notNull().default(0),
+  items:                jsonb('items').$type<Array<Record<string, unknown>>>().notNull().default([]),
+  abandonedAt:          bigint('abandoned_at', { mode: 'number' }).notNull(),
+  recoveredAt:          bigint('recovered_at', { mode: 'number' }),
+  recoveryCampaignId:   text('recovery_campaign_id'),
+  recoveryStatus:       text('recovery_status').notNull().default('pending'),
+}, (t) => [
+  index('ca_ws_idx').on(t.workspaceId, t.abandonedAt),
+  index('ca_status_idx').on(t.workspaceId, t.recoveryStatus, t.abandonedAt),
+])

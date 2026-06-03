@@ -5227,6 +5227,89 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return competitorGaps(ws)
     },
   },
+
+  // ─── R146.164 — Funnel CRO ────────────────────────────────────────
+  'funnel.track': {
+    description: 'Record a funnel event. Params: { sessionId, kind, source?, medium?, campaign?, page?, ref?, amountCents?, meta?, captureId?, businessId? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { eventTrack } = await import('./r164-funnel-cro.js')
+      return eventTrack(ws, params as unknown as Parameters<typeof eventTrack>[1])
+    },
+  },
+  'funnel.summary': {
+    description: 'View→click→signup→purchase conversion table. Params: { sinceDays? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { funnelSummary } = await import('./r164-funnel-cro.js')
+      return funnelSummary(ws, (params as { sinceDays?: number }) ?? {})
+    },
+  },
+  'funnel.sessions': {
+    description: 'List funnel sessions. Params: { purchasedOnly?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { sessionList } = await import('./r164-funnel-cro.js')
+      return sessionList(ws, (params as Parameters<typeof sessionList>[1]) ?? {})
+    },
+  },
+  'funnel.topSources': {
+    description: 'Top traffic sources by revenue. Params: { sinceDays?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { topSources } = await import('./r164-funnel-cro.js')
+      return topSources(ws, (params as Parameters<typeof topSources>[1]) ?? {})
+    },
+  },
+  'bandit.pick': {
+    description: 'Pick next variant via Thompson sampling. Params: { name, variantLabels? (first call) }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { banditPick } = await import('./r164-funnel-cro.js')
+      return banditPick(ws, params as unknown as Parameters<typeof banditPick>[1])
+    },
+  },
+  'bandit.observe': {
+    description: 'Record bandit outcome. Params: { name, variant, won }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { banditObserve } = await import('./r164-funnel-cro.js')
+      const p = params as { name: string; variant: string; won: boolean }
+      return banditObserve(ws, p.name, p.variant, p.won)
+    },
+  },
+  'bandit.list': {
+    description: 'List all bandit experiments.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { banditList } = await import('./r164-funnel-cro.js')
+      return banditList(ws)
+    },
+  },
+  'cart.abandon': {
+    description: 'Register a cart abandonment. Params: { sessionId?, email?, cartValueCents?, items?, businessId? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { cartAbandonRegister } = await import('./r164-funnel-cro.js')
+      return cartAbandonRegister(ws, params as unknown as Parameters<typeof cartAbandonRegister>[1])
+    },
+  },
+  'cart.recovered': {
+    description: 'Mark a session as recovered. Params: { sessionId }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { cartMarkRecovered } = await import('./r164-funnel-cro.js')
+      return cartMarkRecovered(ws, (params as { sessionId: string }).sessionId)
+    },
+  },
+  'cart.recoverDrafts': {
+    description: 'Mint a recovery campaign for ≥1h-old abandons with known emails.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { cartRecoverDrafts } = await import('./r164-funnel-cro.js')
+      return cartRecoverDrafts(ws)
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────

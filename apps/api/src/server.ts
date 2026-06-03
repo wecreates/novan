@@ -531,6 +531,33 @@ app.post<{ Params: { workspaceId: string; slug: string }; Body: { email?: string
   }
 })
 
+// R146.164 — Public funnel tracking endpoint.
+// POST /t/:workspaceId  body: { sessionId, kind, source?, ... }
+// Cheap, CORS-open, ingests view/click/signup/purchase events from any page.
+app.post<{ Params: { workspaceId: string }; Body: Record<string, unknown> }>('/t/:workspaceId', async (req, reply) => {
+  reply.header('access-control-allow-origin', '*')
+  reply.header('access-control-allow-headers', 'content-type')
+  const ws = req.params.workspaceId
+  const body = (req.body ?? {}) as Record<string, unknown>
+  if (!body['sessionId'] || !body['kind']) return reply.code(400).send({ error: 'sessionId + kind required' })
+  if (typeof body['kind'] !== 'string' || !['view', 'click', 'signup', 'purchase', 'custom'].includes(body['kind'])) {
+    return reply.code(400).send({ error: 'invalid kind' })
+  }
+  try {
+    const { eventTrack } = await import('./services/r164-funnel-cro.js')
+    const r = await eventTrack(ws, body as unknown as Parameters<typeof eventTrack>[1])
+    return reply.send({ ok: true, id: r.id })
+  } catch (e) {
+    return reply.code(500).send({ error: (e as Error).message })
+  }
+})
+app.options<{ Params: { workspaceId: string } }>('/t/:workspaceId', async (_req, reply) => {
+  reply.header('access-control-allow-origin', '*')
+  reply.header('access-control-allow-headers', 'content-type')
+  reply.header('access-control-allow-methods', 'POST, OPTIONS')
+  return reply.code(204).send()
+})
+
 // /metrics is registered by metricsRoutes plugin (queue depths + R119 registry).
 await app.register(workflowRoutes, { prefix: '/api/v1/workflows' })
 await app.register(maintenanceRoutes, { prefix: '/api/v1' })

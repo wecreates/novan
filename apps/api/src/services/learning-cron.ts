@@ -1262,6 +1262,8 @@ const INTERVALS = {
   socialCommentImprove:  60 * 60_000,
   // R146.162 — Owned-audience: segment refresh + win-back detection.
   audienceMaint:         60 * 60_000,
+  // R146.164 — Cart recovery sweep hourly.
+  cartRecovery:          60 * 60_000,
 }
 
 /**
@@ -1592,6 +1594,23 @@ async function runSocialCommentHarvest(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'social_comment_harvest', error: (e as Error).message }) }
 }
 
+// R146.164 — Cart recovery: per-workspace sweep for ≥1h abandoned carts.
+async function runCartRecovery(): Promise<void> {
+  if (process.env['DISABLE_CART_RECOVERY'] === '1') return
+  try {
+    const ids = await listWorkspaceIds()
+    const { cartRecoverDrafts } = await import('./r164-funnel-cro.js')
+    let totalDrafted = 0
+    for (const ws of ids) {
+      try {
+        const r = await cartRecoverDrafts(ws)
+        totalDrafted += r.drafted
+      } catch (e) { await emit('cron.error', { task: 'cart_recovery', workspace: ws, error: (e as Error).message }) }
+    }
+    if (totalDrafted > 0) await emit('cron.cart_recovery', { workspaces: ids.length, drafted: totalDrafted })
+  } catch (e) { await emit('cron.error', { task: 'cart_recovery', error: (e as Error).message }) }
+}
+
 // R146.162 — Audience maintenance: segment refresh + win-back drafting.
 let _lastWinBackDay = -1
 async function runAudienceMaint(): Promise<void> {
@@ -1903,6 +1922,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runSocialCommentHarvest,        INTERVALS.socialCommentHarvest))
   handles.push(scheduleJittered(runSocialCommentImprove,        INTERVALS.socialCommentImprove))
   handles.push(scheduleJittered(runAudienceMaint,               INTERVALS.audienceMaint))
+  handles.push(scheduleJittered(runCartRecovery,                INTERVALS.cartRecovery))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
