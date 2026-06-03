@@ -5694,3 +5694,67 @@ export const adaptiveTemperatures = pgTable('adaptive_temperatures', {
   avgScore:     real('avg_score').notNull().default(0),
   updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
 }, (t) => [primaryKey({ columns: [t.workspaceId, t.taskType] })])
+
+// ─── R146.147 — Second-brain S-tier ────────────────────────────────────
+
+export const memoryLinks = pgTable('memory_links', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  srcChunkId:   text('src_chunk_id').notNull(),
+  dstChunkId:   text('dst_chunk_id').notNull(),
+  linkType:     text('link_type').notNull().default('wiki'),
+  context:      text('context'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ml_src_idx').on(t.workspaceId, t.srcChunkId),
+  index('ml_dst_idx').on(t.workspaceId, t.dstChunkId),
+  index('ml_type_idx').on(t.workspaceId, t.linkType),
+])
+
+export const dailyNotes = pgTable('daily_notes', {
+  workspaceId: text('workspace_id').notNull(),
+  date:        text('date').notNull(),
+  chunkId:     text('chunk_id').notNull(),
+  prevDate:    text('prev_date'),
+  nextDate:    text('next_date'),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [primaryKey({ columns: [t.workspaceId, t.date] })])
+
+export const memoryTags = pgTable('memory_tags', {
+  workspaceId: text('workspace_id').notNull(),
+  chunkId:     text('chunk_id').notNull(),
+  tag:         text('tag').notNull(),
+  source:      text('source').notNull().default('auto'),
+  confidence:  real('confidence').notNull().default(1.0),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.workspaceId, t.chunkId, t.tag] }),
+  index('mt_tag_idx').on(t.workspaceId, t.tag),
+])
+
+export const memoryOutline = pgTable('memory_outline', {
+  workspaceId:    text('workspace_id').notNull(),
+  chunkId:        text('chunk_id').notNull(),
+  parentChunkId:  text('parent_chunk_id'),
+  sortOrder:      integer('sort_order').notNull().default(0),
+  collapsed:      boolean('collapsed').notNull().default(false),
+  updatedAt:      bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.workspaceId, t.chunkId] }),
+  index('mo_parent_idx').on(t.workspaceId, t.parentChunkId, t.sortOrder),
+])
+
+export const inboxItems = pgTable('inbox_items', {
+  id:                  text('id').primaryKey(),
+  workspaceId:         text('workspace_id').notNull(),
+  kind:                text('kind').notNull(),
+  rawContent:          text('raw_content').notNull(),
+  sourceUrl:           text('source_url'),
+  processed:           boolean('processed').notNull().default(false),
+  processedChunkId:    text('processed_chunk_id'),
+  extracted:           jsonb('extracted').$type<Record<string, unknown>>().notNull().default({}),
+  capturedAt:          bigint('captured_at',  { mode: 'number' }).notNull(),
+  processedAt:         bigint('processed_at', { mode: 'number' }),
+}, (t) => [
+  index('ii_ws_idx').on(t.workspaceId, t.capturedAt),
+])
