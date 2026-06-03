@@ -2602,6 +2602,18 @@ export const OPERATIONS: Record<string, OpSpec> = {
   'habit.outcomeCorr':     { description: 'SB3#5 Pearson correlation of habit done vs next-day mood/energy. Params: habitId, outcome? (mood|energy), windowDays?', risk: 'low',
     handler: async (ws, p) => (await import('./r155-sb3-s-tier.js')).habitOutcomeCorr(ws, { habitId: String(p['habitId'] ?? ''), ...(p['outcome'] ? { outcome: p['outcome'] as 'mood'|'energy' } : {}), ...(typeof p['windowDays'] === 'number' ? { windowDays: p['windowDays'] as number } : {}) }) },
 
+  // ─── R146.156 — SB3 A-tier (#6-10) ────────────────────────────────
+  'yearly.generate':       { description: 'SB3#6 Generate a yearly review synthesis from weekly reviews + chunks. Params: year', risk: 'low',
+    handler: async (ws, p) => (await import('./r156-sb3-a-tier.js')).yearlyReviewGenerate(ws, Number(p['year'] ?? new Date().getUTCFullYear())) },
+  'identity.timeline':     { description: 'SB3#7 Identity statements (I am / I value / I believe) over time. Params: windowDays?', risk: 'low',
+    handler: async (ws, p) => (await import('./r156-sb3-a-tier.js')).identityTimeline(ws, { ...(typeof p['windowDays'] === 'number' ? { windowDays: p['windowDays'] as number } : {}) }) },
+  'calibration.trend':     { description: 'SB3#8 Monthly avg calibration score over windowMonths. Params: windowMonths?', risk: 'low',
+    handler: async (ws, p) => (await import('./r156-sb3-a-tier.js')).calibrationTrend(ws, { ...(typeof p['windowMonths'] === 'number' ? { windowMonths: p['windowMonths'] as number } : {}) }) },
+  'belief.shifts':         { description: 'SB3#9 Find chunks containing belief-change language. Params: limit?', risk: 'low',
+    handler: async (ws, p) => (await import('./r156-sb3-a-tier.js')).beliefShifts(ws, typeof p['limit'] === 'number' ? p['limit'] as number : 30) },
+  'resonance.top':         { description: 'SB3#10 Most-referenced ideas by later chunks (resonance = later-links * sqrt(age/30)). Params: limit?', risk: 'low',
+    handler: async (ws, p) => (await import('./r156-sb3-a-tier.js')).resonanceTop(ws, typeof p['limit'] === 'number' ? p['limit'] as number : 20) },
+
   'autonomy.counts':       { description: 'Live counts for autonomy dashboard: findings(open) · improvements(open) · ops(in_process/on_deck) · proposals(proposed/approved) · connectorsNeedingRefresh · agentsLive.', risk: 'low',
     handler: async (ws) => (await import('./r124-autonomy.js')).autonomyCounts(ws) },
   'suggestions.scan':      { description: 'Scan last 24h of error events and create improvement_suggestions for recurring patterns (≥3 occurrences). Powers Ali queue.', risk: 'low',
