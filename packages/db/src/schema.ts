@@ -5876,3 +5876,39 @@ export const conceptMaturity = pgTable('concept_maturity', {
   primaryKey({ columns: [t.workspaceId, t.concept] }),
   index('cm_maturity_idx').on(t.workspaceId, t.maturity, t.lastSeenAt),
 ])
+
+// ─── R146.150 — SB C-tier ─────────────────────────────────────────────
+
+export const memorySnapshots = pgTable('memory_snapshots', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  snapshotDate:  text('snapshot_date').notNull(),
+  chunkCount:    integer('chunk_count').notNull().default(0),
+  linkCount:     integer('link_count').notNull().default(0),
+  tagCount:      integer('tag_count').notNull().default(0),
+  manifest:      jsonb('manifest').$type<Record<string, unknown>>().notNull().default({}),
+  createdAt:     bigint('created_at', { mode: 'number' }).notNull(),
+})
+
+export const voiceJournals = pgTable('voice_journals', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  date:         text('date').notNull(),
+  audioPath:    text('audio_path'),
+  transcript:   text('transcript'),
+  chunkId:      text('chunk_id'),
+  durationSec:  integer('duration_sec'),
+  status:       text('status').notNull().default('recorded'),
+  recordedAt:   bigint('recorded_at', { mode: 'number' }).notNull(),
+}, (t) => [index('vj_ws_date_idx').on(t.workspaceId, t.date)])
+
+export const externalImports = pgTable('external_imports', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  source:         text('source').notNull(),
+  sourceRef:      text('source_ref'),
+  importedCount:  integer('imported_count').notNull().default(0),
+  status:         text('status').notNull().default('pending'),
+  metadata:       jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  importedAt:     bigint('imported_at', { mode: 'number' }).notNull(),
+}, (t) => [index('ei_ws_idx').on(t.workspaceId, t.importedAt)])
