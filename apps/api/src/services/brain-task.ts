@@ -5634,6 +5634,72 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { script: controllerScriptJs() }
     },
   },
+
+  // ─── R146.173 — Music deep-listen + reproduce + master ────────────
+  'music.analyze': {
+    description: 'Deep-listen a reference song: stems + key + BPM + structure + instruments. Params: { sourceUrl, sourceKind?, title?, artist? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { songAnalyze } = await import('./r173-music-deep.js')
+      return songAnalyze(ws, params as unknown as Parameters<typeof songAnalyze>[1])
+    },
+  },
+  'music.recipeFromAnalysis': {
+    description: 'Compose a Suno/Udio-grade structured prompt from an analyzed song. Params: { analysisId, name?, durationSec?, targetLufs? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { recipeFromAnalysis } = await import('./r173-music-deep.js')
+      return recipeFromAnalysis(ws, params as unknown as Parameters<typeof recipeFromAnalysis>[1])
+    },
+  },
+  'music.reproduce': {
+    description: 'Generate the song from a recipe via Suno/Udio/Stable Audio + auto-master. Params: { recipeId, provider?, autoMaster? }',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const { reproduce } = await import('./r173-music-deep.js')
+      return reproduce(ws, params as unknown as Parameters<typeof reproduce>[1])
+    },
+  },
+  'music.makeAlike': {
+    description: 'End-to-end: analyze → recipe → reproduce → master. One call to clone a song. Params: { sourceUrl, title?, artist?, durationSec? }',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const { makeAlike } = await import('./r173-music-deep.js')
+      return makeAlike(ws, params as unknown as Parameters<typeof makeAlike>[1])
+    },
+  },
+  'music.studioMaster': {
+    description: 'R173 studio master via Matchering / LANDR / CloudBounce / eMastered. Params: { inputUrl, referenceUrl?, lufsTarget?, truePeakTarget?, provider? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { masterAudio } = await import('./r173-music-deep.js')
+      return masterAudio(ws, params as unknown as Parameters<typeof masterAudio>[1])
+    },
+  },
+  'music.analysis': {
+    description: 'Get a song analysis. Params: { id }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { analysisGet } = await import('./r173-music-deep.js')
+      return analysisGet(ws, (params as { id: string }).id)
+    },
+  },
+  'music.recipes': {
+    description: 'List recipes. Params: { limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { recipesList } = await import('./r173-music-deep.js')
+      return recipesList(ws, (params as { limit?: number }) ?? {})
+    },
+  },
+  'music.reproductions': {
+    description: 'List reproductions. Params: { recipeId?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { reproductionsList } = await import('./r173-music-deep.js')
+      return reproductionsList(ws, (params as Parameters<typeof reproductionsList>[1]) ?? {})
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────
