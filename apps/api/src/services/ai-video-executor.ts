@@ -98,6 +98,11 @@ export async function executeEpisode(input: ExecuteEpisodeInput): Promise<Execut
       const charBibleEntry = continuity.characterBible.find(c => c.characterId === charId)
       if (charBibleEntry) refs.push(...charBibleEntry.referenceImages.slice(0, 2))
     }
+    // R146.170 — character-lock referenceUrls injected by R166 director controls.
+    // These come pre-attached on the shot via applyProfileToPlan() and provide
+    // multi-shot character continuity from the lock registry.
+    const r166Refs = (shot as unknown as { referenceUrls?: string[] }).referenceUrls
+    if (Array.isArray(r166Refs) && r166Refs.length > 0) refs.push(...r166Refs.slice(0, 3))
     // R146.100 — resolve prev-shot end frame. The continuity plan refers to
     // it by symbolic anchor; here we look up the actual URL/path from the
     // already-rendered prev shot. Without parallel=1, this won't always be

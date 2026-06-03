@@ -5513,6 +5513,24 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return dashboardSummary(ws)
     },
   },
+
+  // ─── R146.170 — Frontier video ────────────────────────────────────
+  'video.vibeMotion': {
+    description: 'Derive a new director profile from your top-scored PAI runs (motion style transfer). Params: { topN?, profileName? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { vibeMotionDerive } = await import('./r170-frontier-video.js')
+      return vibeMotionDerive(ws, (params as Parameters<typeof vibeMotionDerive>[1]) ?? {})
+    },
+  },
+  'video.imageToVideo': {
+    description: 'Single-shot image-to-video direct render. Params: { imageUrl, prompt?, motionPreset?, durationSec?, aspectRatio? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { imageToVideo } = await import('./r170-frontier-video.js')
+      return imageToVideo(ws, params as unknown as Parameters<typeof imageToVideo>[1])
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────
