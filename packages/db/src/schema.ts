@@ -6735,3 +6735,49 @@ export const capcutClip = pgTable('capcut_clip', {
   index('cc_project_idx').on(t.projectId, t.trackIdx, t.startMs),
   index('cc_ws_idx').on(t.workspaceId),
 ])
+
+// ─── R146.175 — Top-tier image generation + upscaling ──────────────
+export const imageProJob = pgTable('image_pro_job', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  businessId:     text('business_id'),
+  prompt:         text('prompt').notNull(),
+  negativePrompt: text('negative_prompt'),
+  provider:       text('provider').notNull(),
+  aspect:         text('aspect').notNull().default('1:1'),
+  megapixels:     real('megapixels').notNull().default(1.0),
+  seed:           bigint('seed', { mode: 'number' }),
+  referenceUrls:  jsonb('reference_urls').$type<string[]>().notNull().default([]),
+  params:         jsonb('params').$type<Record<string, unknown>>().notNull().default({}),
+  outputUrl:      text('output_url'),
+  width:          integer('width'),
+  height:         integer('height'),
+  costUsd:        real('cost_usd').notNull().default(0),
+  latencyMs:      integer('latency_ms'),
+  status:         text('status').notNull().default('queued'),
+  error:          text('error'),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+  endedAt:        bigint('ended_at', { mode: 'number' }),
+}, (t) => [
+  index('ipj_ws_idx').on(t.workspaceId, t.createdAt),
+  index('ipj_status_idx').on(t.workspaceId, t.status),
+])
+
+export const imageUpscaleJob = pgTable('image_upscale_job', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  inputUrl:     text('input_url').notNull(),
+  outputUrl:    text('output_url'),
+  scaleFactor:  integer('scale_factor').notNull().default(4),
+  provider:     text('provider').notNull().default('clarity'),
+  detail:       real('detail').notNull().default(0.5),
+  costUsd:      real('cost_usd').notNull().default(0),
+  widthIn:      integer('width_in'),
+  heightIn:     integer('height_in'),
+  widthOut:     integer('width_out'),
+  heightOut:    integer('height_out'),
+  status:       text('status').notNull().default('queued'),
+  error:        text('error'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  endedAt:      bigint('ended_at', { mode: 'number' }),
+}, (t) => [index('iuj_ws_idx').on(t.workspaceId, t.createdAt)])

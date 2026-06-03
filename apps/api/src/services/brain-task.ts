@@ -5751,6 +5751,48 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return draftContentJson(ws, (params as { projectId: string }).projectId)
     },
   },
+
+  // ─── R146.175 — Crystal-clear image generation + upscaling ────────
+  'image.proGenerate': {
+    description: 'Top-tier image gen. Provider waterfall: Flux Pro Ultra → MJ v7 → Recraft v3 → Imagen 4 → Ideogram v3. Params: { prompt, negativePrompt?, aspect?, megapixels?, seed?, referenceUrls?, provider? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { proGenerate } = await import('./r175-image-pro.js')
+      return proGenerate(ws, params as unknown as Parameters<typeof proGenerate>[1])
+    },
+  },
+  'image.upscale': {
+    description: 'High-quality upscale. Waterfall: Magnific → Clarity → Topaz → Upscayl. Params: { imageUrl, factor?, detail?, provider? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { upscale } = await import('./r175-image-pro.js')
+      return upscale(ws, params as unknown as Parameters<typeof upscale>[1])
+    },
+  },
+  'image.crystalize': {
+    description: 'Combo: top-tier generate + auto-upscale for crystal-clear output. Params: { prompt, ...genParams, upscaleFactor?, upscaleDetail? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { crystalize } = await import('./r175-image-pro.js')
+      return crystalize(ws, params as unknown as Parameters<typeof crystalize>[1])
+    },
+  },
+  'image.proJobs': {
+    description: 'List pro image generations. Params: { status?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { proJobsList } = await import('./r175-image-pro.js')
+      return proJobsList(ws, (params as Parameters<typeof proJobsList>[1]) ?? {})
+    },
+  },
+  'image.upscaleJobs': {
+    description: 'List upscale jobs. Params: { status?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { upscaleJobsList } = await import('./r175-image-pro.js')
+      return upscaleJobsList(ws, (params as Parameters<typeof upscaleJobsList>[1]) ?? {})
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────
