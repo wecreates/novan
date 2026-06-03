@@ -5580,3 +5580,32 @@ export const syntheticDataRuns = pgTable('synthetic_data_runs', {
   status:         text('status').notNull().default('pending'),
   createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
 }, (t) => [index('sdr_ws_idx').on(t.workspaceId, t.createdAt)])
+
+// ─── R146.142 — AI C-tier ──────────────────────────────────────────────
+
+export const finetuneJobs = pgTable('finetune_jobs', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  provider:       text('provider').notNull(),
+  baseModel:      text('base_model').notNull(),
+  datasetPath:    text('dataset_path').notNull(),
+  externalJobId:  text('external_job_id'),
+  status:         text('status').notNull().default('submitted'),
+  tunedModelId:   text('tuned_model_id'),
+  costUsd:        real('cost_usd'),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:      bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [index('fj_ws_idx').on(t.workspaceId, t.createdAt)])
+
+export const batchJobs = pgTable('batch_jobs', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  provider:         text('provider').notNull(),
+  externalBatchId:  text('external_batch_id'),
+  requestCount:     integer('request_count').notNull().default(0),
+  completedCount:   integer('completed_count').notNull().default(0),
+  status:           text('status').notNull().default('submitted'),
+  costUsd:          real('cost_usd'),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:        bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [index('bj_ws_idx').on(t.workspaceId, t.createdAt)])
