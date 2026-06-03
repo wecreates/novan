@@ -5153,6 +5153,80 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return winBackTick(ws)
     },
   },
+
+  // ─── R146.163 — Volume engines ─────────────────────────────────────
+  'repurpose.create': {
+    description: 'Splits a long source into N variants per format. Params: { sourceBody, title?, businessId?, formats?, perFormat? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { repurposeCreate } = await import('./r163-volume-engines.js')
+      return repurposeCreate(ws, params as unknown as Parameters<typeof repurposeCreate>[1])
+    },
+  },
+  'repurpose.packs': {
+    description: 'List repurpose packs.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { repurposeListPacks } = await import('./r163-volume-engines.js')
+      return repurposeListPacks(ws, (params as { limit?: number }) ?? {})
+    },
+  },
+  'repurpose.variants': {
+    description: 'List variants. Params: { packId?, format?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { repurposeVariants } = await import('./r163-volume-engines.js')
+      return repurposeVariants(ws, (params as Parameters<typeof repurposeVariants>[1]) ?? {})
+    },
+  },
+  'trend.toDraft': {
+    description: 'Turn a trend_findings row into a repurpose pack. Params: { trendId }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { trendToDraft } = await import('./r163-volume-engines.js')
+      return trendToDraft(ws, (params as { trendId: string }).trendId)
+    },
+  },
+  'trend.listFresh': {
+    description: 'List recent trends. Params: { sinceHours?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { trendListFresh } = await import('./r163-volume-engines.js')
+      return trendListFresh(ws, (params as Parameters<typeof trendListFresh>[1]) ?? {})
+    },
+  },
+  'competitor.watch': {
+    description: 'Track a competitor handle for content gap analysis. Params: { platform, handle, niche?, notes?, businessId? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { competitorAdd } = await import('./r163-volume-engines.js')
+      return competitorAdd(ws, params as unknown as Parameters<typeof competitorAdd>[1])
+    },
+  },
+  'competitor.watchList': {
+    description: 'List watched competitor handles. Params: { businessId?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { competitorList } = await import('./r163-volume-engines.js')
+      return competitorList(ws, (params as Parameters<typeof competitorList>[1]) ?? {})
+    },
+  },
+  'competitor.recordWinner': {
+    description: 'Log a winning competitor post. Params: { competitorId, body, externalId?, metricScore?, theme? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { competitorRecordWinner } = await import('./r163-volume-engines.js')
+      return competitorRecordWinner(ws, params as unknown as Parameters<typeof competitorRecordWinner>[1])
+    },
+  },
+  'competitor.gaps': {
+    description: 'Identify themes competitors hit that we miss; mint PAI lessons.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { competitorGaps } = await import('./r163-volume-engines.js')
+      return competitorGaps(ws)
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────

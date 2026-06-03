@@ -6279,3 +6279,64 @@ export const emailSend = pgTable('email_send', {
   index('es_campaign_idx').on(t.campaignId, t.sentAt),
   index('es_capture_idx').on(t.captureId, t.sentAt),
 ])
+
+// ─── R146.163 — Volume engines ─────────────────────────────────────
+export const repurposePack = pgTable('repurpose_pack', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  businessId:   text('business_id'),
+  sourceKind:   text('source_kind').notNull().default('text'),
+  sourceRef:    text('source_ref'),
+  sourceBody:   text('source_body').notNull(),
+  title:        text('title'),
+  variantCount: integer('variant_count').notNull().default(0),
+  status:       text('status').notNull().default('ready'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('rp_ws_idx').on(t.workspaceId, t.createdAt)])
+
+export const repurposeVariant = pgTable('repurpose_variant', {
+  id:                  text('id').primaryKey(),
+  workspaceId:         text('workspace_id').notNull(),
+  packId:              text('pack_id').notNull(),
+  format:              text('format').notNull(),
+  body:                text('body').notNull(),
+  score:               real('score'),
+  usedAt:              bigint('used_at', { mode: 'number' }),
+  publishedExternalId: text('published_external_id'),
+  createdAt:           bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rv_pack_idx').on(t.packId),
+  index('rv_ws_format_idx').on(t.workspaceId, t.format, t.createdAt),
+])
+
+export const competitorHandle = pgTable('competitor_handle', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  businessId:    text('business_id'),
+  platform:      text('platform').notNull(),
+  handle:        text('handle').notNull(),
+  niche:         text('niche'),
+  notes:         text('notes'),
+  status:        text('status').notNull().default('active'),
+  addedAt:       bigint('added_at', { mode: 'number' }).notNull(),
+  lastScannedAt: bigint('last_scanned_at', { mode: 'number' }),
+}, (t) => [
+  uniqueIndex('ch_ws_platform_handle_idx').on(t.workspaceId, t.platform, t.handle),
+  index('ch_ws_idx').on(t.workspaceId, t.status),
+])
+
+export const competitorWinner = pgTable('competitor_winner', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  competitorId:  text('competitor_id').notNull(),
+  externalId:    text('external_id'),
+  body:          text('body').notNull(),
+  metricScore:   real('metric_score'),
+  theme:         text('theme'),
+  recordedAt:    bigint('recorded_at', { mode: 'number' }).notNull(),
+  source:        text('source').notNull().default('agent'),
+}, (t) => [
+  index('cw_ws_idx').on(t.workspaceId, t.recordedAt),
+  index('cw_comp_idx').on(t.competitorId, t.recordedAt),
+  index('cw_theme_idx').on(t.workspaceId, t.theme),
+])
