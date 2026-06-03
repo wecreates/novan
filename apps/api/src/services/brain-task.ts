@@ -5700,6 +5700,57 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return reproductionsList(ws, (params as Parameters<typeof reproductionsList>[1]) ?? {})
     },
   },
+
+  // ─── R146.174 — CapCut adapter ────────────────────────────────────
+  'capcut.projectCreate': {
+    description: 'Create a CapCut project. Params: { name, width?, height?, fps?, sourceKind?, sourceRef?, businessId? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { projectCreate } = await import('./r174-capcut-adapter.js')
+      return projectCreate(ws, params as unknown as Parameters<typeof projectCreate>[1])
+    },
+  },
+  'capcut.clipAdd': {
+    description: 'Add a clip. Params: { projectId, kind, assetUrl?, trackIdx?, startMs, durationMs, sourceStartMs?, transform?, orderIdx? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { clipAdd } = await import('./r174-capcut-adapter.js')
+      return clipAdd(ws, params as unknown as Parameters<typeof clipAdd>[1])
+    },
+  },
+  'capcut.fromVideoRun': {
+    description: 'Wrap a completed R160 PAI video run into a CapCut project. Params: { runId, name?, width?, height?, fps? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { capcutFromVideoRun } = await import('./r174-capcut-adapter.js')
+      const p = params as { runId: string; name?: string; width?: number; height?: number; fps?: number }
+      return capcutFromVideoRun(ws, p.runId, { ...(p.name ? { name: p.name } : {}), ...(p.width ? { width: p.width } : {}), ...(p.height ? { height: p.height } : {}), ...(p.fps ? { fps: p.fps } : {}) })
+    },
+  },
+  'capcut.projects': {
+    description: 'List CapCut projects. Params: { limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { projectList } = await import('./r174-capcut-adapter.js')
+      return projectList(ws, (params as { limit?: number }) ?? {})
+    },
+  },
+  'capcut.project': {
+    description: 'Get a project + clips. Params: { projectId }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { projectGet } = await import('./r174-capcut-adapter.js')
+      return projectGet(ws, (params as { projectId: string }).projectId)
+    },
+  },
+  'capcut.draftJson': {
+    description: 'Return CapCut draft_content.json (same as GET /capcut/:ws/:id/draft_content.json). Params: { projectId }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { draftContentJson } = await import('./r174-capcut-adapter.js')
+      return draftContentJson(ws, (params as { projectId: string }).projectId)
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────

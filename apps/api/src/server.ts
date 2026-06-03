@@ -596,6 +596,34 @@ app.get<{ Params: { workspaceId: string } }>('/mixcraft/:workspaceId/controller.
   }
 })
 
+// R146.174 — CapCut bundle endpoints.
+app.get<{ Params: { workspaceId: string; projectId: string } }>('/capcut/:workspaceId/:projectId/draft_content.json', async (req, reply) => {
+  const { workspaceId, projectId } = req.params
+  try {
+    const { draftContentJson } = await import('./services/r174-capcut-adapter.js')
+    const j = await draftContentJson(workspaceId, projectId)
+    if (!j) return reply.code(404).send({ error: 'project not found' })
+    return reply.type('application/json').send(j)
+  } catch (e) {
+    return reply.code(500).send({ error: (e as Error).message })
+  }
+})
+app.get<{ Params: { workspaceId: string; projectId: string } }>('/capcut/:workspaceId/:projectId/import.ps1', async (req, reply) => {
+  const { workspaceId, projectId } = req.params
+  try {
+    const { projectGet, importScriptPs1 } = await import('./services/r174-capcut-adapter.js')
+    const r = await projectGet(workspaceId, projectId)
+    if (!r) return reply.code(404).type('text/plain').send('# project not found')
+    const proto = (req.headers['x-forwarded-proto'] as string | undefined) ?? 'http'
+    const host = (req.headers['x-forwarded-host'] as string | undefined) ?? req.headers.host ?? 'localhost'
+    const baseUrl = `${proto}://${host}/capcut/${workspaceId}/${projectId}`
+    const script = importScriptPs1(projectId, r.project.name, baseUrl)
+    return reply.type('text/plain; charset=utf-8').header('content-disposition', `attachment; filename="novan-capcut-${projectId.slice(0, 8)}.ps1"`).send(script)
+  } catch (e) {
+    return reply.code(500).type('text/plain').send(`# error: ${(e as Error).message}`)
+  }
+})
+
 // /metrics is registered by metricsRoutes plugin (queue depths + R119 registry).
 await app.register(workflowRoutes, { prefix: '/api/v1/workflows' })
 await app.register(maintenanceRoutes, { prefix: '/api/v1' })

@@ -6699,3 +6699,39 @@ export const masterJob = pgTable('master_job', {
   createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
   endedAt:          bigint('ended_at', { mode: 'number' }),
 }, (t) => [index('mj_ws_idx').on(t.workspaceId, t.createdAt)])
+
+// ─── R146.174 — CapCut adapter ─────────────────────────────────────
+export const capcutProject = pgTable('capcut_project', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  businessId:      text('business_id'),
+  sourceKind:      text('source_kind').notNull().default('manual'),
+  sourceRef:       text('source_ref'),
+  name:            text('name').notNull(),
+  width:           integer('width').notNull().default(1080),
+  height:          integer('height').notNull().default(1920),
+  fps:             integer('fps').notNull().default(30),
+  durationMs:      integer('duration_ms').notNull().default(0),
+  status:          text('status').notNull().default('ready'),
+  masterAudioUrl:  text('master_audio_url'),
+  coverUrl:        text('cover_url'),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('cp_ws_idx').on(t.workspaceId, t.createdAt)])
+
+export const capcutClip = pgTable('capcut_clip', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  projectId:        text('project_id').notNull(),
+  kind:             text('kind').notNull(),
+  assetUrl:         text('asset_url'),
+  trackIdx:         integer('track_idx').notNull().default(0),
+  startMs:          integer('start_ms').notNull().default(0),
+  durationMs:       integer('duration_ms').notNull().default(0),
+  sourceStartMs:    integer('source_start_ms').notNull().default(0),
+  transform:        jsonb('transform').$type<Record<string, unknown>>().notNull().default({}),
+  orderIdx:         integer('order_idx').notNull().default(0),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('cc_project_idx').on(t.projectId, t.trackIdx, t.startMs),
+  index('cc_ws_idx').on(t.workspaceId),
+])
