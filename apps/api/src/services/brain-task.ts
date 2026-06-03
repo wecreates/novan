@@ -5836,6 +5836,48 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return playbookGet(ws, p.platform, p.form)
     },
   },
+
+  // ─── R146.177 — Browser humanizer + spend-lock ────────────────────
+  'browser.humanize.action': {
+    description: 'Run a browser action through the humanizer + spend-lock + cap-check + audit. Params: { sessionId, accountId?, platform?, kind, countAs?, target?, value?, scrollPx?, waitMs? }',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const { humanizeAction } = await import('./r177-browser-humanizer.js')
+      return humanizeAction(ws, params as unknown as Parameters<typeof humanizeAction>[1])
+    },
+  },
+  'browser.humanize.profileUpsert': {
+    description: 'Set the humanizer profile (typing WPM, pause range, peak hours, daily caps). Params: { accountId?, typingWpmMin?, typingWpmMax?, pauseMinMs?, pauseMaxMs?, peakHours?, dailyCaps?, weekendFactor? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { profileUpsert } = await import('./r177-browser-humanizer.js')
+      return profileUpsert(ws, params as unknown as Parameters<typeof profileUpsert>[1])
+    },
+  },
+  'browser.humanize.profileGet': {
+    description: 'Get the humanizer profile. Params: { accountId? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { profileGet } = await import('./r177-browser-humanizer.js')
+      return profileGet(ws, (params as { accountId?: string }).accountId)
+    },
+  },
+  'browser.humanize.actionLog': {
+    description: 'List recent browser actions. Params: { sessionId?, accountId?, platform?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { actionLogList } = await import('./r177-browser-humanizer.js')
+      return actionLogList(ws, (params as Parameters<typeof actionLogList>[1]) ?? {})
+    },
+  },
+  'browser.humanize.dailyCounts': {
+    description: 'Per-kind action counts for the last 24h. Params: { accountId?, platform? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { dailyCountsSummary } = await import('./r177-browser-humanizer.js')
+      return dailyCountsSummary(ws, (params as Parameters<typeof dailyCountsSummary>[1]) ?? {})
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────

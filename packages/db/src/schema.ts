@@ -6820,3 +6820,45 @@ export const platformRankingPlaybook = pgTable('platform_ranking_playbook', {
   sourceUrl:    text('source_url'),
   updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
 })
+
+// ─── R146.177 — Browser humanizer + spend-lock + audit ─────────────
+export const humanizerProfile = pgTable('humanizer_profile', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  accountId:        text('account_id'),
+  typingWpmMin:     integer('typing_wpm_min').notNull().default(35),
+  typingWpmMax:     integer('typing_wpm_max').notNull().default(75),
+  mouseJitterPx:    integer('mouse_jitter_px').notNull().default(4),
+  pauseMinMs:       integer('pause_min_ms').notNull().default(250),
+  pauseMaxMs:       integer('pause_max_ms').notNull().default(1800),
+  idleJitterMs:     integer('idle_jitter_ms').notNull().default(600),
+  peakHours:        jsonb('peak_hours').$type<number[]>().notNull().default([]),
+  dailyCaps:        jsonb('daily_caps').$type<Record<string, Record<string, number>>>().notNull().default({}),
+  weekendFactor:    real('weekend_factor').notNull().default(1.15),
+  status:           text('status').notNull().default('active'),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:        bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [index('hp_ws_idx').on(t.workspaceId)])
+
+export const browserActionLog = pgTable('browser_action_log', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  accountId:      text('account_id'),
+  sessionId:      text('session_id').notNull(),
+  platform:       text('platform'),
+  kind:           text('kind').notNull(),
+  target:         text('target'),
+  args:           jsonb('args').$type<Record<string, unknown>>().notNull().default({}),
+  result:         jsonb('result').$type<Record<string, unknown>>().notNull().default({}),
+  spendBlocked:   boolean('spend_blocked').notNull().default(false),
+  tosWarning:     text('tos_warning'),
+  pauseMsUsed:    integer('pause_ms_used'),
+  success:        boolean('success').notNull().default(false),
+  error:          text('error'),
+  startedAt:      bigint('started_at', { mode: 'number' }).notNull(),
+  endedAt:        bigint('ended_at', { mode: 'number' }),
+}, (t) => [
+  index('bal_ws_idx').on(t.workspaceId, t.startedAt),
+  index('bal_session_idx').on(t.sessionId, t.startedAt),
+  index('bal_account_idx').on(t.accountId, t.startedAt),
+])
