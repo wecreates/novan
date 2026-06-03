@@ -6138,3 +6138,63 @@ export const videoPaiLesson = pgTable('video_pai_lesson', {
   createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
   retiredAt:    bigint('retired_at', { mode: 'number' }),
 }, (t) => [index('vpl_ws_idx').on(t.workspaceId, t.topic, t.confidence)])
+
+// ─── R146.161 — Social comment harvest + self-improvement ──────────
+export const socialComment = pgTable('social_comment', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  platform:        text('platform').notNull(),
+  accountId:       text('account_id').notNull(),
+  postId:          text('post_id'),
+  externalPostId:  text('external_post_id'),
+  externalId:      text('external_id').notNull(),
+  authorHandle:    text('author_handle'),
+  authorId:        text('author_id'),
+  body:            text('body').notNull(),
+  publishedAt:     bigint('published_at', { mode: 'number' }),
+  fetchedAt:       bigint('fetched_at', { mode: 'number' }).notNull(),
+  sentiment:       text('sentiment'),
+  intent:          text('intent'),
+  themes:          jsonb('themes').$type<string[]>().notNull().default([]),
+  replyPriority:   integer('reply_priority').notNull().default(0),
+  hiddenAt:        bigint('hidden_at', { mode: 'number' }),
+  repliedAt:       bigint('replied_at', { mode: 'number' }),
+  replyExternalId: text('reply_external_id'),
+}, (t) => [
+  uniqueIndex('sc_platform_extid_idx').on(t.platform, t.externalId),
+  index('sc_ws_idx').on(t.workspaceId, t.fetchedAt),
+  index('sc_ws_intent_idx').on(t.workspaceId, t.intent, t.fetchedAt),
+])
+
+export const socialCommentTheme = pgTable('social_comment_theme', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  theme:         text('theme').notNull(),
+  count:         integer('count').notNull().default(0),
+  posCount:      integer('pos_count').notNull().default(0),
+  negCount:      integer('neg_count').notNull().default(0),
+  sentimentAvg:  real('sentiment_avg').notNull().default(0),
+  firstSeenAt:   bigint('first_seen_at', { mode: 'number' }).notNull(),
+  lastSeenAt:    bigint('last_seen_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('sct_ws_theme_idx').on(t.workspaceId, t.theme),
+  index('sct_ws_count_idx').on(t.workspaceId, t.count),
+])
+
+export const socialReplyDraft = pgTable('social_reply_draft', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  commentId:    text('comment_id').notNull(),
+  body:         text('body').notNull(),
+  source:       text('source').notNull().default('rules'),
+  model:        text('model'),
+  status:       text('status').notNull().default('draft'),
+  approvedBy:   text('approved_by'),
+  approvedAt:   bigint('approved_at', { mode: 'number' }),
+  sentAt:       bigint('sent_at', { mode: 'number' }),
+  sendError:    text('send_error'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('srd_ws_idx').on(t.workspaceId, t.status, t.createdAt),
+  index('srd_comment_idx').on(t.commentId),
+])

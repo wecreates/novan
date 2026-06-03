@@ -4980,6 +4980,81 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return paiLessons(ws, (params as Parameters<typeof paiLessons>[1]) ?? {})
     },
   },
+
+  // ─── R146.161 — Social comment harvest + self-improvement ──────────
+  'social.comments.harvest': {
+    description: 'Fan out to every active social account, fetch new comments.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { commentsHarvest } = await import('./r161-social-comments.js')
+      return commentsHarvest(ws)
+    },
+  },
+  'social.comments.analyze': {
+    description: 'Re-roll up themes from the last N days. Params: { windowDays? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { commentsAnalyze } = await import('./r161-social-comments.js')
+      return commentsAnalyze(ws, (params as { windowDays?: number })?.windowDays)
+    },
+  },
+  'social.comments.selfImprove': {
+    description: 'Mint PAI lessons from audience themes (loves/dislikes/requests).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { commentsSelfImprove } = await import('./r161-social-comments.js')
+      return commentsSelfImprove(ws)
+    },
+  },
+  'social.comments.list': {
+    description: 'List comments. Params: { intent?, sentiment?, limit?, unrepliedOnly? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { commentsList } = await import('./r161-social-comments.js')
+      return commentsList(ws, (params as Parameters<typeof commentsList>[1]) ?? {})
+    },
+  },
+  'social.comments.themes': {
+    description: 'Top themes across the comment corpus. Params: { limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { themesTop } = await import('./r161-social-comments.js')
+      return themesTop(ws, (params as { limit?: number })?.limit)
+    },
+  },
+  'social.reply.draft': {
+    description: 'Draft a reply for one comment. Params: { commentId }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { replyDraftCreate } = await import('./r161-social-comments.js')
+      return replyDraftCreate(ws, (params as { commentId: string }).commentId)
+    },
+  },
+  'social.reply.autoDraft': {
+    description: 'Auto-draft replies for top-N high-priority unanswered comments. Params: { limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { autoDraftBacklog } = await import('./r161-social-comments.js')
+      return autoDraftBacklog(ws, (params as { limit?: number })?.limit ?? 10)
+    },
+  },
+  'social.reply.approve': {
+    description: 'Approve a draft. Params: { draftId, approvedBy }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { replyDraftApprove } = await import('./r161-social-comments.js')
+      const p = params as { draftId: string; approvedBy?: string }
+      return replyDraftApprove(ws, p.draftId, p.approvedBy ?? 'operator')
+    },
+  },
+  'social.reply.send': {
+    description: 'Send an approved draft to the platform. Params: { draftId }',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const { replyDraftSend } = await import('./r161-social-comments.js')
+      return replyDraftSend(ws, (params as { draftId: string }).draftId)
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────

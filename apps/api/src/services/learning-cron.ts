@@ -1257,6 +1257,9 @@ const INTERVALS = {
   // R146.159 — PKM maintenance: daily snapshot, weekly review (Monday),
   // concept maturity update. All gated by UTC time inside their handlers.
   pkmMaintenance:        60 * 60_000,
+  // R146.161 — Social comment harvest every 30min; self-improve daily.
+  socialCommentHarvest:  30 * 60_000,
+  socialCommentImprove:  60 * 60_000,
 }
 
 /**
@@ -1567,6 +1570,51 @@ async function runPkmMaintenance(): Promise<void> {
   }
 }
 
+// R146.161 — Harvest comments across every active workspace's social
+// accounts. Each workspace runs in its own try so one bad token doesn't
+// poison the sweep.
+async function runSocialCommentHarvest(): Promise<void> {
+  if (process.env['DISABLE_SOCIAL_COMMENTS'] === '1') return
+  try {
+    const ids = await listWorkspaceIds()
+    const { commentsHarvest, autoDraftBacklog } = await import('./r161-social-comments.js')
+    let totalNew = 0
+    for (const ws of ids) {
+      try {
+        const r = await commentsHarvest(ws)
+        totalNew += r.new
+        if (r.new > 0) await autoDraftBacklog(ws, 10).catch(() => null)
+      } catch (e) { await emit('cron.error', { task: 'social_comment_harvest', workspace: ws, error: (e as Error).message }) }
+    }
+    if (totalNew > 0) await emit('cron.social_comment_harvest', { workspaces: ids.length, new: totalNew })
+  } catch (e) { await emit('cron.error', { task: 'social_comment_harvest', error: (e as Error).message }) }
+}
+
+// R146.161 — Self-improve once per UTC day at 06:00. Rolls up themes
+// into PAI lessons so future content generation knows what the audience
+// loves/dislikes/requests.
+let _lastSocialImproveDay = -1
+async function runSocialCommentImprove(): Promise<void> {
+  if (process.env['DISABLE_SOCIAL_COMMENTS'] === '1') return
+  const now = new Date()
+  if (now.getUTCHours() !== 6) return
+  const today = Math.floor(now.getTime() / (24 * 60 * 60_000))
+  if (_lastSocialImproveDay === today) return
+  _lastSocialImproveDay = today
+  try {
+    const ids = await listWorkspaceIds()
+    const { commentsSelfImprove } = await import('./r161-social-comments.js')
+    let totalLessons = 0
+    for (const ws of ids) {
+      try {
+        const r = await commentsSelfImprove(ws)
+        totalLessons += r.lessonsMinted
+      } catch (e) { await emit('cron.error', { task: 'social_comment_improve', workspace: ws, error: (e as Error).message }) }
+    }
+    await emit('cron.social_comment_improve', { workspaces: ids.length, lessons: totalLessons })
+  } catch (e) { await emit('cron.error', { task: 'social_comment_improve', error: (e as Error).message }) }
+}
+
 // R146.130 — Morning push briefing. Fires hourly but only sends if current
 // UTC hour matches BRIEFING_HOUR (default 7) and not already sent today.
 let lastBriefingDay = -1
@@ -1830,6 +1878,8 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runNightlyBackup,               INTERVALS.nightlyBackup))
   handles.push(scheduleJittered(runMorningBriefing,             INTERVALS.morningBriefing))
   handles.push(scheduleJittered(runPkmMaintenance,              INTERVALS.pkmMaintenance))
+  handles.push(scheduleJittered(runSocialCommentHarvest,        INTERVALS.socialCommentHarvest))
+  handles.push(scheduleJittered(runSocialCommentImprove,        INTERVALS.socialCommentImprove))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
