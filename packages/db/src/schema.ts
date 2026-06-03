@@ -6781,3 +6781,42 @@ export const imageUpscaleJob = pgTable('image_upscale_job', {
   createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
   endedAt:      bigint('ended_at', { mode: 'number' }),
 }, (t) => [index('iuj_ws_idx').on(t.workspaceId, t.createdAt)])
+
+// ─── R146.176 — Video tactics analyzer ─────────────────────────────
+export const videoTacticAnalysis = pgTable('video_tactic_analysis', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  sourceUrl:       text('source_url').notNull(),
+  platform:        text('platform'),
+  durationSec:     real('duration_sec'),
+  isShortForm:     boolean('is_short_form').notNull().default(false),
+  hook:            jsonb('hook').$type<Record<string, unknown>>().notNull().default({}),
+  cuts:            jsonb('cuts').$type<Record<string, unknown>>().notNull().default({}),
+  retention:       jsonb('retention').$type<Array<{ atSec: number; kind: string; desc: string }>>().notNull().default([]),
+  engagement:      jsonb('engagement').$type<Record<string, unknown>>().notNull().default({}),
+  captions:        jsonb('captions').$type<Record<string, unknown>>().notNull().default({}),
+  audio:           jsonb('audio').$type<Record<string, unknown>>().notNull().default({}),
+  platformSignals: jsonb('platform_signals').$type<Record<string, unknown>>().notNull().default({}),
+  transcript:      text('transcript'),
+  summary:         text('summary'),
+  score:           real('score').notNull().default(0),
+  costUsd:         real('cost_usd').notNull().default(0),
+  status:          text('status').notNull().default('pending'),
+  error:           text('error'),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+  analyzedAt:      bigint('analyzed_at', { mode: 'number' }),
+}, (t) => [
+  index('vta_ws_idx').on(t.workspaceId, t.createdAt),
+  index('vta_ws_platform_idx').on(t.workspaceId, t.platform),
+])
+
+export const platformRankingPlaybook = pgTable('platform_ranking_playbook', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id'),
+  platform:     text('platform').notNull(),
+  form:         text('form').notNull(),
+  rules:        jsonb('rules').$type<Array<{ rule: string; evidence?: string; weight: number }>>().notNull().default([]),
+  version:      integer('version').notNull().default(1),
+  sourceUrl:    text('source_url'),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+})

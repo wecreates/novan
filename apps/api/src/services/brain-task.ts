@@ -5793,6 +5793,49 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return upscaleJobsList(ws, (params as Parameters<typeof upscaleJobsList>[1]) ?? {})
     },
   },
+
+  // ─── R146.176 — Video tactics analyzer ────────────────────────────
+  'video.tactics.analyze': {
+    description: 'Watch a video and extract: hook, cut tempo, retention beats, captions, engagement, platform ranking signals. Params: { sourceUrl, platform? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { tacticAnalyze } = await import('./r176-video-tactics.js')
+      return tacticAnalyze(ws, params as unknown as Parameters<typeof tacticAnalyze>[1])
+    },
+  },
+  'video.tactics.compare': {
+    description: 'Diff two analyses + give improvement suggestions for A. Params: { id1, id2 }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { compareTactics } = await import('./r176-video-tactics.js')
+      return compareTactics(ws, params as unknown as Parameters<typeof compareTactics>[1])
+    },
+  },
+  'video.tactics.get': {
+    description: 'Get a tactic analysis. Params: { id }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { tacticAnalysisGet } = await import('./r176-video-tactics.js')
+      return tacticAnalysisGet(ws, (params as { id: string }).id)
+    },
+  },
+  'video.tactics.list': {
+    description: 'List analyses. Params: { platform?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { tacticAnalysesList } = await import('./r176-video-tactics.js')
+      return tacticAnalysesList(ws, (params as Parameters<typeof tacticAnalysesList>[1]) ?? {})
+    },
+  },
+  'video.tactics.playbook': {
+    description: 'Get the workspace-or-global ranking playbook for a platform+form. Params: { platform, form }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { playbookGet } = await import('./r176-video-tactics.js')
+      const p = params as { platform: string; form: 'short' | 'long' }
+      return playbookGet(ws, p.platform, p.form)
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────
