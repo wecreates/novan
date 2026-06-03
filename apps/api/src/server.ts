@@ -558,6 +558,44 @@ app.options<{ Params: { workspaceId: string } }>('/t/:workspaceId', async (_req,
   return reply.code(204).send()
 })
 
+// R146.172 — Mixcraft bundle download endpoints.
+//   GET /mixcraft/:workspaceId/:bundleId/manifest.json — Mixcraft import spec
+//   GET /mixcraft/:workspaceId/:bundleId/import.ps1    — PowerShell driver
+//   GET /mixcraft/:workspaceId/controller.js           — MIDI controller script
+app.get<{ Params: { workspaceId: string; bundleId: string } }>('/mixcraft/:workspaceId/:bundleId/manifest.json', async (req, reply) => {
+  const { workspaceId, bundleId } = req.params
+  try {
+    const { manifestFor } = await import('./services/r172-mixcraft-adapter.js')
+    const m = await manifestFor(workspaceId, bundleId)
+    if (!m) return reply.code(404).send({ error: 'bundle not found' })
+    return reply.type('application/json').send(m)
+  } catch (e) {
+    return reply.code(500).send({ error: (e as Error).message })
+  }
+})
+
+app.get<{ Params: { workspaceId: string; bundleId: string } }>('/mixcraft/:workspaceId/:bundleId/import.ps1', async (req, reply) => {
+  const { workspaceId, bundleId } = req.params
+  try {
+    const { manifestFor, importScriptPs1 } = await import('./services/r172-mixcraft-adapter.js')
+    const m = await manifestFor(workspaceId, bundleId)
+    if (!m) return reply.code(404).type('text/plain').send('# bundle not found')
+    const script = importScriptPs1(m)
+    return reply.type('text/plain; charset=utf-8').header('content-disposition', `attachment; filename="novan-mixcraft-${bundleId.slice(0, 8)}.ps1"`).send(script)
+  } catch (e) {
+    return reply.code(500).type('text/plain').send(`# error: ${(e as Error).message}`)
+  }
+})
+
+app.get<{ Params: { workspaceId: string } }>('/mixcraft/:workspaceId/controller.js', async (_req, reply) => {
+  try {
+    const { controllerScriptJs } = await import('./services/r172-mixcraft-adapter.js')
+    return reply.type('text/javascript; charset=utf-8').header('content-disposition', 'attachment; filename="novan-mixcraft-controller.js"').send(controllerScriptJs())
+  } catch (e) {
+    return reply.code(500).type('text/plain').send(`// error: ${(e as Error).message}`)
+  }
+})
+
 // /metrics is registered by metricsRoutes plugin (queue depths + R119 registry).
 await app.register(workflowRoutes, { prefix: '/api/v1/workflows' })
 await app.register(maintenanceRoutes, { prefix: '/api/v1' })

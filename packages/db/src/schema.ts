@@ -6571,3 +6571,44 @@ export const audioSyncJob = pgTable('audio_sync_job', {
   index('asj_run_idx').on(t.runId, t.createdAt),
   index('asj_status_idx').on(t.workspaceId, t.status),
 ])
+
+// ─── R146.172 — Mixcraft adapter ───────────────────────────────────
+export const mixcraftBundle = pgTable('mixcraft_bundle', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  businessId:       text('business_id'),
+  sourceKind:       text('source_kind').notNull().default('music_job'),
+  sourceRef:        text('source_ref'),
+  name:             text('name').notNull(),
+  bpm:              integer('bpm').notNull().default(120),
+  timeSignature:    text('time_signature').notNull().default('4/4'),
+  sampleRate:       integer('sample_rate').notNull().default(44100),
+  bitDepth:         integer('bit_depth').notNull().default(24),
+  masterAudioUrl:   text('master_audio_url'),
+  durationSec:      real('duration_sec'),
+  status:           text('status').notNull().default('ready'),
+  importedAt:       bigint('imported_at', { mode: 'number' }),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('mb_ws_idx').on(t.workspaceId, t.status, t.createdAt)])
+
+export const mixcraftTrack = pgTable('mixcraft_track', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  bundleId:     text('bundle_id').notNull(),
+  name:         text('name').notNull(),
+  role:         text('role').notNull().default('audio'),
+  audioUrl:     text('audio_url').notNull(),
+  midiUrl:      text('midi_url'),
+  positionSec:  real('position_sec').notNull().default(0),
+  durationSec:  real('duration_sec'),
+  volumeDb:     real('volume_db').notNull().default(0),
+  pan:          real('pan').notNull().default(0),
+  muted:        boolean('muted').notNull().default(false),
+  solo:         boolean('solo').notNull().default(false),
+  colorHex:     text('color_hex'),
+  orderIdx:     integer('order_idx').notNull().default(0),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('mt_bundle_idx').on(t.bundleId, t.orderIdx),
+  index('mt_ws_idx').on(t.workspaceId),
+])

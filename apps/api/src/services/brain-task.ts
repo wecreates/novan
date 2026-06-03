@@ -5565,6 +5565,75 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return audioJobsList(ws, (params as Parameters<typeof audioJobsList>[1]) ?? {})
     },
   },
+
+  // ─── R146.172 — Mixcraft adapter ──────────────────────────────────
+  'mixcraft.bundleCreate': {
+    description: 'Create a Mixcraft project bundle. Params: { name, bpm?, timeSignature?, sampleRate?, bitDepth?, masterAudioUrl?, durationSec?, sourceKind?, sourceRef?, businessId? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { bundleCreate } = await import('./r172-mixcraft-adapter.js')
+      return bundleCreate(ws, params as unknown as Parameters<typeof bundleCreate>[1])
+    },
+  },
+  'mixcraft.trackAdd': {
+    description: 'Add a track to a Mixcraft bundle. Params: { bundleId, name, audioUrl, role?, midiUrl?, positionSec?, durationSec?, volumeDb?, pan?, muted?, solo?, colorHex?, orderIdx? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { trackAdd } = await import('./r172-mixcraft-adapter.js')
+      return trackAdd(ws, params as unknown as Parameters<typeof trackAdd>[1])
+    },
+  },
+  'mixcraft.fromMusicJob': {
+    description: 'Wrap a Novan music-studio result (stems + master) into a Mixcraft bundle. Params: { name?, bpm?, timeSignature?, durationSec?, masterAudioUrl?, stems[], sourceRef?, businessId? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { fromMusicJob } = await import('./r172-mixcraft-adapter.js')
+      return fromMusicJob(ws, params as unknown as Parameters<typeof fromMusicJob>[1])
+    },
+  },
+  'mixcraft.bundles': {
+    description: 'List Mixcraft bundles. Params: { limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { bundleList } = await import('./r172-mixcraft-adapter.js')
+      return bundleList(ws, (params as { limit?: number }) ?? {})
+    },
+  },
+  'mixcraft.bundle': {
+    description: 'Get a bundle + its tracks. Params: { bundleId }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { bundleGet } = await import('./r172-mixcraft-adapter.js')
+      return bundleGet(ws, (params as { bundleId: string }).bundleId)
+    },
+  },
+  'mixcraft.manifest': {
+    description: 'Return the JSON manifest for a bundle (same shape served by GET /mixcraft/:ws/:id/manifest.json). Params: { bundleId }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { manifestFor } = await import('./r172-mixcraft-adapter.js')
+      return manifestFor(ws, (params as { bundleId: string }).bundleId)
+    },
+  },
+  'mixcraft.importScript': {
+    description: 'Return the PowerShell import driver for a bundle. Params: { bundleId, mixcraftExe?, workDir? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { manifestFor, importScriptPs1 } = await import('./r172-mixcraft-adapter.js')
+      const p = params as { bundleId: string; mixcraftExe?: string; workDir?: string }
+      const m = await manifestFor(ws, p.bundleId)
+      if (!m) return { error: 'bundle not found' }
+      return { script: importScriptPs1(m, { ...(p.mixcraftExe ? { mixcraftExe: p.mixcraftExe } : {}), ...(p.workDir ? { workDir: p.workDir } : {}) }) }
+    },
+  },
+  'mixcraft.controllerScript': {
+    description: 'Return the Mixcraft 10 MIDI controller script (JavaScript).',
+    risk: 'low',
+    handler: async () => {
+      const { controllerScriptJs } = await import('./r172-mixcraft-adapter.js')
+      return { script: controllerScriptJs() }
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────
