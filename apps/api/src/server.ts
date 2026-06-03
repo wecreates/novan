@@ -497,6 +497,40 @@ app.get<{ Params: { slug: string } }>('/garden/:slug', async (req, reply) => {
     return reply.code(500).send(`Error: ${(e as Error).message}`)
   }
 })
+// R146.162 — Public lead-magnet landing page.
+// URL: /m/:workspaceId/:slug  → renders magnet body + opt-in form.
+// POST /m/:workspaceId/:slug → captures the email (idempotent dedupe).
+app.get<{ Params: { workspaceId: string; slug: string } }>('/m/:workspaceId/:slug', async (req, reply) => {
+  const { workspaceId, slug } = req.params
+  if (!workspaceId || !slug || slug.length > 200) return reply.code(404).send('Not found')
+  try {
+    const { magnetGetBySlug } = await import('./services/r162-owned-audience.js')
+    const m = await magnetGetBySlug(workspaceId, slug)
+    if (!m) return reply.code(404).type('text/html').send('<h1>Not found</h1>')
+    const escape = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escape(m.title)}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;max-width:560px;margin:3rem auto;padding:0 1rem;color:#1a1a1a;line-height:1.55}h1{font-size:1.8rem;margin-bottom:0.5rem}pre{white-space:pre-wrap;font-family:inherit;background:none;padding:0}form{display:flex;flex-direction:column;gap:0.5rem;margin-top:1.5rem;padding:1rem;border:1px solid #e0e0e0;border-radius:6px}input{padding:0.6rem;border:1px solid #ccc;border-radius:4px;font-size:1rem}button{padding:0.7rem;background:#1a1a1a;color:white;border:none;border-radius:4px;font-size:1rem;cursor:pointer}button:hover{background:#000}.msg{color:#0a7;margin-top:0.5rem}</style></head><body><article><h1>${escape(m.title)}</h1><pre>${escape(m.body)}</pre></article><form method="POST" action=""><label>Email to get this</label><input type="email" name="email" required placeholder="you@example.com"><input type="text" name="name" placeholder="Name (optional)"><button type="submit">Send it</button></form></body></html>`
+    return reply.type('text/html').send(html)
+  } catch (e) {
+    return reply.code(500).send(`Error: ${(e as Error).message}`)
+  }
+})
+
+app.post<{ Params: { workspaceId: string; slug: string }; Body: { email?: string; name?: string } }>('/m/:workspaceId/:slug', async (req, reply) => {
+  const { workspaceId, slug } = req.params
+  const body = (req.body ?? {}) as { email?: string; name?: string }
+  if (!body.email) return reply.code(400).type('text/html').send('<p>Email required. <a href="">Back</a></p>')
+  try {
+    const { magnetGetBySlug, captureCreate } = await import('./services/r162-owned-audience.js')
+    const m = await magnetGetBySlug(workspaceId, slug)
+    if (!m) return reply.code(404).send('Not found')
+    await captureCreate(workspaceId, { email: body.email, ...(body.name ? { name: body.name } : {}), magnetId: m.id, source: 'page', sourceRef: slug })
+    const escape = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    return reply.type('text/html').send(`<!doctype html><html><body style="font-family:system-ui;max-width:560px;margin:3rem auto;padding:0 1rem;text-align:center"><h1>Check your email</h1><p>Sent to <strong>${escape(body.email)}</strong>. (If you don't see it, check spam.)</p></body></html>`)
+  } catch (e) {
+    return reply.code(500).send(`Error: ${(e as Error).message}`)
+  }
+})
+
 // /metrics is registered by metricsRoutes plugin (queue depths + R119 registry).
 await app.register(workflowRoutes, { prefix: '/api/v1/workflows' })
 await app.register(maintenanceRoutes, { prefix: '/api/v1' })

@@ -6198,3 +6198,84 @@ export const socialReplyDraft = pgTable('social_reply_draft', {
   index('srd_ws_idx').on(t.workspaceId, t.status, t.createdAt),
   index('srd_comment_idx').on(t.commentId),
 ])
+
+// ─── R146.162 — Owned-audience loop ────────────────────────────────
+export const leadMagnet = pgTable('lead_magnet', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  businessId:   text('business_id'),
+  title:        text('title').notNull(),
+  slug:         text('slug').notNull(),
+  format:       text('format').notNull().default('pdf'),
+  body:         text('body').notNull(),
+  fileUrl:      text('file_url'),
+  signups:      integer('signups').notNull().default(0),
+  status:       text('status').notNull().default('active'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  archivedAt:   bigint('archived_at', { mode: 'number' }),
+}, (t) => [
+  uniqueIndex('lm_ws_slug_idx').on(t.workspaceId, t.slug),
+  index('lm_ws_idx').on(t.workspaceId, t.status, t.createdAt),
+])
+
+export const leadCapture = pgTable('lead_capture', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  magnetId:        text('magnet_id'),
+  email:           text('email').notNull(),
+  name:            text('name'),
+  source:          text('source').notNull().default('page'),
+  sourceRef:       text('source_ref'),
+  segments:        jsonb('segments').$type<string[]>().notNull().default([]),
+  subscribedAt:    bigint('subscribed_at', { mode: 'number' }).notNull(),
+  unsubscribedAt:  bigint('unsubscribed_at', { mode: 'number' }),
+  lastOpenAt:      bigint('last_open_at', { mode: 'number' }),
+  lastClickAt:     bigint('last_click_at', { mode: 'number' }),
+  bounceCount:     integer('bounce_count').notNull().default(0),
+}, (t) => [
+  uniqueIndex('lc_ws_email_idx').on(t.workspaceId, t.email),
+  index('lc_ws_subscribed_idx').on(t.workspaceId, t.subscribedAt),
+])
+
+export const emailCampaign = pgTable('email_campaign', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  name:           text('name').notNull(),
+  subjectA:       text('subject_a').notNull(),
+  subjectB:       text('subject_b'),
+  body:           text('body').notNull(),
+  segmentFilter:  jsonb('segment_filter').$type<Record<string, unknown>>().notNull().default({}),
+  fromAddress:    text('from_address'),
+  fromName:       text('from_name'),
+  replyTo:        text('reply_to'),
+  scheduledAt:    bigint('scheduled_at', { mode: 'number' }),
+  sentAt:         bigint('sent_at', { mode: 'number' }),
+  status:         text('status').notNull().default('draft'),
+  sends:          integer('sends').notNull().default(0),
+  opens:          integer('opens').notNull().default(0),
+  clicks:         integer('clicks').notNull().default(0),
+  bounces:        integer('bounces').notNull().default(0),
+  winnerVariant:  text('winner_variant'),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ec_ws_idx').on(t.workspaceId, t.status, t.createdAt),
+  index('ec_scheduled_idx').on(t.status, t.scheduledAt),
+])
+
+export const emailSend = pgTable('email_send', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  campaignId:   text('campaign_id').notNull(),
+  captureId:    text('capture_id').notNull(),
+  variant:      text('variant').notNull().default('a'),
+  provider:     text('provider').notNull().default('resend'),
+  providerId:   text('provider_id'),
+  sentAt:       bigint('sent_at', { mode: 'number' }).notNull(),
+  openedAt:     bigint('opened_at', { mode: 'number' }),
+  clickedAt:    bigint('clicked_at', { mode: 'number' }),
+  bouncedAt:    bigint('bounced_at', { mode: 'number' }),
+  error:        text('error'),
+}, (t) => [
+  index('es_campaign_idx').on(t.campaignId, t.sentAt),
+  index('es_capture_idx').on(t.captureId, t.sentAt),
+])

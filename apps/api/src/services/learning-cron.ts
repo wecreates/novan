@@ -1260,6 +1260,8 @@ const INTERVALS = {
   // R146.161 — Social comment harvest every 30min; self-improve daily.
   socialCommentHarvest:  30 * 60_000,
   socialCommentImprove:  60 * 60_000,
+  // R146.162 — Owned-audience: segment refresh + win-back detection.
+  audienceMaint:         60 * 60_000,
 }
 
 /**
@@ -1590,6 +1592,26 @@ async function runSocialCommentHarvest(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'social_comment_harvest', error: (e as Error).message }) }
 }
 
+// R146.162 — Audience maintenance: segment refresh + win-back drafting.
+let _lastWinBackDay = -1
+async function runAudienceMaint(): Promise<void> {
+  if (process.env['DISABLE_AUDIENCE_MAINT'] === '1') return
+  try {
+    const ids = await listWorkspaceIds()
+    const { segmentSync, winBackTick } = await import('./r162-owned-audience.js')
+    const now = new Date()
+    const today = Math.floor(now.getTime() / (24 * 60 * 60_000))
+    const winBackHour = now.getUTCHours() === 8 && _lastWinBackDay !== today
+    if (winBackHour) _lastWinBackDay = today
+    for (const ws of ids) {
+      try {
+        await segmentSync(ws)
+        if (winBackHour) await winBackTick(ws).catch(() => null)
+      } catch (e) { await emit('cron.error', { task: 'audience_maint', workspace: ws, error: (e as Error).message }) }
+    }
+  } catch (e) { await emit('cron.error', { task: 'audience_maint', error: (e as Error).message }) }
+}
+
 // R146.161 — Self-improve once per UTC day at 06:00. Rolls up themes
 // into PAI lessons so future content generation knows what the audience
 // loves/dislikes/requests.
@@ -1880,6 +1902,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runPkmMaintenance,              INTERVALS.pkmMaintenance))
   handles.push(scheduleJittered(runSocialCommentHarvest,        INTERVALS.socialCommentHarvest))
   handles.push(scheduleJittered(runSocialCommentImprove,        INTERVALS.socialCommentImprove))
+  handles.push(scheduleJittered(runAudienceMaint,               INTERVALS.audienceMaint))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

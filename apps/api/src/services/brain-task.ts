@@ -5055,6 +5055,104 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return replyDraftSend(ws, (params as { draftId: string }).draftId)
     },
   },
+
+  // ─── R146.162 — Owned-audience loop ────────────────────────────────
+  'magnet.create': {
+    description: 'Create a lead magnet. Params: { title, body, slug?, format?, fileUrl?, businessId? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { magnetCreate } = await import('./r162-owned-audience.js')
+      return magnetCreate(ws, params as unknown as Parameters<typeof magnetCreate>[1])
+    },
+  },
+  'magnet.draftFromBrain': {
+    description: 'Auto-write a magnet from brain knowledge. Params: { topic, format?, businessId? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { magnetDraftFromBrain } = await import('./r162-owned-audience.js')
+      return magnetDraftFromBrain(ws, params as { topic: string; format?: 'pdf' | 'checklist' | 'template' | 'swipe' | 'course'; businessId?: string })
+    },
+  },
+  'magnet.list': {
+    description: 'List active magnets.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { magnetList } = await import('./r162-owned-audience.js')
+      return magnetList(ws, (params as { limit?: number }) ?? {})
+    },
+  },
+  'list.capture': {
+    description: 'Add an email to the workspace list. Params: { email, name?, magnetId?, source?, sourceRef? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { captureCreate } = await import('./r162-owned-audience.js')
+      return captureCreate(ws, params as unknown as Parameters<typeof captureCreate>[1])
+    },
+  },
+  'list.unsubscribe': {
+    description: 'Unsubscribe an email. Params: { email }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { captureUnsubscribe } = await import('./r162-owned-audience.js')
+      return captureUnsubscribe(ws, (params as { email: string }).email)
+    },
+  },
+  'list.segmentSync': {
+    description: 'Recompute behavior segments across the list.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { segmentSync } = await import('./r162-owned-audience.js')
+      return segmentSync(ws)
+    },
+  },
+  'list.stats': {
+    description: 'List size + segment breakdown for dashboards.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { listStats } = await import('./r162-owned-audience.js')
+      return listStats(ws)
+    },
+  },
+  'list.captures': {
+    description: 'List captures. Params: { segment?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { listCaptures } = await import('./r162-owned-audience.js')
+      return listCaptures(ws, (params as Parameters<typeof listCaptures>[1]) ?? {})
+    },
+  },
+  'email.campaignCreate': {
+    description: 'Draft a campaign. Params: { name, subjectA, subjectB?, body, segmentFilter?, fromAddress, fromName?, replyTo?, scheduledAt? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { campaignCreate } = await import('./r162-owned-audience.js')
+      return campaignCreate(ws, params as unknown as Parameters<typeof campaignCreate>[1])
+    },
+  },
+  'email.campaignSend': {
+    description: 'Send a campaign now. Requires resend_api_key in vault + fromAddress on campaign. Params: { campaignId }',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const { campaignSendNow } = await import('./r162-owned-audience.js')
+      return campaignSendNow(ws, (params as { campaignId: string }).campaignId)
+    },
+  },
+  'email.campaigns': {
+    description: 'List campaigns. Params: { status?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { listCampaigns } = await import('./r162-owned-audience.js')
+      return listCampaigns(ws, (params as Parameters<typeof listCampaigns>[1]) ?? {})
+    },
+  },
+  'list.winBack': {
+    description: 'Detect dormant subscribers and auto-draft a win-back campaign.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { winBackTick } = await import('./r162-owned-audience.js')
+      return winBackTick(ws)
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────
