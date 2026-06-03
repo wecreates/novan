@@ -6087,6 +6087,58 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return findingResolve(ws, params as unknown as Parameters<typeof findingResolve>[1])
     },
   },
+
+  // ─── R146.182 — Voice layer ───────────────────────────────────────
+  'voice.persona.upsert': {
+    description: 'Create or update a voice persona. Params: { name?, preset?, wakeWord?, voiceId?, personaPrompt?, tone?, alwaysOn?, proactiveEnabled? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { personaUpsert } = await import('./r182-voice-layer.js')
+      return personaUpsert(ws, params as unknown as Parameters<typeof personaUpsert>[1])
+    },
+  },
+  'voice.persona.get': {
+    description: 'Get persona + client-side wake-word config. Params: { name? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { personaGet, wakeWordConfig } = await import('./r182-voice-layer.js')
+      const p = await personaGet(ws, (params as { name?: string })?.name ?? 'novan')
+      if (!p) return null
+      return { persona: p, wakeWordConfig: wakeWordConfig(p) }
+    },
+  },
+  'voice.persona.list': {
+    description: 'List personas.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { personaList } = await import('./r182-voice-layer.js')
+      return personaList(ws)
+    },
+  },
+  'voice.session.ping': {
+    description: 'Cross-device heartbeat + draft sync. Params: { userId, deviceId, deviceKind?, activeChatId?, draftInput?, draftVoiceState? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { sessionPing } = await import('./r182-voice-layer.js')
+      return sessionPing(ws, params as unknown as Parameters<typeof sessionPing>[1])
+    },
+  },
+  'voice.session.handoff': {
+    description: 'Transfer active chat + draft from one device to another. Params: { userId, fromDeviceId, toDeviceId }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { handoff } = await import('./r182-voice-layer.js')
+      return handoff(ws, params as unknown as Parameters<typeof handoff>[1])
+    },
+  },
+  'voice.devices': {
+    description: 'List devices active in last 5 minutes. Params: { userId }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { devicesList } = await import('./r182-voice-layer.js')
+      return devicesList(ws, (params as { userId: string }).userId)
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────

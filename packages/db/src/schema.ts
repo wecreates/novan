@@ -7033,3 +7033,38 @@ export const pentestFinding = pgTable('pentest_finding', {
   index('pf_run_idx').on(t.runId),
   index('pf_ws_status_idx').on(t.workspaceId, t.status, t.severity),
 ])
+
+// ─── R146.182 — Voice layer ─────────────────────────────────────────
+export const voicePersona = pgTable('voice_persona', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  name:             text('name').notNull(),
+  wakeWord:         text('wake_word').notNull().default('hey novan'),
+  voiceId:          text('voice_id').notNull(),
+  voiceProvider:    text('voice_provider').notNull().default('elevenlabs'),
+  personaPrompt:    text('persona_prompt').notNull(),
+  tone:             text('tone').notNull().default('precise'),
+  responseSpeed:    text('response_speed').notNull().default('normal'),
+  proactiveEnabled: boolean('proactive_enabled').notNull().default(true),
+  alwaysOn:         boolean('always_on').notNull().default(false),
+  status:           text('status').notNull().default('active'),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:        bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [uniqueIndex('vp_ws_idx').on(t.workspaceId, t.name)])
+
+export const sessionSync = pgTable('session_sync', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  userId:           text('user_id').notNull(),
+  deviceId:         text('device_id').notNull(),
+  deviceKind:       text('device_kind'),
+  activeChatId:     text('active_chat_id'),
+  draftInput:       text('draft_input'),
+  draftVoiceState:  jsonb('draft_voice_state').$type<Record<string, unknown>>().notNull().default({}),
+  lastPingAt:       bigint('last_ping_at', { mode: 'number' }).notNull(),
+  lastHandoffTo:    text('last_handoff_to'),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('ss_user_device_idx').on(t.workspaceId, t.userId, t.deviceId),
+  index('ss_user_ping_idx').on(t.workspaceId, t.userId, t.lastPingAt),
+])
