@@ -5310,6 +5310,80 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return cartRecoverDrafts(ws)
     },
   },
+
+  // ─── R146.165 — Revenue intelligence ──────────────────────────────
+  'seo.draft': {
+    description: 'Draft a buyer-intent SEO article. Params: { query, businessId?, bodyHint? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { seoDraft } = await import('./r165-revenue-intel.js')
+      return seoDraft(ws, params as unknown as Parameters<typeof seoDraft>[1])
+    },
+  },
+  'seo.list': {
+    description: 'List SEO articles. Params: { status?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { seoList } = await import('./r165-revenue-intel.js')
+      return seoList(ws, (params as Parameters<typeof seoList>[1]) ?? {})
+    },
+  },
+  'seo.publish': {
+    description: 'Publish a draft article. Params: { id }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { seoPublish } = await import('./r165-revenue-intel.js')
+      return seoPublish(ws, (params as { id: string }).id)
+    },
+  },
+  'ltv.score': {
+    description: 'Score one customer. Params: { customerRef, revenueCents?, purchaseCount?, firstSeenAt?, lastPurchaseAt?, emailOpens?, emailClicks?, businessId? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { ltvScore } = await import('./r165-revenue-intel.js')
+      return ltvScore(ws, params as unknown as Parameters<typeof ltvScore>[1])
+    },
+  },
+  'ltv.whales': {
+    description: 'List top-decile customers. Params: { minDecile?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { ltvWhales } = await import('./r165-revenue-intel.js')
+      return ltvWhales(ws, (params as Parameters<typeof ltvWhales>[1]) ?? {})
+    },
+  },
+  'ltv.sweep': {
+    description: 'Re-score every active capture using existing funnel + email signals.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { ltvSweep } = await import('./r165-revenue-intel.js')
+      return ltvSweep(ws)
+    },
+  },
+  'crossbusiness.overlap': {
+    description: 'Find customers shared across businesses (upsell opportunity).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { crossOverlap } = await import('./r165-revenue-intel.js')
+      return crossOverlap(ws)
+    },
+  },
+  'refund.log': {
+    description: 'Log + classify a refund. Params: { reasonText, businessId?, orderRef?, customerRef?, amountCents?, category? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { refundLog } = await import('./r165-revenue-intel.js')
+      return refundLog(ws, params as unknown as Parameters<typeof refundLog>[1])
+    },
+  },
+  'refund.themes': {
+    description: 'Roll up refund categories; mint product-issue PAI lessons. Params: { sinceDays? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { refundThemes } = await import('./r165-revenue-intel.js')
+      return refundThemes(ws, (params as { sinceDays?: number }) ?? {})
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────

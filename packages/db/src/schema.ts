@@ -6411,3 +6411,69 @@ export const cartAbandonment = pgTable('cart_abandonment', {
   index('ca_ws_idx').on(t.workspaceId, t.abandonedAt),
   index('ca_status_idx').on(t.workspaceId, t.recoveryStatus, t.abandonedAt),
 ])
+
+// ─── R146.165 — Revenue intelligence ───────────────────────────────
+export const seoArticle = pgTable('seo_article', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  businessId:   text('business_id'),
+  query:        text('query').notNull(),
+  title:        text('title').notNull(),
+  slug:         text('slug').notNull(),
+  body:         text('body').notNull(),
+  metaDesc:     text('meta_desc'),
+  intent:       text('intent').notNull().default('commercial'),
+  status:       text('status').notNull().default('draft'),
+  views:        integer('views').notNull().default(0),
+  clicks:       integer('clicks').notNull().default(0),
+  conversions:  integer('conversions').notNull().default(0),
+  publishedAt:  bigint('published_at', { mode: 'number' }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('sa_ws_slug_idx').on(t.workspaceId, t.slug),
+  index('sa_ws_idx').on(t.workspaceId, t.status, t.publishedAt),
+])
+
+export const customerScore = pgTable('customer_score', {
+  id:                  text('id').primaryKey(),
+  workspaceId:         text('workspace_id').notNull(),
+  businessId:          text('business_id'),
+  customerRef:         text('customer_ref').notNull(),
+  revenueCents:        integer('revenue_cents').notNull().default(0),
+  predictedLtvCents:   integer('predicted_ltv_cents').notNull().default(0),
+  decile:              integer('decile').notNull().default(5),
+  signals:             jsonb('signals').$type<Record<string, unknown>>().notNull().default({}),
+  lastPurchaseAt:      bigint('last_purchase_at', { mode: 'number' }),
+  firstSeenAt:         bigint('first_seen_at', { mode: 'number' }).notNull(),
+  updatedAt:           bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('cs_ws_ref_idx').on(t.workspaceId, t.customerRef),
+  index('cs_ws_decile_idx').on(t.workspaceId, t.decile),
+])
+
+export const crossBusinessOverlap = pgTable('cross_business_overlap', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  businessA:        text('business_a').notNull(),
+  businessB:        text('business_b').notNull(),
+  sharedCustomers:  integer('shared_customers').notNull().default(0),
+  totalA:           integer('total_a').notNull().default(0),
+  totalB:           integer('total_b').notNull().default(0),
+  overlapPct:       real('overlap_pct').notNull().default(0),
+  computedAt:       bigint('computed_at', { mode: 'number' }).notNull(),
+}, (t) => [uniqueIndex('cbo_ws_pair_idx').on(t.workspaceId, t.businessA, t.businessB)])
+
+export const refundReason = pgTable('refund_reason', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  businessId:   text('business_id'),
+  orderRef:     text('order_ref'),
+  customerRef:  text('customer_ref'),
+  reasonText:   text('reason_text').notNull(),
+  category:     text('category'),
+  amountCents:  integer('amount_cents').notNull().default(0),
+  recordedAt:   bigint('recorded_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rr_ws_idx').on(t.workspaceId, t.recordedAt),
+  index('rr_ws_cat_idx').on(t.workspaceId, t.category),
+])
