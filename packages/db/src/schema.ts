@@ -5912,3 +5912,78 @@ export const externalImports = pgTable('external_imports', {
   metadata:       jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
   importedAt:     bigint('imported_at', { mode: 'number' }).notNull(),
 }, (t) => [index('ei_ws_idx').on(t.workspaceId, t.importedAt)])
+
+// ─── R146.151 — SB2 S-tier ─────────────────────────────────────────────
+
+export const habits = pgTable('habits', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  name:           text('name').notNull(),
+  cadence:        text('cadence').notNull().default('daily'),
+  active:         boolean('active').notNull().default(true),
+  currentStreak:  integer('current_streak').notNull().default(0),
+  longestStreak:  integer('longest_streak').notNull().default(0),
+  lastDoneDate:   text('last_done_date'),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('habits_ws_idx').on(t.workspaceId, t.active)])
+
+export const habitLogs = pgTable('habit_logs', {
+  workspaceId: text('workspace_id').notNull(),
+  habitId:     text('habit_id').notNull(),
+  date:        text('date').notNull(),
+  done:        boolean('done').notNull().default(true),
+  notes:       text('notes'),
+  loggedAt:    bigint('logged_at', { mode: 'number' }).notNull(),
+}, (t) => [primaryKey({ columns: [t.workspaceId, t.habitId, t.date] })])
+
+export const objectives = pgTable('objectives', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  title:        text('title').notNull(),
+  quarter:      text('quarter').notNull(),
+  status:       text('status').notNull().default('active'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('obj_ws_idx').on(t.workspaceId, t.quarter, t.status)])
+
+export const keyResults = pgTable('key_results', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  objectiveId:   text('objective_id').notNull(),
+  title:         text('title').notNull(),
+  targetValue:   real('target_value'),
+  currentValue:  real('current_value').notNull().default(0),
+  unit:          text('unit'),
+  confidence:    real('confidence').notNull().default(0.5),
+  updatedAt:     bigint('updated_at', { mode: 'number' }).notNull(),
+  createdAt:     bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('kr_obj_idx').on(t.objectiveId)])
+
+export const focusSessions = pgTable('focus_sessions', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  description:   text('description').notNull(),
+  durationMin:   integer('duration_min').notNull(),
+  outputChunkId: text('output_chunk_id'),
+  tags:          jsonb('tags').$type<string[]>().notNull().default([]),
+  startedAt:     bigint('started_at',  { mode: 'number' }).notNull(),
+  finishedAt:    bigint('finished_at', { mode: 'number' }),
+}, (t) => [index('fs_ws_idx').on(t.workspaceId, t.startedAt)])
+
+export const moodLogs = pgTable('mood_logs', {
+  workspaceId: text('workspace_id').notNull(),
+  date:        text('date').notNull(),
+  slot:        text('slot').notNull(),
+  mood:        integer('mood').notNull(),
+  energy:      integer('energy').notNull(),
+  notes:       text('notes'),
+  loggedAt:    bigint('logged_at', { mode: 'number' }).notNull(),
+}, (t) => [primaryKey({ columns: [t.workspaceId, t.date, t.slot] })])
+
+export const noteTemplates = pgTable('note_templates', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  name:        text('name').notNull(),
+  body:        text('body').notNull(),
+  variables:   jsonb('variables').$type<string[]>().notNull().default([]),
+  createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('nt_ws_idx').on(t.workspaceId, t.name)])
