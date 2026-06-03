@@ -4929,6 +4929,57 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return listChatEvalSeeds()
     },
   },
+
+  // ─── R146.160 — PAI 7-phase loop for video gen ─────────────────────
+  'video.pai.isaCreate': {
+    description: 'Create a video Ideal State Artifact (brief + ISCs). Params: title, brief, target?, telos?, iscs?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { isaCreate } = await import('./r160-pai-video-loop.js')
+      return isaCreate(ws, params as unknown as Parameters<typeof isaCreate>[1])
+    },
+  },
+  'video.pai.isaList': {
+    description: 'List ISAs for this workspace. Params: { limit?, status? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { isaList } = await import('./r160-pai-video-loop.js')
+      return isaList(ws, (params as Parameters<typeof isaList>[1]) ?? {})
+    },
+  },
+  'video.pai.run': {
+    description: 'Run the OBSERVE→VERIFY phases for an ISA. Params: { isaId }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { paiRun } = await import('./r160-pai-video-loop.js')
+      return paiRun(ws, params as Parameters<typeof paiRun>[1])
+    },
+  },
+  'video.pai.recordOutcome': {
+    description: 'LEARN phase. Feed real performance back. Params: { runId, score (0..1), meta? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { paiRecordOutcome } = await import('./r160-pai-video-loop.js')
+      const p = params as { runId: string; score: number; meta?: Record<string, unknown> }
+      return paiRecordOutcome(ws, p.runId, p.score, p.meta ?? {})
+    },
+  },
+  'video.pai.listRuns': {
+    description: 'List recent PAI runs. Params: { isaId?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { paiListRuns } = await import('./r160-pai-video-loop.js')
+      return paiListRuns(ws, (params as Parameters<typeof paiListRuns>[1]) ?? {})
+    },
+  },
+  'video.pai.lessons': {
+    description: 'List cross-run lessons. Params: { topic?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { paiLessons } = await import('./r160-pai-video-loop.js')
+      return paiLessons(ws, (params as Parameters<typeof paiLessons>[1]) ?? {})
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────

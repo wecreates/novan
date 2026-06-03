@@ -6085,3 +6085,56 @@ export const inheritanceManifests = pgTable('inheritance_manifests', {
   manifestData:   jsonb('manifest_data').$type<Record<string, unknown>>().notNull().default({}),
   generatedAt:    bigint('generated_at', { mode: 'number' }).notNull(),
 }, (t) => [index('im_ws_idx').on(t.workspaceId, t.generatedAt)])
+
+// ─── R146.160 — PAI 7-phase loop for video gen ─────────────────────
+export const videoIsa = pgTable('video_isa', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  title:        text('title').notNull(),
+  brief:        text('brief').notNull(),
+  telos:        jsonb('telos').$type<Record<string, unknown>>().notNull().default({}),
+  iscs:         jsonb('iscs').$type<Array<{ id: string; criterion: string; weight: number; kind: string }>>().notNull().default([]),
+  target:       jsonb('target').$type<Record<string, unknown>>().notNull().default({}),
+  status:       text('status').notNull().default('active'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  archivedAt:   bigint('archived_at', { mode: 'number' }),
+}, (t) => [index('vi_ws_idx').on(t.workspaceId, t.status, t.createdAt)])
+
+export const videoPaiRun = pgTable('video_pai_run', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  isaId:        text('isa_id').notNull(),
+  episodeId:    text('episode_id'),
+  phase:        text('phase').notNull().default('observe'),
+  observe:      jsonb('observe').$type<Record<string, unknown>>().notNull().default({}),
+  think:        jsonb('think').$type<Record<string, unknown>>().notNull().default({}),
+  plan:         jsonb('plan').$type<Record<string, unknown>>().notNull().default({}),
+  build:        jsonb('build').$type<Record<string, unknown>>().notNull().default({}),
+  execute:      jsonb('execute').$type<Record<string, unknown>>().notNull().default({}),
+  verify:       jsonb('verify').$type<Record<string, unknown>>().notNull().default({}),
+  learn:        jsonb('learn').$type<Record<string, unknown>>().notNull().default({}),
+  iscPassRate:  real('isc_pass_rate').notNull().default(0),
+  outcomeScore: real('outcome_score'),
+  outcomeMeta:  jsonb('outcome_meta').$type<Record<string, unknown>>().notNull().default({}),
+  costUsd:      real('cost_usd').notNull().default(0),
+  startedAt:    bigint('started_at', { mode: 'number' }).notNull(),
+  endedAt:      bigint('ended_at', { mode: 'number' }),
+  error:        text('error'),
+}, (t) => [
+  index('vpr_ws_idx').on(t.workspaceId, t.startedAt),
+  index('vpr_isa_idx').on(t.isaId, t.startedAt),
+])
+
+export const videoPaiLesson = pgTable('video_pai_lesson', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  topic:        text('topic').notNull(),
+  pattern:      text('pattern').notNull(),
+  evidence:     jsonb('evidence').$type<Record<string, unknown>>().notNull().default({}),
+  confidence:   real('confidence').notNull().default(0.5),
+  uses:         integer('uses').notNull().default(0),
+  wins:         integer('wins').notNull().default(0),
+  losses:       integer('losses').notNull().default(0),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  retiredAt:    bigint('retired_at', { mode: 'number' }),
+}, (t) => [index('vpl_ws_idx').on(t.workspaceId, t.topic, t.confidence)])
