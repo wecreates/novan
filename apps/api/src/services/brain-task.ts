@@ -6011,6 +6011,48 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return bestSellersToContent(ws, params as unknown as Parameters<typeof bestSellersToContent>[1])
     },
   },
+
+  // ─── R146.180 — Money maximizer ───────────────────────────────────
+  'money.scan': {
+    description: 'Scan every loop for actionable money-making opportunities; rank by $/hr.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { opportunityScan } = await import('./r180-money-maximizer.js')
+      return opportunityScan(ws)
+    },
+  },
+  'money.allocate': {
+    description: 'Knapsack the top opportunities to fit your hours. Params: { hoursAvailable?, minDollarsPerHour? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { allocateEffort } = await import('./r180-money-maximizer.js')
+      return allocateEffort(ws, (params as Parameters<typeof allocateEffort>[1]) ?? {})
+    },
+  },
+  'money.execute': {
+    description: 'Execute one opportunity via its mapped brain op. Params: { opportunityId }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { executeNext } = await import('./r180-money-maximizer.js')
+      return executeNext(ws, params as unknown as Parameters<typeof executeNext>[1])
+    },
+  },
+  'money.opportunities': {
+    description: 'List opportunities. Params: { status?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { opportunitiesList } = await import('./r180-money-maximizer.js')
+      return opportunitiesList(ws, (params as Parameters<typeof opportunitiesList>[1]) ?? {})
+    },
+  },
+  'money.dailyOptimize': {
+    description: 'Combo: scan + allocate today\\u2019s effort. Params: { hoursAvailable? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { dailyOptimize } = await import('./r180-money-maximizer.js')
+      return dailyOptimize(ws, (params as { hoursAvailable?: number })?.hoursAvailable ?? 8)
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────

@@ -6974,3 +6974,28 @@ export const socialFunnelRoute = pgTable('social_funnel_route', {
   uniqueIndex('sfr_post_store_idx').on(t.socialPostId, t.storeId),
   index('sfr_ws_idx').on(t.workspaceId, t.createdAt),
 ])
+
+// ─── R146.180 — Money maximizer ─────────────────────────────────────
+export const moneyOpportunity = pgTable('money_opportunity', {
+  id:                    text('id').primaryKey(),
+  workspaceId:           text('workspace_id').notNull(),
+  businessId:            text('business_id'),
+  kind:                  text('kind').notNull(),
+  title:                 text('title').notNull(),
+  estRevenueLiftCents:   integer('est_revenue_lift_cents').notNull().default(0),
+  estHours:              real('est_hours').notNull().default(1),
+  estCostCents:          integer('est_cost_cents').notNull().default(0),
+  dollarsPerHour:        real('dollars_per_hour').notNull().default(0),
+  confidence:            real('confidence').notNull().default(0.5),
+  evidence:              jsonb('evidence').$type<Record<string, unknown>>().notNull().default({}),
+  source:                text('source').notNull(),
+  payload:               jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+  status:                text('status').notNull().default('open'),
+  scheduledAt:           bigint('scheduled_at', { mode: 'number' }),
+  completedAt:           bigint('completed_at', { mode: 'number' }),
+  actualRevenueCents:    integer('actual_revenue_cents'),
+  createdAt:             bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('mo_ws_idx').on(t.workspaceId, t.status, t.dollarsPerHour),
+  index('mo_ws_created_idx').on(t.workspaceId, t.createdAt),
+])
