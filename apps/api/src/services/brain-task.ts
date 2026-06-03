@@ -2614,6 +2614,20 @@ export const OPERATIONS: Record<string, OpSpec> = {
   'resonance.top':         { description: 'SB3#10 Most-referenced ideas by later chunks (resonance = later-links * sqrt(age/30)). Params: limit?', risk: 'low',
     handler: async (ws, p) => (await import('./r156-sb3-a-tier.js')).resonanceTop(ws, typeof p['limit'] === 'number' ? p['limit'] as number : 20) },
 
+  // ─── R146.157 — SB3 B-tier (#11-15) ───────────────────────────────
+  'inline.rewrite':        { description: 'SB3#11 Rewrite text in a style (concise|honest|formal|specific|gentle|punchy|plain). Params: text, style, keepLength?', risk: 'low',
+    handler: async (ws, p) => (await import('./r157-sb3-b-tier.js')).inlineRewrite(ws, { text: String(p['text'] ?? ''), style: (p['style'] ?? 'concise') as 'concise'|'honest'|'formal'|'specific'|'gentle'|'punchy'|'plain', ...(p['keepLength'] === true ? { keepLength: true } : {}) }) },
+  'tone.check':            { description: 'SB3#12 Score tone drift vs baseline of recent notes. Params: chunkId', risk: 'low',
+    handler: async (ws, p) => (await import('./r157-sb3-b-tier.js')).toneCheck(ws, { chunkId: String(p['chunkId'] ?? '') }) },
+  'bibliography.for':      { description: 'SB3#13 Build bibliography of outgoing links from a chunk. Params: chunkId', risk: 'low',
+    handler: async (ws, p) => (await import('./r157-sb3-b-tier.js')).bibliographyFor(ws, String(p['chunkId'] ?? '')) },
+  'note.borrowStructure':  { description: 'SB3#14 Create new chunk with the skeleton (headings + bullets) of an existing one. Params: fromChunkId, newTitle?', risk: 'low',
+    handler: async (ws, p) => (await import('./r157-sb3-b-tier.js')).noteBorrowStructure(ws, { fromChunkId: String(p['fromChunkId'] ?? ''), ...(p['newTitle'] ? { newTitle: String(p['newTitle']) } : {}) }) },
+  'bulk.retag':            { description: 'SB3#15 Add/remove tags on chunks matching a search query. dryRun defaults TRUE. Params: query, addTags?, removeTags?, dryRun?', risk: 'high',
+    handler: async (ws, p) => (await import('./r157-sb3-b-tier.js')).bulkRetag(ws, { query: String(p['query'] ?? ''), ...(Array.isArray(p['addTags']) ? { addTags: p['addTags'] as string[] } : {}), ...(Array.isArray(p['removeTags']) ? { removeTags: p['removeTags'] as string[] } : {}), ...(p['dryRun'] === false ? { dryRun: false } : {}) }) },
+  'bulk.delete':            { description: 'SB3#15 Delete chunks matching a search query. Requires confirm: "DELETE" to actually delete. Params: query, confirm', risk: 'critical',
+    handler: async (ws, p) => (await import('./r157-sb3-b-tier.js')).bulkDelete(ws, { query: String(p['query'] ?? ''), confirm: String(p['confirm'] ?? '') }) },
+
   'autonomy.counts':       { description: 'Live counts for autonomy dashboard: findings(open) · improvements(open) · ops(in_process/on_deck) · proposals(proposed/approved) · connectorsNeedingRefresh · agentsLive.', risk: 'low',
     handler: async (ws) => (await import('./r124-autonomy.js')).autonomyCounts(ws) },
   'suggestions.scan':      { description: 'Scan last 24h of error events and create improvement_suggestions for recurring patterns (≥3 occurrences). Powers Ali queue.', risk: 'low',
