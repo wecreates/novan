@@ -624,6 +624,22 @@ app.get<{ Params: { workspaceId: string; projectId: string } }>('/capcut/:worksp
   }
 })
 
+// R146.179 — POD social-traffic short-URL redirect.
+// GET /r/:short → look up route, increment click counter, redirect to UTM-stitched store URL.
+app.get<{ Params: { short: string } }>('/r/:short', async (req, reply) => {
+  const short = req.params.short
+  if (!short || short.length > 20) return reply.code(404).send('Not found')
+  try {
+    const { routeResolve, routeRecordClick } = await import('./services/r179-pod-social.js')
+    const r = await routeResolve(short)
+    if (!r) return reply.code(404).send('Not found')
+    routeRecordClick(r.routeId).catch(() => null)
+    return reply.redirect(r.destination, 302)
+  } catch (e) {
+    return reply.code(500).send(`Error: ${(e as Error).message}`)
+  }
+})
+
 // /metrics is registered by metricsRoutes plugin (queue depths + R119 registry).
 await app.register(workflowRoutes, { prefix: '/api/v1/workflows' })
 await app.register(maintenanceRoutes, { prefix: '/api/v1' })

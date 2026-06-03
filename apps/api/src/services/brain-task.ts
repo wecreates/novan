@@ -5953,6 +5953,64 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return maxDailyTargets(ws, (params as { accountId: string }).accountId)
     },
   },
+
+  // ─── R146.179 — POD social-traffic engine ─────────────────────────
+  'pod.store.create': {
+    description: 'Create a POD store. Params: { platform: shopify|etsy|printful|redbubble|gumroad, brandName, niche?, domain?, businessId?, socialAccountIds? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { storeCreate } = await import('./r179-pod-social.js')
+      return storeCreate(ws, params as unknown as Parameters<typeof storeCreate>[1])
+    },
+  },
+  'pod.store.list': {
+    description: 'List active stores.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { storeList } = await import('./r179-pod-social.js')
+      return storeList(ws)
+    },
+  },
+  'pod.product.add': {
+    description: 'Add a product. Params: { storeId, sku, title, designUrl?, category?, tags?, priceCents, costCents, externalId?, productUrl? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { productAdd } = await import('./r179-pod-social.js')
+      return productAdd(ws, params as unknown as Parameters<typeof productAdd>[1])
+    },
+  },
+  'pod.product.list': {
+    description: 'Products in a store by revenue. Params: { storeId }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { productListByStore } = await import('./r179-pod-social.js')
+      return productListByStore(ws, (params as { storeId: string }).storeId)
+    },
+  },
+  'pod.route.attach': {
+    description: 'Stitch a social post → store via UTM short URL. Params: { postId, storeId, productId? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { routeAttach } = await import('./r179-pod-social.js')
+      return routeAttach(ws, params as unknown as Parameters<typeof routeAttach>[1])
+    },
+  },
+  'pod.cadence': {
+    description: 'Max-volume content cadence given store inventory + attached accounts. Params: { storeId, daysAhead? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { cadenceFromInventory } = await import('./r179-pod-social.js')
+      return cadenceFromInventory(ws, params as unknown as Parameters<typeof cadenceFromInventory>[1])
+    },
+  },
+  'pod.bestSellersToContent': {
+    description: 'Top-revenue products → R163 repurpose packs ready to post. Params: { storeId, topN? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { bestSellersToContent } = await import('./r179-pod-social.js')
+      return bestSellersToContent(ws, params as unknown as Parameters<typeof bestSellersToContent>[1])
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────

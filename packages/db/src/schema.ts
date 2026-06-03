@@ -6917,3 +6917,60 @@ export const warmupDay = pgTable('warmup_day', {
   executedAt:   bigint('executed_at', { mode: 'number' }),
   error:        text('error'),
 }, (t) => [uniqueIndex('wd_plan_day_idx').on(t.planId, t.dayIndex)])
+
+// ─── R146.179 — POD social-traffic engine ──────────────────────────
+export const podStore = pgTable('pod_store', {
+  id:                  text('id').primaryKey(),
+  workspaceId:         text('workspace_id').notNull(),
+  businessId:          text('business_id'),
+  platform:            text('platform').notNull(),
+  domain:              text('domain'),
+  niche:               text('niche'),
+  brandName:           text('brand_name').notNull(),
+  socialAccountIds:    jsonb('social_account_ids').$type<string[]>().notNull().default([]),
+  status:              text('status').notNull().default('active'),
+  createdAt:           bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('ps_ws_idx').on(t.workspaceId, t.status)])
+
+export const podProduct = pgTable('pod_product', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  storeId:      text('store_id').notNull(),
+  sku:          text('sku').notNull(),
+  title:        text('title').notNull(),
+  designUrl:    text('design_url'),
+  category:     text('category'),
+  tags:         jsonb('tags').$type<string[]>().notNull().default([]),
+  priceCents:   integer('price_cents').notNull().default(0),
+  costCents:    integer('cost_cents').notNull().default(0),
+  marginCents:  integer('margin_cents').notNull().default(0),
+  externalId:   text('external_id'),
+  productUrl:   text('product_url'),
+  soldCount:    integer('sold_count').notNull().default(0),
+  revenueCents: integer('revenue_cents').notNull().default(0),
+  status:       text('status').notNull().default('active'),
+  listedAt:     bigint('listed_at', { mode: 'number' }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('pp_store_sku_idx').on(t.storeId, t.sku),
+  index('pp_ws_revenue_idx').on(t.workspaceId, t.revenueCents),
+])
+
+export const socialFunnelRoute = pgTable('social_funnel_route', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  socialPostId:  text('social_post_id').notNull(),
+  storeId:       text('store_id').notNull(),
+  productId:     text('product_id'),
+  utmCampaign:   text('utm_campaign').notNull(),
+  utmSource:     text('utm_source'),
+  utmMedium:     text('utm_medium'),
+  shortUrl:      text('short_url'),
+  clicks:        integer('clicks').notNull().default(0),
+  conversions:   integer('conversions').notNull().default(0),
+  revenueCents:  integer('revenue_cents').notNull().default(0),
+  createdAt:     bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('sfr_post_store_idx').on(t.socialPostId, t.storeId),
+  index('sfr_ws_idx').on(t.workspaceId, t.createdAt),
+])
