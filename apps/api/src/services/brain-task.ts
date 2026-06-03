@@ -2344,6 +2344,18 @@ export const OPERATIONS: Record<string, OpSpec> = {
   'mcp.listClients':       { description: '#25 List registered MCP clients (no api keys).', risk: 'low',
     handler: async (ws) => (await import('./r143-ai-s2-tier.js')).mcpClientList(ws) },
 
+  // ─── R146.144 — A2-tier AI 26-30 ──────────────────────────────────
+  'consensus.vote':        { description: '#26 Query N providers, take majority answer. Params: messages, providers, parseAs?', risk: 'medium',
+    handler: async (ws, p) => (await import('./r144-ai-a2-tier.js')).consensusVote(ws, { messages: (p['messages'] ?? []) as Array<{ role: 'system'|'user'|'assistant'; content: string }>, providers: (p['providers'] ?? []) as string[], ...(p['parseAs'] ? { parseAs: p['parseAs'] as 'string'|'json'|'boolean' } : {}) }) },
+  'transform.chain':       { description: '#27 Stream chat through a chain of delta transforms. Params: messages, transforms (uppercase|lowercase|strip_html|censor_pii|trim)', risk: 'low',
+    handler: async (ws, p) => (await import('./r144-ai-a2-tier.js')).transformChain(ws, { messages: (p['messages'] ?? []) as Array<{ role: 'system'|'user'|'assistant'; content: string }>, transforms: (p['transforms'] ?? []) as string[] }) },
+  'eval.bisect':           { description: '#28 Find which prompt version regressed by bisecting eval run history. Params: promptKey', risk: 'low',
+    handler: async (ws, p) => (await import('./r144-ai-a2-tier.js')).evalBisect(ws, String(p['promptKey'] ?? '')) },
+  'memory.dedup':          { description: '#29 Find + remove near-duplicate memory chunks via embedding similarity. Params: dryRun?, limit?', risk: 'medium',
+    handler: async (ws, p) => (await import('./r144-ai-a2-tier.js')).memoryDedup(ws, { ...(p['dryRun'] === true ? { dryRun: true } : {}), ...(typeof p['limit'] === 'number' ? { limit: p['limit'] as number } : {}) }) },
+  'speculative.preview':   { description: '#30 Stream first N deltas as preview; returns sessionId to cancel full run. Params: messages, previewDeltas?', risk: 'low',
+    handler: async (ws, p) => (await import('./r144-ai-a2-tier.js')).speculativePreview(ws, { messages: (p['messages'] ?? []) as Array<{ role: 'system'|'user'|'assistant'; content: string }>, ...(typeof p['previewDeltas'] === 'number' ? { previewDeltas: p['previewDeltas'] as number } : {}) }) },
+
   'autonomy.counts':       { description: 'Live counts for autonomy dashboard: findings(open) · improvements(open) · ops(in_process/on_deck) · proposals(proposed/approved) · connectorsNeedingRefresh · agentsLive.', risk: 'low',
     handler: async (ws) => (await import('./r124-autonomy.js')).autonomyCounts(ws) },
   'suggestions.scan':      { description: 'Scan last 24h of error events and create improvement_suggestions for recurring patterns (≥3 occurrences). Powers Ali queue.', risk: 'low',
