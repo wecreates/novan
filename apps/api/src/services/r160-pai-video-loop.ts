@@ -308,6 +308,13 @@ export async function paiRun(workspaceId: string, opts: { isaId: string }): Prom
       ...(planOut.episodeId ? { episodeId: planOut.episodeId } : {}),
     }).where(eq(videoPaiRun.id, runId))
 
+    // R146.166 — if a director profile is bound to this run (or a default
+    // profile exists for the workspace), rewrite shot prompts now.
+    try {
+      const { applyProfileToPlan } = await import('./r166-director-controls.js')
+      await applyProfileToPlan(workspaceId, runId).catch(() => null)
+    } catch { /* director controls optional */ }
+
     const build = await phaseBuild(workspaceId, planOut.plan)
     await db.update(videoPaiRun).set({ build, phase: 'execute' }).where(eq(videoPaiRun.id, runId))
 

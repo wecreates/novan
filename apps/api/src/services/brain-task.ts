@@ -5384,6 +5384,64 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return refundThemes(ws, (params as { sinceDays?: number }) ?? {})
     },
   },
+
+  // ─── R146.166 — Director controls (Higgsfield-style) ──────────────
+  'director.presets': {
+    description: 'List all cinema presets: camera bodies, lenses, motions, color grades, vibes.',
+    risk: 'low',
+    handler: async () => {
+      const { presetsList } = await import('./r166-director-controls.js')
+      return presetsList()
+    },
+  },
+  'director.profileCreate': {
+    description: 'Create a director profile (camera+lens+motions+grade+vibe). Params: { name, cameraBody?, lens?, focalMm?, aperture?, motions? (≤3), colorGrade?, vibe?, notes?, businessId? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { profileCreate } = await import('./r166-director-controls.js')
+      return profileCreate(ws, params as unknown as Parameters<typeof profileCreate>[1])
+    },
+  },
+  'director.profileList': {
+    description: 'List director profiles.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { profileList } = await import('./r166-director-controls.js')
+      return profileList(ws)
+    },
+  },
+  'character.lock': {
+    description: 'Register a character with reference images + description for cross-shot consistency. Params: { name, description, referenceUrls?, appearanceSeed?, voiceId?, businessId? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { characterLockCreate } = await import('./r166-director-controls.js')
+      return characterLockCreate(ws, params as unknown as Parameters<typeof characterLockCreate>[1])
+    },
+  },
+  'character.list': {
+    description: 'List locked characters.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { characterList } = await import('./r166-director-controls.js')
+      return characterList(ws)
+    },
+  },
+  'director.bindToRun': {
+    description: 'Bind a director profile + characters to a PAI run. Params: { runId, profileId, characterIds? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { bindToRun } = await import('./r166-director-controls.js')
+      return bindToRun(ws, params as unknown as Parameters<typeof bindToRun>[1])
+    },
+  },
+  'director.applyToPlan': {
+    description: 'Rewrite a PAI run plan with the bound profile (composes augmented shot prompts). Params: { runId }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { applyProfileToPlan } = await import('./r166-director-controls.js')
+      return applyProfileToPlan(ws, (params as { runId: string }).runId)
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────

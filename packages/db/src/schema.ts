@@ -6477,3 +6477,53 @@ export const refundReason = pgTable('refund_reason', {
   index('rr_ws_idx').on(t.workspaceId, t.recordedAt),
   index('rr_ws_cat_idx').on(t.workspaceId, t.category),
 ])
+
+// ─── R146.166 — Director controls (Higgsfield-inspired) ────────────
+export const directorProfile = pgTable('director_profile', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  businessId:   text('business_id'),
+  name:         text('name').notNull(),
+  cameraBody:   text('camera_body').notNull().default('arri_alexa_35'),
+  lens:         text('lens').notNull().default('zeiss_supreme_50'),
+  focalMm:      integer('focal_mm').notNull().default(50),
+  aperture:     real('aperture').notNull().default(2.8),
+  shutterDeg:   integer('shutter_deg').notNull().default(180),
+  motions:      jsonb('motions').$type<string[]>().notNull().default([]),
+  colorGrade:   text('color_grade').notNull().default('natural'),
+  vibe:         text('vibe'),
+  notes:        text('notes'),
+  status:       text('status').notNull().default('active'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('dp_ws_name_idx').on(t.workspaceId, t.name),
+  index('dp_ws_idx').on(t.workspaceId, t.status, t.createdAt),
+])
+
+export const characterLock = pgTable('character_lock', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  businessId:      text('business_id'),
+  name:            text('name').notNull(),
+  description:     text('description').notNull(),
+  referenceUrls:   jsonb('reference_urls').$type<string[]>().notNull().default([]),
+  appearanceSeed:  integer('appearance_seed'),
+  voiceId:         text('voice_id'),
+  status:          text('status').notNull().default('active'),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('cl_ws_name_idx').on(t.workspaceId, t.name),
+  index('cl_ws_idx').on(t.workspaceId, t.status),
+])
+
+export const directorRunBinding = pgTable('director_run_binding', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  runId:         text('run_id').notNull(),
+  profileId:     text('profile_id').notNull(),
+  characterIds:  jsonb('character_ids').$type<string[]>().notNull().default([]),
+  boundAt:       bigint('bound_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('drb_run_idx').on(t.runId),
+  index('drb_ws_idx').on(t.workspaceId, t.boundAt),
+])
