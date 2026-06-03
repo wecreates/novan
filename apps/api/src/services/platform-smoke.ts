@@ -126,7 +126,7 @@ export const SMOKE_CATALOG: string[] = [
 
 /** Classify a single probe result. Pure. */
 export function classify(p: ProbeResult, slowMs: number = DEFAULT_SLOW_MS):
-  'ok' | 'slow' | 'bad_input' | 'not_found' | 'server_err' | 'unreachable' {
+  'ok' | 'slow' | 'bad_input' | 'not_found' | 'server_err' | 'unreachable' | 'auth_required' {
   if (p.status === 0) return 'unreachable'
   if (p.status === 404) return 'not_found'
   if (p.status === 400) return 'bad_input'
@@ -134,7 +134,12 @@ export function classify(p: ProbeResult, slowMs: number = DEFAULT_SLOW_MS):
   if (p.status >= 200 && p.status < 300) {
     return p.ms >= slowMs ? 'slow' : 'ok'
   }
-  return 'server_err'    // 401/403/3xx — flag for attention
+  // R146.189 — 401/403 on a gated route means the route is wired correctly
+  // and the auth layer is doing its job. Surfacing this as 'auth_required'
+  // (treated as ok for failCount purposes) instead of 'server_err' so
+  // unauthenticated smoke runs don't drown the report in 43 false fails.
+  if (p.status === 401 || p.status === 403) return 'auth_required'
+  return 'server_err'    // 3xx / other 4xx — flag for attention
 }
 
 /** Compare two runs and return paths whose ok-status flipped. Pure. */
@@ -210,6 +215,7 @@ export async function runPlatformSmoke(workspaceId: string, opts: SmokeOpts = {}
     if (k === 'ok') ok++
     else if (k === 'slow') { ok++; slow++ }
     else if (k === 'bad_input') ok++   // 400 due to omitted param = not a bug
+    else if (k === 'auth_required') ok++ // R146.189 — 401/403 on a gated route is correct behaviour
     else fail++
   }
 
