@@ -1254,6 +1254,9 @@ const INTERVALS = {
   // R146.130 — morning briefing push at 7am UTC. 24h tick; gate inside
   // checks current UTC hour and fires once per day.
   morningBriefing:       60 * 60_000,
+  // R146.159 — PKM maintenance: daily snapshot, weekly review (Monday),
+  // concept maturity update. All gated by UTC time inside their handlers.
+  pkmMaintenance:        60 * 60_000,
 }
 
 /**
@@ -1518,6 +1521,52 @@ async function runFrontierIntelTick(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'frontier_intel', error: (e as Error).message }) }
 }
 
+// R146.159 — PKM maintenance: daily snapshot, weekly review (Monday 9am UTC),
+// concept maturity update. Hourly tick gates by UTC time.
+let lastSnapshotDay = -1
+let lastConceptDay = -1
+let lastWeeklyMonday = ''
+async function runPkmMaintenance(): Promise<void> {
+  if (process.env['DISABLE_PKM_MAINTENANCE'] === '1') return
+  const now = new Date()
+  const today = Math.floor(now.getTime() / (24 * 60 * 60_000))
+  const utcHour = now.getUTCHours()
+  const utcDay = now.getUTCDay()  // 0 = Sun, 1 = Mon
+
+  // Daily memory snapshot at 4am UTC
+  if (utcHour === 4 && lastSnapshotDay !== today) {
+    lastSnapshotDay = today
+    try {
+      const { snapshotCapture } = await import('./r150-sb-c-tier.js')
+      await snapshotCapture('system')
+      await emit('cron.pkm_snapshot', { day: today })
+    } catch (e) { await emit('cron.error', { task: 'pkm_snapshot', error: (e as Error).message }) }
+  }
+
+  // Concept maturity daily at 5am UTC
+  if (utcHour === 5 && lastConceptDay !== today) {
+    lastConceptDay = today
+    try {
+      const { conceptMaturityTick } = await import('./r149-sb-b-tier.js')
+      const out = await conceptMaturityTick('system')
+      await emit('cron.pkm_concept_maturity', out)
+    } catch (e) { await emit('cron.error', { task: 'pkm_concept_maturity', error: (e as Error).message }) }
+  }
+
+  // Weekly review on Monday 9am UTC
+  if (utcDay === 1 && utcHour === 9) {
+    const monday = now.toISOString().slice(0, 10)
+    if (lastWeeklyMonday !== monday) {
+      lastWeeklyMonday = monday
+      try {
+        const { weeklyReviewGenerate } = await import('./r148-sb-a-tier.js')
+        const out = await weeklyReviewGenerate('system')
+        await emit('cron.pkm_weekly_review', { week: out.weekStarting })
+      } catch (e) { await emit('cron.error', { task: 'pkm_weekly_review', error: (e as Error).message }) }
+    }
+  }
+}
+
 // R146.130 — Morning push briefing. Fires hourly but only sends if current
 // UTC hour matches BRIEFING_HOUR (default 7) and not already sent today.
 let lastBriefingDay = -1
@@ -1780,6 +1829,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runSuggestionsProducer,         INTERVALS.suggestionsProducer))
   handles.push(scheduleJittered(runNightlyBackup,               INTERVALS.nightlyBackup))
   handles.push(scheduleJittered(runMorningBriefing,             INTERVALS.morningBriefing))
+  handles.push(scheduleJittered(runPkmMaintenance,              INTERVALS.pkmMaintenance))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

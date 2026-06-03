@@ -144,9 +144,32 @@ export async function sendMorningBriefing(workspaceId: string): Promise<{ sent: 
   if (counts.proposalsProposed > 0)  lines.push(`${counts.proposalsProposed} proposal${counts.proposalsProposed === 1 ? '' : 's'} awaiting review`)
   if (counts.connectorsNeedingRefresh > 0) lines.push(`${counts.connectorsNeedingRefresh} OAuth token${counts.connectorsNeedingRefresh === 1 ? '' : 's'} near expiry`)
   if (counts.opsInProcess > 0)       lines.push(`${counts.opsInProcess} agent task${counts.opsInProcess === 1 ? '' : 's'} in progress`)
+
+  // R146.159 — PKM additions: broken habit streaks + due decisions + due SRS cards
+  try {
+    const { habitBroken } = await import('./r151-sb2-s-tier.js')
+    const broken = await habitBroken(workspaceId).catch(() => [])
+    if (broken.length > 0) lines.push(`${broken.length} broken streak${broken.length === 1 ? '' : 's'}: ${broken.slice(0, 2).map(b => b.name).join(', ')}`)
+  } catch { /* skip */ }
+  try {
+    const { decisionList } = await import('./r149-sb-b-tier.js')
+    const due = await decisionList(workspaceId, { dueOnly: true, limit: 10 }).catch(() => [])
+    if (due.length > 0) lines.push(`${due.length} decision${due.length === 1 ? '' : 's'} due for hindsight review`)
+  } catch { /* skip */ }
+  try {
+    const { srsDue } = await import('./r148-sb-a-tier.js')
+    const cards = await srsDue(workspaceId, 50).catch(() => [])
+    if (cards.length > 0) lines.push(`${cards.length} SRS card${cards.length === 1 ? '' : 's'} ready to review`)
+  } catch { /* skip */ }
+  try {
+    const { questionBacklog } = await import('./r155-sb3-s-tier.js')
+    const qs = await questionBacklog(workspaceId, { minPriority: 2, limit: 10 }).catch(() => [])
+    if (qs.length > 0) lines.push(`${qs.length} high-priority question${qs.length === 1 ? '' : 's'} still open`)
+  } catch { /* skip */ }
+
   if (lines.length === 0)            lines.push('all clear · 0 open items')
 
-  const body = lines.slice(0, 3).join(' · ')
+  const body = lines.slice(0, 4).join(' · ')
   try {
     const { broadcastPush } = await import('./web-push.js')
     const r = await broadcastPush(workspaceId, {

@@ -474,6 +474,29 @@ await app.register(healthRoutes,   { prefix: '/health' })
 await app.register(healthRoutes,   { prefix: '/api/v1/health' })
 // /healthz alias — k8s/UptimeRobot convention
 app.get('/healthz', async (_req, reply) => reply.send({ status: 'ok', timestamp: Date.now() }))
+
+// R146.159 — Public knowledge garden. Serves chunks operator has published
+// via garden.publish. No auth — public by definition. Returns rendered HTML.
+app.get<{ Params: { slug: string } }>('/garden/:slug', async (req, reply) => {
+  const slug = req.params.slug
+  if (!slug || slug.length > 200) return reply.code(404).send('Not found')
+  try {
+    const { db } = await import('./db/client.js')
+    const { publicPublishes } = await import('./db/schema.js')
+    const { and, eq, sql } = await import('drizzle-orm')
+    const [row] = await db.select().from(publicPublishes)
+      .where(and(eq(publicPublishes.slug, slug), sql`${publicPublishes.unpublishedAt} IS NULL`))
+      .limit(1)
+    if (!row) return reply.code(404).type('text/html').send('<h1>Not found</h1><p>This page does not exist or has been unpublished.</p>')
+    // Increment view count (fire-and-forget)
+    db.update(publicPublishes).set({ viewCount: sql`${publicPublishes.viewCount} + 1` }).where(eq(publicPublishes.id, row.id)).catch(() => null)
+    const escape = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escape(row.title)}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;max-width:680px;margin:2rem auto;padding:0 1rem;color:#1a1a1a;line-height:1.6}h1{font-size:1.8rem;margin-bottom:0.5rem}pre{background:#f4f4f4;padding:0.8rem;border-radius:4px;overflow:auto}code{background:#f4f4f4;padding:0.1rem 0.3rem;border-radius:3px}hr{border:none;border-top:1px solid #e0e0e0;margin:2rem 0}footer{color:#888;font-size:0.85rem}</style></head><body><article><pre style="background:none;padding:0">${escape(row.body)}</pre></article><hr><footer>Published ${new Date(row.publishedAt).toISOString().slice(0, 10)} · ${row.viewCount + 1} views</footer></body></html>`
+    return reply.type('text/html').send(html)
+  } catch (e) {
+    return reply.code(500).send(`Error: ${(e as Error).message}`)
+  }
+})
 // /metrics is registered by metricsRoutes plugin (queue depths + R119 registry).
 await app.register(workflowRoutes, { prefix: '/api/v1/workflows' })
 await app.register(maintenanceRoutes, { prefix: '/api/v1' })

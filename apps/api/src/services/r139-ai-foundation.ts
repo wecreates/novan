@@ -29,6 +29,19 @@ export async function memoryStore(workspaceId: string, opts: {
     pinned: opts.pinned === true,
     createdAt: Date.now(),
   })
+  // R146.159 — auto-index pipeline: extract wiki-links + tags in the
+  // background. Kill-switch via DISABLE_AUTO_INDEX=1 for bulk imports.
+  if (process.env['DISABLE_AUTO_INDEX'] !== '1') {
+    void (async () => {
+      try {
+        const sb = await import('./r147-sb-s-tier.js')
+        // Wiki-links only if content contains [[
+        if (opts.content.includes('[[')) await sb.linksExtract(workspaceId, id).catch(() => null)
+        // Auto-tag if content has substance (> 80 chars) — skips daily-note stubs
+        if (opts.content.length > 80) await sb.tagsExtract(workspaceId, id).catch(() => null)
+      } catch { /* indexing is best-effort */ }
+    })()
+  }
   return { id, embedded: vec !== null }
 }
 
