@@ -6042,3 +6042,46 @@ export const questionsBacklog = pgTable('questions_backlog', {
   answeredAt:      bigint('answered_at', { mode: 'number' }),
   priority:        integer('priority').notNull().default(0),
 }, (t) => [index('qb_ws_status_idx').on(t.workspaceId, t.status, t.raisedAt)])
+
+// ─── R146.158 — SB3 C-tier ─────────────────────────────────────────────
+
+export const dreamEntries = pgTable('dream_entries', {
+  id:          text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  date:        text('date').notNull(),
+  body:        text('body').notNull(),
+  themes:      jsonb('themes').$type<string[]>().notNull().default([]),
+  vivid:       boolean('vivid').notNull().default(false),
+  chunkId:     text('chunk_id'),
+  recordedAt:  bigint('recorded_at', { mode: 'number' }).notNull(),
+}, (t) => [index('de_ws_date_idx').on(t.workspaceId, t.date)])
+
+export const bodyMetrics = pgTable('body_metrics', {
+  workspaceId: text('workspace_id').notNull(),
+  date:        text('date').notNull(),
+  metric:      text('metric').notNull(),
+  value:       real('value').notNull(),
+  source:      text('source').notNull().default('manual'),
+  recordedAt:  bigint('recorded_at', { mode: 'number' }).notNull(),
+}, (t) => [primaryKey({ columns: [t.workspaceId, t.date, t.metric] })])
+
+export const publicPublishes = pgTable('public_publishes', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  slug:           text('slug').notNull().unique(),
+  chunkId:        text('chunk_id').notNull(),
+  title:          text('title').notNull(),
+  body:           text('body').notNull(),
+  viewCount:      integer('view_count').notNull().default(0),
+  publishedAt:    bigint('published_at',   { mode: 'number' }).notNull(),
+  unpublishedAt:  bigint('unpublished_at', { mode: 'number' }),
+}, (t) => [index('pp_ws_idx').on(t.workspaceId, t.publishedAt)])
+
+export const inheritanceManifests = pgTable('inheritance_manifests', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  recipientHint:  text('recipient_hint').notNull(),
+  bodyMd:         text('body_md').notNull(),
+  manifestData:   jsonb('manifest_data').$type<Record<string, unknown>>().notNull().default({}),
+  generatedAt:    bigint('generated_at', { mode: 'number' }).notNull(),
+}, (t) => [index('im_ws_idx').on(t.workspaceId, t.generatedAt)])
