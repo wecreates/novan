@@ -6028,3 +6028,17 @@ export const chunkConfidence = pgTable('chunk_confidence', {
   contradictions: jsonb('contradictions').$type<Array<{ chunkId: string; reason: string }>>().notNull().default([]),
   updatedAt:      bigint('updated_at', { mode: 'number' }).notNull(),
 }, (t) => [primaryKey({ columns: [t.workspaceId, t.chunkId] })])
+
+// ─── R146.155 — SB3 S-tier ─────────────────────────────────────────────
+
+export const questionsBacklog = pgTable('questions_backlog', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  question:        text('question').notNull(),
+  contextChunkId:  text('context_chunk_id'),
+  status:          text('status').notNull().default('open'),
+  answerChunkId:   text('answer_chunk_id'),
+  raisedAt:        bigint('raised_at',   { mode: 'number' }).notNull(),
+  answeredAt:      bigint('answered_at', { mode: 'number' }),
+  priority:        integer('priority').notNull().default(0),
+}, (t) => [index('qb_ws_status_idx').on(t.workspaceId, t.status, t.raisedAt)])
