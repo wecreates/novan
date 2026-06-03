@@ -5503,6 +5503,16 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return closeLoops(ws)
     },
   },
+
+  // ─── R146.169 — Operator dashboard ────────────────────────────────
+  'dashboard.summary': {
+    description: 'All-in-one dashboard: audience, social, funnel, revenue, PAI, publishing, issues, action queue.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { dashboardSummary } = await import('./r169-dashboard.js')
+      return dashboardSummary(ws)
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────
