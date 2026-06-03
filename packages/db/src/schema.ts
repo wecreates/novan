@@ -5516,3 +5516,36 @@ export const promptEvalRuns = pgTable('prompt_eval_runs', {
   details:       jsonb('details').$type<Array<{ caseId: string; passed: boolean; actual: unknown; reason: string }>>().notNull().default([]),
   ranAt:         bigint('ran_at', { mode: 'number' }).notNull(),
 }, (t) => [index('per_key_idx').on(t.workspaceId, t.promptKey, t.ranAt)])
+
+// ─── R146.140 — AI A-tier ──────────────────────────────────────────────
+
+export const inferenceCache = pgTable('inference_cache', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  promptHash:       text('prompt_hash').notNull(),
+  promptEmbedding:  vector('prompt_embedding', { dimensions: 768 }),
+  response:         text('response').notNull(),
+  taskType:         text('task_type').notNull(),
+  provider:         text('provider').notNull(),
+  hitCount:         integer('hit_count').notNull().default(0),
+  createdAt:        bigint('created_at',  { mode: 'number' }).notNull(),
+  lastHitAt:        bigint('last_hit_at', { mode: 'number' }),
+}, (t) => [
+  index('ic_ws_idx').on(t.workspaceId, t.createdAt),
+  index('ic_hash_idx').on(t.workspaceId, t.promptHash),
+])
+
+export const promptTemplatesV2 = pgTable('prompt_templates_v2', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  name:         text('name').notNull(),
+  version:      integer('version').notNull().default(1),
+  body:         text('body').notNull(),
+  inputSchema:  jsonb('input_schema').$type<Record<string, unknown>>().notNull().default({}),
+  outputSchema: jsonb('output_schema').$type<Record<string, unknown>>(),
+  active:       boolean('active').notNull().default(true),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ptv2_ws_idx').on(t.workspaceId, t.name),
+  index('ptv2_active_idx').on(t.workspaceId, t.active),
+])
