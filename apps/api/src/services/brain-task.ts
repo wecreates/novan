@@ -2376,6 +2376,18 @@ export const OPERATIONS: Record<string, OpSpec> = {
   'temp.get':              { description: '#35 Get the adapted temperature for a task type. Params: taskType', risk: 'low',
     handler: async (ws, p) => (await import('./r145-ai-b2-tier.js')).adaptiveTempGet(ws, String(p['taskType'] ?? '')) },
 
+  // ─── R146.146 — C2-tier AI 36-40 (final of next 20) ───────────────
+  'density.summarize':     { description: '#36 Chain-of-density: iteratively denser summary, same length, more entities. Params: source, rounds?', risk: 'low',
+    handler: async (ws, p) => (await import('./r146-ai-c2-tier.js')).chainOfDensity(ws, { source: String(p['source'] ?? ''), ...(typeof p['rounds'] === 'number' ? { rounds: p['rounds'] as number } : {}) }) },
+  'constitutional.draft':  { description: '#37 LLM draft → self-critique vs constitution → revise. Params: task, constitution?, maxRevisions?', risk: 'low',
+    handler: async (ws, p) => (await import('./r146-ai-c2-tier.js')).constitutionalDraft(ws, { task: String(p['task'] ?? ''), ...(p['constitution'] ? { constitution: p['constitution'] as string[] } : {}), ...(typeof p['maxRevisions'] === 'number' ? { maxRevisions: p['maxRevisions'] as number } : {}) }) },
+  'tot.reason':            { description: '#38 Tree-of-thoughts: branch N reasoning approaches, score, pick winner. Params: problem, branches?', risk: 'low',
+    handler: async (ws, p) => (await import('./r146-ai-c2-tier.js')).treeOfThoughts(ws, { problem: String(p['problem'] ?? ''), ...(typeof p['branches'] === 'number' ? { branches: p['branches'] as number } : {}) }) },
+  'active.surface':        { description: '#39 Surface eval boundary cases (pass rate closest to 50%) for operator labeling. Params: promptKey, topN?', risk: 'low',
+    handler: async (ws, p) => (await import('./r146-ai-c2-tier.js')).activeLearningSurface(ws, { promptKey: String(p['promptKey'] ?? ''), ...(typeof p['topN'] === 'number' ? { topN: p['topN'] as number } : {}) }) },
+  'hybrid.solve':          { description: '#40 Symbolic+LLM hybrid solver — tries arithmetic/date math first, falls back to LLM. Params: question', risk: 'low',
+    handler: async (ws, p) => (await import('./r146-ai-c2-tier.js')).hybridSolve(ws, { question: String(p['question'] ?? '') }) },
+
   'autonomy.counts':       { description: 'Live counts for autonomy dashboard: findings(open) · improvements(open) · ops(in_process/on_deck) · proposals(proposed/approved) · connectorsNeedingRefresh · agentsLive.', risk: 'low',
     handler: async (ws) => (await import('./r124-autonomy.js')).autonomyCounts(ws) },
   'suggestions.scan':      { description: 'Scan last 24h of error events and create improvement_suggestions for recurring patterns (≥3 occurrences). Powers Ali queue.', risk: 'low',
