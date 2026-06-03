@@ -99,11 +99,21 @@ async function phaseObserve(workspaceId: string, isaId: string): Promise<Record<
     .where(and(eq(videoPaiRun.workspaceId, workspaceId), eq(videoPaiRun.isaId, isaId)))
   const prior = Number(sameIsa[0]?.count ?? 0)
 
+  // R146.186 — Pull workspace's evolved platform_ranking_playbook from R176
+  // tactics so THINK consumes it as additional directives.
+  let playbookRules: Array<{ rule: string; weight: number }> = []
+  try {
+    const { playbookGet } = await import('./r176-video-tactics.js')
+    const pb = await playbookGet(workspaceId, 'tiktok', 'short').catch(() => null)
+    if (pb) playbookRules = (pb.rules ?? []).filter(r => r.weight >= 0.6)
+  } catch { /* tactics is optional */ }
+
   return {
     recentRuns: recent.length,
     avgOutcome: recent.length ? recent.reduce((a, r) => a + (r.outcomeScore ?? 0), 0) / recent.length : null,
     avgIscPass: recent.length ? recent.reduce((a, r) => a + r.iscPassRate, 0) / recent.length : null,
     activeLessons: lessons.map(l => ({ topic: l.topic, pattern: l.pattern, confidence: l.confidence })),
+    platformRules: playbookRules,
     priorRunsForIsa: prior,
     timestamp: Date.now(),
   }

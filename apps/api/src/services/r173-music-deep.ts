@@ -278,6 +278,21 @@ export async function reproduce(workspaceId: string, opts: { recipeId: string; p
       costUsd: chosen.provider === 'suno' || chosen.provider === 'udio' ? 0.30 : 0.10,
       endedAt: Date.now(),
     }).where(eq(musicReproduction.id, id))
+
+    // R146.186 — Auto-wrap finished reproduction as an R172 Mixcraft bundle
+    // so the operator can drag-import the master into a session. Best-effort.
+    try {
+      const { fromMusicJob } = await import('./r172-mixcraft-adapter.js')
+      await fromMusicJob(workspaceId, {
+        name: recipe.name,
+        bpm: recipe.bpm,
+        timeSignature: recipe.timeSignature,
+        durationSec: recipe.durationSec,
+        masterAudioUrl: masteredUrl ?? generationUrl,
+        stems: [{ name: 'master', role: 'audio', audioUrl: masteredUrl ?? generationUrl, durationSec: recipe.durationSec }],
+        sourceRef: `music_reproduction:${id}`,
+      }).catch(() => null)
+    } catch { /* mixcraft wrap is optional */ }
     return { id, status: 'done', provider: chosen.provider }
   } catch (e) {
     const msg = (e as Error).message.slice(0, 400)

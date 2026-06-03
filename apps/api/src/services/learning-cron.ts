@@ -1266,6 +1266,12 @@ const INTERVALS = {
   cartRecovery:          60 * 60_000,
   // R146.168 — Loop closure sweep hourly.
   loopClosure:           60 * 60_000,
+  // R146.186 — Wire-up crons.
+  proactiveScan:          5 * 60_000,
+  radarScan:             10 * 60_000,
+  moneyDailyOptimize:    60 * 60_000,    // gated to 07:00 UTC inside handler
+  pentestWeekly:         60 * 60_000,    // gated to Mon 04:00 UTC inside handler
+  sessionSyncPrune:      30 * 60_000,
 }
 
 /**
@@ -1614,6 +1620,81 @@ async function runLoopClosure(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'loop_closure', error: (e as Error).message }) }
 }
 
+// R146.186 — Wire R183 proactive scan every 5 min across all workspaces.
+async function runProactiveScan(): Promise<void> {
+  if (process.env['DISABLE_PROACTIVE'] === '1') return
+  try {
+    const ids = await listWorkspaceIds()
+    const { proactiveScan } = await import('./r183-proactive-radar.js')
+    for (const ws of ids) {
+      try { await proactiveScan(ws) }
+      catch (e) { await emit('cron.error', { task: 'proactive_scan', workspace: ws, error: (e as Error).message }) }
+    }
+  } catch (e) { await emit('cron.error', { task: 'proactive_scan', error: (e as Error).message }) }
+}
+
+// R146.186 — Wire R183 radar snapshot every 10 min.
+async function runRadarScan(): Promise<void> {
+  if (process.env['DISABLE_RADAR'] === '1') return
+  try {
+    const ids = await listWorkspaceIds()
+    const { radarScan } = await import('./r183-proactive-radar.js')
+    for (const ws of ids) {
+      try { await radarScan(ws) }
+      catch (e) { await emit('cron.error', { task: 'radar_scan', workspace: ws, error: (e as Error).message }) }
+    }
+  } catch (e) { await emit('cron.error', { task: 'radar_scan', error: (e as Error).message }) }
+}
+
+// R146.186 — Wire R180 daily money optimize. Fires once per UTC day at 07:00.
+let _lastMoneyDay = -1
+async function runMoneyDailyOptimize(): Promise<void> {
+  if (process.env['DISABLE_MONEY_OPTIMIZE'] === '1') return
+  const now = new Date()
+  if (now.getUTCHours() !== 7) return
+  const today = Math.floor(now.getTime() / (24 * 60 * 60_000))
+  if (_lastMoneyDay === today) return
+  _lastMoneyDay = today
+  try {
+    const ids = await listWorkspaceIds()
+    const { dailyOptimize } = await import('./r180-money-maximizer.js')
+    for (const ws of ids) {
+      try { await dailyOptimize(ws, 8) }
+      catch (e) { await emit('cron.error', { task: 'money_daily_optimize', workspace: ws, error: (e as Error).message }) }
+    }
+  } catch (e) { await emit('cron.error', { task: 'money_daily_optimize', error: (e as Error).message }) }
+}
+
+// R146.186 — Wire R181 weekly auto-pentest. Fires Monday 04:00 UTC.
+let _lastPentestWeek = ''
+async function runPentestWeekly(): Promise<void> {
+  if (process.env['DISABLE_PENTEST_WEEKLY'] === '1') return
+  const now = new Date()
+  if (now.getUTCDay() !== 1 || now.getUTCHours() !== 4) return
+  const weekKey = now.toISOString().slice(0, 10)
+  if (_lastPentestWeek === weekKey) return
+  _lastPentestWeek = weekKey
+  try {
+    const ids = await listWorkspaceIds()
+    const { runPentest } = await import('./r181-self-pentest.js')
+    for (const ws of ids) {
+      try { await runPentest(ws, { triggeredBy: 'cron' }) }
+      catch (e) { await emit('cron.error', { task: 'pentest_weekly', workspace: ws, error: (e as Error).message }) }
+    }
+  } catch (e) { await emit('cron.error', { task: 'pentest_weekly', error: (e as Error).message }) }
+}
+
+// R146.186 — Prune R182 session_sync rows older than 7 days.
+async function runSessionSyncPrune(): Promise<void> {
+  try {
+    const { db } = await import('../db/client.js')
+    const { sessionSync } = await import('../db/schema.js')
+    const { sql: drizzleSql } = await import('drizzle-orm')
+    const cutoff = Date.now() - 7 * 86_400_000
+    await db.delete(sessionSync).where(drizzleSql`${sessionSync.lastPingAt} < ${cutoff}`)
+  } catch (e) { await emit('cron.error', { task: 'session_sync_prune', error: (e as Error).message }) }
+}
+
 // R146.164 — Cart recovery: per-workspace sweep for ≥1h abandoned carts.
 async function runCartRecovery(): Promise<void> {
   if (process.env['DISABLE_CART_RECOVERY'] === '1') return
@@ -1944,6 +2025,11 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runAudienceMaint,               INTERVALS.audienceMaint))
   handles.push(scheduleJittered(runCartRecovery,                INTERVALS.cartRecovery))
   handles.push(scheduleJittered(runLoopClosure,                 INTERVALS.loopClosure))
+  handles.push(scheduleJittered(runProactiveScan,               INTERVALS.proactiveScan))
+  handles.push(scheduleJittered(runRadarScan,                   INTERVALS.radarScan))
+  handles.push(scheduleJittered(runMoneyDailyOptimize,          INTERVALS.moneyDailyOptimize))
+  handles.push(scheduleJittered(runPentestWeekly,               INTERVALS.pentestWeekly))
+  handles.push(scheduleJittered(runSessionSyncPrune,            INTERVALS.sessionSyncPrune))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

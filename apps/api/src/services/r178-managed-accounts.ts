@@ -143,6 +143,12 @@ export async function accountAdd(workspaceId: string, input: AddAccountInput): P
     health: 'unknown',
     createdAt: now, updatedAt: now,
   })
+  // R146.186 — Auto-seed a per-account R177 humanizer profile so caps +
+  // pacing kick in immediately. Best-effort; failure is non-fatal.
+  try {
+    const { profileUpsert } = await import('./r177-browser-humanizer.js')
+    await profileUpsert(workspaceId, { accountId: id }).catch(() => null)
+  } catch { /* optional */ }
   return { id }
 }
 
