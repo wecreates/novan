@@ -327,6 +327,15 @@ export async function paiRun(workspaceId: string, opts: { isaId: string }): Prom
       verify, iscPassRate: passRate, phase: 'done', endedAt: Date.now(),
     }).where(eq(videoPaiRun.id, runId))
 
+    // R146.167 — auto-publish + repurpose if ISA target opts in.
+    const autoPublish = (isa.target as { autoPublish?: boolean })?.autoPublish === true
+    if (autoPublish) {
+      try {
+        const { publishAndRepurpose } = await import('./r167-auto-publish.js')
+        await publishAndRepurpose(workspaceId, runId).catch(() => null)
+      } catch { /* publish optional */ }
+    }
+
     return { runId, isaId: opts.isaId, iscPassRate: passRate, phase: 'done' }
   } catch (e) {
     const error = (e as Error).message.slice(0, 500)

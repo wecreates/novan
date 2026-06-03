@@ -5442,6 +5442,41 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return applyProfileToPlan(ws, (params as { runId: string }).runId)
     },
   },
+
+  // ─── R146.167 — Auto-publish pipeline ─────────────────────────────
+  'publish.fromRun': {
+    description: 'Publish a completed PAI run to all active platforms (drafts socialPosts with bandit-picked captions). Params: { runId, platforms?, scheduledAt? }',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const { publishFromRun } = await import('./r167-auto-publish.js')
+      return publishFromRun(ws, params as unknown as Parameters<typeof publishFromRun>[1])
+    },
+  },
+  'publish.autoRepurpose': {
+    description: 'Mint a R163 repurpose pack from a completed run. Params: { runId }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { autoRepurposeFromRun } = await import('./r167-auto-publish.js')
+      return autoRepurposeFromRun(ws, (params as { runId: string }).runId)
+    },
+  },
+  'publish.andRepurpose': {
+    description: 'Combo: publish + repurpose. Params: { runId, platforms?, scheduledAt? }',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const { publishAndRepurpose } = await import('./r167-auto-publish.js')
+      const p = params as { runId: string; platforms?: string[]; scheduledAt?: number }
+      return publishAndRepurpose(ws, p.runId, { ...(p.platforms ? { platforms: p.platforms } : {}), ...(p.scheduledAt ? { scheduledAt: p.scheduledAt } : {}) })
+    },
+  },
+  'publish.plans': {
+    description: 'List publish plans. Params: { status?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { publishPlanList } = await import('./r167-auto-publish.js')
+      return publishPlanList(ws, (params as Parameters<typeof publishPlanList>[1]) ?? {})
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────

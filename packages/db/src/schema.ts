@@ -6527,3 +6527,23 @@ export const directorRunBinding = pgTable('director_run_binding', {
   uniqueIndex('drb_run_idx').on(t.runId),
   index('drb_ws_idx').on(t.workspaceId, t.boundAt),
 ])
+
+// ─── R146.167 — Auto-publish pipeline ──────────────────────────────
+export const publishPlan = pgTable('publish_plan', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  businessId:       text('business_id'),
+  runId:            text('run_id').notNull(),
+  sourceKind:       text('source_kind').notNull().default('pai_run'),
+  platforms:        jsonb('platforms').$type<string[]>().notNull().default([]),
+  assetPaths:       jsonb('asset_paths').$type<string[]>().notNull().default([]),
+  socialPostIds:    jsonb('social_post_ids').$type<string[]>().notNull().default([]),
+  repurposePackId:  text('repurpose_pack_id'),
+  scheduledAt:      bigint('scheduled_at', { mode: 'number' }),
+  status:           text('status').notNull().default('draft'),
+  error:            text('error'),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('pp_run_idx').on(t.runId),
+  index('pp_ws_idx').on(t.workspaceId, t.status, t.createdAt),
+])
