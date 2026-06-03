@@ -5987,3 +5987,44 @@ export const noteTemplates = pgTable('note_templates', {
   variables:   jsonb('variables').$type<string[]>().notNull().default([]),
   createdAt:   bigint('created_at', { mode: 'number' }).notNull(),
 }, (t) => [index('nt_ws_idx').on(t.workspaceId, t.name)])
+
+// ─── R146.152 — SB2 A-tier ─────────────────────────────────────────────
+
+export const digestSubscriptions = pgTable('digest_subscriptions', {
+  workspaceId: text('workspace_id').primaryKey(),
+  email:       text('email').notNull(),
+  cadence:     text('cadence').notNull().default('weekly'),
+  lastSentAt:  bigint('last_sent_at', { mode: 'number' }),
+  active:      boolean('active').notNull().default(true),
+  updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
+export const chunkAnnotations = pgTable('chunk_annotations', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  chunkId:      text('chunk_id').notNull(),
+  body:         text('body').notNull(),
+  color:        text('color').notNull().default('yellow'),
+  startOffset:  integer('start_offset'),
+  endOffset:    integer('end_offset'),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('ca_chunk_idx').on(t.chunkId)])
+
+export const chunkRevisions = pgTable('chunk_revisions', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  chunkId:      text('chunk_id').notNull(),
+  prevContent:  text('prev_content').notNull(),
+  diffSummary:  text('diff_summary'),
+  editedBy:     text('edited_by').notNull().default('operator'),
+  editedAt:     bigint('edited_at', { mode: 'number' }).notNull(),
+}, (t) => [index('cr_chunk_idx').on(t.workspaceId, t.chunkId, t.editedAt)])
+
+export const chunkConfidence = pgTable('chunk_confidence', {
+  workspaceId:    text('workspace_id').notNull(),
+  chunkId:        text('chunk_id').notNull(),
+  confidence:     real('confidence').notNull().default(0.7),
+  sources:        jsonb('sources').$type<string[]>().notNull().default([]),
+  contradictions: jsonb('contradictions').$type<Array<{ chunkId: string; reason: string }>>().notNull().default([]),
+  updatedAt:      bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [primaryKey({ columns: [t.workspaceId, t.chunkId] })])
