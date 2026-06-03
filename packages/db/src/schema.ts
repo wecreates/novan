@@ -5758,3 +5758,68 @@ export const inboxItems = pgTable('inbox_items', {
 }, (t) => [
   index('ii_ws_idx').on(t.workspaceId, t.capturedAt),
 ])
+
+// ─── R146.148 — Second-brain A-tier ────────────────────────────────────
+
+export const srsCards = pgTable('srs_cards', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  chunkId:      text('chunk_id').notNull(),
+  front:        text('front').notNull(),
+  back:         text('back').notNull(),
+  intervalDays: integer('interval_days').notNull().default(1),
+  ease:         real('ease').notNull().default(2.5),
+  reps:         integer('reps').notNull().default(0),
+  nextReviewAt: bigint('next_review_at', { mode: 'number' }).notNull(),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('srs_due_idx').on(t.workspaceId, t.nextReviewAt)])
+
+export const people = pgTable('people', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  name:         text('name').notNull(),
+  email:        text('email'),
+  org:          text('org'),
+  notes:        text('notes'),
+  lastContactAt: bigint('last_contact_at', { mode: 'number' }),
+  followUpAt:   bigint('follow_up_at',   { mode: 'number' }),
+  metadata:     jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('people_ws_idx').on(t.workspaceId, t.name),
+  index('people_follow_idx').on(t.workspaceId, t.followUpAt),
+])
+
+export const personInteractions = pgTable('person_interactions', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  personId:     text('person_id').notNull(),
+  channel:      text('channel').notNull(),
+  notes:        text('notes').notNull(),
+  occurredAt:   bigint('occurred_at', { mode: 'number' }).notNull(),
+  createdAt:    bigint('created_at',  { mode: 'number' }).notNull(),
+}, (t) => [index('pi_person_idx').on(t.personId, t.occurredAt)])
+
+export const readingQueue = pgTable('reading_queue', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  title:        text('title').notNull(),
+  url:          text('url'),
+  estimatedMin: integer('estimated_min'),
+  status:       text('status').notNull().default('queued'),
+  notesChunkId: text('notes_chunk_id'),
+  addedAt:      bigint('added_at',    { mode: 'number' }).notNull(),
+  startedAt:    bigint('started_at',  { mode: 'number' }),
+  finishedAt:   bigint('finished_at', { mode: 'number' }),
+}, (t) => [index('rq_ws_status_idx').on(t.workspaceId, t.status, t.addedAt)])
+
+export const weeklyReviews = pgTable('weekly_reviews', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  weekStarting:  text('week_starting').notNull(),
+  synthesis:     text('synthesis').notNull(),
+  chunkId:       text('chunk_id'),
+  metrics:       jsonb('metrics').$type<Record<string, unknown>>().notNull().default({}),
+  generatedAt:   bigint('generated_at', { mode: 'number' }).notNull(),
+})
