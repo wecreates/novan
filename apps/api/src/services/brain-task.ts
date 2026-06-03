@@ -6046,11 +6046,45 @@ export const OPERATIONS: Record<string, OpSpec> = {
     },
   },
   'money.dailyOptimize': {
-    description: 'Combo: scan + allocate today\\u2019s effort. Params: { hoursAvailable? }',
+    description: 'Combo: scan + allocate todays effort. Params: { hoursAvailable? }',
     risk: 'low',
     handler: async (ws, params) => {
       const { dailyOptimize } = await import('./r180-money-maximizer.js')
       return dailyOptimize(ws, (params as { hoursAvailable?: number })?.hoursAvailable ?? 8)
+    },
+  },
+
+  // ─── R146.181 — Self-pentest ──────────────────────────────────────
+  'pentest.run': {
+    description: 'Run safe red-team probes against Novan itself. Params: { targetBaseUrl?, scope?, triggeredBy? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { runPentest } = await import('./r181-self-pentest.js')
+      return runPentest(ws, (params as Parameters<typeof runPentest>[1]) ?? {})
+    },
+  },
+  'pentest.runs': {
+    description: 'List pentest runs. Params: { limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { runsList } = await import('./r181-self-pentest.js')
+      return runsList(ws, (params as { limit?: number }) ?? {})
+    },
+  },
+  'pentest.findings': {
+    description: 'List findings. Params: { runId?, severity?, status?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { findingsList } = await import('./r181-self-pentest.js')
+      return findingsList(ws, (params as Parameters<typeof findingsList>[1]) ?? {})
+    },
+  },
+  'pentest.finding.resolve': {
+    description: 'Resolve a finding. Params: { id, status: fixed|wontfix|duplicate, fixPr? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { findingResolve } = await import('./r181-self-pentest.js')
+      return findingResolve(ws, params as unknown as Parameters<typeof findingResolve>[1])
     },
   },
 }

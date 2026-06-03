@@ -6999,3 +6999,37 @@ export const moneyOpportunity = pgTable('money_opportunity', {
   index('mo_ws_idx').on(t.workspaceId, t.status, t.dollarsPerHour),
   index('mo_ws_created_idx').on(t.workspaceId, t.createdAt),
 ])
+
+// ─── R146.181 — Self-pentest ───────────────────────────────────────
+export const pentestRun = pgTable('pentest_run', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  targetBaseUrl:   text('target_base_url').notNull(),
+  scope:           jsonb('scope').$type<string[]>().notNull().default([]),
+  startedAt:       bigint('started_at', { mode: 'number' }).notNull(),
+  endedAt:         bigint('ended_at', { mode: 'number' }),
+  status:          text('status').notNull().default('running'),
+  findingsCount:   integer('findings_count').notNull().default(0),
+  criticalsCount:  integer('criticals_count').notNull().default(0),
+  triggeredBy:     text('triggered_by').notNull().default('manual'),
+  error:           text('error'),
+}, (t) => [index('prn_ws_idx').on(t.workspaceId, t.startedAt)])
+
+export const pentestFinding = pgTable('pentest_finding', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  runId:        text('run_id').notNull(),
+  severity:     text('severity').notNull(),
+  category:     text('category').notNull(),
+  title:        text('title').notNull(),
+  endpoint:     text('endpoint'),
+  evidence:     jsonb('evidence').$type<Record<string, unknown>>().notNull().default({}),
+  remediation:  text('remediation'),
+  status:       text('status').notNull().default('open'),
+  fixedAt:      bigint('fixed_at', { mode: 'number' }),
+  fixPr:        text('fix_pr'),
+  foundAt:      bigint('found_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('pf_run_idx').on(t.runId),
+  index('pf_ws_status_idx').on(t.workspaceId, t.status, t.severity),
+])
