@@ -7068,3 +7068,31 @@ export const sessionSync = pgTable('session_sync', {
   uniqueIndex('ss_user_device_idx').on(t.workspaceId, t.userId, t.deviceId),
   index('ss_user_ping_idx').on(t.workspaceId, t.userId, t.lastPingAt),
 ])
+
+// ─── R146.183 — Proactive + radar ──────────────────────────────────
+export const proactiveSignal = pgTable('proactive_signal', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  kind:         text('kind').notNull(),
+  severity:     text('severity').notNull().default('normal'),
+  summary:      text('summary').notNull(),
+  payload:      jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+  firedAt:      bigint('fired_at', { mode: 'number' }),
+  ackedAt:      bigint('acked_at', { mode: 'number' }),
+  dismissedAt:  bigint('dismissed_at', { mode: 'number' }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('ps_ws_unfired_idx').on(t.workspaceId, t.firedAt, t.severity),
+  index('ps_ws_created_idx').on(t.workspaceId, t.createdAt),
+])
+
+export const threatRadarSnapshot = pgTable('threat_radar_snapshot', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  scanAt:         bigint('scan_at', { mode: 'number' }).notNull(),
+  openTotal:      integer('open_total').notNull().default(0),
+  criticalCount:  integer('critical_count').notNull().default(0),
+  highCount:      integer('high_count').notNull().default(0),
+  bySource:       jsonb('by_source').$type<Record<string, number>>().notNull().default({}),
+  byCategory:     jsonb('by_category').$type<Record<string, number>>().notNull().default({}),
+}, (t) => [index('trs_ws_idx').on(t.workspaceId, t.scanAt)])

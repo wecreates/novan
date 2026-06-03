@@ -6139,6 +6139,56 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return devicesList(ws, (params as { userId: string }).userId)
     },
   },
+
+  // ─── R146.183 — Proactive + threat radar ──────────────────────────
+  'proactive.scan': {
+    description: 'Sweep for interrupt-worthy events + fire push for high/urgent.',
+    risk: 'medium',
+    handler: async (ws) => {
+      const { proactiveScan } = await import('./r183-proactive-radar.js')
+      return proactiveScan(ws)
+    },
+  },
+  'proactive.ack': {
+    description: 'Acknowledge a signal. Params: { id }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { proactiveAck } = await import('./r183-proactive-radar.js')
+      return proactiveAck(ws, (params as { id: string }).id)
+    },
+  },
+  'proactive.list': {
+    description: 'List signals. Params: { unackedOnly?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { proactiveList } = await import('./r183-proactive-radar.js')
+      return proactiveList(ws, (params as Parameters<typeof proactiveList>[1]) ?? {})
+    },
+  },
+  'radar.scan': {
+    description: 'Compute + persist a threat radar snapshot.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { radarScan } = await import('./r183-proactive-radar.js')
+      return radarScan(ws)
+    },
+  },
+  'radar.latest': {
+    description: 'Latest snapshot.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { radarLatest } = await import('./r183-proactive-radar.js')
+      return radarLatest(ws)
+    },
+  },
+  'radar.ticker': {
+    description: 'Single-line ticker string for UI heads-up.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { radarTickerLine } = await import('./r183-proactive-radar.js')
+      return { line: await radarTickerLine(ws) }
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────
