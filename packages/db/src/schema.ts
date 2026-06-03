@@ -5823,3 +5823,56 @@ export const weeklyReviews = pgTable('weekly_reviews', {
   metrics:       jsonb('metrics').$type<Record<string, unknown>>().notNull().default({}),
   generatedAt:   bigint('generated_at', { mode: 'number' }).notNull(),
 })
+
+// ─── R146.149 — SB B-tier ─────────────────────────────────────────────
+
+export const decisions = pgTable('decisions', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  question:         text('question').notNull(),
+  reasoning:        text('reasoning').notNull(),
+  expectedOutcome:  text('expected_outcome'),
+  alternatives:     jsonb('alternatives').$type<string[]>().notNull().default([]),
+  confidence:       real('confidence').notNull().default(0.5),
+  reviewAt:         bigint('review_at',  { mode: 'number' }).notNull(),
+  actualOutcome:    text('actual_outcome'),
+  calibrationScore: real('calibration_score'),
+  decidedAt:        bigint('decided_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('dec_ws_idx').on(t.workspaceId, t.decidedAt),
+  index('dec_review_idx').on(t.workspaceId, t.reviewAt),
+])
+
+export const ideasIncubator = pgTable('ideas', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  title:            text('title').notNull(),
+  body:             text('body').notNull(),
+  status:           text('status').notNull().default('incubating'),
+  mentionCount:     integer('mention_count').notNull().default(0),
+  lastMentionedAt:  bigint('last_mentioned_at', { mode: 'number' }),
+  createdAt:        bigint('created_at',        { mode: 'number' }).notNull(),
+}, (t) => [index('ii_ws_status_idx').on(t.workspaceId, t.status, t.createdAt)])
+
+export const qaPairs = pgTable('qa_pairs', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  question:         text('question').notNull(),
+  answer:           text('answer').notNull(),
+  conversationId:   text('conversation_id'),
+  chunkId:          text('chunk_id'),
+  reuseCount:       integer('reuse_count').notNull().default(0),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('qa_ws_idx').on(t.workspaceId, t.createdAt)])
+
+export const conceptMaturity = pgTable('concept_maturity', {
+  workspaceId:      text('workspace_id').notNull(),
+  concept:          text('concept').notNull(),
+  referenceCount:   integer('reference_count').notNull().default(0),
+  firstSeenAt:      bigint('first_seen_at', { mode: 'number' }).notNull(),
+  lastSeenAt:       bigint('last_seen_at',  { mode: 'number' }).notNull(),
+  maturity:         text('maturity').notNull().default('fresh'),
+}, (t) => [
+  primaryKey({ columns: [t.workspaceId, t.concept] }),
+  index('cm_maturity_idx').on(t.workspaceId, t.maturity, t.lastSeenAt),
+])
