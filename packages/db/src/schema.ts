@@ -7096,3 +7096,45 @@ export const threatRadarSnapshot = pgTable('threat_radar_snapshot', {
   bySource:       jsonb('by_source').$type<Record<string, number>>().notNull().default({}),
   byCategory:     jsonb('by_category').$type<Record<string, number>>().notNull().default({}),
 }, (t) => [index('trs_ws_idx').on(t.workspaceId, t.scanAt)])
+
+// ─── R146.184 — Physical bridges ───────────────────────────────────
+export const physicalEndpoint = pgTable('physical_endpoint', {
+  id:              text('id').primaryKey(),
+  workspaceId:     text('workspace_id').notNull(),
+  kind:            text('kind').notNull(),
+  label:           text('label').notNull(),
+  baseUrl:         text('base_url').notNull(),
+  vaultSecretId:   text('vault_secret_id'),
+  metadata:        jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  status:          text('status').notNull().default('active'),
+  lastSeenAt:      bigint('last_seen_at', { mode: 'number' }),
+  createdAt:       bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [index('pe_ws_kind_idx').on(t.workspaceId, t.kind, t.status)])
+
+export const physicalActionLog = pgTable('physical_action_log', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  endpointId:   text('endpoint_id').notNull(),
+  kind:         text('kind').notNull(),
+  payload:      jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+  result:       jsonb('result').$type<Record<string, unknown>>().notNull().default({}),
+  success:      boolean('success').notNull().default(false),
+  error:        text('error'),
+  startedAt:    bigint('started_at', { mode: 'number' }).notNull(),
+  endedAt:      bigint('ended_at', { mode: 'number' }),
+}, (t) => [index('pal_ws_idx').on(t.workspaceId, t.startedAt)])
+
+export const biometricEvent = pgTable('biometric_event', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  userId:       text('user_id'),
+  source:       text('source').notNull(),
+  kind:         text('kind').notNull(),
+  value:        jsonb('value').$type<Record<string, unknown>>().notNull().default({}),
+  unit:         text('unit'),
+  recordedAt:   bigint('recorded_at', { mode: 'number' }).notNull(),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('be_ws_kind_idx').on(t.workspaceId, t.kind, t.recordedAt),
+  index('be_ws_source_idx').on(t.workspaceId, t.source, t.recordedAt),
+])

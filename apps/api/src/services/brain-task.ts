@@ -6189,6 +6189,88 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { line: await radarTickerLine(ws) }
     },
   },
+
+  // ─── R146.184 — Physical bridges ──────────────────────────────────
+  'physical.endpoint.register': {
+    description: 'Register Home Assistant / OctoPrint / Bambu / Tesla / LinuxCNC endpoint. Params: { kind, label, baseUrl, token?, metadata? }',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const { endpointRegister } = await import('./r184-physical-bridges.js')
+      return endpointRegister(ws, params as unknown as Parameters<typeof endpointRegister>[1])
+    },
+  },
+  'physical.endpoint.list': {
+    description: 'List physical endpoints (no tokens returned). Params: { kind? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { endpointList } = await import('./r184-physical-bridges.js')
+      return endpointList(ws, (params as { kind?: string }) ?? {})
+    },
+  },
+  'home.callService': {
+    description: 'Home Assistant service call. Params: { endpointId, domain, service, data? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { homeCallService } = await import('./r184-physical-bridges.js')
+      return homeCallService(ws, params as unknown as Parameters<typeof homeCallService>[1])
+    },
+  },
+  'home.state': {
+    description: 'Home Assistant state read. Params: { endpointId, entityId? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { homeState } = await import('./r184-physical-bridges.js')
+      return homeState(ws, params as unknown as Parameters<typeof homeState>[1])
+    },
+  },
+  'print.start': {
+    description: 'Start an OctoPrint/Bambu job. Params: { endpointId, filePath }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { printStart } = await import('./r184-physical-bridges.js')
+      return printStart(ws, params as unknown as Parameters<typeof printStart>[1])
+    },
+  },
+  'print.status': {
+    description: 'Print job status. Params: { endpointId }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { printStatus } = await import('./r184-physical-bridges.js')
+      return printStatus(ws, (params as { endpointId: string }).endpointId)
+    },
+  },
+  'print.cancel': {
+    description: 'Cancel print. Params: { endpointId }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { printCancel } = await import('./r184-physical-bridges.js')
+      return printCancel(ws, (params as { endpointId: string }).endpointId)
+    },
+  },
+  'bio.ingest': {
+    description: 'Ingest biometric event(s). Params: { source, kind, value, unit?, recordedAt?, userId? } or array',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { bioIngest } = await import('./r184-physical-bridges.js')
+      return bioIngest(ws, params as unknown as Parameters<typeof bioIngest>[1])
+    },
+  },
+  'bio.list': {
+    description: 'List biometric events. Params: { kind?, source?, sinceDays?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { bioList } = await import('./r184-physical-bridges.js')
+      return bioList(ws, (params as Parameters<typeof bioList>[1]) ?? {})
+    },
+  },
+  'bio.summary': {
+    description: 'Avg/min/max for a biometric kind. Params: { kind, sinceDays? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { bioSummary } = await import('./r184-physical-bridges.js')
+      return bioSummary(ws, params as unknown as Parameters<typeof bioSummary>[1])
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────

@@ -640,6 +640,30 @@ app.get<{ Params: { short: string } }>('/r/:short', async (req, reply) => {
   }
 })
 
+// R146.184 — Biometric webhook ingestion. POST /bio/:workspaceId/:source
+// body: { kind, value, unit?, recordedAt?, userId? } | array of same.
+app.post<{ Params: { workspaceId: string; source: string }; Body: unknown }>('/bio/:workspaceId/:source', async (req, reply) => {
+  reply.header('access-control-allow-origin', '*')
+  const { workspaceId, source } = req.params
+  try {
+    const { bioIngest } = await import('./services/r184-physical-bridges.js')
+    const body = req.body as { kind?: string; value?: unknown; unit?: string; recordedAt?: number; userId?: string } | Array<{ kind?: string; value?: unknown; unit?: string; recordedAt?: number; userId?: string }>
+    const arr = Array.isArray(body) ? body : [body]
+    const valid = arr.filter(e => e && typeof e.kind === 'string').map(e => ({
+      source: source as 'apple_health' | 'garmin' | 'fitbit' | 'whoop' | 'oura' | 'manual',
+      kind: e.kind as 'steps' | 'heart_rate' | 'hrv' | 'sleep' | 'workout' | 'stress' | 'spo2' | 'temp' | 'weight' | 'calories' | 'distance',
+      value: (e.value ?? {}) as Record<string, unknown>,
+      ...(e.unit ? { unit: e.unit } : {}),
+      ...(e.recordedAt ? { recordedAt: e.recordedAt } : {}),
+      ...(e.userId ? { userId: e.userId } : {}),
+    }))
+    const r = await bioIngest(workspaceId, valid)
+    return reply.send(r)
+  } catch (e) {
+    return reply.code(500).send({ error: (e as Error).message })
+  }
+})
+
 // /metrics is registered by metricsRoutes plugin (queue depths + R119 registry).
 await app.register(workflowRoutes, { prefix: '/api/v1/workflows' })
 await app.register(maintenanceRoutes, { prefix: '/api/v1' })
