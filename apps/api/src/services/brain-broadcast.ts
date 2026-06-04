@@ -35,13 +35,11 @@ export interface BroadcastResult {
 interface DigestSection { title: string; lines: string[] }
 
 async function ensureBroadcastConversation(workspaceId: string): Promise<string> {
-  const existing = await db.select({ id: conversations.id }).from(conversations)
-    .where(and(
-      eq(conversations.workspaceId, workspaceId),
-      eq(conversations.title, BROADCAST_CONVO_TITLE),
-    ))
-    .limit(1).then(r => r[0]).catch(() => undefined)
-  if (existing) return existing.id
+  // R146.200 — atomic upsert via partial unique index
+  // conversations_broadcast_ws_uniq (workspace_id) WHERE title='Brain
+  // broadcast'. Previous SELECT-then-INSERT had a TOCTOU window: two
+  // concurrent cron ticks could both observe "no row" and create
+  // duplicate broadcast convos, scattering messages across them.
   const id = uuidv7()
   const now = Date.now()
   await db.insert(conversations).values({
@@ -52,8 +50,16 @@ async function ensureBroadcastConversation(workspaceId: string): Promise<string>
     totalCostUsd: 0,
     createdAt: now,
     updatedAt: now,
-  }).catch((e: Error) => { console.error('[brain-broadcast]', e.message); return null })
-  return id
+  }).onConflictDoNothing().catch((e: Error) => { console.error('[brain-broadcast]', e.message); return null })
+  // Read back the canonical row — may be the one we just inserted, or a
+  // concurrent caller's row.
+  const row = await db.select({ id: conversations.id }).from(conversations)
+    .where(and(
+      eq(conversations.workspaceId, workspaceId),
+      eq(conversations.title, BROADCAST_CONVO_TITLE),
+    ))
+    .limit(1).then(r => r[0]).catch(() => undefined)
+  return row?.id ?? id
 }
 
 async function lastBroadcastAge(workspaceId: string, convoId: string): Promise<number> {
