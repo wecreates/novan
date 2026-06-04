@@ -6380,6 +6380,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return r
     },
   },
+  'bio.anomalyCheck': {
+    description: 'Z-score anomaly check vs 14-day baseline; mints proactive_signal on z≥2.5. Params: { kind, windowMin?, baselineDays?, zThreshold? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { bioAnomalyCheck } = await import('./r184-physical-bridges.js')
+      return bioAnomalyCheck(ws, params as unknown as Parameters<typeof bioAnomalyCheck>[1])
+    },
+  },
   'social.reply.sweepApproved': {
     description: 'Sweep approved drafts and send them, capped 10/h. Params: { hourlyCap? }',
     risk: 'high',

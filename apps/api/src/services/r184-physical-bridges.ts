@@ -207,6 +207,61 @@ export async function bioList(workspaceId: string, opts: { kind?: string; source
   return db.select().from(biometricEvent).where(and(...filters)).orderBy(desc(biometricEvent.recordedAt)).limit(Math.min(opts.limit ?? 100, 1000))
 }
 
+/**
+ * R146.192 — Bio anomaly detection. For a given kind in last `windowMin`
+ * minutes, flag z-score ≥ 2.5 (vs trailing baseline of `baselineDays`
+ * days) as an anomaly. Mints a R183 proactive_signal when triggered.
+ */
+export async function bioAnomalyCheck(workspaceId: string, opts: { kind: string; windowMin?: number; baselineDays?: number; zThreshold?: number } = { kind: 'heart_rate' }): Promise<{ anomaly: boolean; z: number; lastValue: number | null; baselineMean: number | null }> {
+  const winMin = opts.windowMin ?? 30
+  const baseDays = opts.baselineDays ?? 14
+  const zT = opts.zThreshold ?? 2.5
+  const now = Date.now()
+  const sinceWindow = now - winMin * 60_000
+  const sinceBase = now - baseDays * 86_400_000
+  const rows = await db.select().from(biometricEvent)
+    .where(and(eq(biometricEvent.workspaceId, workspaceId), eq(biometricEvent.kind, opts.kind), gte(biometricEvent.recordedAt, sinceBase)))
+    .limit(20_000)
+  if (rows.length < 20) return { anomaly: false, z: 0, lastValue: null, baselineMean: null }
+  const toNum = (r: typeof biometricEvent.$inferSelect): number | null => {
+    const v = (r.value as { value?: number; bpm?: number; count?: number })
+    const n = v.value ?? v.bpm ?? v.count
+    return typeof n === 'number' ? n : null
+  }
+  const window: number[] = []
+  const baseline: number[] = []
+  for (const r of rows) {
+    const n = toNum(r); if (n === null) continue
+    if (r.recordedAt >= sinceWindow) window.push(n)
+    else baseline.push(n)
+  }
+  if (baseline.length < 10 || window.length === 0) return { anomaly: false, z: 0, lastValue: window.at(-1) ?? null, baselineMean: null }
+  const mean = baseline.reduce((a, b) => a + b, 0) / baseline.length
+  const variance = baseline.reduce((a, b) => a + (b - mean) ** 2, 0) / baseline.length
+  const std = Math.sqrt(variance) || 1
+  const last = window[window.length - 1] ?? mean
+  const z = Math.abs((last - mean) / std)
+  const anomaly = z >= zT
+
+  if (anomaly) {
+    try {
+      const { proactiveSignal } = await import('../db/schema.js')
+      const { v7 } = await import('uuid')
+      await db.insert(proactiveSignal).values({
+        id: v7(), workspaceId,
+        kind: 'biometric_anomaly',
+        severity: z >= 4 ? 'urgent' : 'high',
+        summary: `${opts.kind} anomaly: last=${last.toFixed(1)} vs baseline ${mean.toFixed(1)} (z=${z.toFixed(2)})`,
+        payload: { kind: opts.kind, z, lastValue: last, baselineMean: mean },
+        createdAt: Date.now(),
+      } as Parameters<typeof db.insert<typeof proactiveSignal>>[0] extends never ? never : {
+        id: string; workspaceId: string; kind: string; severity: string; summary: string; payload: Record<string, unknown>; createdAt: number
+      }).catch(() => null)
+    } catch { /* signal mint is best-effort */ }
+  }
+  return { anomaly, z, lastValue: last, baselineMean: mean }
+}
+
 export async function bioSummary(workspaceId: string, opts: { kind: string; sinceDays?: number } = { kind: 'heart_rate' }): Promise<{ kind: string; n: number; avg: number | null; min: number | null; max: number | null }> {
   const since = Date.now() - (opts.sinceDays ?? 7) * 86_400_000
   const rows = await db.select().from(biometricEvent)
