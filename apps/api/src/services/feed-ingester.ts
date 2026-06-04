@@ -137,6 +137,23 @@ export async function pollFeed(feedId: string): Promise<PollResult> {
 
   const now = Date.now()
 
+  // R146.205 — exponential backoff on chronically failing feeds. Without
+  // this, a 403/404 source (e.g., hnrss intermittently rate-limited) gets
+  // re-polled every cron tick forever — burning fetch quota + filling
+  // events with feed.poll_failed noise. Backoff schedule: errorCount=3
+  // → wait 2h before retry; =4 → 4h; =5 → 8h; capped at 24h. Reset
+  // when a successful poll happens.
+  if (feed.errorCount >= 3 && feed.lastPolledAt) {
+    const backoffHours = Math.min(24, Math.pow(2, feed.errorCount - 2))
+    const nextEligibleAt = feed.lastPolledAt + backoffHours * 3600_000
+    if (now < nextEligibleAt) {
+      return {
+        feedId, feedUrl: feed.feedUrl, itemsFound: 0, itemsIngested: 0, itemsCached: 0,
+        error: `backoff: ${feed.errorCount} consecutive failures, next retry in ${Math.round((nextEligibleAt - now) / 60_000)}min`,
+      }
+    }
+  }
+
   // Update poll metadata first (so a hung fetch doesn't get re-polled)
   await db.update(externalFeeds).set({
     lastPolledAt: now, pollCount: feed.pollCount + 1, updatedAt: now,
@@ -219,6 +236,7 @@ export async function pollFeed(feedId: string): Promise<PollResult> {
     lastSuccessAt: Date.now(),
     itemsIngested: feed.itemsIngested + ingested,
     lastError: null,
+    errorCount: 0,  // R146.205 — clear backoff on success
     updatedAt: Date.now(),
   }).where(eq(externalFeeds.id, feedId))
 
