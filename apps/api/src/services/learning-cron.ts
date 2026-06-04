@@ -1660,9 +1660,14 @@ async function runApprovedReplySend(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'approved_reply_send', error: (e as Error).message }) }
 }
 
-// R146.190 — time-based heartbeat (survives restarts): emit when
-// activity OR when ≥58 min has passed since the last heartbeat emit.
-let _proactiveLastEmit = 0
+// R146.197 — Drop the 58-min throttle. The R190 throttle relied on a
+// module-scoped `_proactiveLastEmit = 0` to allow the first emit, but in
+// production we observed 2 successful runRadarScan ticks with zero
+// `cron.radar_scan` events ever written — meaning the conditional never
+// reached emit, despite snapshots being inserted by radarScan itself.
+// Root cause was non-obvious; the pragmatic fix is to always emit per
+// tick. Heartbeats are cheap (~1 row/10min) and the inspector's 6h
+// expectation window is now safely satisfied even after restart.
 async function runProactiveScan(): Promise<void> {
   if (process.env['DISABLE_PROACTIVE'] === '1') return
   try {
@@ -1676,16 +1681,11 @@ async function runProactiveScan(): Promise<void> {
         totalFired  += r.fired
       } catch (e) { await emit('cron.error', { task: 'proactive_scan', workspace: ws, error: (e as Error).message }) }
     }
-    const now = Date.now()
-    if (totalMinted > 0 || totalFired > 0 || now - _proactiveLastEmit >= 58 * 60_000) {
-      await emit('cron.proactive_scan', { workspaces: ids.length, minted: totalMinted, fired: totalFired })
-      _proactiveLastEmit = now
-    }
+    await emit('cron.proactive_scan', { workspaces: ids.length, minted: totalMinted, fired: totalFired })
   } catch (e) { await emit('cron.error', { task: 'proactive_scan', error: (e as Error).message }) }
 }
 
 // R146.186 — Wire R183 radar snapshot every 10 min.
-let _radarLastEmit = 0
 async function runRadarScan(): Promise<void> {
   if (process.env['DISABLE_RADAR'] === '1') return
   try {
@@ -1699,11 +1699,7 @@ async function runRadarScan(): Promise<void> {
         totalCrit += snap.criticalCount
       } catch (e) { await emit('cron.error', { task: 'radar_scan', workspace: ws, error: (e as Error).message }) }
     }
-    const now = Date.now()
-    if (totalOpen > 0 || totalCrit > 0 || now - _radarLastEmit >= 58 * 60_000) {
-      await emit('cron.radar_scan', { workspaces: ids.length, openTotal: totalOpen, criticalCount: totalCrit })
-      _radarLastEmit = now
-    }
+    await emit('cron.radar_scan', { workspaces: ids.length, openTotal: totalOpen, criticalCount: totalCrit })
   } catch (e) { await emit('cron.error', { task: 'radar_scan', error: (e as Error).message }) }
 }
 

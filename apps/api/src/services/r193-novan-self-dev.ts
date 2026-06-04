@@ -95,10 +95,26 @@ async function inspectProviders(_workspaceId: string): Promise<Finding[]> {
     const r = await validateProviders('system') as { results: Array<{ provider: string; status: string }> }
     const degraded = r.results?.filter(p => p.status === 'degraded') ?? []
     if (degraded.length === 0) return []
+    // R146.197 — Suppress known-degraded providers (revoked Groq key,
+    // missing Fal key, etc.) via KNOWN_DEGRADED_PROVIDERS env. They still
+    // surface but at info severity so they don't mint a fresh medium
+    // proposal every inspection cycle.
+    const known = new Set(
+      (process.env['KNOWN_DEGRADED_PROVIDERS'] || '')
+        .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+    )
+    const surprising = degraded.filter(p => !known.has(p.provider.toLowerCase()))
+    if (surprising.length === 0) {
+      return [{
+        dimension: 'providers', severity: 'info',
+        title: `${degraded.length} known-degraded provider(s) — no action`,
+        evidence: { degraded: degraded.map(p => p.provider), known: [...known] },
+      }]
+    }
     return [{
       dimension: 'providers', severity: 'medium',
-      title: `${degraded.length} AI provider(s) degraded`,
-      evidence: { degraded: degraded.map(p => p.provider) },
+      title: `${surprising.length} AI provider(s) degraded`,
+      evidence: { degraded: surprising.map(p => p.provider) },
       suggestedFix: 'Operator should rotate the affected API keys.',
     }]
   } catch { return [] }
