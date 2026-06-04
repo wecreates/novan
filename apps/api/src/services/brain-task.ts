@@ -6388,6 +6388,24 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return bioAnomalyCheck(ws, params as unknown as Parameters<typeof bioAnomalyCheck>[1])
     },
   },
+  // ─── R146.196 — Quickstart + status ──────────────────────────────
+  'platform.status': {
+    description: 'Single-call platform snapshot: radar + open issues + open self-dev findings + cron coverage + flags.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { platformStatus } = await import('./r196-quickstart.js')
+      return platformStatus(ws)
+    },
+  },
+  'platform.quickstart': {
+    description: 'First-run wizard: seeds default persona + director profile + starter ISA + returns checklist.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { quickstart } = await import('./r196-quickstart.js')
+      return quickstart(ws)
+    },
+  },
+
   // ─── R146.193 — Novan Self-Dev Engine ─────────────────────────────
   'selfdev.inspect': {
     description: 'Run 12 parallel inspectors and persist findings. Params: { goal? }',
