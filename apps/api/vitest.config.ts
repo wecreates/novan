@@ -13,8 +13,11 @@ export default defineConfig({
       // vitest handles TypeScript via esbuild transforms by default
     },
 
-    // Test file patterns
-    include: ['src/test/**/*.test.ts'],
+    // Test file patterns. R146.200 — also pick up colocated
+    // src/services/__tests__/ files; the R192 smoke tests + R200
+    // regression tests live there and were silently never running
+    // because the glob excluded them.
+    include: ['src/test/**/*.test.ts', 'src/**/__tests__/**/*.test.ts'],
 
     // Coverage (optional — run with --coverage flag)
     coverage: {
