@@ -1272,6 +1272,8 @@ const INTERVALS = {
   moneyDailyOptimize:    60 * 60_000,    // gated to 07:00 UTC inside handler
   pentestWeekly:         60 * 60_000,    // gated to Mon 04:00 UTC inside handler
   sessionSyncPrune:      30 * 60_000,
+  // R146.191 — Sweep approved reply drafts and send them with throttling.
+  approvedReplySend:     60 * 60_000,
 }
 
 /**
@@ -1621,6 +1623,29 @@ async function runLoopClosure(): Promise<void> {
 }
 
 // R146.186 — Wire R183 proactive scan every 5 min across all workspaces.
+// R146.191 — send approved reply drafts on hourly cron, capped at 10/h per workspace.
+let _approvedSendLastEmit = 0
+async function runApprovedReplySend(): Promise<void> {
+  if (process.env['DISABLE_APPROVED_REPLY_SEND'] === '1') return
+  try {
+    const ids = await listWorkspaceIds()
+    const { sweepApprovedSends } = await import('./r161-social-comments.js')
+    let totalSent = 0, totalFailed = 0
+    for (const ws of ids) {
+      try {
+        const r = await sweepApprovedSends(ws)
+        totalSent += r.sent
+        totalFailed += r.failed
+      } catch (e) { await emit('cron.error', { task: 'approved_reply_send', workspace: ws, error: (e as Error).message }) }
+    }
+    const now = Date.now()
+    if (totalSent > 0 || totalFailed > 0 || now - _approvedSendLastEmit >= 23 * 60 * 60_000) {
+      await emit('cron.approved_reply_send', { workspaces: ids.length, sent: totalSent, failed: totalFailed })
+      _approvedSendLastEmit = now
+    }
+  } catch (e) { await emit('cron.error', { task: 'approved_reply_send', error: (e as Error).message }) }
+}
+
 // R146.190 — time-based heartbeat (survives restarts): emit when
 // activity OR when ≥58 min has passed since the last heartbeat emit.
 let _proactiveLastEmit = 0
@@ -2059,6 +2084,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runMoneyDailyOptimize,          INTERVALS.moneyDailyOptimize))
   handles.push(scheduleJittered(runPentestWeekly,               INTERVALS.pentestWeekly))
   handles.push(scheduleJittered(runSessionSyncPrune,            INTERVALS.sessionSyncPrune))
+  handles.push(scheduleJittered(runApprovedReplySend,           INTERVALS.approvedReplySend))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

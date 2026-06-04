@@ -6353,6 +6353,41 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return vehicleStatus(ws, (params as { endpointId: string }).endpointId)
     },
   },
+
+  // ─── R146.191 — Feature flags + R161 approved-reply sweep ─────────
+  'flag.list': {
+    description: 'List all feature flags.',
+    risk: 'low',
+    handler: async () => {
+      const { db } = await import('../db/client.js')
+      const { featureFlag } = await import('../db/schema.js')
+      return db.select().from(featureFlag).orderBy(featureFlag.key)
+    },
+  },
+  'flag.set': {
+    description: 'Toggle a feature flag. Params: { key, enabled, description? }',
+    risk: 'medium',
+    handler: async (_ws, params) => {
+      const { db } = await import('../db/client.js')
+      const { featureFlag } = await import('../db/schema.js')
+      const { eq } = await import('drizzle-orm')
+      const p = params as { key: string; enabled: boolean; description?: string }
+      if (!p.key) throw new Error('key required')
+      const now = Date.now()
+      await db.insert(featureFlag).values({ key: p.key, enabled: p.enabled, ...(p.description ? { description: p.description } : {}), updatedAt: now, updatedBy: 'brain-op' })
+        .onConflictDoUpdate({ target: featureFlag.key, set: { enabled: p.enabled, ...(p.description ? { description: p.description } : {}), updatedAt: now, updatedBy: 'brain-op' } })
+      const [r] = await db.select().from(featureFlag).where(eq(featureFlag.key, p.key)).limit(1)
+      return r
+    },
+  },
+  'social.reply.sweepApproved': {
+    description: 'Sweep approved drafts and send them, capped 10/h. Params: { hourlyCap? }',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const { sweepApprovedSends } = await import('./r161-social-comments.js')
+      return sweepApprovedSends(ws, (params as { hourlyCap?: number }) ?? {})
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────

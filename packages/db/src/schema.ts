@@ -7187,3 +7187,12 @@ export const xrScene = pgTable('xr_scene', {
   updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
   createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
 }, (t) => [uniqueIndex('xr_ws_name_idx').on(t.workspaceId, t.name)])
+
+// ─── R146.191 — Feature flags ──────────────────────────────────────
+export const featureFlag = pgTable('feature_flag', {
+  key:          text('key').primaryKey(),
+  enabled:      boolean('enabled').notNull().default(true),
+  description:  text('description'),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+  updatedBy:    text('updated_by'),
+})

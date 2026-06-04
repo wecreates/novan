@@ -294,6 +294,7 @@ await app.register(authPlugin)
 // explicitly only exempts paths ending in `/trigger`.
 const isPublic = (url: string): boolean => {
   if (url === '/health'         || url.startsWith('/health/'))         return true
+  if (url === '/healthz/cron')                                          return true
   if (url === '/api/v1/health'  || url.startsWith('/api/v1/health/'))  return true
   if (url === '/metrics'        || url.startsWith('/metrics/'))        return true
   if (url === '/docs'           || url.startsWith('/docs/'))           return true
@@ -742,6 +743,39 @@ app.get('/admin/brain/ops', async (req, reply) => {
     name, description: (spec as { description?: string }).description ?? '', risk: (spec as { risk?: string }).risk ?? 'low',
   }))
   return reply.send({ count: ops.length, ops })
+})
+
+// R146.191 — Cron health endpoint. Returns the catalogue of cron families
+// observed in the last 48h with last-fire timestamp + count. Useful for
+// confirming that every scheduled job is alive.
+app.get('/healthz/cron', async (_req, reply) => {
+  try {
+    const { db } = await import('./db/client.js')
+    const { sql } = await import('drizzle-orm')
+    const since = Date.now() - 48 * 60 * 60_000
+    const rows = await db.execute(sql`
+      SELECT type, count(*)::int AS count, max(created_at)::bigint AS last_at
+      FROM events
+      WHERE type LIKE 'cron.%' AND created_at >= ${since}
+      GROUP BY type
+      ORDER BY type
+    `)
+    const list = (rows as unknown as { rows?: Array<{ type: string; count: number; last_at: number }> }).rows
+      ?? (rows as unknown as Array<{ type: string; count: number; last_at: number }>)
+    const now = Date.now()
+    return reply.send({
+      ok: true,
+      windowHours: 48,
+      jobs: (Array.isArray(list) ? list : []).map(j => ({
+        type: j.type,
+        count: Number(j.count),
+        lastAt: Number(j.last_at),
+        lastAgoSec: Math.round((now - Number(j.last_at)) / 1000),
+      })),
+    })
+  } catch (e) {
+    return reply.code(500).send({ error: (e as Error).message })
+  }
 })
 
 // /metrics is registered by metricsRoutes plugin (queue depths + R119 registry).

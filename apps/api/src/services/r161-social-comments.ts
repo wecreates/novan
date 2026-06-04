@@ -396,6 +396,38 @@ export async function replyDraftSend(workspaceId: string, draftId: string): Prom
 }
 
 /**
+ * R146.191 — Sweep approved drafts and send them, capped per workspace
+ * per hour to avoid spam-pattern detection.
+ */
+export async function sweepApprovedSends(workspaceId: string, opts: { hourlyCap?: number } = {}): Promise<{ sent: number; failed: number }> {
+  const cap = opts.hourlyCap ?? 10
+  const since = Date.now() - 60 * 60_000
+  const [recent] = await db.select({ n: sql<number>`count(*)::int` })
+    .from(socialReplyDraft)
+    .where(and(
+      eq(socialReplyDraft.workspaceId, workspaceId),
+      eq(socialReplyDraft.status, 'sent'),
+      gte(socialReplyDraft.sentAt, since),
+    ))
+  const recentSent = Number(recent?.n ?? 0)
+  const remaining = Math.max(0, cap - recentSent)
+  if (remaining === 0) return { sent: 0, failed: 0 }
+
+  const approved = await db.select({ id: socialReplyDraft.id }).from(socialReplyDraft)
+    .where(and(eq(socialReplyDraft.workspaceId, workspaceId), eq(socialReplyDraft.status, 'approved')))
+    .orderBy(socialReplyDraft.approvedAt)
+    .limit(remaining)
+  let sent = 0, failed = 0
+  for (const a of approved) {
+    const r = await replyDraftSend(workspaceId, a.id).catch(() => ({ ok: false } as { ok: boolean }))
+    if (r.ok) sent += 1; else failed += 1
+    // Humanish 30-90s gap between sends — avoids burst pattern.
+    await new Promise(r => setTimeout(r, 30_000 + Math.random() * 60_000))
+  }
+  return { sent, failed }
+}
+
+/**
  * Auto-draft replies for the top-N pending high-priority comments.
  * Operator still approves. Idempotent: skips comments that already have a draft.
  */
