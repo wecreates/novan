@@ -14,7 +14,7 @@
  */
 import { db } from '../db/client.js'
 import { discoveredCapabilities } from '../db/schema.js'
-import { and, eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { v7 as uuidv7 } from 'uuid'
 import { introspectCode } from './code-introspection.js'
 
@@ -26,29 +26,41 @@ function maturityOf(exportsCount: number): 'scaffolded' | 'basic' | 'healthy' | 
 }
 
 export async function autoRegister(workspaceId: string): Promise<{ added: number; updated: number; total: number }> {
+  // R146.204 — single atomic upsert per row. Previously did SELECT then
+  // UPDATE-or-INSERT, blindly rewriting lastSeenAt + exportsCount +
+  // maturity on every tick → ~87K writes/24h on 1197 rows (73× churn
+  // ratio). Now the upsert's WHERE clause skips no-op writes (same
+  // exportsCount + maturity + lastSeenAt freshness <1h), cutting churn
+  // by ~50-100×. Relies on uniq idx discovered_capabilities_ws_file_uniq
+  // from migration 0111.
   const intro = introspectCode()
-  let added = 0, updated = 0
+  const HOUR_MS = 60 * 60_000
+  const now = Date.now()
+  let added = 0, updated = 0, skipped = 0
   for (const m of intro.servicesIndex) {
     const exportsCount = m.exports.length
     const maturity = maturityOf(exportsCount)
-    const existing = await db.select().from(discoveredCapabilities)
-      .where(and(
-        eq(discoveredCapabilities.workspaceId, workspaceId),
-        eq(discoveredCapabilities.serviceFile, m.file),
-      )).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[capability-auto-register]', e.message); return null })
-    if (existing) {
-      await db.update(discoveredCapabilities).set({
-        exportsCount, maturity, lastSeenAt: Date.now(),
-      }).where(eq(discoveredCapabilities.id, existing.id)).catch((e: Error) => { console.error('[capability-auto-register]', e.message); return null })
-      updated++
-    } else {
-      await db.insert(discoveredCapabilities).values({
-        id: uuidv7(), workspaceId, serviceFile: m.file,
-        exportsCount, maturity,
-        firstSeenAt: Date.now(), lastSeenAt: Date.now(),
-      }).onConflictDoNothing().catch((e: Error) => { console.error('[capability-auto-register]', e.message); return null })
-      added++
-    }
+    const r = await db.insert(discoveredCapabilities).values({
+      id: uuidv7(), workspaceId, serviceFile: m.file,
+      exportsCount, maturity,
+      firstSeenAt: now, lastSeenAt: now,
+    })
+      .onConflictDoUpdate({
+        target: [discoveredCapabilities.workspaceId, discoveredCapabilities.serviceFile],
+        set: { exportsCount, maturity, lastSeenAt: now },
+        // Only write when something actually changed or the heartbeat
+        // is stale (>1h). Avoids burning 73× tick churn on no-op writes.
+        setWhere: sql`
+          ${discoveredCapabilities.exportsCount} <> ${exportsCount}
+          OR ${discoveredCapabilities.maturity}     <> ${maturity}
+          OR ${discoveredCapabilities.lastSeenAt}   <  ${now - HOUR_MS}
+        `,
+      })
+      .returning({ firstSeen: discoveredCapabilities.firstSeenAt })
+      .catch((e: Error) => { console.error('[capability-auto-register]', e.message); return [] as Array<{ firstSeen: number }> })
+    if (r.length === 0) skipped++
+    else if (r[0]!.firstSeen === now) added++
+    else updated++
   }
   return { added, updated, total: intro.servicesIndex.length }
 }
