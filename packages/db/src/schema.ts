@@ -2097,7 +2097,9 @@ export const operatorPresence = pgTable('operator_presence', {
   createdAt:      bigint('created_at',    { mode: 'number' }).notNull(),
   updatedAt:      bigint('updated_at',    { mode: 'number' }).notNull(),
 }, (t) => [
-  index('op_presence_idx').on(t.workspaceId, t.operatorId),
+  // R146.199 — composite PK enables atomic upsert via ON CONFLICT.
+  // Previously a non-unique btree allowed TOCTOU duplicates.
+  primaryKey({ name: 'operator_presence_pkey', columns: [t.workspaceId, t.operatorId] }),
 ])
 
 /**

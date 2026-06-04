@@ -27,22 +27,28 @@ import {
 // ── Presence tracking ─────────────────────────────────────────────────
 
 async function getOrInitPresence(workspaceId: string, operatorId = 'default') {
-  const existing = await db.select().from(operatorPresence)
-    .where(and(
-      eq(operatorPresence.workspaceId, workspaceId),
-      eq(operatorPresence.operatorId, operatorId),
-    ))
-    .limit(1).then(r => r[0]).catch(() => undefined)
-  if (existing) return existing
+  // R146.199 — atomic upsert via the new (workspace_id, operator_id) PK.
+  // Previous SELECT-then-INSERT had a TOCTOU window: two concurrent polls
+  // could both observe "no row" and both INSERT. Now ON CONFLICT silently
+  // skips the second insert and we read back whichever row exists.
   const now = Date.now()
   const fallback = now - 24 * 60 * 60_000  // 24h boundary on first ever poll
   await db.insert(operatorPresence).values({
     workspaceId, operatorId,
     lastSeenAt: fallback, lastPolledAt: now,
     createdAt: now, updatedAt: now,
-  }).catch((e: Error) => { console.error('[recap]', e.message); return null })
-  return { workspaceId, operatorId, lastSeenAt: fallback, lastPolledAt: now,
-    createdAt: now, updatedAt: now }
+  }).onConflictDoNothing({ target: [operatorPresence.workspaceId, operatorPresence.operatorId] })
+    .catch((e: Error) => { console.error('[recap]', e.message); return null })
+  const row = await db.select().from(operatorPresence)
+    .where(and(
+      eq(operatorPresence.workspaceId, workspaceId),
+      eq(operatorPresence.operatorId, operatorId),
+    ))
+    .limit(1).then(r => r[0]).catch(() => undefined)
+  return row ?? {
+    workspaceId, operatorId, lastSeenAt: fallback, lastPolledAt: now,
+    createdAt: now, updatedAt: now,
+  }
 }
 
 /** Bump lastPolledAt without resetting the "while you were away" boundary. */
