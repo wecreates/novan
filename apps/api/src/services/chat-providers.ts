@@ -51,6 +51,10 @@ export interface StreamResult {
   cacheCreationTokens?: number
   /** Total thinking tokens, when extended-thinking was requested. */
   thinkingTokens?: number
+  /** R146.198 — Surface prompt_tokens from each provider's usage payload
+   *  so ai_usage rows capture real input volume (was hardcoded to 0 in the
+   *  unified dispatcher, breaking cost trend + cache-savings analytics). */
+  promptTokens?: number
 }
 
 // Provider family registry — id → handler
@@ -250,6 +254,7 @@ async function* streamOpenAI(p: ProviderDef, msgs: ChatMsg[], abort?: AbortSigna
     provider: p.id, model: p.defaultModel,
   }
   if (cachedTok > 0) out.cacheReadTokens = cachedTok
+  if (promptTok > 0) out.promptTokens = promptTok
   return out
 }
 
@@ -387,6 +392,7 @@ async function* streamAnthropic(p: ProviderDef, msgs: ChatMsg[], abort?: AbortSi
   if (cacheRead    > 0) out.cacheReadTokens     = cacheRead
   if (cacheCreate  > 0) out.cacheCreationTokens = cacheCreate
   if (thinkBuf.length > 0) out.thinkingTokens   = Math.ceil(thinkBuf.length / 4)
+  if (inTok        > 0) out.promptTokens        = inTok
   return out
 }
 
@@ -487,6 +493,7 @@ async function* streamGemini(p: ProviderDef, msgs: ChatMsg[], abort?: AbortSigna
     provider: p.id, model: p.defaultModel,
   }
   if (cachedTok > 0) out.cacheReadTokens = cachedTok
+  if (promptTok > 0) out.promptTokens = promptTok
   return out
 }
 
@@ -607,7 +614,7 @@ export async function* streamChat(workspaceId: string, msgs: ChatMsg[], opts?: S
           workspaceId,
           provider:     result.provider,
           model:        result.model,
-          promptTokens: 0,
+          promptTokens: result.promptTokens ?? 0,
           outputTokens: result.tokens,
           costUsd:      result.costUsd,
           latencyMs:    Date.now() - streamStartedAt,
