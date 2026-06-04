@@ -1621,9 +1621,9 @@ async function runLoopClosure(): Promise<void> {
 }
 
 // R146.186 — Wire R183 proactive scan every 5 min across all workspaces.
-// R146.189 — heartbeat counter: emit cron.proactive_scan once an hour
-// so the events table shows the cron is alive even when it mints nothing.
-let _proactiveTickN = 0
+// R146.190 — time-based heartbeat (survives restarts): emit when
+// activity OR when ≥58 min has passed since the last heartbeat emit.
+let _proactiveLastEmit = 0
 async function runProactiveScan(): Promise<void> {
   if (process.env['DISABLE_PROACTIVE'] === '1') return
   try {
@@ -1637,16 +1637,16 @@ async function runProactiveScan(): Promise<void> {
         totalFired  += r.fired
       } catch (e) { await emit('cron.error', { task: 'proactive_scan', workspace: ws, error: (e as Error).message }) }
     }
-    _proactiveTickN += 1
-    // Emit on activity OR every 12 ticks (~1h at 5min cadence) for heartbeat.
-    if (totalMinted > 0 || totalFired > 0 || _proactiveTickN % 12 === 0) {
-      await emit('cron.proactive_scan', { workspaces: ids.length, minted: totalMinted, fired: totalFired, tick: _proactiveTickN })
+    const now = Date.now()
+    if (totalMinted > 0 || totalFired > 0 || now - _proactiveLastEmit >= 58 * 60_000) {
+      await emit('cron.proactive_scan', { workspaces: ids.length, minted: totalMinted, fired: totalFired })
+      _proactiveLastEmit = now
     }
   } catch (e) { await emit('cron.error', { task: 'proactive_scan', error: (e as Error).message }) }
 }
 
 // R146.186 — Wire R183 radar snapshot every 10 min.
-let _radarTickN = 0
+let _radarLastEmit = 0
 async function runRadarScan(): Promise<void> {
   if (process.env['DISABLE_RADAR'] === '1') return
   try {
@@ -1660,10 +1660,10 @@ async function runRadarScan(): Promise<void> {
         totalCrit += snap.criticalCount
       } catch (e) { await emit('cron.error', { task: 'radar_scan', workspace: ws, error: (e as Error).message }) }
     }
-    _radarTickN += 1
-    // Emit on issues OR every 6 ticks (~1h at 10min cadence).
-    if (totalOpen > 0 || totalCrit > 0 || _radarTickN % 6 === 0) {
-      await emit('cron.radar_scan', { workspaces: ids.length, openTotal: totalOpen, criticalCount: totalCrit, tick: _radarTickN })
+    const now = Date.now()
+    if (totalOpen > 0 || totalCrit > 0 || now - _radarLastEmit >= 58 * 60_000) {
+      await emit('cron.radar_scan', { workspaces: ids.length, openTotal: totalOpen, criticalCount: totalCrit })
+      _radarLastEmit = now
     }
   } catch (e) { await emit('cron.error', { task: 'radar_scan', error: (e as Error).message }) }
 }
@@ -1707,7 +1707,7 @@ async function runPentestWeekly(): Promise<void> {
 }
 
 // R146.186 — Prune R182 session_sync rows older than 7 days.
-let _sessionPruneTickN = 0
+let _sessionPruneLastEmit = 0
 async function runSessionSyncPrune(): Promise<void> {
   try {
     const { db } = await import('../db/client.js')
@@ -1715,11 +1715,11 @@ async function runSessionSyncPrune(): Promise<void> {
     const { sql: drizzleSql } = await import('drizzle-orm')
     const cutoff = Date.now() - 7 * 86_400_000
     const r = await db.delete(sessionSync).where(drizzleSql`${sessionSync.lastPingAt} < ${cutoff}`)
-    _sessionPruneTickN += 1
-    // Emit on activity OR every 48 ticks (~24h at 30min cadence).
     const pruned = (r as { rowCount?: number }).rowCount ?? 0
-    if (pruned > 0 || _sessionPruneTickN % 48 === 0) {
-      await emit('cron.session_sync_prune', { pruned, tick: _sessionPruneTickN })
+    const now = Date.now()
+    if (pruned > 0 || now - _sessionPruneLastEmit >= 23 * 60 * 60_000) {
+      await emit('cron.session_sync_prune', { pruned })
+      _sessionPruneLastEmit = now
     }
   } catch (e) { await emit('cron.error', { task: 'session_sync_prune', error: (e as Error).message }) }
 }

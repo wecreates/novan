@@ -685,6 +685,8 @@ app.get<{ Params: { workspaceId: string; sceneName: string } }>('/xr/:workspaceI
 // AND remoteAddress in {127.0.0.1, ::1, 172.x.0.1 (docker)}.
 // Lets the operator (or me via SSH) invoke any registered brain op
 // without a full JWT. Disabled if ADMIN_LOOPBACK_TOKEN is unset.
+// R146.190 — in-process rate limit (30 req/min) + audit log every call.
+const _adminBrainRate: { ts: number; count: number } = { ts: Date.now(), count: 0 }
 app.post<{ Body: { op?: string; workspaceId?: string; params?: Record<string, unknown> } }>('/admin/brain', async (req, reply) => {
   const token = process.env['ADMIN_LOOPBACK_TOKEN']
   if (!token) return reply.code(404).send({ error: 'admin bridge disabled' })
@@ -692,12 +694,35 @@ app.post<{ Body: { op?: string; workspaceId?: string; params?: Record<string, un
   const isLoopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1' || /^172\.\d+\.0\.1$/.test(remote)
   if (!isLoopback) return reply.code(403).send({ error: 'loopback only' })
   if ((req.headers['x-admin-token'] ?? '') !== token) return reply.code(401).send({ error: 'bad token' })
+
+  // Rate limit: 30 calls per rolling minute.
+  const now = Date.now()
+  if (now - _adminBrainRate.ts > 60_000) { _adminBrainRate.ts = now; _adminBrainRate.count = 0 }
+  _adminBrainRate.count += 1
+  if (_adminBrainRate.count > 30) return reply.code(429).send({ error: 'admin bridge rate limit (30/min)' })
+
   const body = req.body ?? {}
   if (!body.op || !body.workspaceId) return reply.code(400).send({ error: 'op + workspaceId required' })
   try {
     const { OPERATIONS } = await import('./services/brain-task.js')
-    const spec = (OPERATIONS as Record<string, { handler: (ws: string, params: Record<string, unknown>) => Promise<unknown> }>)[body.op]
+    const spec = (OPERATIONS as Record<string, { handler: (ws: string, params: Record<string, unknown>) => Promise<unknown>; risk?: string }>)[body.op]
     if (!spec) return reply.code(404).send({ error: `unknown op: ${body.op}` })
+
+    // Audit log: persist to events table before execution.
+    try {
+      const { db } = await import('./db/client.js')
+      const { events } = await import('./db/schema.js')
+      const { v7: uuidv7 } = await import('uuid')
+      await db.insert(events).values({
+        id: uuidv7(),
+        workspaceId: body.workspaceId,
+        type: 'admin_brain.invoked',
+        payload: { op: body.op, risk: spec.risk ?? 'low', remote, paramsKeys: Object.keys(body.params ?? {}) },
+        traceId: req.id ?? 'admin', correlationId: req.id ?? 'admin', source: 'admin-bridge',
+        createdAt: Date.now(),
+      }).catch(() => null)
+    } catch { /* audit is best-effort */ }
+
     const result = await spec.handler(body.workspaceId, body.params ?? {})
     return reply.send({ ok: true, op: body.op, result })
   } catch (e) {

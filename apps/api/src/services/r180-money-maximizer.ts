@@ -21,7 +21,7 @@
 import { db } from '../db/client.js'
 import {
   moneyOpportunity, socialComment, socialReplyDraft, leadCapture, managedAccount,
-  customerScore, crossBusinessOverlap, refundReason, funnelEvent, podProduct,
+  customerScore, crossBusinessOverlap, refundReason, funnelEvent, podProduct, videoPaiRun,
 } from '../db/schema.js'
 import { and, eq, desc, sql, isNull, gte } from 'drizzle-orm'
 import { v7 as uuidv7 } from 'uuid'
@@ -347,9 +347,19 @@ export async function executeNext(workspaceId: string, opts: { opportunityId: st
         break
       }
       case 'publish_post': {
-        // Routing requires an existing PAI run; here we surface a "needs ISA" advisory.
-        ranOp = 'requires existing PAI run — operator should run video.pai.run first'
-        result = { advisory: 'create ISA + run + bind director profile → publish.fromRun' }
+        // R146.190 — find the most recent done PAI run, publish it.
+        // If none, surface the advisory.
+        const [latest] = await db.select({ id: videoPaiRun.id }).from(videoPaiRun)
+          .where(and(eq(videoPaiRun.workspaceId, workspaceId), eq(videoPaiRun.phase, 'done')))
+          .orderBy(desc(videoPaiRun.startedAt)).limit(1)
+        if (latest) {
+          const { publishAndRepurpose } = await import('./r167-auto-publish.js')
+          result = await publishAndRepurpose(workspaceId, latest.id)
+          ranOp = `publish.andRepurpose(${latest.id.slice(0, 8)})`
+        } else {
+          ranOp = 'requires existing PAI run — none found'
+          result = { advisory: 'create an ISA + run video.pai.run first' }
+        }
         break
       }
       case 'fix_funnel_leak': {

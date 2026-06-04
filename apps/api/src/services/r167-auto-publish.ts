@@ -66,7 +66,20 @@ export async function publishFromRun(workspaceId: string, input: PublishFromRunI
     set: { platforms, assetPaths, status: 'draft', error: null },
   })
 
+  // R146.190 — Resolve an actual managed account per platform instead
+  // of falling back to the literal string 'default:<platform>'. This
+  // makes posts attachable to the real account they'll publish from.
+  const { managedAccount } = await import('../db/schema.js')
+  const accountByPlatform = new Map<string, string>()
+  try {
+    const accts = await db.select({ id: managedAccount.id, handle: managedAccount.handle, platform: managedAccount.platform })
+      .from(managedAccount)
+      .where(and(eq(managedAccount.workspaceId, workspaceId), eq(managedAccount.status, 'active')))
+    for (const a of accts) if (!accountByPlatform.has(a.platform)) accountByPlatform.set(a.platform, a.id)
+  } catch { /* no accounts yet; fall through with anonymous ref */ }
+
   for (const platform of platforms) {
+    const accountRef = accountByPlatform.get(platform) ?? `unbound:${platform}`
     try {
       // Per-platform caption variants from R163 (if a pack exists for this run).
       const captionVariants = await draftCaptionsFor(isa.title, isa.brief, platform)
@@ -78,13 +91,13 @@ export async function publishFromRun(workspaceId: string, input: PublishFromRunI
       const postId = uuidv7()
       await db.insert(socialPosts).values({
         id: postId, workspaceId, platform,
-        accountRef: `default:${platform}`,
+        accountRef,
         body: caption.slice(0, 4000),
         assetRefs: assetPaths,
         ...(input.scheduledAt ? { scheduledAt: input.scheduledAt } : {}),
         status: input.scheduledAt ? 'scheduled' : 'draft',
         engagement: {},
-        blockReasons: [],
+        blockReasons: accountRef.startsWith('unbound:') ? ['no_active_account_for_platform'] : [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
       })
@@ -93,7 +106,7 @@ export async function publishFromRun(workspaceId: string, input: PublishFromRunI
       // Per-platform failure doesn't abort the plan.
       await db.insert(socialPosts).values({
         id: uuidv7(), workspaceId, platform,
-        accountRef: `default:${platform}`,
+        accountRef,
         body: isa.title.slice(0, 4000),
         assetRefs: assetPaths,
         status: 'failed',

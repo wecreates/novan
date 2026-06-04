@@ -268,7 +268,12 @@ export async function campaignSendNow(workspaceId: string, campaignId: string): 
   let failed = 0
   const hasB = !!c.subjectB
 
+  // R146.190 — drip-send to avoid spam-filter trips. Batches of 50,
+  // 250ms gaussian-paced gap between sends; 8s pause between batches.
+  const BATCH_SIZE = 50
   for (let i = 0; i < recipients.length; i++) {
+    if (i > 0 && i % BATCH_SIZE === 0) await new Promise(r => setTimeout(r, 8_000))
+    else if (i > 0) await new Promise(r => setTimeout(r, 200 + Math.random() * 200))
     const r = recipients[i]
     if (!r) continue
     const variant: 'a' | 'b' = hasB && (i % 2 === 1) ? 'b' : 'a'

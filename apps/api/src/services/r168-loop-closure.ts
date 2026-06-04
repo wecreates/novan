@@ -166,9 +166,39 @@ export async function funnelToOutcome(workspaceId: string, opts: { sinceDays?: n
 
 // ─── Combined closure pass (cron-friendly) ──────────────────────────
 
+/**
+ * R146.190 — Prune stale low-confidence lessons so videoPaiLesson doesn't
+ * grow unbounded. Retires lessons where:
+ *   - confidence < 0.4 AND uses = 0 AND age > 30d
+ *   - wins/losses ratio < 0.2 (clearly losing pattern)
+ */
+export async function pruneStaleLessons(workspaceId: string): Promise<{ retired: number }> {
+  const thirtyDaysAgo = Date.now() - 30 * 86_400_000
+  const r1 = await db.update(videoPaiLesson).set({ retiredAt: Date.now() })
+    .where(and(
+      eq(videoPaiLesson.workspaceId, workspaceId),
+      isNull(videoPaiLesson.retiredAt),
+      sql`${videoPaiLesson.confidence} < 0.4`,
+      eq(videoPaiLesson.uses, 0),
+      sql`${videoPaiLesson.createdAt} < ${thirtyDaysAgo}`,
+    ))
+    .returning({ id: videoPaiLesson.id })
+  const r2 = await db.update(videoPaiLesson).set({ retiredAt: Date.now() })
+    .where(and(
+      eq(videoPaiLesson.workspaceId, workspaceId),
+      isNull(videoPaiLesson.retiredAt),
+      sql`${videoPaiLesson.uses} >= 5`,
+      sql`(${videoPaiLesson.wins}::real / NULLIF(${videoPaiLesson.uses}, 0)) < 0.2`,
+    ))
+    .returning({ id: videoPaiLesson.id })
+  return { retired: r1.length + r2.length }
+}
+
 export async function closeLoops(workspaceId: string): Promise<{ lessonsSeeded: number; outcomesFilled: number }> {
   const l = await lessonsToPrompts(workspaceId).catch(() => ({ seeded: 0, perTopic: {} as Record<string, number> }))
   const f = await funnelToOutcome(workspaceId).catch(() => ({ updated: 0, perRun: [] as Array<{ runId: string; score: number; revenueCents: number }> }))
+  // R146.190 — prune stale lessons as part of the closure pass.
+  await pruneStaleLessons(workspaceId).catch(() => null)
   return { lessonsSeeded: l.seeded, outcomesFilled: f.updated }
 }
 

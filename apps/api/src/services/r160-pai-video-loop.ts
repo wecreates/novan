@@ -139,10 +139,34 @@ async function phaseThink(workspaceId: string, isa: typeof videoIsa.$inferSelect
     if (l.confidence >= 0.55) directives.push(`[${topic}] ${l.pattern}`)
   }
 
-  // LLM enrichment slot — currently rules-only; future round can wire chat
-  // here without changing the THINK output shape.
-  const llmDirection: string | null = null
-  void workspaceId; void isa
+  // R146.190 — Wire LLM via chat-providers.streamChat. Best-effort: if
+  // no provider configured, fall back to rules-only directives.
+  let llmDirection: string | null = null
+  try {
+    const { streamChat } = await import('./chat-providers.js')
+    const prompt = [
+      `You are the THINK phase of a 7-phase PAI video loop.`,
+      `ISA title: ${isa.title}`,
+      `Brief: ${isa.brief.slice(0, 800)}`,
+      `Target: ${JSON.stringify(isa.target).slice(0, 300)}`,
+      `Active lessons from prior runs:`,
+      ...directives.map(d => `- ${d}`),
+      ``,
+      `In <=120 words, return strict JSON: {"angle":"...","hook":"...","cta":"..."}.`,
+      `angle = the single creative angle for THIS run.`,
+      `hook = exact words/visual for the first 2.5s.`,
+      `cta = closing call to action.`,
+    ].join('\n')
+    const gen = streamChat(workspaceId, [{ role: 'user', content: prompt }] as Parameters<typeof streamChat>[1])
+    let acc = ''
+    for await (const chunk of gen) {
+      if (chunk && typeof chunk === 'object' && 'delta' in chunk && typeof (chunk as { delta?: string }).delta === 'string') {
+        acc += (chunk as { delta: string }).delta
+        if (acc.length > 800) break
+      }
+    }
+    llmDirection = acc.trim().slice(0, 800) || null
+  } catch { /* LLM is optional */ }
 
   return {
     directives,
