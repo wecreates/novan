@@ -1274,6 +1274,8 @@ const INTERVALS = {
   sessionSyncPrune:      30 * 60_000,
   // R146.191 — Sweep approved reply drafts and send them with throttling.
   approvedReplySend:     60 * 60_000,
+  // R146.193 — Novan Self-Dev auto-loop. Gated by feature flag inside handler.
+  selfDevAutoLoop:        2 * 60 * 60_000,
 }
 
 /**
@@ -1623,6 +1625,18 @@ async function runLoopClosure(): Promise<void> {
 }
 
 // R146.186 — Wire R183 proactive scan every 5 min across all workspaces.
+// R146.193 — Novan Self-Dev autonomous inspect+propose cycle. Gated.
+async function runSelfDevAutoLoop(): Promise<void> {
+  try {
+    const ids = await listWorkspaceIds()
+    const { autoLoop } = await import('./r193-novan-self-dev.js')
+    for (const ws of ids) {
+      try { await autoLoop(ws) }
+      catch (e) { await emit('cron.error', { task: 'self_dev_auto_loop', workspace: ws, error: (e as Error).message }) }
+    }
+  } catch (e) { await emit('cron.error', { task: 'self_dev_auto_loop', error: (e as Error).message }) }
+}
+
 // R146.191 — send approved reply drafts on hourly cron, capped at 10/h per workspace.
 let _approvedSendLastEmit = 0
 async function runApprovedReplySend(): Promise<void> {
@@ -2085,6 +2099,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runPentestWeekly,               INTERVALS.pentestWeekly))
   handles.push(scheduleJittered(runSessionSyncPrune,            INTERVALS.sessionSyncPrune))
   handles.push(scheduleJittered(runApprovedReplySend,           INTERVALS.approvedReplySend))
+  handles.push(scheduleJittered(runSelfDevAutoLoop,             INTERVALS.selfDevAutoLoop))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

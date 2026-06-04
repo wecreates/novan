@@ -6388,6 +6388,72 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return bioAnomalyCheck(ws, params as unknown as Parameters<typeof bioAnomalyCheck>[1])
     },
   },
+  // ─── R146.193 — Novan Self-Dev Engine ─────────────────────────────
+  'selfdev.inspect': {
+    description: 'Run 12 parallel inspectors and persist findings. Params: { goal? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { inspectAll } = await import('./r193-novan-self-dev.js')
+      return inspectAll(ws, (params as { goal?: string }) ?? {})
+    },
+  },
+  'selfdev.propose': {
+    description: 'Generate fix proposals for open findings via LLM. Params: { sessionId?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { proposeForFindings } = await import('./r193-novan-self-dev.js')
+      return proposeForFindings(ws, (params as { sessionId?: string; limit?: number }) ?? {})
+    },
+  },
+  'selfdev.approve': {
+    description: 'Approve a proposal. Params: { proposalId, approvedBy, confirm:"I_AUTHORIZE_PROPOSAL_APPROVAL" }',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const { approveProposal } = await import('./r193-novan-self-dev.js')
+      return approveProposal(ws, params as unknown as Parameters<typeof approveProposal>[1])
+    },
+  },
+  'selfdev.reject': {
+    description: 'Reject a proposal. Params: { proposalId }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { rejectProposal } = await import('./r193-novan-self-dev.js')
+      return rejectProposal(ws, (params as { proposalId: string }).proposalId)
+    },
+  },
+  'selfdev.autoLoop': {
+    description: 'Run a full inspect → propose cycle. Gated by feature flag self_dev_inspect_enabled.',
+    risk: 'medium',
+    handler: async (ws) => {
+      const { autoLoop } = await import('./r193-novan-self-dev.js')
+      return autoLoop(ws)
+    },
+  },
+  'selfdev.sessions': {
+    description: 'List sessions. Params: { limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { sessionList } = await import('./r193-novan-self-dev.js')
+      return sessionList(ws, (params as { limit?: number }) ?? {})
+    },
+  },
+  'selfdev.findings': {
+    description: 'List findings. Params: { status?, severity?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { findingList } = await import('./r193-novan-self-dev.js')
+      return findingList(ws, (params as Parameters<typeof findingList>[1]) ?? {})
+    },
+  },
+  'selfdev.proposals': {
+    description: 'List proposals. Params: { status?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { proposalList } = await import('./r193-novan-self-dev.js')
+      return proposalList(ws, (params as Parameters<typeof proposalList>[1]) ?? {})
+    },
+  },
+
   'social.reply.sweepApproved': {
     description: 'Sweep approved drafts and send them, capped 10/h. Params: { hourlyCap? }',
     risk: 'high',

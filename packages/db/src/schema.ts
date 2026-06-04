@@ -7196,3 +7196,55 @@ export const featureFlag = pgTable('feature_flag', {
   updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
   updatedBy:    text('updated_by'),
 })
+
+// ─── R146.193 — Self-Dev Engine ────────────────────────────────────
+export const selfDevSession = pgTable('self_dev_session', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  goal:             text('goal').notNull(),
+  status:           text('status').notNull().default('running'),
+  findingsCount:    integer('findings_count').notNull().default(0),
+  proposalsCount:   integer('proposals_count').notNull().default(0),
+  appliedCount:     integer('applied_count').notNull().default(0),
+  startedAt:        bigint('started_at', { mode: 'number' }).notNull(),
+  endedAt:          bigint('ended_at', { mode: 'number' }),
+  error:            text('error'),
+}, (t) => [index('sds_ws_idx').on(t.workspaceId, t.startedAt)])
+
+export const selfDevFinding = pgTable('self_dev_finding', {
+  id:               text('id').primaryKey(),
+  sessionId:        text('session_id').notNull(),
+  workspaceId:      text('workspace_id').notNull(),
+  dimension:        text('dimension').notNull(),
+  severity:         text('severity').notNull(),
+  title:            text('title').notNull(),
+  evidence:         jsonb('evidence').$type<Record<string, unknown>>().notNull().default({}),
+  suggestedFix:     text('suggested_fix'),
+  status:           text('status').notNull().default('open'),
+  foundAt:          bigint('found_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('sdf_session_idx').on(t.sessionId),
+  index('sdf_ws_status_idx').on(t.workspaceId, t.status, t.severity),
+])
+
+export const selfDevProposal = pgTable('self_dev_proposal', {
+  id:               text('id').primaryKey(),
+  findingId:        text('finding_id').notNull(),
+  workspaceId:      text('workspace_id').notNull(),
+  title:            text('title').notNull(),
+  rationale:        text('rationale').notNull(),
+  files:            jsonb('files').$type<Array<{ path: string; action: 'edit' | 'add'; diff: string }>>().notNull().default([]),
+  riskLevel:        text('risk_level').notNull().default('medium'),
+  confidence:       real('confidence').notNull().default(0.5),
+  status:           text('status').notNull().default('draft'),
+  approvalToken:    text('approval_token'),
+  approvedBy:       text('approved_by'),
+  approvedAt:       bigint('approved_at', { mode: 'number' }),
+  appliedAt:        bigint('applied_at', { mode: 'number' }),
+  applyResult:      jsonb('apply_result').$type<Record<string, unknown>>(),
+  rolledBackAt:     bigint('rolled_back_at', { mode: 'number' }),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('sdp_finding_idx').on(t.findingId),
+  index('sdp_ws_status_idx').on(t.workspaceId, t.status, t.createdAt),
+])
