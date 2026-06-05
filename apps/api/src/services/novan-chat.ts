@@ -425,6 +425,12 @@ async function buildSystemPrompt(workspaceId: string, userMessage: string): Prom
     const ad = await operatorSkillsAdvertisement(workspaceId, 2000)
     if (ad) { lines.push(''); lines.push(ad) }
   } catch { /* tolerated */ }
+  // R146.211 — inject workspace memory digest so each session starts smart.
+  try {
+    const { memoryDigest } = await import('./r211-workplace.js')
+    const md = await memoryDigest(workspaceId, 1500)
+    if (md) { lines.push(''); lines.push(md) }
+  } catch { /* tolerated */ }
 
   return { systemPrompt: lines.join('\n'), citations }
 }

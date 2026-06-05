@@ -7331,3 +7331,107 @@ export const operatorWorkflowRuns = pgTable('operator_workflow_runs', {
 }, (t) => [
   index('owr_ws_idx').on(t.workspaceId, t.startedAt),
 ])
+
+// ─── R146.211 — Workplace layer ───────────────────────────────────────
+export const workspaceMemory = pgTable('workspace_memory', {
+  workspaceId:  text('workspace_id').notNull(),
+  key:          text('key').notNull(),
+  value:        text('value').notNull(),
+  scope:        text('scope').notNull().default('general'),
+  importance:   integer('importance').notNull().default(50),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  primaryKey({ name: 'workspace_memory_pkey', columns: [t.workspaceId, t.key] }),
+  index('wm_scope_idx').on(t.workspaceId, t.scope, t.importance),
+])
+
+export const sessionChapters = pgTable('session_chapters', {
+  id:               text('id').primaryKey(),
+  workspaceId:      text('workspace_id').notNull(),
+  conversationId:   text('conversation_id'),
+  title:            text('title').notNull(),
+  summary:          text('summary'),
+  messageAnchorId:  text('message_anchor_id'),
+  createdAt:        bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('sc_ws_idx').on(t.workspaceId, t.createdAt),
+])
+
+export const eventHooks = pgTable('event_hooks', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  name:         text('name').notNull(),
+  eventPattern: text('event_pattern').notNull(),
+  opName:       text('op_name').notNull(),
+  opParams:     jsonb('op_params').$type<Record<string, unknown>>().notNull().default({}),
+  enabled:      boolean('enabled').notNull().default(true),
+  fires:        integer('fires').notNull().default(0),
+  lastFiredAt:  bigint('last_fired_at', { mode: 'number' }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('eh_ws_name_uniq').on(t.workspaceId, t.name),
+  index('eh_pattern_idx').on(t.enabled, t.eventPattern),
+])
+
+export const nlSchedules = pgTable('nl_schedules', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  description:  text('description').notNull(),
+  cronExpr:     text('cron_expr').notNull(),
+  opName:       text('op_name').notNull(),
+  opParams:     jsonb('op_params').$type<Record<string, unknown>>().notNull().default({}),
+  enabled:      boolean('enabled').notNull().default(true),
+  nextRunAt:    bigint('next_run_at', { mode: 'number' }),
+  lastRunAt:    bigint('last_run_at', { mode: 'number' }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('nls_next_idx').on(t.enabled, t.nextRunAt),
+])
+
+export const spawnTasks = pgTable('spawn_tasks', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  title:        text('title').notNull(),
+  tldr:         text('tldr'),
+  prompt:       text('prompt').notNull(),
+  status:       text('status').notNull().default('pending'),
+  spawnedAt:    bigint('spawned_at',  { mode: 'number' }),
+  dismissedAt:  bigint('dismissed_at',{ mode: 'number' }),
+  createdAt:    bigint('created_at',  { mode: 'number' }).notNull(),
+}, (t) => [
+  index('st_ws_status_idx').on(t.workspaceId, t.status, t.createdAt),
+])
+
+export const operatorQuestions = pgTable('operator_questions', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  question:     text('question').notNull(),
+  options:      jsonb('options').$type<Array<{ label: string; description?: string }>>().notNull(),
+  multiSelect:  boolean('multi_select').notNull().default(false),
+  context:      text('context'),
+  answer:       jsonb('answer').$type<Record<string, unknown>>(),
+  status:       text('status').notNull().default('pending'),
+  askedAt:      bigint('asked_at',    { mode: 'number' }).notNull(),
+  answeredAt:   bigint('answered_at', { mode: 'number' }),
+}, (t) => [
+  index('oq_ws_status_idx').on(t.workspaceId, t.status, t.askedAt),
+])
+
+export const mcpConnectors = pgTable('mcp_connectors', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  name:         text('name').notNull(),
+  category:     text('category').notNull(),
+  description:  text('description'),
+  endpointUrl:  text('endpoint_url'),
+  authKind:     text('auth_kind'),
+  installed:    boolean('installed').notNull().default(false),
+  enabled:      boolean('enabled').notNull().default(false),
+  meta:         jsonb('meta').$type<Record<string, unknown>>(),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('mcp_ws_name_uniq').on(t.workspaceId, t.name),
+])

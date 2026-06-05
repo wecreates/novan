@@ -6591,6 +6591,186 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return workflowRun(ws, p.name, p.args)
     },
   },
+
+  // ─── R146.211 Workspace memory + chapters ───────────────────────
+  'memory.remember': {
+    description: 'Store a memory key→value with optional scope + importance(0-100). Params: { key, value, scope?, importance? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { memoryRemember } = await import('./r211-workplace.js')
+      await memoryRemember(ws, params as { key: string; value: string; scope?: string; importance?: number })
+      return { ok: true }
+    },
+  },
+  'memory.kv.recall': {
+    description: 'Recall R211 workspace KV memories, sorted by importance. Params: { scope?, limit? }. (Semantic embedding recall is `memory.recall`.)',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { memoryRecall } = await import('./r211-workplace.js')
+      const p = params as { scope?: string; limit?: number }
+      return memoryRecall(ws, p.scope, p.limit)
+    },
+  },
+  'memory.forget': {
+    description: 'Delete a memory by key. Params: { key }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { memoryForget } = await import('./r211-workplace.js')
+      await memoryForget(ws, (params as { key: string }).key)
+      return { ok: true }
+    },
+  },
+  'chapter.mark': {
+    description: 'Add a chapter marker on the current conversation. Params: { title, summary?, conversationId?, messageAnchorId? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { chapterMark } = await import('./r211-workplace.js')
+      return chapterMark(ws, params as { title: string; summary?: string; conversationId?: string; messageAnchorId?: string })
+    },
+  },
+  'chapter.list': {
+    description: 'List chapters for a conversation (or workspace). Params: { conversationId?, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { chapterList } = await import('./r211-workplace.js')
+      const p = params as { conversationId?: string; limit?: number }
+      return chapterList(ws, p.conversationId, p.limit)
+    },
+  },
+
+  // ─── R146.212 Hooks + NL schedules ──────────────────────────────
+  'hook.create': {
+    description: 'Subscribe an op to an event pattern (e.g. "feed.poll_failed" or "cron.*"). Params: { name, eventPattern, opName, opParams? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { hookCreate } = await import('./r211-workplace.js')
+      return hookCreate(ws, params as { name: string; eventPattern: string; opName: string; opParams?: Record<string, unknown> })
+    },
+  },
+  'hook.list': {
+    description: 'List event hooks for the workspace.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { hookList } = await import('./r211-workplace.js')
+      return hookList(ws)
+    },
+  },
+  'hook.setEnabled': {
+    description: 'Enable/disable a hook by name. Params: { name, enabled }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { hookSetEnabled } = await import('./r211-workplace.js')
+      const p = params as { name: string; enabled: boolean }
+      await hookSetEnabled(ws, p.name, p.enabled)
+      return { ok: true }
+    },
+  },
+  'schedule.nl.create': {
+    description: 'Create an NL-described recurring schedule. Params: { description, opName, opParams? } (e.g. description="daily at 09:00")',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { scheduleCreate } = await import('./r211-workplace.js')
+      return scheduleCreate(ws, params as { description: string; opName: string; opParams?: Record<string, unknown> })
+    },
+  },
+  'schedule.nl.list': {
+    description: 'List NL schedules for the workspace.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { scheduleList } = await import('./r211-workplace.js')
+      return scheduleList(ws)
+    },
+  },
+
+  // ─── R146.213 Spawn-task chips + operator questions ─────────────
+  'spawnTask.create': {
+    description: 'Flag a side-task for later dispatch. Params: { title, tldr?, prompt }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { spawnTaskCreate } = await import('./r211-workplace.js')
+      return spawnTaskCreate(ws, params as { title: string; tldr?: string; prompt: string })
+    },
+  },
+  'spawnTask.list': {
+    description: 'List spawn-task chips. Params: { status? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { spawnTaskList } = await import('./r211-workplace.js')
+      return spawnTaskList(ws, (params as { status?: string }).status)
+    },
+  },
+  'spawnTask.dismiss': {
+    description: 'Dismiss a spawn task. Params: { id }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { spawnTaskDismiss } = await import('./r211-workplace.js')
+      await spawnTaskDismiss(ws, (params as { id: string }).id)
+      return { ok: true }
+    },
+  },
+  'operator.ask': {
+    description: 'Ask the operator a structured question (2-4 options). Params: { question, options:[{label,description?}], multiSelect?, context? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { operatorAsk } = await import('./r211-workplace.js')
+      return operatorAsk(ws, params as { question: string; options: Array<{ label: string; description?: string }>; multiSelect?: boolean; context?: string })
+    },
+  },
+  'operator.answer': {
+    description: 'Submit an answer to a pending question. Params: { id, answer }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { operatorAnswer } = await import('./r211-workplace.js')
+      const p = params as { id: string; answer: unknown }
+      await operatorAnswer(ws, p.id, p.answer)
+      return { ok: true }
+    },
+  },
+  'operator.pending': {
+    description: 'List pending operator questions.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { operatorQuestionsPending } = await import('./r211-workplace.js')
+      return operatorQuestionsPending(ws)
+    },
+  },
+
+  // ─── R146.214 MCP connector marketplace ─────────────────────────
+  'mcp.register': {
+    description: 'Register an MCP-style external connector in the R214 marketplace. Params: { name, category, description?, endpointUrl?, authKind?, meta? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { connectorRegister } = await import('./r211-workplace.js')
+      return connectorRegister(ws, params as { name: string; category: string; description?: string; endpointUrl?: string; authKind?: string; meta?: Record<string, unknown> })
+    },
+  },
+  'mcp.list': {
+    description: 'List registered MCP marketplace connectors. (Legacy R141 connectors are `connector.list`.)',
+    risk: 'low',
+    handler: async (ws) => {
+      const { connectorList } = await import('./r211-workplace.js')
+      return connectorList(ws)
+    },
+  },
+  'mcp.set': {
+    description: 'Toggle installed/enabled on an MCP marketplace connector. Params: { name, installed?, enabled? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { connectorSet } = await import('./r211-workplace.js')
+      const p = params as { name: string; installed?: boolean; enabled?: boolean }
+      await connectorSet(ws, p.name, { ...(p.installed !== undefined ? { installed: p.installed } : {}),
+                                       ...(p.enabled   !== undefined ? { enabled:   p.enabled   } : {}) })
+      return { ok: true }
+    },
+  },
+  'workplace.counts': {
+    description: 'Aggregate R211-R214 counts for platform.status.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { workplaceCounts } = await import('./r211-workplace.js')
+      return workplaceCounts(ws)
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────
