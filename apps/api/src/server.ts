@@ -296,6 +296,7 @@ const isPublic = (url: string): boolean => {
   if (url === '/health'         || url.startsWith('/health/'))         return true
   if (url === '/healthz/cron')                                          return true
   if (url === '/console.html' || url === '/console')                    return true
+  if (url === '/brain.html'   || url === '/brain')                      return true
   if (url === '/api/v1/health'  || url.startsWith('/api/v1/health/'))  return true
   if (url === '/metrics'        || url.startsWith('/metrics/'))        return true
   if (url === '/docs'           || url.startsWith('/docs/'))           return true
@@ -752,6 +753,13 @@ app.get('/console.html', async (_req, reply) => {
   return reply.type('text/html').send(novanConsoleHtml())
 })
 app.get('/console', async (_req, reply) => reply.redirect('/console.html', 302))
+
+// R146.215 — Novan Brain agentic chat UI.
+app.get('/brain.html', async (_req, reply) => {
+  const { novanBrainChatHtml } = await import('./routes/novan-brain-chat.js')
+  return reply.type('text/html').send(novanBrainChatHtml())
+})
+app.get('/brain', async (_req, reply) => reply.redirect('/brain.html', 302))
 
 // R146.191 — Cron health endpoint. Returns the catalogue of cron families
 // observed in the last 48h with last-fire timestamp + count. Useful for

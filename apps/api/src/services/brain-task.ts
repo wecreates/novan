@@ -6771,6 +6771,23 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return workplaceCounts(ws)
     },
   },
+
+  // ─── R146.215 Brain agentic loop ────────────────────────────────
+  'brain.loop.run': {
+    description: 'Run the R215 agentic chat loop. Auto-picks skill, runs low-risk ops inline up to maxSteps, writes salient memories, marks chapter on topic shift. Params: { messages:[{role,content}], conversationId?, maxSteps?, autoSkill?, autoMemory?, autoChapter? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { runBrainLoopCollect } = await import('./r215-brain-loop.js')
+      const p = params as { messages: Array<{ role: 'system'|'user'|'assistant'; content: string }>; conversationId?: string; maxSteps?: number; autoSkill?: boolean; autoMemory?: boolean; autoChapter?: boolean }
+      return runBrainLoopCollect(ws, p.messages, {
+        ...(p.conversationId !== undefined ? { conversationId: p.conversationId } : {}),
+        ...(p.maxSteps       !== undefined ? { maxSteps:       p.maxSteps       } : {}),
+        ...(p.autoSkill      !== undefined ? { autoSkill:      p.autoSkill      } : {}),
+        ...(p.autoMemory     !== undefined ? { autoMemory:     p.autoMemory     } : {}),
+        ...(p.autoChapter    !== undefined ? { autoChapter:    p.autoChapter    } : {}),
+      })
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────
