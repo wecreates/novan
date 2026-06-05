@@ -15,7 +15,7 @@
  * cap. 1MB result cap.
  */
 import { db } from '../db/client.js'
-import { operatorWorkflows, operatorWorkflowRuns } from '../db/schema.js'
+import { operatorWorkflows, operatorWorkflowRuns, workflowJournal } from '../db/schema.js'
 import { and, eq, desc, sql } from 'drizzle-orm'
 import { v7 as uuidv7 } from 'uuid'
 import { spawnSubagent, parallelSubagents } from './r208-subagent.js'
@@ -83,15 +83,42 @@ export async function workflowRun(workspaceId: string, name: string, args?: unkn
     logParts.push(String(msg).slice(0, 1000) + '\n')
   }
 
-  const sandboxAgent = async (prompt: string, opts?: { schema?: Record<string, unknown> }) => {
-    const r = await spawnSubagent(workspaceId, {
-      parentOp: 'workflow.run',
-      prompt,
-      ...(opts?.schema ? { schema: opts.schema } : {}),
-    })
-    return r.parsed ?? r.text
+  // R216 — journal each step for resume.
+  let stepCounter = 0
+  const recordStep = async (kind: string, input: unknown, output?: unknown, error?: string, ms?: number) => {
+    const stepId = uuidv7()
+    await db.insert(workflowJournal).values({
+      id: stepId, workflowRunId: runId, stepIndex: stepCounter++,
+      stepKind: kind,
+      stepInput:  input  === undefined ? null : (typeof input  === 'object' ? input  as Record<string, unknown> : { value: input }),
+      stepOutput: output === undefined ? null : (typeof output === 'object' ? output as Record<string, unknown> : { value: output }),
+      stepError: error ?? null,
+      ms: ms ?? null,
+      createdAt: Date.now(),
+    }).catch(() => null)
   }
-  const sandboxParallel = async (thunks: Array<() => Promise<unknown>>) => Promise.all(thunks.map(t => t()))
+
+  const sandboxAgent = async (prompt: string, opts?: { schema?: Record<string, unknown> }) => {
+    const t0 = Date.now()
+    try {
+      const r = await spawnSubagent(workspaceId, {
+        parentOp: 'workflow.run',
+        prompt,
+        ...(opts?.schema ? { schema: opts.schema } : {}),
+      })
+      await recordStep('agent', { prompt: prompt.slice(0, 500) }, r as unknown, undefined, Date.now() - t0)
+      return r.parsed ?? r.text
+    } catch (e) {
+      await recordStep('agent', { prompt: prompt.slice(0, 500) }, undefined, (e as Error).message, Date.now() - t0)
+      throw e
+    }
+  }
+  const sandboxParallel = async (thunks: Array<() => Promise<unknown>>) => {
+    const t0 = Date.now()
+    const out = await Promise.all(thunks.map(t => t()))
+    await recordStep('parallel', { count: thunks.length }, { results: out.length }, undefined, Date.now() - t0)
+    return out
+  }
 
   let result: unknown
   let error: string | undefined

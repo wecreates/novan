@@ -7419,6 +7419,48 @@ export const operatorQuestions = pgTable('operator_questions', {
   index('oq_ws_status_idx').on(t.workspaceId, t.status, t.askedAt),
 ])
 
+// ─── R146.216 — 10× brain primitives ──────────────────────────────────
+export const workflowJournal = pgTable('workflow_journal', {
+  id:            text('id').primaryKey(),
+  workflowRunId: text('workflow_run_id').notNull(),
+  stepIndex:     integer('step_index').notNull(),
+  stepKind:      text('step_kind').notNull(),
+  stepInput:     jsonb('step_input').$type<Record<string, unknown>>(),
+  stepOutput:    jsonb('step_output').$type<Record<string, unknown>>(),
+  stepError:     text('step_error'),
+  ms:            integer('ms'),
+  createdAt:     bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('wfj_run_idx').on(t.workflowRunId, t.stepIndex),
+])
+
+export const routingDecisions = pgTable('routing_decisions', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  task:          text('task').notNull(),
+  chainPlanned:  jsonb('chain_planned').$type<string[]>().notNull(),
+  providerUsed:  text('provider_used'),
+  healthScores:  jsonb('health_scores').$type<Record<string, number>>(),
+  reason:        text('reason'),
+  decidedAt:     bigint('decided_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('rd_ws_idx').on(t.workspaceId, t.decidedAt),
+])
+
+export const skillOutcomes = pgTable('skill_outcomes', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  skillName:     text('skill_name').notNull(),
+  picker:        text('picker').notNull(),
+  won:           boolean('won'),
+  costUsd:       real('cost_usd').notNull().default(0),
+  stepsUsed:     integer('steps_used').notNull().default(0),
+  context:       text('context'),
+  createdAt:     bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('so_skill_idx').on(t.workspaceId, t.skillName, t.createdAt),
+])
+
 export const mcpConnectors = pgTable('mcp_connectors', {
   id:           text('id').primaryKey(),
   workspaceId:  text('workspace_id').notNull(),

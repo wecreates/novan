@@ -11,6 +11,7 @@ import { db } from '../db/client.js'
 import { adversarialVerdicts } from '../db/schema.js'
 import { v7 as uuidv7 } from 'uuid'
 import { parallelSubagents } from './r208-subagent.js'
+import { diverseProviders } from './r216-routing.js'
 
 export interface VerifyRequest {
   subject:    string
@@ -43,8 +44,14 @@ export async function adversarialVerify(workspaceId: string, req: VerifyRequest)
   const threshold = req.threshold ?? Math.ceil(voters / 2)
 
   const lenses = ['correctness', 'safety', 'completeness', 'user-impact', 'side-effects', 'security', 'cost'].slice(0, voters)
-  const requests = lenses.map(lens => ({
+  // R216 — each voter routed to a DIFFERENT provider so single-model bias
+  // can't dominate the verdict. Diversity falls back gracefully if fewer
+  // healthy providers are available.
+  const providers = await diverseProviders(voters, 'adversarial').catch(() => [])
+  const requests = lenses.map((lens, i) => ({
     parentOp: 'adversarial.verify',
+    task: 'adversarial',
+    ...(providers[i] ? { preferProvider: providers[i] } : {}),
     prompt: `You are a skeptic reviewing this action via the ${lens} lens.\n\n` +
             `Subject: ${req.subject}\nClaim: ${req.claim}\n` +
             (req.evidence ? `Evidence: ${req.evidence}\n` : '') +

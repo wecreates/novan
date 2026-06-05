@@ -13,11 +13,15 @@
  *
  * Each turn = N tool steps + 1 final message. MAX_STEPS caps runaway.
  */
+import { db } from '../db/client.js'
 import { streamChat, type ChatMsg } from './chat-providers.js'
 import { OPERATIONS } from './brain-task.js'
 import { spawnSubagent } from './r208-subagent.js'
-import { operatorSkillsAdvertisement, skillLoad } from './r206-skills.js'
+import { operatorSkillsAdvertisement, skillLoad, skillScore } from './r206-skills.js'
 import { memoryRemember, memoryDigest, chapterMark } from './r211-workplace.js'
+import { pickSkillSmart } from './r216-routing.js'
+import { skillOutcomes } from '../db/schema.js'
+import { v7 as uuidv7 } from 'uuid'
 
 export interface BrainLoopOpts {
   conversationId?: string
@@ -77,24 +81,31 @@ const MEMORY_SCHEMA = {
 }
 
 /**
- * Decide if any registered skill applies to the user's message. If so,
- * load + return its instructions to splice into the system prompt.
+ * R216 — Smart skill pick: Thompson sampling first (exploits scored
+ * history), LLM picker as cold-start fallback. Returns provenance so
+ * caller can record outcome against the right picker.
  */
-async function pickSkill(workspaceId: string, userMessage: string): Promise<{ name: string; instructions: string } | null> {
+async function pickSkill(workspaceId: string, userMessage: string): Promise<{ name: string; instructions: string; via: 'thompson' | 'llm' } | null> {
   const ad = await operatorSkillsAdvertisement(workspaceId, 1500)
   if (!ad) return null
-  const r = await spawnSubagent(workspaceId, {
-    parentOp: 'brain.loop.skill_pick',
-    prompt: `${ad}\n\nUser said: "${userMessage.slice(0, 1000)}"\n\n` +
-            `Which single skill name (from the list above) BEST applies? Return ` +
-            `{name, reason}. name=null if none clearly applies.`,
-    schema: SKILL_PICKER_SCHEMA,
-  })
-  const picked = r.parsed as { name: string | null } | undefined
-  if (!picked?.name) return null
-  const skill = await skillLoad(workspaceId, picked.name)
+  const llmFallback = async (): Promise<string | null> => {
+    const r = await spawnSubagent(workspaceId, {
+      parentOp: 'brain.loop.skill_pick',
+      task: 'skill_pick',
+      maxOutputTokens: 300,
+      prompt: `${ad}\n\nUser said: "${userMessage.slice(0, 1000)}"\n\n` +
+              `Which single skill name (from the list above) BEST applies? Return ` +
+              `{name, reason}. name=null if none clearly applies.`,
+      schema: SKILL_PICKER_SCHEMA,
+    })
+    const picked = r.parsed as { name: string | null } | undefined
+    return picked?.name ?? null
+  }
+  const r = await pickSkillSmart(workspaceId, llmFallback)
+  if (!r.name || r.via === 'none') return null
+  const skill = await skillLoad(workspaceId, r.name)
   if (!skill) return null
-  return { name: picked.name, instructions: skill.instructions }
+  return { name: r.name, instructions: skill.instructions, via: r.via as 'thompson' | 'llm' }
 }
 
 /**
@@ -206,12 +217,16 @@ export async function* runBrainLoop(
 
   const userMessage = [...messages].reverse().find(m => m.role === 'user')?.content ?? ''
 
-  // 1. Skill auto-pick
+  // 1. Skill auto-pick (Thompson sampling → LLM fallback per R216)
   let extraSys = ''
+  let pickedSkillName: string | undefined
+  let pickedVia: 'thompson' | 'llm' | undefined
   if (autoSkill && userMessage) {
     const picked = await pickSkill(workspaceId, userMessage).catch(() => null)
     if (picked) {
       extraSys += `\n\nActivated skill «${picked.name}» — follow its instructions:\n${picked.instructions}`
+      pickedSkillName = picked.name
+      pickedVia = picked.via
       yield { kind: 'skill', name: picked.name, loaded: true }
     }
   }
@@ -288,6 +303,22 @@ export async function* runBrainLoop(
   if (autoChapter) {
     const title = await detectChapterShift(workspaceId, messages, opts.conversationId).catch(() => null)
     if (title) yield { kind: 'chapter', title }
+  }
+
+  // 5. R216 — skill outcome scoring. A turn that produced a final answer
+  // without erroring out is treated as a win. A future enhancement can
+  // accept explicit operator feedback to override.
+  if (pickedSkillName) {
+    const won = assistantFinal.length > 0 && !assistantFinal.startsWith('_(no provider')
+    await skillScore(workspaceId, pickedSkillName, won).catch(() => null)
+    await db.insert(skillOutcomes).values({
+      id: uuidv7(), workspaceId, skillName: pickedSkillName,
+      picker: pickedVia ?? 'unknown', won,
+      costUsd: totalCost,
+      stepsUsed: maxSteps,
+      context: userMessage.slice(0, 500),
+      createdAt: Date.now(),
+    }).catch(() => null)
   }
 
   // Step count = number of (delta+tool_call) groups before final

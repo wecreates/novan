@@ -6773,6 +6773,35 @@ export const OPERATIONS: Record<string, OpSpec> = {
   },
 
   // ─── R146.215 Brain agentic loop ────────────────────────────────
+  // ─── R146.216 — 10× routing/diversity/learning ─────────────────
+  'routing.healthCheck': {
+    description: 'R216 — show current provider chains per task type with health-aware ordering.',
+    risk: 'low',
+    handler: async () => {
+      const { routingHealthSnapshot } = await import('./r216-routing.js')
+      return routingHealthSnapshot()
+    },
+  },
+  'routing.diverseProviders': {
+    description: 'R216 — return N healthy, distinct providers for adversarial voters. Params: { n, task? }',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { diverseProviders } = await import('./r216-routing.js')
+      const p = params as { n: number; task?: string }
+      const task = (p.task ?? 'adversarial') as Parameters<typeof diverseProviders>[1]
+      return { providers: await diverseProviders(p.n, task) }
+    },
+  },
+  'skill.thompsonPick': {
+    description: 'R216 — sample a skill via Thompson sampling (Beta(wins+1, losses+1)). Params: { candidates? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { thompsonPickSkill } = await import('./r216-routing.js')
+      const p = params as { candidates?: string[] }
+      return { name: await thompsonPickSkill(ws, p.candidates) }
+    },
+  },
+
   'brain.loop.run': {
     description: 'Run the R215 agentic chat loop. Auto-picks skill, runs low-risk ops inline up to maxSteps, writes salient memories, marks chapter on topic shift. Params: { messages:[{role,content}], conversationId?, maxSteps?, autoSkill?, autoMemory?, autoChapter? }',
     risk: 'medium',

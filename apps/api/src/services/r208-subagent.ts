@@ -13,21 +13,31 @@ import { v7 as uuidv7 } from 'uuid'
 import { streamChat } from './chat-providers.js'
 
 export interface SubagentRequest {
-  prompt:      string
-  schema?:     Record<string, unknown>
-  parentOp?:   string
-  maxBytes?:   number
+  prompt:           string
+  schema?:          Record<string, unknown>
+  parentOp?:        string
+  maxBytes?:        number
+  /** R216 — hard token budget. If the generated response would push
+   *  output tokens past this, the call is aborted. Default 4000. */
+  maxOutputTokens?: number
+  /** R216 — preferred provider id (e.g. "anthropic-sonnet"). If
+   *  unavailable, falls through provider chain via streamChat fallback. */
+  preferProvider?:  string
+  /** R216 — explicit task type for routing telemetry. */
+  task?:            string
 }
 
 export interface SubagentResult {
-  id:        string
-  text:      string
-  parsed?:   unknown
-  error?:    string
-  tokensIn:  number
-  tokensOut: number
-  costUsd:   number
-  ms:        number
+  id:         string
+  text:       string
+  parsed?:    unknown
+  error?:     string
+  tokensIn:   number
+  tokensOut:  number
+  costUsd:    number
+  ms:         number
+  provider?:  string
+  model?:     string
 }
 
 const SCHEMA_INSTRUCTION = 'Return ONLY a single JSON object matching the schema. No prose, no fences, no commentary.'
@@ -48,13 +58,16 @@ export async function spawnSubagent(workspaceId: string, req: SubagentRequest): 
 
   let text = ''
   let tokensIn = 0, tokensOut = 0, costUsd = 0
+  let provider: string | undefined, model: string | undefined
   let error: string | undefined
   let parsed: unknown
+  const maxOut = Math.max(100, Math.min(8000, req.maxOutputTokens ?? 4000))
   try {
     const gen = streamChat(workspaceId, [
       { role: 'system', content: sys },
       { role: 'user', content: req.prompt },
     ], { taskType: 'chat' })
+    let abortBudget = false
     while (true) {
       const next = await gen.next()
       if (next.done) {
@@ -63,8 +76,22 @@ export async function spawnSubagent(workspaceId: string, req: SubagentRequest): 
         tokensOut = r.tokens
         costUsd   = r.costUsd
         text      = r.content
+        provider  = r.provider
+        model     = r.model
+        if (tokensOut > maxOut) { abortBudget = true }
         break
       }
+      // R216 — accumulate streamed token estimate; if we exceed budget,
+      // try to cancel. Streaming tokens aren't reported per-delta so we
+      // estimate as 1 token per 4 chars (rough English heuristic).
+      if (next.value.delta) {
+        const est = Math.ceil(next.value.delta.length / 4)
+        tokensOut += est
+        if (tokensOut > maxOut) { abortBudget = true; break }
+      }
+    }
+    if (abortBudget) {
+      error = `output budget exceeded (>${maxOut} tokens)`
     }
     if (req.schema) {
       const jsonText = text.trim().replace(/^```(?:json)?/, '').replace(/```$/, '').trim()
@@ -87,6 +114,8 @@ export async function spawnSubagent(workspaceId: string, req: SubagentRequest): 
   const out: SubagentResult = { id, text, tokensIn, tokensOut, costUsd, ms }
   if (parsed !== undefined) out.parsed = parsed
   if (error) out.error = error
+  if (provider) out.provider = provider
+  if (model) out.model = model
   return out
 }
 
