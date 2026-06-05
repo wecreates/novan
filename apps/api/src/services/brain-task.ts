@@ -6480,6 +6480,117 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return sweepApprovedSends(ws, (params as { hourlyCap?: number }) ?? {})
     },
   },
+
+  // ─── R146.206 Skills registry ───────────────────────────────────
+  'skill.create': {
+    description: 'Register or update a skill (capability bundle). Params: { name, description, whenToUse?, instructions }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { skillCreate } = await import('./r206-skills.js')
+      return skillCreate(ws, params as { name: string; description: string; whenToUse?: string; instructions: string })
+    },
+  },
+  'skill.list': {
+    description: 'List all skills registered for the workspace, sorted by uses.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { skillList } = await import('./r206-skills.js')
+      return skillList(ws)
+    },
+  },
+  'skill.load': {
+    description: 'Load full instructions for a skill by name. Increments uses counter. Params: { name }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { skillLoad } = await import('./r206-skills.js')
+      return skillLoad(ws, (params as { name: string }).name)
+    },
+  },
+  'skill.search': {
+    description: 'Fuzzy-find skills matching query. Params: { query, limit? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { skillSearch } = await import('./r206-skills.js')
+      const p = params as { query: string; limit?: number }
+      return skillSearch(ws, p.query, p.limit)
+    },
+  },
+  'skill.score': {
+    description: 'Record outcome for a skill. Params: { name, won }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { skillScore } = await import('./r206-skills.js')
+      const p = params as { name: string; won: boolean }
+      return skillScore(ws, p.name, p.won)
+    },
+  },
+
+  // ─── R146.207 Op search (deferred discovery) ────────────────────
+  'op.search': {
+    description: 'Find brain ops matching a query without loading the full ~900-op registry. Params: { query, limit? }',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { opSearch } = await import('./r207-op-search.js')
+      const p = params as { query: string; limit?: number }
+      return opSearch(p.query, p.limit)
+    },
+  },
+
+  // ─── R146.208 Sub-agent spawner ─────────────────────────────────
+  'subagent.run': {
+    description: 'Spawn an isolated sub-agent with focused prompt + optional JSON schema. Params: { prompt, schema?, parentOp? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { spawnSubagent } = await import('./r208-subagent.js')
+      return spawnSubagent(ws, params as { prompt: string; schema?: Record<string, unknown>; parentOp?: string })
+    },
+  },
+  'subagent.parallel': {
+    description: 'Spawn N sub-agents in parallel. Params: { requests: [{prompt, schema?}, ...] }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { parallelSubagents } = await import('./r208-subagent.js')
+      const p = params as { requests: Array<{ prompt: string; schema?: Record<string, unknown> }> }
+      return parallelSubagents(ws, p.requests)
+    },
+  },
+
+  // ─── R146.209 Adversarial verify ────────────────────────────────
+  'verify.adversarial': {
+    description: 'Run N skeptics tasked to refute a claim. Returns {decision: approve|block, votes, reasons}. Params: { subject, claim, evidence?, voters?, threshold? }',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { adversarialVerify } = await import('./r209-adversarial.js')
+      return adversarialVerify(ws, params as { subject: string; claim: string; evidence?: string; voters?: number; threshold?: number })
+    },
+  },
+
+  // ─── R146.210 Workflow runtime ──────────────────────────────────
+  'wf.create': {
+    description: 'Register or update a workflow JS script. Params: { name, description?, script }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { workflowCreate } = await import('./r210-workflow.js')
+      return workflowCreate(ws, params as { name: string; description?: string; script: string })
+    },
+  },
+  'wf.list': {
+    description: 'List R210 operator workflows (JS-script kind). For old multi-step workflows use workflow.list.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { workflowList } = await import('./r210-workflow.js')
+      return workflowList(ws)
+    },
+  },
+  'wf.run': {
+    description: 'Execute an R210 workflow by name with optional args. Params: { name, args? }',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { workflowRun } = await import('./r210-workflow.js')
+      const p = params as { name: string; args?: unknown }
+      return workflowRun(ws, p.name, p.args)
+    },
+  },
 }
 
 // ─── Public surface ────────────────────────────────────────────────────

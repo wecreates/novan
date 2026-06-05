@@ -7250,3 +7250,84 @@ export const selfDevProposal = pgTable('self_dev_proposal', {
   index('sdp_finding_idx').on(t.findingId),
   index('sdp_ws_status_idx').on(t.workspaceId, t.status, t.createdAt),
 ])
+
+// ─── R146.206 — Skills registry (Anthropic-style capability bundles) ──
+export const operatorSkills = pgTable('operator_skills', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  name:         text('name').notNull(),
+  description:  text('description').notNull(),
+  whenToUse:    text('when_to_use'),
+  instructions: text('instructions').notNull(),
+  version:      integer('version').notNull().default(1),
+  uses:         integer('uses').notNull().default(0),
+  wins:         integer('wins').notNull().default(0),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('operator_skills_ws_name_uniq').on(t.workspaceId, t.name),
+  index('operator_skills_ws_idx').on(t.workspaceId),
+])
+
+// ─── R146.208 — Sub-agent runs (isolated reasoning contexts) ──────────
+export const subagentRuns = pgTable('subagent_runs', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  parentOp:     text('parent_op'),
+  prompt:       text('prompt').notNull(),
+  schema:       jsonb('schema').$type<Record<string, unknown>>(),
+  result:       jsonb('result').$type<Record<string, unknown>>(),
+  error:        text('error'),
+  tokensIn:     integer('tokens_in').notNull().default(0),
+  tokensOut:    integer('tokens_out').notNull().default(0),
+  costUsd:      real('cost_usd').notNull().default(0),
+  startedAt:    bigint('started_at', { mode: 'number' }).notNull(),
+  endedAt:      bigint('ended_at',   { mode: 'number' }),
+}, (t) => [
+  index('sar_ws_idx').on(t.workspaceId, t.startedAt),
+])
+
+// ─── R146.209 — Adversarial verdicts ──────────────────────────────────
+export const adversarialVerdicts = pgTable('adversarial_verdicts', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  subject:      text('subject').notNull(),
+  claim:        text('claim').notNull(),
+  voters:       integer('voters').notNull(),
+  refutedCount: integer('refuted_count').notNull(),
+  votes:        jsonb('votes').$type<Array<{ refuted: boolean; reason: string }>>().notNull(),
+  decision:     text('decision').notNull(),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('av_ws_idx').on(t.workspaceId, t.createdAt),
+])
+
+// ─── R146.210 — Operator workflow scripts + runs ──────────────────────
+export const operatorWorkflows = pgTable('operator_workflows', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  name:         text('name').notNull(),
+  description:  text('description'),
+  script:       text('script').notNull(),
+  version:      integer('version').notNull().default(1),
+  runsCount:    integer('runs_count').notNull().default(0),
+  lastRunAt:    bigint('last_run_at', { mode: 'number' }),
+  createdAt:    bigint('created_at',  { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at',  { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('operator_workflows_ws_name_uniq').on(t.workspaceId, t.name),
+])
+
+export const operatorWorkflowRuns = pgTable('operator_workflow_runs', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  workflowId:   text('workflow_id').notNull(),
+  args:         jsonb('args').$type<Record<string, unknown>>(),
+  result:       jsonb('result').$type<Record<string, unknown>>(),
+  error:        text('error'),
+  log:          text('log'),
+  startedAt:    bigint('started_at', { mode: 'number' }).notNull(),
+  endedAt:      bigint('ended_at',   { mode: 'number' }),
+}, (t) => [
+  index('owr_ws_idx').on(t.workspaceId, t.startedAt),
+])

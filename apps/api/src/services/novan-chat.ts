@@ -412,6 +412,20 @@ async function buildSystemPrompt(workspaceId: string, userMessage: string): Prom
   lines.push('')
   lines.push('Respond directly. No preamble. Reference dashboard pages by path when relevant.')
 
+  // R146.207 — Hint about op.search so the model doesn't need the full
+  // ~900-op registry inlined. R146.206 — Advertise registered skills
+  // (name + description only; instructions load on demand via skill.load).
+  try {
+    const { opSearchHint } = await import('./r207-op-search.js')
+    lines.push('')
+    lines.push(opSearchHint())
+  } catch { /* tolerated */ }
+  try {
+    const { operatorSkillsAdvertisement } = await import('./r206-skills.js')
+    const ad = await operatorSkillsAdvertisement(workspaceId, 2000)
+    if (ad) { lines.push(''); lines.push(ad) }
+  } catch { /* tolerated */ }
+
   return { systemPrompt: lines.join('\n'), citations }
 }
 
