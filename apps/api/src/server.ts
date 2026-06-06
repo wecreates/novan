@@ -1075,6 +1075,13 @@ const shutdown = async (signal: string) => {
   } catch { /* */ }
   await app.close()
   await redisClient.quit()
+  // R146.281 — close the pg pool last (after every other component has
+  // stopped issuing queries). 5s grace lets any LISTEN connection or
+  // in-flight cron query exit cleanly instead of cutting mid-stream.
+  try {
+    const { closeDb } = await import('./db/client.js')
+    await closeDb(5)
+  } catch { /* */ }
   process.exit(0)
 }
 

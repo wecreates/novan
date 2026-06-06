@@ -27,3 +27,11 @@ export type DB  = typeof db
 // Exposed raw client for postgres-js features Drizzle doesn't wrap —
 // specifically LISTEN/NOTIFY for sub-second SSE notifications.
 export const pg = queryClient
+
+// R146.281 — graceful shutdown. Without this, the pool's idle connections
+// sit after SIGTERM until forced exit, and any in-flight query gets cut
+// mid-stream. postgres-js .end({timeout}) waits up to N seconds for
+// pending queries to finish, then closes all connections.
+export async function closeDb(timeoutSec = 5): Promise<void> {
+  try { await queryClient.end({ timeout: timeoutSec }) } catch { /* tolerated */ }
+}
