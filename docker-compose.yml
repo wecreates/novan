@@ -22,6 +22,11 @@ services:
   redis:
     image: redis:7-alpine
     command: ["redis-server","--appendonly","yes","--requirepass","${REDIS_PASSWORD}"]
+    # R146.299b — inject REDIS_PASSWORD into the container env so the
+    # healthcheck CMD-SHELL can expand $$REDIS_PASSWORD at probe time.
+    # Without this, the new healthcheck always fails NOAUTH (empty password).
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     ports:
       - '6379:6379'
     volumes:
