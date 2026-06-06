@@ -45,6 +45,7 @@ export interface BrainHealth {
   cron:    { missing: number; autoClosed: number }
   errors:  { last1h: number; last24h: number }
   skills:  { total: number; recentWinRate: number | null }
+  process: { uptimeSec: number }  // R146.271 — container boot age
   at:      number
 }
 
@@ -106,6 +107,7 @@ export async function brainHealth(workspaceId: string): Promise<BrainHealth> {
     cron:    { missing: cr.missing.length, autoClosed: cr.autoClosed },
     errors:  { last1h: errs1h, last24h: errs24h },
     skills:  { total: skillStats, recentWinRate },
+    process: { uptimeSec: Math.round(process.uptime()) },
     at: now,
   }
   _cache.set(workspaceId, { snap, at: now })
