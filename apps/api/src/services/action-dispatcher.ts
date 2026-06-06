@@ -12,7 +12,7 @@
  */
 import { db } from '../db/client.js'
 import { actions, reasoningChains, killSwitches, workerConcurrency, providerPreferences } from '../db/schema.js'
-import { and, eq, desc, gte } from 'drizzle-orm'
+import { and, eq, desc, gte, sql } from 'drizzle-orm'
 import { v7 as uuidv7 } from 'uuid'
 import { notify } from './notifications.js'
 import { shouldAutoAct, type LoadMode } from './strategic-restraint.js'
@@ -178,22 +178,24 @@ async function execute(i: DispatchInput): Promise<Record<string, unknown>> {
     case 'engage_kill_switch': {
       const switchType = String(i.payload['switchType'] ?? 'research')
       const reason     = String(i.payload['reason']     ?? 'manual via action-dispatcher')
-      const existing = await db.select().from(killSwitches)
-        .where(and(eq(killSwitches.workspaceId, i.workspaceId), eq(killSwitches.switchType, switchType)))
-        .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
       const now = Date.now()
-      if (existing?.enabled) return { engaged: false, alreadyEngaged: true }
-      if (existing) {
-        await db.update(killSwitches).set({
-          enabled: true, reason, enabledBy: 'action-dispatcher', enabledAt: now, updatedAt: now,
-        }).where(eq(killSwitches.id, existing.id)).catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
-      } else {
-        await db.insert(killSwitches).values({
-          id: uuidv7(), workspaceId: i.workspaceId, switchType, enabled: true,
-          reason, enabledBy: 'action-dispatcher', enabledAt: now,
-          createdAt: now, updatedAt: now,
-        }).onConflictDoNothing().catch((e: Error) => { console.error('[action-dispatcher]', e.message); return null })
-      }
+      // R146.220 — atomic upsert via R203 unique idx kill_switches_ws_type_uniq.
+      // Previous SELECT-then-(UPDATE-or-INSERT) had a TOCTOU window: two
+      // concurrent emergency triggers for the same (workspace, switchType)
+      // could both observe "no row" and INSERT before the unique index
+      // existed (R203 added it). With both unique index + atomic upsert
+      // the race is closed at the DB level.
+      const ret = await db.insert(killSwitches).values({
+        id: uuidv7(), workspaceId: i.workspaceId, switchType, enabled: true,
+        reason, enabledBy: 'action-dispatcher', enabledAt: now,
+        createdAt: now, updatedAt: now,
+      }).onConflictDoUpdate({
+        target: [killSwitches.workspaceId, killSwitches.switchType],
+        set: { enabled: true, reason, enabledBy: 'action-dispatcher', enabledAt: now, updatedAt: now },
+        setWhere: sql`${killSwitches.enabled} = false`,
+      }).returning({ enabled: killSwitches.enabled, enabledAt: killSwitches.enabledAt })
+        .catch((e: Error) => { console.error('[action-dispatcher]', e.message); return [] as Array<{ enabled: boolean; enabledAt: number | null }> })
+      if (ret.length === 0) return { engaged: false, alreadyEngaged: true }
       return { engaged: true, switchType, reason }
     }
 

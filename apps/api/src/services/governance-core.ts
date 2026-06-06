@@ -324,23 +324,21 @@ export async function deploymentsToday(workspaceId: string): Promise<number> {
 export async function autoEngageThrottle(workspaceId: string, reason: string): Promise<{ engaged: string[] }> {
   const engaged: string[] = []
   const now = Date.now()
+  // R146.220 — atomic upsert via R203 unique idx kill_switches_ws_type_uniq.
+  // setWhere ensures we only count "engaged" rows that actually flipped
+  // from disabled → enabled this call. Already-enabled rows return empty.
   for (const switchType of ['research', 'image'] as const) {
-    const existing = await db.select().from(killSwitches)
-      .where(and(eq(killSwitches.workspaceId, workspaceId), eq(killSwitches.switchType, switchType)))
-      .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[governance-core]', e.message); return null })
-    if (existing?.enabled) continue
-    if (existing) {
-      await db.update(killSwitches).set({
-        enabled: true, reason, enabledBy: 'governance-core', enabledAt: now, updatedAt: now,
-      }).where(eq(killSwitches.id, existing.id)).catch((e: Error) => { console.error('[governance-core]', e.message); return null })
-    } else {
-      await db.insert(killSwitches).values({
-        id: uuidv7(), workspaceId, switchType, enabled: true,
-        reason, enabledBy: 'governance-core', enabledAt: now,
-        createdAt: now, updatedAt: now,
-      }).onConflictDoNothing().catch((e: Error) => { console.error('[governance-core]', e.message); return null })
-    }
-    engaged.push(switchType)
+    const ret = await db.insert(killSwitches).values({
+      id: uuidv7(), workspaceId, switchType, enabled: true,
+      reason, enabledBy: 'governance-core', enabledAt: now,
+      createdAt: now, updatedAt: now,
+    }).onConflictDoUpdate({
+      target: [killSwitches.workspaceId, killSwitches.switchType],
+      set: { enabled: true, reason, enabledBy: 'governance-core', enabledAt: now, updatedAt: now },
+      setWhere: sql`${killSwitches.enabled} = false`,
+    }).returning({ enabled: killSwitches.enabled })
+      .catch((e: Error) => { console.error('[governance-core]', e.message); return [] as Array<{ enabled: boolean }> })
+    if (ret.length > 0) engaged.push(switchType)
   }
   if (engaged.length > 0) {
     await emitGovernance(workspaceId, 'auto_throttle_engaged', { engaged, reason })
