@@ -414,7 +414,14 @@ app.addHook('preHandler', async (req, reply) => {
     ? (('workspace_id' in query ? query['workspace_id'] : undefined)
         ?? ('workspaceId' in query ? query['workspaceId'] : undefined))
     : undefined
-  const probe = probeFromBody ?? probeFromQuery
+  // R146.315 — extend to URL params. routes/runtime-registry.ts uses
+  // `/scores/:workspaceId` etc., which the body+query guard misses.
+  const params = (req.params as Record<string, unknown> | undefined) ?? undefined
+  const probeFromParams = params
+    ? (('workspace_id' in params ? params['workspace_id'] : undefined)
+        ?? ('workspaceId' in params ? params['workspaceId'] : undefined))
+    : undefined
+  const probe = probeFromBody ?? probeFromQuery ?? probeFromParams
   if (probe !== undefined && (typeof probe !== 'string' || probe !== authWs)) {
     req.log.warn({ authWs, probeType: typeof probe, url }, '[auth] cross-workspace or type-confusion request rejected')
     return reply.code(403).send({
@@ -438,9 +445,10 @@ app.addHook('preHandler', async (req, reply) => {
   if (isPublic(url)) return
   const body  = (req.body  as Record<string, unknown> | undefined) ?? undefined
   const query = (req.query as Record<string, unknown> | undefined) ?? undefined
+  const params = (req.params as Record<string, unknown> | undefined) ?? undefined
   // R146.308 — check both snake and camel key shapes; same camelCase blind
-  // spot the R30 guard had.
-  for (const src of [body, query]) {
+  // spot the R30 guard had. R146.315 — extend to URL params.
+  for (const src of [body, query, params]) {
     if (!src) continue
     for (const key of ['workspace_id', 'workspaceId']) {
       if (!(key in src)) continue
