@@ -113,7 +113,7 @@ const engAgentsRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/jobs', async (req, reply) => {
     const q           = req.query as Record<string, string>
-    const workspaceId = q['workspaceId'] ?? 'default'
+    const workspaceId = wsOf(req, { workspaceId: q['workspaceId'] })
     const agentType   = q['agentType']
     const list        = listJobs(
       workspaceId,

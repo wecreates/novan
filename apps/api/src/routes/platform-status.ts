@@ -14,10 +14,17 @@ import { coordinatorSnapshot, recentPriorityDecisions } from '../services/agent-
 import { runDailyReview, generateDailyReview } from '../services/daily-review.js'
 import { listAvailableProviders } from '../services/image-generator.js'
 
+// R146.320 — derive workspaceId from auth claim first.
+function wsOf(req: unknown, fallback?: string): string {
+  const auth = (req as { workspaceId?: string }).workspaceId
+  if (auth) return auth
+  return fallback ?? 'default'
+}
+
 const platformStatusRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.get<{ Querystring: { workspace_id?: string } }>('/providers', async (req, reply) => {
-    const ws = req.query.workspace_id ?? 'default'
+    const ws = wsOf(req, req.query.workspace_id)
     const probe = await validateProviders(ws)
     return {
       success: true,
@@ -35,7 +42,7 @@ const platformStatusRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   fastify.get<{ Querystring: { workspace_id?: string } }>('/governor', async (req, reply) => {
-    const ws = req.query.workspace_id
+    const ws = wsOf(req, req.query.workspace_id)
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     return { success: true, data: await governorSnapshot(ws) }
   })
@@ -51,7 +58,7 @@ const platformStatusRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   fastify.post<{ Body: { workspace_id?: string; force?: boolean } }>('/daily-review', async (req, reply) => {
-    const ws = req.body.workspace_id
+    const ws = wsOf(req, req.body.workspace_id)
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     const opts = req.body.force ? { force: true } : {}
     const review = await runDailyReview(ws, opts)
