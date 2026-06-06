@@ -40,6 +40,10 @@ export interface PresenceResult {
 
 export async function checkCronPresence(): Promise<PresenceResult & { autoClosed: number }> {
   const now = Date.now()
+  // R146.270 — boot grace: if a cron has never emitted but the process
+  // has been up less than its maxAgeMs, treat it as still warming, not
+  // missing. Avoids the post-redeploy "8 missing" flap.
+  const uptimeMs = process.uptime() * 1000
   const missing: PresenceResult['missing'] = []
   let opened = 0
   let autoClosed = 0
@@ -53,7 +57,9 @@ export async function checkCronPresence(): Promise<PresenceResult & { autoClosed
       .catch(() => [])
     const lastSeenAt = latest?.createdAt ? Number(latest.createdAt) : null
     const ageMs = lastSeenAt === null ? null : now - lastSeenAt
-    const isMissing = lastSeenAt === null || ageMs! > exp.maxAgeMs
+    // Never-seen + boot-grace → still warming, skip.
+    const inBootGrace = lastSeenAt === null && uptimeMs < exp.maxAgeMs
+    const isMissing = !inBootGrace && (lastSeenAt === null || ageMs! > exp.maxAgeMs)
 
     const fingerprint = `cron-presence:${exp.eventType}`
     if (!isMissing) {
