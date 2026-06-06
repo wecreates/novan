@@ -39,6 +39,18 @@ function isAgentType(v: unknown): v is AgentType {
   return typeof v === 'string' && (AGENT_TYPES as string[]).includes(v)
 }
 
+// R146.318 — derive workspaceId from auth claim first, body second.
+// Previously every handler did `body.workspaceId ?? 'default'` which under
+// ENFORCE_GLOBAL_AUTH=false allowed any caller to pause/resume/unlock another
+// workspace's engineering agents by setting body.workspaceId. The global
+// R30/R308 IDOR guard only fires when authWs is set; this falls back safely
+// when it isn't.
+function wsOf(req: unknown, body?: { workspaceId?: string }): string {
+  const auth = (req as { workspaceId?: string }).workspaceId
+  if (auth) return auth
+  return body?.workspaceId ?? 'default'
+}
+
 // ─── Plugin ───────────────────────────────────────────────────────────────────
 
 const engAgentsRoutes: FastifyPluginAsync = async (app) => {
@@ -46,13 +58,13 @@ const engAgentsRoutes: FastifyPluginAsync = async (app) => {
   // ── Agent state ────────────────────────────────────────────────────────────
 
   app.get('/agents', async (req, reply) => {
-    const workspaceId = (req.query as Record<string, string>)['workspaceId'] ?? 'default'
+    const workspaceId = wsOf(req, { workspaceId: (req.query as Record<string, string>)['workspaceId'] })
     return reply.send({ success: true, data: { agents: listAgents(workspaceId) } })
   })
 
   app.get('/agents/:type', async (req, reply) => {
     const { type } = req.params as { type: string }
-    const workspaceId = (req.query as Record<string, string>)['workspaceId'] ?? 'default'
+    const workspaceId = wsOf(req, { workspaceId: (req.query as Record<string, string>)['workspaceId'] })
     if (!isAgentType(type)) return reply.status(400).send({ success: false, error: `Unknown agent type: ${type}` })
     return reply.send({ success: true, data: { agent: getAgent(workspaceId, type) } })
   })
@@ -61,7 +73,7 @@ const engAgentsRoutes: FastifyPluginAsync = async (app) => {
     const { type } = req.params as { type: string }
     const body = req.body as { workspaceId?: string; reason?: string }
     if (!isAgentType(type)) return reply.status(400).send({ success: false, error: `Unknown agent type: ${type}` })
-    const workspaceId = body.workspaceId ?? 'default'
+    const workspaceId = wsOf(req, body)
     const reason      = body.reason ?? 'manual pause'
     try {
       const agent = await pauseAgent(workspaceId, type, reason)
@@ -75,7 +87,7 @@ const engAgentsRoutes: FastifyPluginAsync = async (app) => {
     const { type } = req.params as { type: string }
     const body = req.body as { workspaceId?: string }
     if (!isAgentType(type)) return reply.status(400).send({ success: false, error: `Unknown agent type: ${type}` })
-    const workspaceId = body.workspaceId ?? 'default'
+    const workspaceId = wsOf(req, body)
     try {
       const agent = await resumeAgent(workspaceId, type)
       return reply.send({ success: true, data: { agent } })
@@ -88,7 +100,7 @@ const engAgentsRoutes: FastifyPluginAsync = async (app) => {
     const { type } = req.params as { type: string }
     const body = req.body as { workspaceId?: string }
     if (!isAgentType(type)) return reply.status(400).send({ success: false, error: `Unknown agent type: ${type}` })
-    const workspaceId = body.workspaceId ?? 'default'
+    const workspaceId = wsOf(req, body)
     try {
       const agent = await unlockAgent(workspaceId, type)
       return reply.send({ success: true, data: { agent } })
@@ -133,7 +145,7 @@ const engAgentsRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(400).send({ success: false, error: `Unknown agent type: ${body.agentType}` })
     }
 
-    const workspaceId  = body.workspaceId ?? 'default'
+    const workspaceId  = wsOf(req, body)
     const targetFiles  = body.targetFiles ?? []
     const needApproval = requiresApproval(body.agentType, targetFiles)
     // Optional unified-diff patch + rollback content supplied by caller
