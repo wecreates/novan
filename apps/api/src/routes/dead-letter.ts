@@ -46,11 +46,16 @@ const ListQuery = z.object({
 const REDIS_URL = process.env['REDIS_URL'] ?? 'redis://localhost:6379'
 const queueCache = new Map<string, Queue>()
 
-/** Canonical queue names — must match queues/index.ts. */
+/** Canonical queue names — must match queues/index.ts AND have an active
+ *  worker. 'notifications' was removed per R75 (no producers). 'briefing'
+ *  was removed per R146.279 (producer was zombie-job-leaking; no worker
+ *  generator exists). Retrying into either queue would re-create the
+ *  silent-drop hazard that R75/R279 fixed. */
 const KNOWN_QUEUES = new Set([
   'workflow', 'browser', 'memory', 'analytics', 'recovery',
-  'optimization', 'notifications', 'briefing', 'learning', 'autonomous',
+  'optimization', 'learning', 'autonomous',
 ])
+const RETIRED_QUEUES = new Set(['notifications', 'briefing'])
 
 /** Legacy queueName aliases that ended up in the dead_letter_jobs table
  *  from old code. Map to current names so DLQ retry doesn't create a
@@ -65,6 +70,9 @@ function normalizeQueueName(name: string): string {
 
 function getQueue(name: string): Queue {
   const canonical = normalizeQueueName(name)
+  if (RETIRED_QUEUES.has(canonical)) {
+    throw new Error(`retired queue "${canonical}" — no consumer exists; discard instead of retrying`)
+  }
   if (!KNOWN_QUEUES.has(canonical)) {
     throw new Error(`unknown queue "${name}" — refusing to create phantom queue with no consumer`)
   }
