@@ -24,6 +24,19 @@ function getMasterKey(): Buffer {
     if (buf.length !== 32) throw new Error('VAULT_MASTER_KEY must be 32 bytes base64-encoded')
     return buf
   }
+  // R146.295 — fail-fast in production. The dev fallback derives the
+  // key from `process.pid` + day-of-year, so every restart with a new
+  // PID OR every UTC-day rollover changes the key. In production this
+  // would silently destroy every previously-stored secret on the next
+  // restart, with no log line until a decrypt() call surfaces the
+  // mismatch. Force the env var unless explicitly opted into dev mode.
+  if (process.env['NODE_ENV'] === 'production' && process.env['ALLOW_DEV_VAULT'] !== '1') {
+    throw new Error(
+      '[secrets-vault] VAULT_MASTER_KEY required in production. ' +
+      'Set the env var (32 random bytes, base64-encoded) or set ' +
+      'ALLOW_DEV_VAULT=1 to acknowledge ephemeral key risk.',
+    )
+  }
   // Dev fallback — derive from pid+startup. NOT production-safe.
   const seed = `dev-vault-${process.pid}-${Math.floor(Date.now() / 86400_000)}`
   return crypto.createHash('sha256').update(seed).digest()
