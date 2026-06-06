@@ -11,6 +11,7 @@
  *   7. Graceful shutdown handlers
  */
 import './telemetry.js'
+import { timingSafeEqual }   from 'node:crypto'
 import Fastify               from 'fastify'
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import cors                  from '@fastify/cors'
@@ -768,7 +769,12 @@ app.post<{ Body: { op?: string; workspaceId?: string; params?: Record<string, un
   const remote = req.ip ?? req.socket?.remoteAddress ?? ''
   const isLoopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1' || /^172\.\d+\.0\.1$/.test(remote)
   if (!isLoopback) return reply.code(403).send({ error: 'loopback only' })
-  if ((req.headers['x-admin-token'] ?? '') !== token) return reply.code(401).send({ error: 'bad token' })
+  // R146.314 — constant-time compare to defeat byte-by-byte timing oracle.
+  // Even though endpoint is loopback-only, an attacker on the docker bridge
+  // (e.g. compromised sidecar) could still measure timing.
+  const given = String(req.headers['x-admin-token'] ?? '')
+  const a = Buffer.from(given), b = Buffer.from(token)
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return reply.code(401).send({ error: 'bad token' })
 
   // Rate limit: 30 calls per rolling minute.
   const now = Date.now()
@@ -811,7 +817,12 @@ app.get('/admin/brain/ops', async (req, reply) => {
   const remote = req.ip ?? req.socket?.remoteAddress ?? ''
   const isLoopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1' || /^172\.\d+\.0\.1$/.test(remote)
   if (!isLoopback) return reply.code(403).send({ error: 'loopback only' })
-  if ((req.headers['x-admin-token'] ?? '') !== token) return reply.code(401).send({ error: 'bad token' })
+  // R146.314 — constant-time compare to defeat byte-by-byte timing oracle.
+  // Even though endpoint is loopback-only, an attacker on the docker bridge
+  // (e.g. compromised sidecar) could still measure timing.
+  const given = String(req.headers['x-admin-token'] ?? '')
+  const a = Buffer.from(given), b = Buffer.from(token)
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return reply.code(401).send({ error: 'bad token' })
   const { OPERATIONS } = await import('./services/brain-task.js')
   const ops = Object.entries(OPERATIONS).map(([name, spec]: [string, unknown]) => ({
     name, description: (spec as { description?: string }).description ?? '', risk: (spec as { risk?: string }).risk ?? 'low',
