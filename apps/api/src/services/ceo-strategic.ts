@@ -262,7 +262,13 @@ export async function adversarialReview(input: {
         const res = await fetch(p.url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-          body: JSON.stringify({ model: p.model, max_tokens: 400, temperature: 0, system: SYS, messages: [{ role: 'user', content: USER }] }),
+          // R146.325 (#12) — cache the static SYS block. Above ~1024 tokens
+          // this halves input cost across the next 5 min of identical-SYS calls.
+          body: JSON.stringify({
+            model: p.model, max_tokens: 400, temperature: 0,
+            system: [{ type: 'text', text: SYS, cache_control: { type: 'ephemeral' } }],
+            messages: [{ role: 'user', content: USER }],
+          }),
           signal: AbortSignal.timeout(8000),
         })
         if (!res.ok) throw new Error(`${p.env} ${res.status}`)

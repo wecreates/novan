@@ -298,7 +298,17 @@ const _authSecret = process.env['AUTH_SECRET']
 if (!_authSecret || _authSecret.length < 32) {
   throw new Error('[auth] AUTH_SECRET must be set and ≥ 32 chars before boot')
 }
-await app.register(jwt,         { secret: _authSecret })
+// R146.325 (#24) — JWT rotation support. AUTH_SECRET_PREVIOUS, if set, is
+// tried as a fallback verifier so rotating the secret doesn't immediately
+// invalidate every active token. Sign with current; verify against either.
+// When we observe a previous-secret-hit we log so the operator knows when
+// it's safe to drop AUTH_SECRET_PREVIOUS from env.
+const _authSecretPrev = process.env['AUTH_SECRET_PREVIOUS']
+await app.register(jwt, {
+  secret: _authSecretPrev && _authSecretPrev.length >= 32
+    ? { private: _authSecret, public: [_authSecret, _authSecretPrev] }
+    : _authSecret,
+})
 await app.register(requestContextPlugin)
 await app.register(errorHandlerPlugin)
 await app.register(auditPlugin)
@@ -1231,7 +1241,15 @@ async function waitForPortFree(port: number, host: string): Promise<void> {
 try {
   await waitForPortFree(PORT, HOST).catch((e: Error) => { console.error('[server]', e.message); return null })
   await app.listen({ port: PORT, host: HOST })
-  app.log.info({ port: PORT, host: HOST, docs: `http://${HOST}:${PORT}/docs` }, 'API server started')
+  // R146.325 (#20) — startup mode banner. Makes auth misconfiguration
+  // obvious in logs instead of silently shipping dev-mode auto-auth to prod.
+  const authMode = process.env['ENFORCE_GLOBAL_AUTH'] === 'true'
+    ? 'enforced'
+    : 'DEV-OPEN — DO NOT RUN IN PROD'
+  app.log.info({ port: PORT, host: HOST, docs: `http://${HOST}:${PORT}/docs`, authMode }, 'API server started')
+  if (authMode !== 'enforced' && process.env['NODE_ENV'] === 'production') {
+    app.log.error({ authMode }, '[boot] AUTH IS OPEN IN PRODUCTION — set ENFORCE_GLOBAL_AUTH=true')
+  }
 } catch (err) {
   app.log.error({ err: (err as Error).message, stack: (err as Error).stack }, 'Failed to start server')
   process.exit(1)

@@ -214,8 +214,14 @@ export function startAgentHeartbeatTicker(workspaceId = 'default', intervalMs = 
       beatInFlight = false
     }
   }
-  void beat()
-  heartbeatTimer = setInterval(() => void beat(), intervalMs)
+  // R146.325 (#5) — jitter to avoid lockstep with other 60s tickers
+  // (runtime-heartbeat, connector-oauth reap, brain-task-browser reap).
+  // Without jitter all four fire in the same second every minute.
+  const jitter = Math.floor((process.pid % 15) * 1000)
+  setTimeout(() => {
+    void beat()
+    heartbeatTimer = setInterval(() => void beat(), intervalMs)
+  }, jitter)
 }
 
 export function stopAgentHeartbeatTicker(): void {

@@ -45,6 +45,17 @@ async function main(): Promise<void> {
     .filter(n => n.endsWith('.sql'))
     .sort()  // alphabetical — same order as boot.sh's glob
 
+  // R146.325 (#14) — migration filename regex validation. Existing files
+  // all match NNNN_name.sql. A misnamed migration (e.g. typo'd extension,
+  // missing leading zero) would otherwise be silently skipped by boot.sh's
+  // glob and never applied. Hard fail at boot instead.
+  const MIGRATION_NAME = /^\d{4}_[a-z0-9_]+\.sql$/
+  const bad = files.filter(f => !MIGRATION_NAME.test(f))
+  if (bad.length > 0) {
+    console.error(`[migrate] malformed filenames (must match ^\\d{4}_[a-z0-9_]+\\.sql$): ${bad.join(', ')}`)
+    process.exit(1)
+  }
+
   const appliedRows = await sql<{ filename: string }[]>`SELECT filename FROM schema_migrations_history`
   const applied = new Set(appliedRows.map(r => r.filename))
 

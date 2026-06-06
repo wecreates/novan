@@ -14,12 +14,10 @@ import { coordinatorSnapshot, recentPriorityDecisions } from '../services/agent-
 import { runDailyReview, generateDailyReview } from '../services/daily-review.js'
 import { listAvailableProviders } from '../services/image-generator.js'
 
-// R146.320 — derive workspaceId from auth claim first.
-function wsOf(req: unknown, fallback?: string): string {
-  const auth = (req as { workspaceId?: string }).workspaceId
-  if (auth) return auth
-  return fallback ?? 'default'
-}
+import { wsOf } from '../util/ws-of.js'
+import { TtlCache } from '../util/ttl-cache.js'
+// R146.325 (#6) — short TTL cache on operator-UI polled aggregates.
+const _governorCache = new TtlCache<unknown>(30_000)
 
 const platformStatusRoutes: FastifyPluginAsync = async (fastify) => {
 
@@ -44,7 +42,8 @@ const platformStatusRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Querystring: { workspace_id?: string } }>('/governor', async (req, reply) => {
     const ws = wsOf(req, req.query.workspace_id)
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
-    return { success: true, data: await governorSnapshot(ws) }
+    const data = await _governorCache.memoize(ws, () => governorSnapshot(ws))
+    return { success: true, data }
   })
 
   fastify.get('/coordinator', async () => {

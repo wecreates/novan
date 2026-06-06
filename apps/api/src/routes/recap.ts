@@ -5,11 +5,15 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { generateRecap, acknowledgeRecap } from '../services/recap.js'
 
-// R146.320 — auth-first workspaceId
+import { wsOf as _wsOf } from '../util/ws-of.js'
+// Recap routes need undefined-on-no-fallback (handlers return 400 if absent),
+// not the default-string behaviour of the shared helper.
 function wsOf(req: unknown, fallback?: string): string | undefined {
   const auth = (req as { workspaceId?: string }).workspaceId
-  return auth ?? fallback
+  if (auth) return auth
+  return fallback
 }
+void _wsOf  // keep import for future migration
 
 const recapRoutes: FastifyPluginAsync = async (fastify) => {
 

@@ -46,6 +46,7 @@ export interface BrainHealth {
   errors:  { last1h: number; last24h: number }
   skills:  { total: number; recentWinRate: number | null }
   process: { uptimeSec: number }  // R146.271 — container boot age
+  notes?:  string[]               // R146.325 (#7) — observability-only signals
   at:      number
 }
 
@@ -95,9 +96,23 @@ export async function brainHealth(workspaceId: string): Promise<BrainHealth> {
   const a = applier ?? { status: 'unknown', lastEventAt: null }
   const cr = cron ?? { missing: [], autoClosed: 0 }
 
+  // R146.325 (#7) — split `overall` into production-impacting vs metadata.
+  // Old behaviour conflated cost.over (real fire) with applier.unwired
+  // (purely informational) — both became 'degraded' so alerts couldn't
+  // distinguish. Now: critical = data-loss/cost-overrun risk; degraded =
+  // production user-visible issue; healthy with a `notes` array for purely
+  // observability gaps. The `overall` field stays for back-compat consumers.
   let overall: Health = 'healthy'
-  if (c.over || b.status === 'missing' || a.status === 'never') overall = 'critical'
-  else if (b.status !== 'fresh' || a.status !== 'alive' || cr.missing.length > 0 || errs1h > 5) overall = 'degraded'
+  const notes: string[] = []
+  if (c.over || b.status === 'missing') overall = 'critical'
+  else if (cr.missing.length > 0 || errs1h > 5) overall = 'degraded'
+  // Applier status is informational, not production-impacting (applier
+  // only writes optional improvement proposals). Report in notes instead
+  // of escalating overall — observed live as the dominant cause of
+  // false-positive 'degraded' across the round.
+  if (a.status !== 'alive')      notes.push(`applier:${a.status}`)
+  if (b.status !== 'fresh')      notes.push(`backup:${b.status}`)
+  if (a.status === 'never')      overall = 'critical'  // never wired at all → real config issue
 
   const snap: BrainHealth = {
     overall,
@@ -108,6 +123,7 @@ export async function brainHealth(workspaceId: string): Promise<BrainHealth> {
     errors:  { last1h: errs1h, last24h: errs24h },
     skills:  { total: skillStats, recentWinRate },
     process: { uptimeSec: Math.round(process.uptime()) },
+    ...(notes.length > 0 ? { notes } : {}),
     at: now,
   }
   _cache.set(workspaceId, { snap, at: now })

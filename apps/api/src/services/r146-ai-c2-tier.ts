@@ -180,6 +180,47 @@ export async function activeLearningSurface(workspaceId: string, opts: {
   return { boundary: ranked }
 }
 
+// R146.325 (#21) — recursive-descent arithmetic evaluator. Strictly: + - * /
+// () decimals. Returns null on any parse failure or division-by-zero.
+function evalArith(s: string): number | null {
+  let i = 0
+  const src = s
+  const peek = () => src[i]
+  const eat = (c: string) => { while (peek() === ' ') i++; if (peek() === c) { i++; return true } return false }
+  function parseExpr(): number | null {
+    let v = parseTerm(); if (v === null) return null
+    while (true) {
+      if (eat('+')) { const r = parseTerm(); if (r === null) return null; v += r }
+      else if (eat('-')) { const r = parseTerm(); if (r === null) return null; v -= r }
+      else break
+    }
+    return v
+  }
+  function parseTerm(): number | null {
+    let v = parseFactor(); if (v === null) return null
+    while (true) {
+      if (eat('*')) { const r = parseFactor(); if (r === null) return null; v *= r }
+      else if (eat('/')) { const r = parseFactor(); if (r === null || r === 0) return null; v /= r }
+      else break
+    }
+    return v
+  }
+  function parseFactor(): number | null {
+    while (peek() === ' ') i++
+    if (eat('-')) { const v = parseFactor(); return v === null ? null : -v }
+    if (eat('+')) return parseFactor()
+    if (eat('(')) { const v = parseExpr(); if (!eat(')')) return null; return v }
+    let n = ''
+    while (/[0-9.]/.test(peek() ?? '')) { n += peek(); i++ }
+    if (n === '' || n === '.') return null
+    const v = Number(n)
+    return Number.isFinite(v) ? v : null
+  }
+  const result = parseExpr()
+  while (peek() === ' ') i++
+  return i === src.length ? result : null
+}
+
 // ─── #40 — Symbolic + LLM hybrid solver ──────────────────────────────
 
 /**
@@ -190,18 +231,18 @@ export async function activeLearningSurface(workspaceId: string, opts: {
 export async function hybridSolve(workspaceId: string, opts: { question: string }): Promise<{ answer: string; engine: 'symbolic' | 'llm'; confidence: number }> {
   const q = opts.question.trim()
 
-  // Arithmetic: pure number/op expression
+  // R146.325 (#21) — pure-TS arithmetic evaluator. Previously used
+  // `new Function(...)` with a regex whitelist; safe in practice but
+  // still a code-execution primitive that lints flag and that future
+  // extenders could relax. Replaced with a recursive-descent parser
+  // that only knows about + - * / () and decimals.
   const arithRe = /^[\d\s+\-*/().,]+$/
   if (arithRe.test(q.replace(/^\s*calculate\s+/i, '').replace(/\s*$/, ''))) {
-    try {
-      const expr = q.replace(/^\s*calculate\s+/i, '').replace(/,/g, '')
-      // Safe eval via Function constructor on a whitelisted character set
-      // eslint-disable-next-line no-new-func
-      const result = new Function(`return (${expr})`)()
-      if (typeof result === 'number' && Number.isFinite(result)) {
-        return { answer: String(result), engine: 'symbolic', confidence: 1.0 }
-      }
-    } catch { /* fall through */ }
+    const expr = q.replace(/^\s*calculate\s+/i, '').replace(/,/g, '')
+    const result = evalArith(expr)
+    if (result !== null && Number.isFinite(result)) {
+      return { answer: String(result), engine: 'symbolic', confidence: 1.0 }
+    }
   }
 
   // Date arithmetic: "days between A and B"

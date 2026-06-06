@@ -51,16 +51,7 @@ async function emitEvent(type: string, workspaceId: string, payload: Record<stri
   } catch { /* non-blocking */ }
 }
 
-// R146.319 — derive workspaceId from auth claim first, query/body second.
-// Same defense-in-depth fix as R318 for eng-agents: under ENFORCE_GLOBAL_AUTH=false,
-// anyone could query/post other workspaces' learning signals + patterns + feedback
-// by spoofing ?workspace_id=victim. Auth-first leaves the body fallback for the
-// no-auth dev path only.
-function wsOf(req: unknown, fallback?: string): string {
-  const auth = (req as { workspaceId?: string }).workspaceId
-  if (auth) return auth
-  return fallback ?? 'default'
-}
+import { wsOf } from '../util/ws-of.js'
 
 // ─── Route plugin ─────────────────────────────────────────────────────────────
 

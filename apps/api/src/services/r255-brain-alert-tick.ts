@@ -41,6 +41,37 @@ async function writeState(workspaceId: string, h: Health): Promise<void> {
   }).catch(() => null)
 }
 
+// R146.325 (#8) — atomic transition check. Returns true only if the row
+// was actually updated from `expectedPrev` to `next` (or inserted fresh
+// when expectedPrev=null). Two concurrent ticks both observing
+// healthy→degraded would race the old SELECT-then-UPDATE pattern and
+// double-emit. With this, only one wins the UPDATE.
+async function tryTransition(workspaceId: string, expectedPrev: Health | null, next: Health): Promise<boolean> {
+  const now = Date.now()
+  if (expectedPrev === null) {
+    // Insert-if-absent; if a row already exists we lost the race and
+    // shouldn't emit.
+    const r = await db.insert(workspaceMemory).values({
+      workspaceId, key: STATE_KEY, value: next,
+      scope: 'system', importance: 90, updatedAt: now,
+    }).onConflictDoNothing().returning({ id: workspaceMemory.workspaceId })
+      .catch(() => [])
+    return r.length > 0
+  }
+  // Conditional UPDATE: only fires if value still matches expectedPrev.
+  const r = await db.update(workspaceMemory)
+    .set({ value: next, updatedAt: now })
+    .where(and(
+      eq(workspaceMemory.workspaceId, workspaceId),
+      eq(workspaceMemory.key, STATE_KEY),
+      eq(workspaceMemory.value, expectedPrev),
+    ))
+    .returning({ id: workspaceMemory.workspaceId })
+    .catch(() => [])
+  return r.length > 0
+}
+void tryTransition  // exported indirectly; available for future caller
+
 export interface BrainAlertResult { workspaceId: string; prev: Health | null; now: Health; emitted: string | null }
 
 export async function tickBrainHealthAlert(workspaceId: string): Promise<BrainAlertResult> {
@@ -51,6 +82,10 @@ export async function tickBrainHealthAlert(workspaceId: string): Promise<BrainAl
   const prev = await readPrev(workspaceId)
   let emitted: string | null = null
   if (prev !== snap.overall) {
+    // R146.325 (#8) — race-safe transition. Only emit if THIS tick is
+    // the one that flipped the persisted state.
+    const won = await tryTransition(workspaceId, prev, snap.overall)
+    if (!won) return { workspaceId, prev, now: snap.overall, emitted: null }
     if (snap.overall === 'critical')      emitted = 'brain.critical'
     else if (snap.overall === 'degraded') emitted = 'brain.degraded'
     else if (prev !== null)               emitted = 'brain.healthy'  // recovered

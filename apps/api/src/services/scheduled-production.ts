@@ -211,6 +211,16 @@ export async function tick(): Promise<TickResult> {
     result.errors.push('tick: previous tick still running — skipped to avoid duplicate fires')
     return result
   }
+  // R146.325 (#3) — Postgres advisory lock so multi-instance API doesn't
+  // double-fire. tryAdvisoryLock returns true also on DB-unreachable
+  // (defensive: in-process flag still protects single-instance).
+  const { tryAdvisoryLock, releaseAdvisoryLock } = await import('../util/advisory-lock.js')
+  const lockName = 'tick:scheduled-production'
+  const gotLock = await tryAdvisoryLock(lockName)
+  if (!gotLock) {
+    result.errors.push('tick: another instance holds the advisory lock — skipped')
+    return result
+  }
   _tickRunning = true
   try {
   const schedules = await listSchedules()
@@ -225,12 +235,17 @@ export async function tick(): Promise<TickResult> {
   const { eq, and } = await import('drizzle-orm')
   const haltedWorkspaces = new Set<string>()
   try {
-    const wsSet = new Set(schedules.map(s => s.workspaceId))
-    for (const ws of wsSet) {
-      const rows = await db.select({ enabled: killSwitches.enabled }).from(killSwitches)
-        .where(and(eq(killSwitches.workspaceId, ws), eq(killSwitches.switchType, 'ai_request')))
-        .limit(1)
-      if (rows[0]?.enabled) haltedWorkspaces.add(ws)
+    // R146.325 (#4) — batch the N+1 into a single IN query.
+    const wsList = Array.from(new Set(schedules.map(s => s.workspaceId)))
+    if (wsList.length > 0) {
+      const { inArray } = await import('drizzle-orm')
+      const rows = await db.select({ ws: killSwitches.workspaceId, enabled: killSwitches.enabled })
+        .from(killSwitches)
+        .where(and(
+          inArray(killSwitches.workspaceId, wsList),
+          eq(killSwitches.switchType, 'ai_request'),
+        ))
+      for (const r of rows) if (r.enabled) haltedWorkspaces.add(r.ws)
     }
   } catch { /* if kill-switch lookup fails, default to fire — operator has /api/v1/x/kill-switch endpoint for hard stop */ }
 
@@ -312,5 +327,6 @@ export async function tick(): Promise<TickResult> {
   return result
   } finally {
     _tickRunning = false
+    await releaseAdvisoryLock(lockName)
   }
 }

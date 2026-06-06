@@ -17,6 +17,7 @@
 import { db } from '../db/client.js'
 import { events, selfDevProposal } from '../db/schema.js'
 import { and, desc, eq, gte, sql } from 'drizzle-orm'
+import { setGauge } from './metrics.js'
 
 export interface ApplierHealth {
   status:           'alive' | 'stale' | 'unwired' | 'never'
@@ -61,6 +62,13 @@ export async function applierHealth(): Promise<ApplierHealth> {
   // If we have evidence of applies in the last 24h but no event, the
   // daemon is reachable but not emitting heartbeats.
   if (status === 'unwired' && (applies?.n ?? 0) > 0) status = 'alive'
+
+  // R146.325 (#1) — Prometheus gauge so the silent pool-rot that caused
+  // R324 is visible without polling brain.health. Alert in operator
+  // dashboard when age > 900s.
+  const ageSec = hb ? Math.round((now - Number(hb.createdAt)) / 1000) : -1
+  setGauge('novan_applier_last_heartbeat_age_seconds', ageSec, {},
+    'Seconds since the last applier.cycle event landed. -1 if never seen.')
 
   return {
     status,

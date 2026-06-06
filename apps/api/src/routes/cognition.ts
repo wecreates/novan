@@ -61,7 +61,12 @@ export const cognitionRoutes: FastifyPluginAsync = async (fastify) => {
     return { success: true, data: { id } }
   })
 
-  fastify.post<{ Body: { workspace_id?: string } }>('/chains/reconcile', async (req, reply) => {
+  // R146.325 (#17) — rate-limit LLM-touching cognition endpoints. Each call
+  // may dispatch multiple LLM requests; runaway clients could drive the
+  // cost budget through the floor before kill_switch fires.
+  fastify.post<{ Body: { workspace_id?: string } }>('/chains/reconcile', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     const ws = req.body.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     return { success: true, data: await reconcileRecommendationOutcomes(ws) }
@@ -96,7 +101,9 @@ export const cognitionRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // ── Strategic alignment gate (gap #3) ─────────────────────────────────────
-  fastify.post<{ Body: { workspace_id?: string; intent?: string; tags?: string[] } }>('/alignment/check', async (req, reply) => {
+  fastify.post<{ Body: { workspace_id?: string; intent?: string; tags?: string[] } }>('/alignment/check', {
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     const { workspace_id, intent, tags } = req.body
     if (!workspace_id || !intent || !Array.isArray(tags)) {
       return reply.code(400).send({ success: false, error: 'workspace_id, intent, tags[] required' })
@@ -107,7 +114,9 @@ export const cognitionRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // ── Outcome evaluator (gap #4) ────────────────────────────────────────────
-  fastify.post<{ Body: { workspace_id?: string } }>('/outcomes/evaluate', async (req, reply) => {
+  fastify.post<{ Body: { workspace_id?: string } }>('/outcomes/evaluate', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     const ws = req.body.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     return { success: true, data: await evaluateOutcomes(ws) }

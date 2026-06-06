@@ -19,7 +19,7 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 import type { FastifyPluginAsync }  from 'fastify'
 import { z }                        from 'zod'
-import { eq, and, isNull }          from 'drizzle-orm'
+import { eq, and, isNull, sql }     from 'drizzle-orm'
 import { db }                       from '../db/client.js'
 import { apiTokens }                from '../db/schema.js'
 
@@ -87,6 +87,22 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     }
     const workspaceId = typeof body?.workspace_id === 'string' ? body.workspace_id : 'default'
     const name        = typeof body?.name === 'string' ? body.name.slice(0, 100) : 'operator-bootstrap'
+    // R146.325 (#19) — one-shot bootstrap. After the first successful mint,
+    // further attempts require BOOTSTRAP_REUSABLE=1 in env. Stops the case
+    // where a leaked OPERATOR_BOOTSTRAP_SECRET (committed env file, exposed
+    // dashboard) lets the attacker keep minting tokens indefinitely.
+    if (process.env['BOOTSTRAP_REUSABLE'] !== '1') {
+      const [existingCount] = await db.select({ n: sql<number>`count(*)::int` })
+        .from(apiTokens)
+        .where(eq(apiTokens.workspaceId, workspaceId))
+        .catch(() => [{ n: 0 }])
+      if ((existingCount?.n ?? 0) > 0) {
+        return reply.status(409).send({
+          success: false,
+          error: 'bootstrap already used — set BOOTSTRAP_REUSABLE=1 in env to allow more mints',
+        })
+      }
+    }
     const rawToken    = generateToken()
     const tokenHash   = sha256(rawToken)
     const prefix      = rawToken.slice(0, 12)

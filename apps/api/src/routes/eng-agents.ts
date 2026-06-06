@@ -39,16 +39,10 @@ function isAgentType(v: unknown): v is AgentType {
   return typeof v === 'string' && (AGENT_TYPES as string[]).includes(v)
 }
 
-// R146.318 — derive workspaceId from auth claim first, body second.
-// Previously every handler did `body.workspaceId ?? 'default'` which under
-// ENFORCE_GLOBAL_AUTH=false allowed any caller to pause/resume/unlock another
-// workspace's engineering agents by setting body.workspaceId. The global
-// R30/R308 IDOR guard only fires when authWs is set; this falls back safely
-// when it isn't.
+// R146.318/R325 — moved to util/ws-of.ts (single canonical helper).
+import { wsOf as _wsOf } from '../util/ws-of.js'
 function wsOf(req: unknown, body?: { workspaceId?: string }): string {
-  const auth = (req as { workspaceId?: string }).workspaceId
-  if (auth) return auth
-  return body?.workspaceId ?? 'default'
+  return _wsOf(req, body?.workspaceId)
 }
 
 // ─── Plugin ───────────────────────────────────────────────────────────────────
