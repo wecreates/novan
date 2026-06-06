@@ -858,6 +858,30 @@ async function runEventsPrune() {
     const res = await db.execute(_sql`DELETE FROM events WHERE created_at < ${cutoff} RETURNING 1`)
     const rows = (res as unknown as { rows?: unknown[] }).rows ?? (Array.isArray(res) ? res as unknown[] : [])
     if (rows.length > 0) await emit('cron.events_pruned', { deleted: rows.length, retentionDays: days })
+
+    // R146.226 — also prune capability-layer tables. Shorter TTL since
+    // these grow per LLM call: subagent_runs (one per sub-agent spawn),
+    // workflow_runs + workflow_journal (per workflow), skill_outcomes
+    // (per brain.loop.run), adversarial_verdicts (per verify call),
+    // routing_decisions (per routing event when wired).
+    const subagentDays = Math.max(3, Math.min(180, Number(process.env['SUBAGENT_RETENTION_DAYS'] ?? 30)))
+    const subCutoff = Date.now() - subagentDays * 24 * 60 * 60_000
+    let pruned = 0
+    for (const stmt of [
+      _sql`DELETE FROM subagent_runs        WHERE started_at < ${subCutoff} RETURNING 1`,
+      _sql`DELETE FROM workflow_journal     WHERE created_at < ${subCutoff} RETURNING 1`,
+      _sql`DELETE FROM operator_workflow_runs WHERE started_at < ${subCutoff} RETURNING 1`,
+      _sql`DELETE FROM skill_outcomes       WHERE created_at < ${subCutoff} RETURNING 1`,
+      _sql`DELETE FROM adversarial_verdicts WHERE created_at < ${subCutoff} RETURNING 1`,
+      _sql`DELETE FROM routing_decisions    WHERE decided_at < ${subCutoff} RETURNING 1`,
+    ]) {
+      try {
+        const r = await db.execute(stmt)
+        const c = ((r as unknown as { rows?: unknown[] }).rows ?? (Array.isArray(r) ? r as unknown[] : [])).length
+        pruned += c
+      } catch { /* table may not exist on older deploys */ }
+    }
+    if (pruned > 0) await emit('cron.capability_pruned', { deleted: pruned, retentionDays: subagentDays })
   } catch (e) { await emit('cron.error', { task: 'events_prune', error: (e as Error).message }) }
 }
 
