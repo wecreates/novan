@@ -11,6 +11,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { v7 as uuidv7 } from 'uuid'
 import { and, desc, eq } from 'drizzle-orm'
 import { db }  from '../db/client.js'
+import { safeInt } from '../util/safe-int.js'
 import {
   events, providerBudgets, killSwitches, runawayJobs, budgetAlerts,
   endpointUsageLogs, providerFailures,
@@ -425,7 +426,7 @@ const costGovernorRoutes: FastifyPluginAsync = async (app) => {
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const { workspaceId } = req.params
-      const days   = parseInt(req.query.days ?? '30', 10)
+      const days   = safeInt(req.query.days, 30, { min: 1, max: 365 })
       const since  = Date.now() - days * 86_400_000
 
       // Use providerFailures (has createdAt + costUsd) for provider cost aggregation
@@ -460,7 +461,7 @@ const costGovernorRoutes: FastifyPluginAsync = async (app) => {
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const { workspaceId } = req.params
-      const days   = parseInt(req.query.days ?? '30', 10)
+      const days   = safeInt(req.query.days, 30, { min: 1, max: 365 })
       const since  = Date.now() - days * 86_400_000
 
       const rows = await db.select().from(endpointUsageLogs)

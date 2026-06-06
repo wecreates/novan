@@ -11,6 +11,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { v7 as uuidv7 }           from 'uuid'
 import { and, desc, eq, lt }      from 'drizzle-orm'
+import { safeInt }                from '../util/safe-int.js'
 import { db }                      from '../db/client.js'
 import {
   workerRegistry, executionLeases, providerScores, events,
@@ -333,7 +334,7 @@ const runtimeRegistryRoutes: FastifyPluginAsync = async (app) => {
 
     const leases = await query
       .orderBy(desc(executionLeases.createdAt))
-      .limit(Math.min(parseInt(limit, 10), 200))
+      .limit(safeInt(limit, 50, { min: 1, max: 200 }))
 
     return reply.send({ success: true, data: leases })
   })

@@ -1938,7 +1938,9 @@ async function runSocialCommentImprove(): Promise<void> {
 let lastBriefingDay = -1
 async function runMorningBriefing(): Promise<void> {
   if (process.env['DISABLE_MORNING_BRIEFING'] === '1') return
-  const targetHour = parseInt(process.env['BRIEFING_HOUR_UTC'] ?? '7', 10)
+  // R146.284 — safeInt: prevents BRIEFING_HOUR_UTC=foo NaN-poisoning the hour compare.
+  const _bh = Number(process.env['BRIEFING_HOUR_UTC'] ?? '7')
+  const targetHour = Number.isFinite(_bh) && _bh >= 0 && _bh < 24 ? _bh : 7
   const now = new Date()
   if (now.getUTCHours() !== targetHour) return
   const today = Math.floor(now.getTime() / (24 * 60 * 60_000))

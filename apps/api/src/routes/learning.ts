@@ -20,6 +20,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { v7 as uuidv7 }            from 'uuid'
 import { db }                      from '../db/client.js'
 import { queues }                  from '../queues/index.js'
+import { safeInt }                 from '../util/safe-int.js'
 import {
   learningSignals,
   learningPatterns,
@@ -58,8 +59,8 @@ const learningRoutes: FastifyPluginAsync = async (app) => {
   app.get('/signals', async (req, reply) => {
     const query = req.query as Record<string, string>
     const workspaceId = query['workspace_id'] ?? 'default'
-    const limit  = Math.min(parseInt(query['limit']  ?? '50'), 200)
-    const offset = parseInt(query['offset'] ?? '0')
+    const limit  = safeInt(query['limit'], 50, { min: 1, max: 200 })
+    const offset = safeInt(query['offset'], 0, { min: 0 })
     const source = query['source']
     const status = query['status']
 
@@ -108,8 +109,8 @@ const learningRoutes: FastifyPluginAsync = async (app) => {
   app.get('/patterns', async (req, reply) => {
     const query = req.query as Record<string, string>
     const workspaceId   = query['workspace_id'] ?? 'default'
-    const limit         = Math.min(parseInt(query['limit']  ?? '50'), 200)
-    const offset        = parseInt(query['offset'] ?? '0')
+    const limit         = safeInt(query['limit'], 50, { min: 1, max: 200 })
+    const offset        = safeInt(query['offset'], 0, { min: 0 })
     const patternType   = query['pattern_type']
     const status        = query['status']
 
@@ -152,8 +153,8 @@ const learningRoutes: FastifyPluginAsync = async (app) => {
   app.get('/insights', async (req, reply) => {
     const query       = req.query as Record<string, string>
     const workspaceId = query['workspace_id'] ?? 'default'
-    const limit       = Math.min(parseInt(query['limit']  ?? '50'), 200)
-    const offset      = parseInt(query['offset'] ?? '0')
+    const limit       = safeInt(query['limit'], 50, { min: 1, max: 200 })
+    const offset      = safeInt(query['offset'], 0, { min: 0 })
     const status      = query['status']
     const category    = query['category']
 
@@ -228,8 +229,8 @@ const learningRoutes: FastifyPluginAsync = async (app) => {
   app.get('/feedback', async (req, reply) => {
     const query       = req.query as Record<string, string>
     const workspaceId = query['workspace_id'] ?? 'default'
-    const limit       = Math.min(parseInt(query['limit']  ?? '50'), 200)
-    const offset      = parseInt(query['offset'] ?? '0')
+    const limit       = safeInt(query['limit'], 50, { min: 1, max: 200 })
+    const offset      = safeInt(query['offset'], 0, { min: 0 })
 
     const where = eq(learningFeedback.workspaceId, workspaceId)
     const [rows, countResult] = await Promise.all([
@@ -277,7 +278,7 @@ const learningRoutes: FastifyPluginAsync = async (app) => {
     const workspaceId = query['workspace_id'] ?? 'default'
     const entityType  = query['entity_type']
     const scoreType   = query['score_type']
-    const limit       = Math.min(parseInt(query['limit'] ?? '100'), 500)
+    const limit       = safeInt(query['limit'], 100, { min: 1, max: 500 })
 
     const where = and(
       eq(learningScores.workspaceId, workspaceId),

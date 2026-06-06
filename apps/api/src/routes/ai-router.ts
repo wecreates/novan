@@ -21,6 +21,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { v7 as uuidv7 } from 'uuid'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { db }         from '../db/client.js'
+import { safeInt }    from '../util/safe-int.js'
 import {
   events,
   providerConfigs,
@@ -706,7 +707,7 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
   }>('/endpoints/:id/usage', {
     schema: { tags: ['ai-router'], summary: 'Usage log for a remote endpoint' },
   }, async (req, reply) => {
-    const limit = Math.min(parseInt(req.query.limit ?? '100'), 500)
+    const limit = safeInt(req.query.limit, 100, { min: 1, max: 500 })
     const rows  = await db.select().from(endpointUsageLogs)
       .where(eq(endpointUsageLogs.endpointId, req.params.id))
       .orderBy(desc(endpointUsageLogs.createdAt))
@@ -777,7 +778,7 @@ const aiRouterRoutes: FastifyPluginAsync = async (app) => {
     schema: { tags: ['ai-router'], summary: 'Recent provider failure log' },
   }, async (req, reply) => {
     const workspaceId = req.query.workspace_id ?? ws(req)
-    const limit = Math.min(parseInt(req.query.limit ?? '100'), 500)
+    const limit = safeInt(req.query.limit, 100, { min: 1, max: 500 })
     const rows = await db.select().from(providerFailures)
       .where(eq(providerFailures.workspaceId, workspaceId))
       .orderBy(desc(providerFailures.createdAt))
