@@ -432,6 +432,24 @@ async function buildSystemPrompt(workspaceId: string, userMessage: string): Prom
     if (md) { lines.push(''); lines.push(md) }
   } catch { /* tolerated */ }
 
+  // R146.260 — inject 1-line brain.health so chat is self-aware about budget,
+  // backup, applier, cron presence. Operator can ask "are we healthy?" inline.
+  try {
+    const { brainHealth } = await import('./r253-brain-health.js')
+    const h = await brainHealth(workspaceId)
+    const status = h.overall === 'healthy' ? '✓ healthy'
+                 : h.overall === 'degraded' ? '⚠ degraded'
+                 : '✗ critical'
+    const tags: string[] = []
+    if (h.cost.over) tags.push(`cost over ($${h.cost.spent.toFixed(2)}/$${h.cost.cap.toFixed(2)})`)
+    if (h.backup.status !== 'fresh') tags.push(`backup ${h.backup.status}`)
+    if (h.applier.status !== 'alive') tags.push(`applier ${h.applier.status}`)
+    if (h.cron.missing > 0) tags.push(`${h.cron.missing} cron(s) missing`)
+    if (h.errors.last1h > 5) tags.push(`${h.errors.last1h} errors last hour`)
+    lines.push('')
+    lines.push(`Platform health: ${status}${tags.length > 0 ? ' — ' + tags.join(', ') : ''}`)
+  } catch { /* tolerated */ }
+
   return { systemPrompt: lines.join('\n'), citations }
 }
 
