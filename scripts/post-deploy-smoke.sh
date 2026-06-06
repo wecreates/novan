@@ -15,10 +15,13 @@ fi
 probe() {
   local op="$1"
   local params="${2:-{}}"
+  # Use printf to avoid double-escaping issues with nested quotes
+  local payload
+  payload=$(printf '{"op":"%s","workspaceId":"default","params":%s}' "$op" "$params")
   local body
   body=$(curl -s --max-time 15 -H "x-admin-token: $TOKEN" \
     -X POST -H "Content-Type: application/json" \
-    -d "{\"op\":\"$op\",\"workspaceId\":\"default\",\"params\":$params}" \
+    --data-binary "$payload" \
     "$API/admin/brain")
   if echo "$body" | grep -q '"ok":true'; then
     echo "  ok    $op"
