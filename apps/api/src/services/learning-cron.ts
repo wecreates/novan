@@ -1310,6 +1310,7 @@ const INTERVALS = {
   cronPresence:           5 * 60_000,         // R146.245 — cron presence watchdog every 5 min
   wmDecay:               24 * 60 * 60_000,    // R146.252 — daily workspace_memory decay sweep
   brainAlert:            15 * 60_000,         // R146.255 — brain.health state-change alerts every 15min
+  retentionSweeps:       24 * 60 * 60_000,    // R146.276 — daily prune of external_knowledge (30d) + platform_smoke_runs (14d)
 }
 
 /**
@@ -1685,6 +1686,15 @@ async function runBrainAlertTick(): Promise<void> {
     await emit('cron.brain_alert_heartbeat', { workspaces: ids.length, emitted })
     if (emitted > 0) await emit('cron.brain_alert_completed', { workspaces: ids.length, emitted })
   } catch (e) { await emit('cron.error', { task: 'brain_alert', error: (e as Error).message }) }
+}
+
+// R146.276 — daily prune of external_knowledge + platform_smoke_runs.
+async function runRetentionSweepsTick(): Promise<void> {
+  try {
+    const { runRetentionSweeps } = await import('./r276-retention-sweeps.js')
+    const r = await runRetentionSweeps()
+    if (r.ek > 0 || r.sr > 0) await emit('cron.retention_sweeps_completed', { ek: r.ek, sr: r.sr })
+  } catch (e) { await emit('cron.error', { task: 'retention_sweeps', error: (e as Error).message }) }
 }
 
 // R146.252 — daily workspace_memory (R211 KV layer) decay + prune sweep.
@@ -2200,6 +2210,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runCronPresenceWatch,           INTERVALS.cronPresence))
   handles.push(scheduleJittered(runWmDecaySweep,                INTERVALS.wmDecay))
   handles.push(scheduleJittered(runBrainAlertTick,              INTERVALS.brainAlert))
+  handles.push(scheduleJittered(runRetentionSweepsTick,         INTERVALS.retentionSweeps))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
