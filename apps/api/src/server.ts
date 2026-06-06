@@ -319,6 +319,27 @@ if (process.env['ENFORCE_GLOBAL_AUTH'] === 'true') {
   app.log.info('[auth] global auth enforcement ENABLED via ENFORCE_GLOBAL_AUTH=true')
 }
 
+// R146.218 — HTTP timing histogram. Records p50/p95/p99 per route into
+// the metrics registry so /metrics exposes operator-visible latency.
+// Route label is the matched routerPath when available (so /admin/brain
+// doesn't expand into 900 op-specific series), else the raw URL path.
+app.addHook('onRequest', async (req) => {
+  ;(req as unknown as { _startNs: bigint })._startNs = process.hrtime.bigint()
+})
+app.addHook('onResponse', async (req, reply) => {
+  const start = (req as unknown as { _startNs?: bigint })._startNs
+  if (start === undefined) return
+  const elapsedMs = Number(process.hrtime.bigint() - start) / 1_000_000
+  const route = (req as unknown as { routerPath?: string }).routerPath || (req.url.split('?')[0] ?? 'unknown')
+  // Drop tracking on internal Fastify cycles + healthcheck noise
+  if (route === '/health' || route === '/health/ready' || route === '/metrics') return
+  const status = String(reply.statusCode)
+  try {
+    const { observeHistogram } = await import('./services/metrics.js')
+    observeHistogram('http_request_duration_ms', elapsedMs, { route, method: req.method, status }, undefined, 'HTTP request duration')
+  } catch { /* tolerated */ }
+})
+
 // R146.30 — workspace-ID injection (IDOR) guard, promoted to always-on.
 // R146.29 was gated by ENFORCE_GLOBAL_AUTH=true; with the flag off
 // (current operator state for PWA continuity) the guard didn't fire and

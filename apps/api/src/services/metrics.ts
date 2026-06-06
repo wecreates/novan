@@ -46,6 +46,30 @@ export function setGauge(name: string, value: number, labels?: LabelSet, help: s
   g.values.set(labelKey(labels), value)
 }
 
+// ─── R146.218 — Histogram for latency distributions ──────────────────
+interface HistEntry { name: string; help: string; buckets: number[]; counts: Map<string, number[]>; sums: Map<string, number>; counts0: Map<string, number> }
+const histograms = new Map<string, HistEntry>()
+const DEFAULT_BUCKETS_MS = [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
+
+export function observeHistogram(name: string, valueMs: number, labels?: LabelSet, buckets: number[] = DEFAULT_BUCKETS_MS, help: string = ''): void {
+  let h = histograms.get(name)
+  if (!h) {
+    h = { name, help, buckets: buckets.slice().sort((a, b) => a - b), counts: new Map(), sums: new Map(), counts0: new Map() }
+    histograms.set(name, h)
+  }
+  const k = labelKey(labels)
+  const arr = h.counts.get(k) ?? new Array(h.buckets.length + 1).fill(0)
+  // Find the bucket index this value falls into; +Inf bucket is at length.
+  let placed = false
+  for (let i = 0; i < h.buckets.length; i++) {
+    if (valueMs <= h.buckets[i]!) { arr[i]! += 1; placed = true; break }
+  }
+  if (!placed) arr[h.buckets.length]! += 1
+  h.counts.set(k, arr)
+  h.sums.set(k, (h.sums.get(k) ?? 0) + valueMs)
+  h.counts0.set(k, (h.counts0.get(k) ?? 0) + 1)
+}
+
 /** Render the registry in Prometheus exposition format. */
 export function renderMetrics(): string {
   const lines: string[] = []
@@ -61,6 +85,25 @@ export function renderMetrics(): string {
     lines.push(`# TYPE ${g.name} gauge`)
     for (const [k, v] of g.values) {
       lines.push(`${g.name}${k ? `{${k}}` : ''} ${v}`)
+    }
+  }
+  // R146.218 — histograms: emit <name>_bucket{le=...}, <name>_sum, <name>_count
+  for (const h of histograms.values()) {
+    if (h.help) lines.push(`# HELP ${h.name} ${h.help}`)
+    lines.push(`# TYPE ${h.name} histogram`)
+    for (const [k, arr] of h.counts) {
+      let cumulative = 0
+      for (let i = 0; i < h.buckets.length; i++) {
+        cumulative += arr[i]!
+        const labels = k ? `{${k},le="${h.buckets[i]}"}` : `{le="${h.buckets[i]}"}`
+        lines.push(`${h.name}_bucket${labels} ${cumulative}`)
+      }
+      cumulative += arr[h.buckets.length]!
+      const lInf = k ? `{${k},le="+Inf"}` : `{le="+Inf"}`
+      lines.push(`${h.name}_bucket${lInf} ${cumulative}`)
+      const lOnly = k ? `{${k}}` : ''
+      lines.push(`${h.name}_sum${lOnly} ${h.sums.get(k) ?? 0}`)
+      lines.push(`${h.name}_count${lOnly} ${h.counts0.get(k) ?? 0}`)
     }
   }
   return lines.join('\n') + '\n'

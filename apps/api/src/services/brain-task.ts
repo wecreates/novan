@@ -6591,6 +6591,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return workflowRun(ws, p.name, p.args, p.resumeFromRunId ? { resumeFromRunId: p.resumeFromRunId } : {})
     },
   },
+  'backup.health': {
+    description: 'R218 — newest *.sql.gz freshness in /backups (or BACKUP_DIR). Returns {dir, newestFilename, ageHours, status} where status ∈ fresh|stale|missing|unreachable.',
+    risk: 'low',
+    handler: async () => {
+      const { backupHealth } = await import('./r218-backup-health.js')
+      return backupHealth()
+    },
+  },
   'skills.seedStarterPack': {
     description: 'R217 — seed 8 starter skills (platform-status-check, cron-health-triage, cost-investigation, self-dev-review, memory-search, capability-discovery, event-pattern-analysis, workflow-author). Idempotent.',
     risk: 'low',

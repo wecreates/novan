@@ -30,6 +30,7 @@ export async function platformStatus(workspaceId: string): Promise<{
   recentErrors: number
   flags: { enabled: number; disabled: number; disabledKeys: string[] }
   uptime: { snapshotsTotal: number }
+  backup: { status: string; ageHours: number | null; newest: string | null }
   generatedAt: number
 }> {
   const since6h = Date.now() - 6 * 60 * 60_000
@@ -67,6 +68,14 @@ export async function platformStatus(workspaceId: string): Promise<{
   const [snapshotsAll] = await db.select({ n: sql<number>`count(*)::int` })
     .from(threatRadarSnapshot).where(eq(threatRadarSnapshot.workspaceId, workspaceId))
 
+  // R146.218 — backup freshness check
+  let backupSummary: { status: string; ageHours: number | null; newest: string | null } = { status: 'unknown', ageHours: null, newest: null }
+  try {
+    const { backupHealth } = await import('./r218-backup-health.js')
+    const b = await backupHealth()
+    backupSummary = { status: b.status, ageHours: b.ageHours, newest: b.newestFilename }
+  } catch { /* tolerated */ }
+
   return {
     radarLine,
     radarOpen: Number(radarLatest?.openTotal ?? 0),
@@ -83,6 +92,7 @@ export async function platformStatus(workspaceId: string): Promise<{
       disabledKeys: disabled.map(f => f.key),
     },
     uptime: { snapshotsTotal: Number(snapshotsAll?.n ?? 0) },
+    backup: backupSummary,
     generatedAt: Date.now(),
   }
 }
