@@ -54,6 +54,7 @@ const IdeasPage              = React.lazy(() => import('./pages/IdeasPage.js'))
 const SkillLibraryPage       = React.lazy(() => import('./pages/SkillLibraryPage.js'))
 const ConnectorsPage         = React.lazy(() => import('./pages/ConnectorsPage.js'))
 const TodayPage              = React.lazy(() => import('./pages/TodayPage.js'))
+const MainPage               = React.lazy(() => import('./pages/MainPage.js'))
 const IssuesPage             = React.lazy(() => import('./pages/IssuesPage.js'))
 const BrainTasksPage         = React.lazy(() => import('./pages/BrainTasksPage.js'))
 const NotificationsPage      = React.lazy(() => import('./pages/NotificationsPage.js'))
@@ -682,7 +683,9 @@ function AppRoutes() {
     <>
       <GlobalCommandBar />
         <Routes>
-          <Route path="/"            element={<Navigate to="/today" replace />} />
+          {/* R146.326 — minimal main page on "/" */}
+          <Route path="/"            element={<MainPage />} />
+          <Route path="/today-classic" element={<Navigate to="/today" replace />} />
           <Route path="/today"          element={<TodayPage />} />
           <Route path="/blueprint"      element={<BlueprintPage />} />
           <Route path="/strategic-home" element={<StrategicHomePage />} />

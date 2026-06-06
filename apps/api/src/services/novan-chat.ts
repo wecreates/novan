@@ -825,11 +825,26 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
   // what gets dropped if anything is over budget. Playbook block sits
   // mid-prompt so it's protected from head truncation but still trims
   // before the safety tail.
+  // R146.326 — persona prelude (voice contract + greeting + energy mirror).
+  // Goes at the very front of the system prompt so it sets the tone before
+  // task-specific instructions land.
+  let personaBlock = ''
+  try {
+    const { personaPrelude, detectEnergy } = await import('./brain-persona.js')
+    const energy = detectEnergy(i.userMessage)
+    const localHour = new Date().getHours()
+    personaBlock = await personaPrelude({
+      workspaceId: i.workspaceId,
+      localHour,
+      energy,
+    }) + '\n\n'
+  } catch { /* persona is non-fatal */ }
+
   const SYSTEM_PROMPT_MAX_CHARS = 24_000
   const tail = riskAwarenessBlock + riskAlertBlk + recapBlk + dnaBlk + killSwitchBlk
   const midProtected = playbookBlock
-  const headBudget = Math.max(0, SYSTEM_PROMPT_MAX_CHARS - tail.length - midProtected.length)
-  const rawHead = ctx.systemPrompt + videoSystemBlock + musicSystemBlock + musicKnowledgePromptBlock + videoKnowledgePromptBlock
+  const headBudget = Math.max(0, SYSTEM_PROMPT_MAX_CHARS - tail.length - midProtected.length - personaBlock.length)
+  const rawHead = personaBlock + ctx.systemPrompt + videoSystemBlock + musicSystemBlock + musicKnowledgePromptBlock + videoKnowledgePromptBlock
   const head = rawHead.length > headBudget
     ? rawHead.slice(0, headBudget) + '\n\n[…system prompt truncated to keep safety blocks intact…]'
     : rawHead

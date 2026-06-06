@@ -6698,6 +6698,25 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return brainHealth(ws)
     },
   },
+  'brain.capabilities': {
+    description: 'R326 — what Novan can do, what\'s partial, what\'s missing. Honest registry. Use this when the operator asks \"what can you do\".',
+    risk: 'low',
+    handler: async () => {
+      const { completenessReport, completenessSummary, CAPABILITIES } = await import('./brain-completeness.js')
+      return { report: completenessReport(), summary: completenessSummary(), all: CAPABILITIES }
+    },
+  },
+  'task.honest_assess': {
+    description: 'R326 — given a task description, return {verdict: can_do|partial|cannot, steps, gaps, workarounds, honestReply}. Use BEFORE claiming you\'ll do something — call this, read verdict, then either execute or quote the honestReply text.',
+    risk: 'low',
+    handler: async (_ws, p) => {
+      const { assessTask } = await import('./task-honest-assess.js')
+      const task = String(p['task'] ?? '').trim()
+      if (!task) throw new Error('task.honest_assess: task description required')
+      const requiredCaps = Array.isArray(p['requiredCaps']) ? (p['requiredCaps'] as string[]) : undefined
+      return assessTask({ task, ...(requiredCaps ? { requiredCaps } : {}) })
+    },
+  },
   'retention.sweep': {
     description: 'R276 — manually trigger the daily retention sweep (external_knowledge >30d, platform_smoke_runs >14d). Returns {ek, sr} row counts deleted. Idempotent.',
     risk: 'low',
