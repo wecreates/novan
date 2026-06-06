@@ -60,6 +60,11 @@ services:
         condition: service_healthy
     volumes:
       - ./apps/api/src:/app/apps/api/src
+      # R146.221 — read-only mount of host backups so backup.health can
+      # report freshness without shelling out. backup-postgres.sh writes
+      # to /root/backups on the host; expose it at /backups inside the
+      # api container. Read-only — api never writes.
+      - /root/backups:/backups:ro
 
   web:
     build:
