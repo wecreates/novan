@@ -42,8 +42,19 @@ const studioRoutes: FastifyPluginAsync = async (fastify) => {
       style_preset?: string; budget_cap_usd?: number
       enhance_prompt?: boolean
     }
-  }>('/generate', async (req, reply) => {
+  }>('/generate', {
+    // R146.321 — rate-limit. /generate hits paid image providers (OpenAI/Stability/
+    // Replicate/Fal) which charge per-call. Without per-route cap, a runaway loop
+    // or compromised token could rack up bills fast. 10/min/workspace mirrors
+    // images.ts /generate which already has this cap.
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     const b = req.body
+    // R146.321 — auth-first workspace; under enforce-auth, body.workspace_id must
+    // match authWs (caught by R30/R308 IDOR guard) or we'd be writing to another
+    // workspace's quota counter + image table.
+    const authWs = (req as unknown as { workspaceId?: string }).workspaceId
+    if (authWs) b.workspace_id = authWs
     if (!b.workspace_id || !b.prompt) {
       return reply.code(400).send({ success: false, error: 'workspace_id, prompt required' })
     }
