@@ -6698,6 +6698,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return brainHealth(ws)
     },
   },
+  'retention.sweep': {
+    description: 'R276 — manually trigger the daily retention sweep (external_knowledge >30d, platform_smoke_runs >14d). Returns {ek, sr} row counts deleted. Idempotent.',
+    risk: 'low',
+    handler: async () => {
+      const { runRetentionSweeps } = await import('./r276-retention-sweeps.js')
+      return runRetentionSweeps()
+    },
+  },
   'memory.kv.decay': {
     description: 'R252 — run the workspace_memory decay sweep now (normally daily). Returns {decayed, pruned} row counts. Idempotent within a 7-day window per row.',
     risk: 'low',
