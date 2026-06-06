@@ -1680,6 +1680,9 @@ async function runBrainAlertTick(): Promise<void> {
       const r = await tickBrainHealthAlert(ws).catch(() => null)
       if (r?.emitted) emitted++
     }
+    // R146.256 — heartbeat every run so the cron-presence watchdog can
+    // see the tick even when no workspace flipped state.
+    await emit('cron.brain_alert_heartbeat', { workspaces: ids.length, emitted })
     if (emitted > 0) await emit('cron.brain_alert_completed', { workspaces: ids.length, emitted })
   } catch (e) { await emit('cron.error', { task: 'brain_alert', error: (e as Error).message }) }
 }

@@ -25,6 +25,9 @@ const EXPECTED: ExpectedCron[] = [
   { eventType: 'cron.platform_smoke_completed',  maxAgeMs: 2 * 60 * 60_000, severity: 'medium' },
   { eventType: 'cron.frontier_consumer_tick',    maxAgeMs: 10 * 60_000, severity: 'low' },
   { eventType: 'applier.cycle',                  maxAgeMs: 15 * 60_000, severity: 'medium' },
+  // R146.256 — R255 brain-alert tick emits a heartbeat every run so the
+  // watchdog can see it even when nothing changed.
+  { eventType: 'cron.brain_alert_heartbeat',     maxAgeMs: 45 * 60_000, severity: 'low' },
 ]
 
 export interface PresenceResult {
