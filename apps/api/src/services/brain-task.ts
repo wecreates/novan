@@ -6623,6 +6623,22 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return applierHealth()
     },
   },
+  'cost.dailyCap': {
+    description: 'R248 — daily AI cost cap status for the workspace. Returns {spent, cap, over, remaining} in USD. Cached 60s. Cap = env DAILY_AI_COST_CAP_USD (default $5).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { checkDailyCostCap } = await import('./r248-cost-cap.js')
+      return checkDailyCostCap(ws)
+    },
+  },
+  'cost.overCapList': {
+    description: 'R248 — list workspaces currently over their daily cost cap.',
+    risk: 'low',
+    handler: async () => {
+      const { findOverCapWorkspaces } = await import('./r248-cost-cap.js')
+      return findOverCapWorkspaces()
+    },
+  },
   'backup.health': {
     description: 'R218 — newest *.sql.gz freshness in /backups (or BACKUP_DIR). Returns {dir, newestFilename, ageHours, status} where status ∈ fresh|stale|missing|unreachable.',
     risk: 'low',
