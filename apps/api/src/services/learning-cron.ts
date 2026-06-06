@@ -848,8 +848,11 @@ async function runStretchCachePurge() {
 // window: 90 days. Operator can set EVENTS_RETENTION_DAYS to tune.
 async function runEventsPrune() {
   try {
-    const days = Math.max(7, Math.min(365, Number(process.env['EVENTS_RETENTION_DAYS'] ?? 90)))
-    if (!Number.isFinite(days)) return
+    // R146.287 — use safeInt to handle bad env consistently. Without the
+    // !Number.isFinite guard below the existing Math.max/min chain would
+    // propagate NaN through `cutoff` and silently turn into garbage SQL.
+    const { safeInt } = await import('../util/safe-int.js')
+    const days = safeInt(process.env['EVENTS_RETENTION_DAYS'], 90, { min: 7, max: 365 })
     const cutoff = Date.now() - days * 24 * 60 * 60_000
     const { db } = await import('../db/client.js')
     const { sql: _sql } = await import('drizzle-orm')
@@ -864,7 +867,8 @@ async function runEventsPrune() {
     // workflow_runs + workflow_journal (per workflow), skill_outcomes
     // (per brain.loop.run), adversarial_verdicts (per verify call),
     // routing_decisions (per routing event when wired).
-    const subagentDays = Math.max(3, Math.min(180, Number(process.env['SUBAGENT_RETENTION_DAYS'] ?? 30)))
+    // R146.287 — same safeInt path (NaN → fallback 30, clamped 3-180).
+    const subagentDays = safeInt(process.env['SUBAGENT_RETENTION_DAYS'], 30, { min: 3, max: 180 })
     const subCutoff = Date.now() - subagentDays * 24 * 60 * 60_000
     let pruned = 0
     for (const stmt of [

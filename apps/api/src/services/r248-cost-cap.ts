@@ -12,7 +12,10 @@ import { db } from '../db/client.js'
 import { aiUsage } from '../db/schema.js'
 import { and, eq, gte, sql } from 'drizzle-orm'
 
-const DEFAULT_CAP_USD = Number(process.env['DAILY_AI_COST_CAP_USD'] ?? '5.00')
+// R146.287 — NaN guard. Number('garbage') === NaN; spent >= NaN is always
+// false → cap silently disabled. Fall back to $5 on any non-finite env.
+const _capEnv = Number(process.env['DAILY_AI_COST_CAP_USD'] ?? '5.00')
+const DEFAULT_CAP_USD = Number.isFinite(_capEnv) && _capEnv > 0 ? _capEnv : 5
 const CACHE_TTL_MS = 60_000
 
 interface CapCheck { spent: number; cap: number; over: boolean; remaining: number }
