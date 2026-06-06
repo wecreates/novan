@@ -26,9 +26,9 @@ export interface CostForecast {
 export async function costForecast(workspaceId: string, capUsd: number): Promise<CostForecast> {
   const now = Date.now()
   const sevenDaysAgo = now - 7 * 86400_000
-  const rows = await db.select({ usd: aiUsage.estimatedUsd, ts: aiUsage.createdAt })
+  const rows = await db.select({ usd: aiUsage.costUsd, ts: aiUsage.timestamp })
     .from(aiUsage)
-    .where(and(eq(aiUsage.workspaceId, workspaceId), gte(aiUsage.createdAt, sevenDaysAgo)))
+    .where(and(eq(aiUsage.workspaceId, workspaceId), gte(aiUsage.timestamp, sevenDaysAgo)))
     .catch(() => [])
   const totalUsd = rows.reduce((s, r) => s + Number(r.usd ?? 0), 0)
   const burnPerDayUsd = totalUsd / 7
