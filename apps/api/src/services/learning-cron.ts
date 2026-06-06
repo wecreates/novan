@@ -1309,6 +1309,7 @@ const INTERVALS = {
   skillEvolve:           60 * 60_000,         // R146.244 — hourly skill-evolve sweep
   cronPresence:           5 * 60_000,         // R146.245 — cron presence watchdog every 5 min
   wmDecay:               24 * 60 * 60_000,    // R146.252 — daily workspace_memory decay sweep
+  brainAlert:            15 * 60_000,         // R146.255 — brain.health state-change alerts every 15min
 }
 
 /**
@@ -1667,6 +1668,20 @@ async function runCronPresenceWatch(): Promise<void> {
     const r = await checkCronPresence()
     if (r.issuesOpened > 0) await emit('cron.presence_watch_alerted', { opened: r.issuesOpened, missing: r.missing.length })
   } catch (e) { await emit('cron.error', { task: 'cron_presence_watch', error: (e as Error).message }) }
+}
+
+// R146.255 — brain.health state-change alert tick across all workspaces.
+async function runBrainAlertTick(): Promise<void> {
+  try {
+    const ids = await listWorkspaceIds()
+    const { tickBrainHealthAlert } = await import('./r255-brain-alert-tick.js')
+    let emitted = 0
+    for (const ws of ids) {
+      const r = await tickBrainHealthAlert(ws).catch(() => null)
+      if (r?.emitted) emitted++
+    }
+    if (emitted > 0) await emit('cron.brain_alert_completed', { workspaces: ids.length, emitted })
+  } catch (e) { await emit('cron.error', { task: 'brain_alert', error: (e as Error).message }) }
 }
 
 // R146.252 — daily workspace_memory (R211 KV layer) decay + prune sweep.
@@ -2177,6 +2192,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runSkillEvolve,                 INTERVALS.skillEvolve))
   handles.push(scheduleJittered(runCronPresenceWatch,           INTERVALS.cronPresence))
   handles.push(scheduleJittered(runWmDecaySweep,                INTERVALS.wmDecay))
+  handles.push(scheduleJittered(runBrainAlertTick,              INTERVALS.brainAlert))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

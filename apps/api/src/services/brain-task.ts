@@ -6639,6 +6639,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return findOverCapWorkspaces()
     },
   },
+  'brain.health.alertTick': {
+    description: 'R255 — manually trigger the brain.health state-change alert tick. Fires brain.degraded / brain.critical / brain.healthy via R212 event hooks ONLY on state change (no spam). Returns {prev, now, emitted}.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { tickBrainHealthAlert } = await import('./r255-brain-alert-tick.js')
+      return tickBrainHealthAlert(ws)
+    },
+  },
   'brain.health': {
     description: 'R253 — unified workspace health snapshot: cost cap, backup freshness, applier liveness, cron presence, error counts, skill win-rate. Returns {overall: healthy|degraded|critical, ...}. Single call replaces stitching 6 ops together.',
     risk: 'low',
