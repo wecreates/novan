@@ -142,9 +142,17 @@ export async function banditPick(workspaceId: string, opts: { name: string; vari
     if (labels.length < 2) throw new Error('need ≥2 variant labels on first call')
     id = uuidv7()
     variants = labels.map(l => ({ id: l, label: l, alpha: 1, beta: 1, impressions: 0, conversions: 0 }))
+    // R146.304 — race-safe first-create. Two concurrent banditPick(name)
+    // calls both saw existing=null; without the conflict clause the
+    // second INSERT throws on the be_ws_name_idx unique index and
+    // unwinds out of banditPick as a 500. onConflictDoNothing turns it
+    // into a no-op; we then re-SELECT the row the winner inserted.
     await db.insert(banditExperiment).values({
       id, workspaceId, name: opts.name, variants, status: 'running', createdAt: Date.now(),
-    })
+    }).onConflictDoNothing({ target: [banditExperiment.workspaceId, banditExperiment.name] })
+    const [winner] = await db.select().from(banditExperiment)
+      .where(and(eq(banditExperiment.workspaceId, workspaceId), eq(banditExperiment.name, opts.name))).limit(1)
+    if (winner) { id = winner.id; variants = winner.variants }
   } else {
     id = existing.id
     variants = existing.variants

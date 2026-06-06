@@ -71,30 +71,10 @@ export async function getVoicePrefs(workspaceId: string): Promise<WorkspaceVoice
 }
 
 export async function patchVoicePrefs(workspaceId: string, patch: Partial<WorkspaceVoicePrefs>): Promise<WorkspaceVoicePrefs> {
+  // R146.303 — was SELECT then branch on !existing → race-lost on concurrent
+  // first-patch. Single atomic upsert restricted to patched fields.
   const now = Date.now()
-  const existing = await db.select().from(workspaceVoicePrefs).where(eq(workspaceVoicePrefs.workspaceId, workspaceId)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[voice-preferences]', e.message); return null })
-  if (!existing) {
-    const next = { ...DEFAULTS(workspaceId), ...patch, workspaceId }
-    await db.insert(workspaceVoicePrefs).values({
-      workspaceId,
-      preferredProvider:       next.preferredProvider,
-      preferredPreset:         next.preferredPreset,
-      preferredLocale:         next.preferredLocale,
-      transcriptRetained:      next.transcriptRetained,
-      autoConfirmLowRisk:      next.autoConfirmLowRisk,
-      bargeInEnabled:          next.bargeInEnabled,
-      qualityWeight:           Math.max(0, Math.min(1, next.qualityWeight)),
-      wakePhrases:             next.wakePhrases,
-      wakeEnabled:             next.wakeEnabled,
-      handsFreeEnabled:        next.handsFreeEnabled,
-      handsFreeAllowedIntents: next.handsFreeAllowedIntents,
-      ambientAlertsEnabled:    next.ambientAlertsEnabled,
-      ambientSeverityFloor:    next.ambientSeverityFloor,
-      pushToTalkDefault:       next.pushToTalkDefault,
-      updatedAt:               now,
-    }).catch((e: Error) => { console.error('[voice-preferences]', e.message); return null })
-    return next
-  }
+  const row = { ...DEFAULTS(workspaceId), ...patch, workspaceId }
   const update: Record<string, unknown> = { updatedAt: now }
   if (patch.preferredProvider  !== undefined) update['preferredProvider']  = patch.preferredProvider
   if (patch.preferredPreset    !== undefined) update['preferredPreset']    = patch.preferredPreset
@@ -110,6 +90,26 @@ export async function patchVoicePrefs(workspaceId: string, patch: Partial<Worksp
   if (patch.ambientAlertsEnabled    !== undefined) update['ambientAlertsEnabled']    = patch.ambientAlertsEnabled
   if (patch.ambientSeverityFloor    !== undefined) update['ambientSeverityFloor']    = patch.ambientSeverityFloor
   if (patch.pushToTalkDefault       !== undefined) update['pushToTalkDefault']       = patch.pushToTalkDefault
-  await db.update(workspaceVoicePrefs).set(update).where(eq(workspaceVoicePrefs.workspaceId, workspaceId)).catch((e: Error) => { console.error('[voice-preferences]', e.message); return null })
+  await db.insert(workspaceVoicePrefs).values({
+    workspaceId,
+    preferredProvider:       row.preferredProvider,
+    preferredPreset:         row.preferredPreset,
+    preferredLocale:         row.preferredLocale,
+    transcriptRetained:      row.transcriptRetained,
+    autoConfirmLowRisk:      row.autoConfirmLowRisk,
+    bargeInEnabled:          row.bargeInEnabled,
+    qualityWeight:           Math.max(0, Math.min(1, row.qualityWeight)),
+    wakePhrases:             row.wakePhrases,
+    wakeEnabled:             row.wakeEnabled,
+    handsFreeEnabled:        row.handsFreeEnabled,
+    handsFreeAllowedIntents: row.handsFreeAllowedIntents,
+    ambientAlertsEnabled:    row.ambientAlertsEnabled,
+    ambientSeverityFloor:    row.ambientSeverityFloor,
+    pushToTalkDefault:       row.pushToTalkDefault,
+    updatedAt:               now,
+  }).onConflictDoUpdate({
+    target: workspaceVoicePrefs.workspaceId,
+    set: update,
+  }).catch((e: Error) => { console.error('[voice-preferences]', e.message); return null })
   return getVoicePrefs(workspaceId)
 }

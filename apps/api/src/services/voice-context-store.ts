@@ -48,31 +48,9 @@ export async function getContext(sessionId: string, workspaceId: string): Promis
 }
 
 export async function patchContext(sessionId: string, workspaceId: string, patch: Partial<ConversationContext>): Promise<void> {
+  // R146.303 — was SELECT then branch. Concurrent first patches lost.
+  // Atomic upsert with selective set on conflict.
   const now = Date.now()
-  const existing = await db.select().from(voiceSessionContext).where(eq(voiceSessionContext.sessionId, sessionId)).limit(1).then(r => r[0]).catch((e: Error) => { console.error('[voice-context-store]', e.message); return null })
-  if (!existing) {
-    await db.insert(voiceSessionContext).values({
-      sessionId, workspaceId,
-      currentNode:     patch.currentNode ?? null,
-      currentTemplate: patch.currentTemplate ?? null,
-      currentLod:      patch.currentLod ?? null,
-      activeMission:   patch.activeMission ?? null,
-      selectedSystem:  patch.selectedSystem ?? null,
-      lastPlan:        (patch.lastPlan ?? null) as unknown,
-      pendingPlan:     (patch.pendingPlan ?? null) as unknown,
-      currentRisk:     patch.currentRisk ?? 'low',
-      currentUiMode:   patch.currentUiMode ?? null,
-      preferences:     patch.preferences ?? {},
-      turnCount:       patch.turnCount ?? 0,
-      expectedNext:    (patch.expectedNext ?? null) as unknown,
-      mutedUntil:      patch.mutedUntil ?? null,
-      voiceLocked:     patch.voiceLocked ?? false,
-      pendingDryRunId: patch.pendingDryRunId ?? null,
-      updatedAt:       now,
-    }).catch((e: Error) => { console.error('[voice-context-store]', e.message); return null })
-    return
-  }
-  // Selective set — never null-out fields the caller didn't touch
   const update: Record<string, unknown> = { updatedAt: now }
   if (patch.currentNode     !== undefined) update['currentNode']     = patch.currentNode
   if (patch.currentTemplate !== undefined) update['currentTemplate'] = patch.currentTemplate
@@ -89,8 +67,28 @@ export async function patchContext(sessionId: string, workspaceId: string, patch
   if (patch.mutedUntil      !== undefined) update['mutedUntil']      = patch.mutedUntil
   if (patch.voiceLocked     !== undefined) update['voiceLocked']     = patch.voiceLocked
   if (patch.pendingDryRunId !== undefined) update['pendingDryRunId'] = patch.pendingDryRunId
-  await db.update(voiceSessionContext).set(update)
-    .where(eq(voiceSessionContext.sessionId, sessionId)).catch((e: Error) => { console.error('[voice-context-store]', e.message); return null })
+  await db.insert(voiceSessionContext).values({
+    sessionId, workspaceId,
+    currentNode:     patch.currentNode ?? null,
+    currentTemplate: patch.currentTemplate ?? null,
+    currentLod:      patch.currentLod ?? null,
+    activeMission:   patch.activeMission ?? null,
+    selectedSystem:  patch.selectedSystem ?? null,
+    lastPlan:        (patch.lastPlan ?? null) as unknown,
+    pendingPlan:     (patch.pendingPlan ?? null) as unknown,
+    currentRisk:     patch.currentRisk ?? 'low',
+    currentUiMode:   patch.currentUiMode ?? null,
+    preferences:     patch.preferences ?? {},
+    turnCount:       patch.turnCount ?? 0,
+    expectedNext:    (patch.expectedNext ?? null) as unknown,
+    mutedUntil:      patch.mutedUntil ?? null,
+    voiceLocked:     patch.voiceLocked ?? false,
+    pendingDryRunId: patch.pendingDryRunId ?? null,
+    updatedAt:       now,
+  }).onConflictDoUpdate({
+    target: voiceSessionContext.sessionId,
+    set: update,
+  }).catch((e: Error) => { console.error('[voice-context-store]', e.message); return null })
 }
 
 export async function resetContext(sessionId: string): Promise<void> {

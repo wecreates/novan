@@ -58,37 +58,40 @@ export async function getOperatorPrefs(workspaceId: string, userId: string): Pro
 
 export async function patchOperatorPrefs(workspaceId: string, userId: string, patch: Partial<OperatorVoicePrefs>): Promise<OperatorVoicePrefs> {
   const now = Date.now()
-  const existing = await db.select().from(operatorVoicePrefs)
-    .where(and(eq(operatorVoicePrefs.workspaceId, workspaceId), eq(operatorVoicePrefs.userId, userId)))
-    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[voice-operator-prefs]', e.message); return null })
-  if (!existing) {
-    const next = { ...DEFAULTS(workspaceId, userId), ...patch }
-    next.preferredSpeed = clampSpeed(next.preferredSpeed)
-    await db.insert(operatorVoicePrefs).values({
-      workspaceId, userId,
-      preferredVoice:       next.preferredVoice,
-      preferredSpeed:       next.preferredSpeed,
-      preferredLength:      next.preferredLength,
-      confirmationStyle:    next.confirmationStyle,
-      preferredWake:        next.preferredWake,
-      preferredDefaultMode: next.preferredDefaultMode,
-      responseMode:         next.responseMode,
-      createdAt:            now,
-      updatedAt:            now,
-    }).catch((e: Error) => { console.error('[voice-operator-prefs]', e.message); return null })
-    return next
-  }
-  const upd: Record<string, unknown> = { updatedAt: now }
-  if (patch.preferredVoice       !== undefined) upd['preferredVoice']       = patch.preferredVoice
-  if (patch.preferredSpeed       !== undefined) upd['preferredSpeed']       = clampSpeed(patch.preferredSpeed)
-  if (patch.preferredLength      !== undefined) upd['preferredLength']      = patch.preferredLength
-  if (patch.confirmationStyle    !== undefined) upd['confirmationStyle']    = patch.confirmationStyle
-  if (patch.preferredWake        !== undefined) upd['preferredWake']        = patch.preferredWake
-  if (patch.preferredDefaultMode !== undefined) upd['preferredDefaultMode'] = patch.preferredDefaultMode
-  if (patch.responseMode         !== undefined) upd['responseMode']         = patch.responseMode
-  await db.update(operatorVoicePrefs).set(upd)
-    .where(and(eq(operatorVoicePrefs.workspaceId, workspaceId), eq(operatorVoicePrefs.userId, userId)))
-    .catch((e: Error) => { console.error('[voice-operator-prefs]', e.message); return null })
+  // R146.303 — was SELECT → branch on !existing → INSERT or UPDATE. Two
+  // concurrent calls would both see existing=null, both INSERT, second
+  // would PK-collide (workspace_id, user_id) → silently swallowed by the
+  // outer .catch() and the second caller's mutations vanish.
+  //
+  // Fix: build the row from DEFAULTS+patch and onConflictDoUpdate so a
+  // race is resolved by Postgres. The setWhere clause restricts UPDATE
+  // to only the fields the caller actually patched — so the conflict
+  // path doesn't overwrite settings the other thread set.
+  const row = { ...DEFAULTS(workspaceId, userId), ...patch }
+  row.preferredSpeed = clampSpeed(row.preferredSpeed)
+  const updateSet: Record<string, unknown> = { updatedAt: now }
+  if (patch.preferredVoice       !== undefined) updateSet['preferredVoice']       = patch.preferredVoice
+  if (patch.preferredSpeed       !== undefined) updateSet['preferredSpeed']       = clampSpeed(patch.preferredSpeed)
+  if (patch.preferredLength      !== undefined) updateSet['preferredLength']      = patch.preferredLength
+  if (patch.confirmationStyle    !== undefined) updateSet['confirmationStyle']    = patch.confirmationStyle
+  if (patch.preferredWake        !== undefined) updateSet['preferredWake']        = patch.preferredWake
+  if (patch.preferredDefaultMode !== undefined) updateSet['preferredDefaultMode'] = patch.preferredDefaultMode
+  if (patch.responseMode         !== undefined) updateSet['responseMode']         = patch.responseMode
+  await db.insert(operatorVoicePrefs).values({
+    workspaceId, userId,
+    preferredVoice:       row.preferredVoice,
+    preferredSpeed:       row.preferredSpeed,
+    preferredLength:      row.preferredLength,
+    confirmationStyle:    row.confirmationStyle,
+    preferredWake:        row.preferredWake,
+    preferredDefaultMode: row.preferredDefaultMode,
+    responseMode:         row.responseMode,
+    createdAt:            now,
+    updatedAt:            now,
+  }).onConflictDoUpdate({
+    target: [operatorVoicePrefs.workspaceId, operatorVoicePrefs.userId],
+    set: updateSet,
+  }).catch((e: Error) => { console.error('[voice-operator-prefs]', e.message); return null })
   return getOperatorPrefs(workspaceId, userId)
 }
 
