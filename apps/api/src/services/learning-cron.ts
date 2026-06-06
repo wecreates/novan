@@ -72,6 +72,11 @@ async function emit(type: string, payload: Record<string, unknown>) {
     traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
     source: 'learning-cron', version: 1, createdAt: Date.now(),
   }).catch((e: Error) => { console.error('[learning-cron]', e.message); return null })
+  // R146.224 — fire any registered R212 hooks matching this event type.
+  // Dispatched fire-and-forget so a slow hook handler doesn't stall
+  // the cron tick. Each workspace is checked independently inside
+  // hookDispatch (it filters by enabled=true).
+  void import('./r211-workplace.js').then(m => m.hookDispatch('global', type, payload)).catch(() => null)
 }
 
 async function runIncidentScans() {
