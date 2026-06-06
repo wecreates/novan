@@ -14,7 +14,9 @@ fi
 
 probe() {
   local op="$1"
-  local params="${2:-{}}"
+  # bash ${2:-{}} adds a stray "}" when $2 is non-empty — use if/else
+  local params
+  if [ -z "${2:-}" ]; then params='{}'; else params="$2"; fi
   # Use printf to avoid double-escaping issues with nested quotes
   local payload
   payload=$(printf '{"op":"%s","workspaceId":"default","params":%s}' "$op" "$params")
