@@ -340,7 +340,14 @@ app.addHook('onResponse', async (req, reply) => {
   const start = (req as unknown as { _startNs?: bigint })._startNs
   if (start === undefined) return
   const elapsedMs = Number(process.hrtime.bigint() - start) / 1_000_000
-  const route = (req as unknown as { routerPath?: string }).routerPath || (req.url.split('?')[0] ?? 'unknown')
+  // R146.302 — fallback to a SINGLE bucket label when Fastify hasn't matched
+  // a routerPath (404 / probe traffic). The previous fallback was
+  // req.url.split('?')[0] which expanded to the raw URL — an attacker
+  // probing /api/v1/x-aaa, /api/v1/x-bbb, … created unbounded label
+  // cardinality in the histogram's per-label Maps, growing memory
+  // forever. The matched-route case still gets specific labels.
+  const routerPath = (req as unknown as { routerPath?: string }).routerPath
+  const route = routerPath || 'unmatched'
   // Drop tracking on internal Fastify cycles + healthcheck noise
   if (route === '/health' || route === '/health/ready' || route === '/metrics') return
   const status = String(reply.statusCode)
