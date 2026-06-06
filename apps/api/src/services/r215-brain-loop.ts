@@ -166,10 +166,23 @@ function extractToolCall(buffered: string): { op: string; params: Record<string,
 
 const SAFE_INLINE_RISK = new Set(['low'])  // only auto-run low-risk ops
 
-/** Run a brain op safely + return result envelope. */
+/** Run a brain op safely + return result envelope. R238 — when the op
+ *  is unknown, run op.search on its name and include the top 3 matches
+ *  in the error so the model can self-correct in the next step. */
 async function runOp(workspaceId: string, op: string, params: Record<string, unknown>): Promise<{ ok: true; result: unknown } | { ok: false; error: string }> {
   const spec = OPERATIONS[op]
-  if (!spec) return { ok: false, error: `unknown op: ${op}` }
+  if (!spec) {
+    try {
+      const { opSearch } = await import('./r207-op-search.js')
+      const matches = opSearch(op, 3)
+      const hint = matches.length > 0
+        ? ` — did you mean: ${matches.map(m => m.op).join(', ')}?`
+        : ''
+      return { ok: false, error: `unknown op: ${op}${hint}` }
+    } catch {
+      return { ok: false, error: `unknown op: ${op}` }
+    }
+  }
   if (!SAFE_INLINE_RISK.has(spec.risk)) {
     return { ok: false, error: `op ${op} is risk=${spec.risk}; queued for operator approval` }
   }
