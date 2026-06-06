@@ -43,6 +43,20 @@ const SEEDS: SeedHook[] = [
       fingerprint: 'brain-alert:degraded',
     },
   },
+  // R146.272 — also push to operator's phone on critical via webPush/webhook/pushover
+  // (whichever notification driver is configured).
+  {
+    name: 'brain-critical→notify',
+    eventPattern: 'brain.critical',
+    opName: 'notify.send',
+    opParams: {
+      type:      'brain.critical',
+      title:     'Novan platform: CRITICAL',
+      body:      'brain.health overall=critical — cost over, backup missing, or applier dead. Check /brain.html.',
+      severity:  'critical',
+      signature: 'brain-alert:critical',
+    },
+  },
 ]
 
 export interface SeedResult { workspaceId: string; created: number; skipped: number }

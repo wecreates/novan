@@ -6657,6 +6657,23 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return readSummary(ws, p.sinceMs)
     },
   },
+  'notify.send': {
+    description: 'R272 — send a notification through configured drivers (webPush, webhook, pushover). Params: type, title, body, severity?, signature?, link?. Rate-limited per (workspace,type,signature).',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Record<string, unknown>
+      const { notify } = await import('./notifications.js')
+      return notify({
+        workspaceId: ws,
+        type:        String(p['type'] ?? 'brain.alert'),
+        title:       String(p['title'] ?? 'Novan'),
+        body:        String(p['body'] ?? ''),
+        severity:    (p['severity'] as 'normal' | 'high' | 'critical') ?? 'high',
+        ...(p['signature'] ? { signature: String(p['signature']) } : {}),
+        ...(p['link']      ? { link:      String(p['link']) }      : {}),
+      })
+    },
+  },
   'hooks.seedDefaults': {
     description: 'R257 — seed default event hooks: brain.critical→issue.create(critical), brain.degraded→issue.create(warning). Idempotent (atomic onConflictDoNothing on workspace_id+name unique idx). Returns {created, skipped}.',
     risk: 'low',
