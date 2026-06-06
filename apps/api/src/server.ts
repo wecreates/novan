@@ -397,15 +397,29 @@ app.addHook('preHandler', async (req, reply) => {
   // in arbitrary workspaces). Now ANY presence of workspace_id triggers
   // the check: only an exact string-equal-to-authWs is allowed; any
   // other shape (non-string, mismatched string) → 403.
-  const probe = body && 'workspace_id' in body
-    ? body['workspace_id']
-    : (query && 'workspace_id' in query ? query['workspace_id'] : undefined)
+  //
+  // R146.308 — extend to camelCase. The guard previously only checked
+  // `workspace_id` (snake_case). But 20+ routes accept `workspaceId`
+  // (camelCase) from body — verified by grepping body.workspaceId
+  // patterns across apps/api/src/routes. An attacker sending
+  // {workspaceId: "victim"} (no snake_case) bypassed the guard entirely
+  // and the route handler read body.workspaceId straight through.
+  // Check BOTH key shapes; reject on either mismatch.
+  const probeFromBody = body
+    ? (('workspace_id' in body ? body['workspace_id'] : undefined)
+        ?? ('workspaceId' in body ? body['workspaceId'] : undefined))
+    : undefined
+  const probeFromQuery = query
+    ? (('workspace_id' in query ? query['workspace_id'] : undefined)
+        ?? ('workspaceId' in query ? query['workspaceId'] : undefined))
+    : undefined
+  const probe = probeFromBody ?? probeFromQuery
   if (probe !== undefined && (typeof probe !== 'string' || probe !== authWs)) {
     req.log.warn({ authWs, probeType: typeof probe, url }, '[auth] cross-workspace or type-confusion request rejected')
     return reply.code(403).send({
       success: false,
       error: 'cross-workspace request denied',
-      detail: 'workspace_id must be a string matching the authenticated workspace',
+      detail: 'workspace_id / workspaceId must be a string matching the authenticated workspace',
     })
   }
 })
@@ -423,15 +437,20 @@ app.addHook('preHandler', async (req, reply) => {
   if (isPublic(url)) return
   const body  = (req.body  as Record<string, unknown> | undefined) ?? undefined
   const query = (req.query as Record<string, unknown> | undefined) ?? undefined
+  // R146.308 — check both snake and camel key shapes; same camelCase blind
+  // spot the R30 guard had.
   for (const src of [body, query]) {
-    if (!src || !('workspace_id' in src)) continue
-    const v = src['workspace_id']
-    if (v === undefined || v === null) continue
-    if (typeof v !== 'string' || !WORKSPACE_ID_RE.test(v)) {
-      return reply.code(400).send({
-        success: false,
-        error: 'workspace_id must match [A-Za-z0-9_-]{1,64}',
-      })
+    if (!src) continue
+    for (const key of ['workspace_id', 'workspaceId']) {
+      if (!(key in src)) continue
+      const v = src[key]
+      if (v === undefined || v === null) continue
+      if (typeof v !== 'string' || !WORKSPACE_ID_RE.test(v)) {
+        return reply.code(400).send({
+          success: false,
+          error: `${key} must match [A-Za-z0-9_-]{1,64}`,
+        })
+      }
     }
   }
 })
