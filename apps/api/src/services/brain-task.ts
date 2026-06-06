@@ -6717,6 +6717,138 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return assessTask({ task, ...(requiredCaps ? { requiredCaps } : {}) })
     },
   },
+  // ─── R146.327 ─────────────────────────────────────────────────
+  'relationship.upsert': {
+    description: 'R327 #3 — register/refresh a person/business/vendor/partner in the relationship graph.',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { relationshipUpsert } = await import('./r327-relationship-graph.js')
+      return relationshipUpsert({
+        workspaceId: ws, kind: String(p['kind'] ?? 'person') as 'person' | 'business' | 'vendor' | 'partner' | 'team' | 'other',
+        name: String(p['name'] ?? '').trim(),
+        ...(p['attrs'] ? { attrs: p['attrs'] as Record<string, unknown> } : {}),
+      })
+    },
+  },
+  'relationship.recall': {
+    description: 'R327 #3 — search the relationship graph by name substring.',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { relationshipRecall } = await import('./r327-relationship-graph.js')
+      return relationshipRecall({ workspaceId: ws, query: String(p['query'] ?? ''), limit: Number(p['limit'] ?? 10) })
+    },
+  },
+  'clarify.assess': {
+    description: 'R327 #4 — given a user message, decide proceed vs ask-one-question. Returns {proceed, score, question?, missing}.',
+    risk: 'low',
+    handler: async (_ws, p) => {
+      const { shouldClarify } = await import('./r327-clarify.js')
+      return shouldClarify(String(p['userMessage'] ?? ''))
+    },
+  },
+  'setup.state': {
+    description: 'R327 #5 — operator onboarding progress. Returns {steps, nextStep, percentDone, completed}.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { getSetupState } = await import('./r327-onboarding.js')
+      return getSetupState(ws)
+    },
+  },
+  'setup.mark': {
+    description: 'R327 #5 — mark an onboarding step complete.',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { markStep } = await import('./r327-onboarding.js')
+      return markStep(ws, String(p['step'] ?? '') as 'persona' | 'firstGoal' | 'connector' | 'budget' | 'preview')
+    },
+  },
+  'daily_routine.run': {
+    description: 'R327 #6 — run the 6am daily routine (feed scan + ideas + approval triage + push notify). Idempotent: skips if already ran today.',
+    risk: 'medium',
+    handler: async (ws) => {
+      const { runDailyRoutine } = await import('./r327-daily-routine.js')
+      return runDailyRoutine(ws)
+    },
+  },
+  'cost.forecast': {
+    description: 'R327 #8 — 30-day cost projection at current burn vs cap, plus days-of-runway.',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { costForecast } = await import('./r327-misc.js')
+      return costForecast(ws, Number(p['capUsd'] ?? 5))
+    },
+  },
+  'backup.restore_drill': {
+    description: 'R327 #7 — lightweight restore drill: verify newest backup is found + schema is plausible. Returns {backupFound, schemaCheckOk, tablesFound}.',
+    risk: 'low',
+    handler: async () => {
+      const { backupRestoreDrill } = await import('./r327-misc.js')
+      return backupRestoreDrill()
+    },
+  },
+  'email.triage': {
+    description: 'R327 #10 — triage Gmail inbox. Currently returns {available:false, workarounds:[...]} if no Gmail credential. Honest about the gap.',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { emailTriage } = await import('./r327-misc.js')
+      return emailTriage({ workspaceId: ws, ...(p['maxMessages'] ? { maxMessages: Number(p['maxMessages']) } : {}) })
+    },
+  },
+  'brain.what_did_you_do_today': {
+    description: 'R327 #17 — narrative timeline of what Novan did in the last N hours (default 24). Filters noisy heartbeats. Returns {entries, byCategory, totalEvents}.',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { whatDidYouDo } = await import('./r327-misc.js')
+      return whatDidYouDo(ws, Number(p['windowHours'] ?? 24))
+    },
+  },
+  'connector_cred.create': {
+    description: 'R327 #2 — register an OAuth credential reference (vault_key only — actual secret stays in secrets_vault).',
+    risk: 'high',
+    handler: async (ws, p) => {
+      const { connectorCredCreate } = await import('./r327-misc.js')
+      return connectorCredCreate({
+        workspaceId: ws,
+        connectorId: String(p['connectorId'] ?? ''),
+        accountLabel: String(p['accountLabel'] ?? ''),
+        vaultKey: String(p['vaultKey'] ?? ''),
+        scopes: Array.isArray(p['scopes']) ? p['scopes'] as string[] : [],
+        ...(p['expiresAt'] ? { expiresAt: Number(p['expiresAt']) } : {}),
+      })
+    },
+  },
+  'connector_cred.list': {
+    description: 'R327 #2 — list connector credentials in this workspace (never returns the secret).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { connectorCredList } = await import('./r327-misc.js')
+      return connectorCredList(ws)
+    },
+  },
+  'connector_cred.revoke': {
+    description: 'R327 #2 — revoke a connector credential.',
+    risk: 'high',
+    handler: async (ws, p) => {
+      const { connectorCredRevoke } = await import('./r327-misc.js')
+      await connectorCredRevoke(ws, String(p['id'] ?? ''))
+      return { ok: true }
+    },
+  },
+  'browser.action': {
+    description: 'R327 #1 — request a browser action (fill/click/submit/wait_for) via the worker. First call per domain returns {needsApproval:true, approvalKey}; re-call with that token to authorize.',
+    risk: 'high',
+    handler: async (ws, p) => {
+      const { browserAction } = await import('./r327-misc.js')
+      return browserAction({
+        workspaceId: ws,
+        url: String(p['url'] ?? ''),
+        action: String(p['action'] ?? '') as 'fill' | 'click' | 'submit' | 'wait_for',
+        ...(p['selector'] ? { selector: String(p['selector']) } : {}),
+        ...(p['value']    ? { value:    String(p['value']) }    : {}),
+        ...(p['approvalToken'] ? { approvalToken: String(p['approvalToken']) } : {}),
+      })
+    },
+  },
   'retention.sweep': {
     description: 'R276 — manually trigger the daily retention sweep (external_knowledge >30d, platform_smoke_runs >14d). Returns {ek, sr} row counts deleted. Idempotent.',
     risk: 'low',

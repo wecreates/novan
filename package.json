@@ -26,6 +26,7 @@
     "dev:infra":  "docker compose up -d postgres redis",
     "dev:stop":   "docker compose down",
     "db:seed":    "pnpm --filter @ops/db db:seed",
+    "spec:verify": "node scripts/spec-verify.mjs",
     "db:backup":  "powershell -ExecutionPolicy Bypass -File scripts/db-backup.ps1",
     "db:restore": "powershell -ExecutionPolicy Bypass -File scripts/db-restore.ps1",
     "ws:export":  "powershell -ExecutionPolicy Bypass -File scripts/workspace-export.ps1",

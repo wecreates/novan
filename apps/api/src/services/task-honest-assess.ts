@@ -35,8 +35,9 @@ const KEYWORD_TO_CAP: Array<{ rx: RegExp; capId: string }> = [
   { rx: /\b(send|email|message|dm|text|reply)\s+.*(to|via)\s+(slack|email|sms|whatsapp|discord)/i, capId: 'act.send' },
   { rx: /\b(post|publish|upload)\s+.*(youtube|tiktok|instagram|x\.com|twitter|reddit)/i,           capId: 'act.send' },
   { rx: /\b(buy|purchase|order|pay|checkout|charge|withdraw)/i,                                     capId: 'NOT_SUPPORTED:financial' },
-  { rx: /\b(generate|create|make|design)\s+(image|picture|photo|logo|thumbnail)/i,                  capId: 'act.image' },
-  { rx: /\b(generate|create|make)\s+(video|short|reel|tiktok)/i,                                    capId: 'act.video' },
+  // R327 #11 — allow ≤3 filler words between verb and noun ("generate a logo image")
+  { rx: /\b(generate|create|make|design|draw|render)\b(?:\s+\w+){0,3}\s+(image|picture|photo|logo|thumbnail|graphic|illustration|icon|banner)/i, capId: 'act.image' },
+  { rx: /\b(generate|create|make|produce|edit)\b(?:\s+\w+){0,3}\s+(video|short|reel|tiktok|youtube|clip)/i, capId: 'act.video' },
   { rx: /\b(transcribe|listen|speech-to-text|stt)/i,                                                capId: 'perceive.audio' },
   { rx: /\b(read|fetch|scrape|browse|visit|open)\s+.*(http|website|url|page)/i,                     capId: 'perceive.web' },
   { rx: /\b(click|fill|submit|navigate|automate)\s+.*(form|button|page)/i,                          capId: 'act.web' },

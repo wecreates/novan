@@ -7496,3 +7496,55 @@ export const mcpConnectors = pgTable('mcp_connectors', {
 }, (t) => [
   uniqueIndex('mcp_ws_name_uniq').on(t.workspaceId, t.name),
 ])
+
+// ─── R146.327 — relationship graph (#3) ──────────────────────────────────────
+export const relationshipGraph = pgTable('relationship_graph', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  kind:         text('kind').notNull(),
+  name:         text('name').notNull(),
+  attrs:        jsonb('attrs').$type<Record<string, unknown>>().notNull().default({}),
+  links:        jsonb('links').$type<Array<{ otherId: string; rel: string; since: number }>>().notNull().default([]),
+  lastSeenAt:   bigint('last_seen_at', { mode: 'number' }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
+// ─── R146.327 — onboarding (#5) ──────────────────────────────────────────────
+export const workspaceSetupProgress = pgTable('workspace_setup_progress', {
+  workspaceId: text('workspace_id').primaryKey(),
+  steps:       jsonb('steps').$type<Record<string, boolean>>().notNull().default({}),
+  startedAt:   bigint('started_at', { mode: 'number' }).notNull(),
+  completedAt: bigint('completed_at', { mode: 'number' }),
+  updatedAt:   bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
+// ─── R146.327 — connector credentials (#2) ───────────────────────────────────
+export const connectorCredentials = pgTable('connector_credentials', {
+  id:           text('id').primaryKey(),
+  workspaceId:  text('workspace_id').notNull(),
+  connectorId:  text('connector_id').notNull(),
+  accountLabel: text('account_label').notNull(),
+  status:       text('status').notNull(),
+  vaultKey:     text('vault_key').notNull(),
+  scopes:       jsonb('scopes').$type<string[]>().notNull().default([]),
+  expiresAt:    bigint('expires_at', { mode: 'number' }),
+  lastUsedAt:   bigint('last_used_at', { mode: 'number' }),
+  createdAt:    bigint('created_at', { mode: 'number' }).notNull(),
+  updatedAt:    bigint('updated_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  uniqueIndex('cc_ws_conn_label_uniq').on(t.workspaceId, t.connectorId, t.accountLabel),
+])
+
+// ─── R146.327 — clarify-or-act events (#4) ───────────────────────────────────
+export const clarifyEvents = pgTable('clarify_events', {
+  id:             text('id').primaryKey(),
+  workspaceId:    text('workspace_id').notNull(),
+  conversationId: text('conversation_id'),
+  userMessage:    text('user_message').notNull(),
+  question:       text('question').notNull(),
+  resolved:       boolean('resolved').notNull().default(false),
+  answer:         text('answer'),
+  createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
+  resolvedAt:     bigint('resolved_at', { mode: 'number' }),
+})

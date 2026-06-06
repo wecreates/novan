@@ -825,6 +825,35 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
   // what gets dropped if anything is over budget. Playbook block sits
   // mid-prompt so it's protected from head truncation but still trims
   // before the safety tail.
+  // R146.327 (#12) — auto-call task.honest_assess for task-shaped messages.
+  // If verdict is "cannot", inject the honest workaround text into the system
+  // prompt so the LLM responds with it instead of pretending to do the work.
+  let honestyBlock = ''
+  try {
+    const looksLikeTask = /\b(make|generate|create|send|post|publish|buy|order|email|message|schedule|deploy|fix|edit|design|draft|book|call)\b/i.test(i.userMessage)
+    if (looksLikeTask && i.userMessage.length > 12) {
+      const { assessTask } = await import('./task-honest-assess.js')
+      const verdict = assessTask({ task: i.userMessage })
+      if (verdict.verdict === 'cannot' || verdict.verdict === 'partial') {
+        honestyBlock = `\n\nIMPORTANT — task gap detected:\n${verdict.honestReply}\n\nIncorporate this honestly. Don't promise to do what you can't.\n`
+      }
+    }
+  } catch { /* honesty layer is non-fatal */ }
+
+  // R146.327 (#4) — clarify-or-act check. If the message is ambiguous,
+  // surface the question; the LLM should ask rather than guess.
+  let clarifyBlock = ''
+  try {
+    const { shouldClarify } = await import('./r327-clarify.js')
+    const verdict = shouldClarify(i.userMessage)
+    if (!verdict.proceed && verdict.question) {
+      clarifyBlock = `\n\nThe operator's message is ambiguous (score ${verdict.score.toFixed(2)}). If you can't proceed confidently, ASK THIS first: "${verdict.question}"\n`
+    }
+  } catch { /* non-fatal */ }
+
+  // R146.327 (#3) — extract relationship entities from this turn (fire-and-forget).
+  void import('./r327-relationship-graph.js').then(m => m.extractAndPersist(i.workspaceId, i.userMessage)).catch(() => null)
+
   // R146.326 — persona prelude (voice contract + greeting + energy mirror).
   // Goes at the very front of the system prompt so it sets the tone before
   // task-specific instructions land.
@@ -837,7 +866,7 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
       workspaceId: i.workspaceId,
       localHour,
       energy,
-    }) + '\n\n'
+    }) + honestyBlock + clarifyBlock + '\n\n'
   } catch { /* persona is non-fatal */ }
 
   const SYSTEM_PROMPT_MAX_CHARS = 24_000

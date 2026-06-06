@@ -1702,6 +1702,28 @@ async function runRetentionSweepsTick(): Promise<void> {
     const r = await runRetentionSweeps()
     if (r.ek > 0 || r.sr > 0) await emit('cron.retention_sweeps_completed', { ek: r.ek, sr: r.sr })
   } catch (e) { await emit('cron.error', { task: 'retention_sweeps', error: (e as Error).message }) }
+  // R146.327 (#13a) — per-type events retention (replaces the blanket
+  // 30-day sweep for hot types like applier.cycle that don't need
+  // anything close to that retention).
+  try {
+    const { runEventsRetention } = await import('./r325-events-retention-policy.js')
+    const results = await runEventsRetention()
+    const total = results.reduce((s, r) => s + Math.max(0, r.deleted), 0)
+    if (total > 0) await emit('cron.events_retention_per_type', { total, byPrefix: results })
+  } catch (e) { await emit('cron.error', { task: 'events_retention_per_type', error: (e as Error).message }) }
+}
+
+// R146.327 (#6) — 06:00-UTC daily routine across all workspaces.
+async function runDailyRoutineTick(): Promise<void> {
+  try {
+    const hour = new Date().getUTCHours()
+    // Only fire during the 06:00 UTC hour window — the cron itself runs hourly,
+    // but the per-workspace sentinel inside runDailyRoutine catches re-fires.
+    if (hour !== 6) return
+    const { tickAll } = await import('./r327-daily-routine.js')
+    const r = await tickAll()
+    await emit('cron.daily_routine', r)
+  } catch (e) { await emit('cron.error', { task: 'daily_routine', error: (e as Error).message }) }
 }
 
 // R146.252 — daily workspace_memory (R211 KV layer) decay + prune sweep.
@@ -2215,6 +2237,8 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runApprovedReplySend,           INTERVALS.approvedReplySend))
   handles.push(scheduleJittered(runSelfDevAutoLoop,             INTERVALS.selfDevAutoLoop))
   handles.push(scheduleJittered(runNlSchedules,                 INTERVALS.nlSchedules))
+  // R146.327 (#6) — daily routine: hourly tick, only fires inside the 06:00 UTC window.
+  handles.push(scheduleJittered(runDailyRoutineTick,            60 * 60_000))
   handles.push(scheduleJittered(runSkillEvolve,                 INTERVALS.skillEvolve))
   handles.push(scheduleJittered(runCronPresenceWatch,           INTERVALS.cronPresence))
   handles.push(scheduleJittered(runWmDecaySweep,                INTERVALS.wmDecay))
