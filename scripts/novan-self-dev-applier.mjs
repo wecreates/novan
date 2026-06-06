@@ -69,17 +69,33 @@ function safePath(p) {
 
 // R146.273 — pool can get poisoned if PG isn't ready at first connect
 // (boot race: applier starts before postgres-1 finishes accepting SCRAM).
-// Wrap in a recreate-on-error layer.
+// R146.324 — also recreate periodically (every 30 min) since live observation
+// showed the pool entering a state where queries silently fail without
+// throwing recoverable errors. Cheap insurance against pool-rot.
 let pool = new pg.Pool({ connectionString: PG_URL })
+let poolCreatedAt = Date.now()
+const POOL_MAX_AGE_MS = 30 * 60_000
 async function poolQuery(text, params) {
+  // Proactive recreate on age
+  if (Date.now() - poolCreatedAt > POOL_MAX_AGE_MS) {
+    console.error('[applier] pool age-out — recreating')
+    try { await pool.end() } catch {}
+    pool = new pg.Pool({ connectionString: PG_URL })
+    poolCreatedAt = Date.now()
+  }
   try {
     return await pool.query(text, params)
   } catch (e) {
     const msg = (e?.message ?? '').toLowerCase()
-    if (msg.includes('sasl') || msg.includes('password must') || msg.includes('econnrefused')) {
+    // R146.324 — broaden the reset trigger. Any connection-shape error
+    // recreates the pool, not just SASL. Previously a poisoned pool with
+    // a different error class would keep failing forever.
+    if (msg.includes('sasl') || msg.includes('password must') || msg.includes('econnrefused')
+        || msg.includes('connection terminated') || msg.includes('socket') || msg.includes('timeout')) {
       console.error('[applier] pool reset after connection error:', e.message)
       try { await pool.end() } catch {}
       pool = new pg.Pool({ connectionString: PG_URL })
+      poolCreatedAt = Date.now()
       return pool.query(text, params)
     }
     throw e
