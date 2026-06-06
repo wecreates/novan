@@ -55,6 +55,7 @@ const SkillLibraryPage       = React.lazy(() => import('./pages/SkillLibraryPage
 const ConnectorsPage         = React.lazy(() => import('./pages/ConnectorsPage.js'))
 const TodayPage              = React.lazy(() => import('./pages/TodayPage.js'))
 const MainPage               = React.lazy(() => import('./pages/MainPage.js'))
+const WelcomePage            = React.lazy(() => import('./pages/WelcomePage.js'))
 const IssuesPage             = React.lazy(() => import('./pages/IssuesPage.js'))
 const BrainTasksPage         = React.lazy(() => import('./pages/BrainTasksPage.js'))
 const NotificationsPage      = React.lazy(() => import('./pages/NotificationsPage.js'))
@@ -685,6 +686,8 @@ function AppRoutes() {
         <Routes>
           {/* R146.326 — minimal main page on "/" */}
           <Route path="/"            element={<MainPage />} />
+          {/* R146.328 (#4) — onboarding */}
+          <Route path="/welcome"     element={<WelcomePage />} />
           <Route path="/today-classic" element={<Navigate to="/today" replace />} />
           <Route path="/today"          element={<TodayPage />} />
           <Route path="/blueprint"      element={<BlueprintPage />} />

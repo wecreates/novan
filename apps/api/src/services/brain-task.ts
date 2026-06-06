@@ -6834,6 +6834,55 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { ok: true }
     },
   },
+  // ─── R146.328 ─────────────────────────────────────────────────
+  'cost.by_business': {
+    description: 'R328 #14 — per-business cost rollup over a window. Joins ai_usage → workflow_runs → businessId.',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { costByBusiness } = await import('./r328-extras.js')
+      return costByBusiness(ws, Number(p['windowDays'] ?? 30))
+    },
+  },
+  'chat.failover_test': {
+    description: 'R328 #15 — exercise the LLM provider fallback chain (Anthropic → OpenAI → Gemini). Catches silent fallback breakage.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { chatFailoverTest } = await import('./r328-extras.js')
+      return chatFailoverTest(ws)
+    },
+  },
+  'recap.summarize': {
+    description: 'R328 #10 — narrative summary of the last N hours (prose + bullets).',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { summarizeTimeline } = await import('./r328-extras.js')
+      return summarizeTimeline(ws, Number(p['windowHours'] ?? 24))
+    },
+  },
+  'clarify.outcomes': {
+    description: 'R328 #11 — clarify question resolve-rate. Tells you if the heuristic is asking useful questions.',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { clarifyOutcomes } = await import('./r328-extras.js')
+      return clarifyOutcomes(ws, Number(p['windowDays'] ?? 14))
+    },
+  },
+  'persona.preference': {
+    description: 'R328 #12 — learned operator energy preference (terse/warm/analytical) and turn count.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { getPersonaPreference } = await import('./r328-extras.js')
+      return getPersonaPreference(ws)
+    },
+  },
+  'calendar.upcoming': {
+    description: 'R328 #20 — upcoming calendar events from the connected Google Calendar.',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { upcomingEvents } = await import('./r328-calendar.js')
+      return upcomingEvents(ws, Number(p['windowHours'] ?? 24))
+    },
+  },
   'browser.action': {
     description: 'R327 #1 — request a browser action (fill/click/submit/wait_for) via the worker. First call per domain returns {needsApproval:true, approvalKey}; re-call with that token to authorize.',
     risk: 'high',

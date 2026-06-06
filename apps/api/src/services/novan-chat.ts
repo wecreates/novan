@@ -851,8 +851,51 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
     }
   } catch { /* non-fatal */ }
 
-  // R146.327 (#3) — extract relationship entities from this turn (fire-and-forget).
-  void import('./r327-relationship-graph.js').then(m => m.extractAndPersist(i.workspaceId, i.userMessage)).catch(() => null)
+  // R146.327 (#3) + R146.328 (#7) — entity extraction. Try LLM first (catches
+  // "Yesterday I called Sarah"); regex fallback persisted via fire-and-forget.
+  void (async () => {
+    try {
+      const { extractEntities } = await import('./r328-llm-extract.js')
+      const ents = await extractEntities(i.userMessage)
+      if (ents.length > 0) {
+        const { relationshipUpsert } = await import('./r327-relationship-graph.js')
+        for (const e of ents) {
+          await relationshipUpsert({ workspaceId: i.workspaceId, kind: e.kind, name: e.name, ...(e.attrs ? { attrs: e.attrs } : {}) }).catch(() => null)
+        }
+        return
+      }
+    } catch { /* */ }
+    // Regex fallback
+    const m = await import('./r327-relationship-graph.js')
+    await m.extractAndPersist(i.workspaceId, i.userMessage).catch(() => null)
+  })()
+
+  // R146.328 (#22) — auto-fire what_did_you_do_today when the operator asks
+  // a recap-shaped question. Injects narrative summary into the system prompt.
+  let recapBlock2 = ''
+  try {
+    const { looksLikeRecapRequest, summarizeTimeline } = await import('./r328-extras.js')
+    if (looksLikeRecapRequest(i.userMessage)) {
+      const tl = await summarizeTimeline(i.workspaceId, 24)
+      recapBlock2 = `\n\nRECAP CONTEXT (operator asked for a catch-up):\n${tl.prose}\n${tl.bullets.slice(0, 8).join('\n')}\n`
+    }
+  } catch { /* */ }
+
+  // R146.328 (#12) — persona preference: persist energy + use learned default.
+  let learnedEnergy: 'terse' | 'warm' | 'analytical' | null = null
+  try {
+    const { getPersonaPreference, recordPersonaTurn } = await import('./r328-extras.js')
+    const pref = await getPersonaPreference(i.workspaceId)
+    if (pref.totalTurns >= 10) learnedEnergy = pref.defaultEnergy
+    // Record asynchronously so chat isn't blocked
+  } catch { /* */ }
+
+  // R146.328 (#20) — calendar prefix, if connected.
+  let calendarBlock = ''
+  try {
+    const { calendarPrefix } = await import('./r328-calendar.js')
+    calendarBlock = await calendarPrefix(i.workspaceId)
+  } catch { /* */ }
 
   // R146.326 — persona prelude (voice contract + greeting + energy mirror).
   // Goes at the very front of the system prompt so it sets the tone before
@@ -860,13 +903,16 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
   let personaBlock = ''
   try {
     const { personaPrelude, detectEnergy } = await import('./brain-persona.js')
-    const energy = detectEnergy(i.userMessage)
+    const detected = detectEnergy(i.userMessage)
+    const energy = learnedEnergy ?? detected
     const localHour = new Date().getHours()
-    personaBlock = await personaPrelude({
+    personaBlock = calendarBlock + await personaPrelude({
       workspaceId: i.workspaceId,
       localHour,
       energy,
-    }) + honestyBlock + clarifyBlock + '\n\n'
+    }) + honestyBlock + clarifyBlock + recapBlock2 + '\n\n'
+    // Record for preference learning (fire-and-forget)
+    void import('./r328-extras.js').then(m => m.recordPersonaTurn(i.workspaceId, detected)).catch(() => null)
   } catch { /* persona is non-fatal */ }
 
   const SYSTEM_PROMPT_MAX_CHARS = 24_000

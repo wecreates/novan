@@ -49,7 +49,7 @@ export const CAPABILITIES: Capability[] = [
   { id: 'memory.semantic',   category: 'memory', name: 'Semantic search over memory', why: 'find relevant past context',
     status: 'present', service: 'apps/api/src/services/embeddings.ts' },
   { id: 'memory.relationships', category: 'memory', name: 'People/business relationships', why: 'know who is who',
-    status: 'partial', gap: 'no relationship-graph; only flat business_portfolio + operator_profile' },
+    status: 'present', service: 'apps/api/src/services/r327-relationship-graph.ts' },
   { id: 'memory.decay',      category: 'memory', name: 'Forgets the trivial', why: 'avoid drowning in noise',
     status: 'present', service: 'apps/api/src/services/r252-memory-decay.ts' },
 
@@ -81,8 +81,8 @@ export const CAPABILITIES: Capability[] = [
   { id: 'act.music',         category: 'action', name: 'Make music', why: 'audio outputs',
     status: 'present', service: 'apps/api/src/services/music-studio.ts' },
   { id: 'act.web',           category: 'action', name: 'Drive a browser', why: 'do things on websites',
-    status: 'partial', gap: 'playwright-fetcher reads only; no form-submit/click-flow automation',
-    service: 'apps/api/src/services/playwright-fetcher.ts' },
+    status: 'partial', gap: 'browser.action op + per-domain approval gate shipped; Playwright worker consumer in workers/browser-worker reads queued actions',
+    service: 'apps/api/src/services/r327-misc.ts' },
   { id: 'act.send',          category: 'action', name: 'Send messages externally', why: 'reach out without operator',
     status: 'partial', gap: 'connectors registered (slack/email/etc) but most require operator-provided creds' },
 
@@ -104,7 +104,7 @@ export const CAPABILITIES: Capability[] = [
   { id: 'social.persona',    category: 'social', name: 'Has a voice / persona', why: 'feels like a teammate not a tool',
     status: 'present', service: 'apps/api/src/services/brain-persona.ts' },
   { id: 'social.clarify',    category: 'social', name: 'Ask clarifying questions', why: 'doesn\'t guess when unclear',
-    status: 'partial', gap: 'prompt nudges this but no dedicated clarify-or-act decision layer' },
+    status: 'present', service: 'apps/api/src/services/r327-clarify.ts' },
   { id: 'social.energy_mirror', category: 'social', name: 'Mirror operator energy', why: 'doesn\'t feel mismatched',
     status: 'present', service: 'apps/api/src/services/brain-persona.ts' },
   { id: 'social.time_aware', category: 'social', name: 'Knows what time it is', why: 'greets appropriately',
