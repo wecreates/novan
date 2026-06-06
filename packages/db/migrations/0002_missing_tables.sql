@@ -1,3 +1,9 @@
+-- R146.290 note: shares the 0002_ prefix with 0002_api_tokens.sql.
+-- boot.sh and packages/db/src/migrate.ts both walk *.sql alphabetically,
+-- so api_tokens applies first, then missing_tables — verified on live
+-- droplet (applied 1 second apart on 2026-05-29). Distinct CREATE
+-- targets, no collisions. DO NOT rename; the historical filename is
+-- recorded in schema_migrations_history.
 CREATE TABLE IF NOT EXISTS "approved_patterns" (
 	"id" text PRIMARY KEY NOT NULL,
 	"workspace_id" text NOT NULL,
