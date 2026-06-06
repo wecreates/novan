@@ -42,28 +42,31 @@ export const briefingRoutes: FastifyPluginAsync = async (app) => {
     const briefingId = uuidv7()
     const now        = Date.now()
 
-    // Insert placeholder so the client can poll
+    // R146.279 — the briefing queue has NO worker (no `new Worker('briefing', ...)`
+    // exists in the codebase). Enqueueing a job here left the row sitting at
+    // status='generating' forever; producer + DB row + redis job all dead. We
+    // ack the request with a placeholder marked status='unimplemented' so the
+    // operator sees the right state immediately instead of fake-progress, and
+    // skip the queue.add() entirely so we don't keep accumulating zombie jobs
+    // in the briefing wait list.
     await db.insert(briefings).values({
       id:          briefingId,
       workspaceId,
-      status:      'generating',
+      status:      'unimplemented',
       requestedBy,
       traceId,
       windowMs,
       createdAt:   now,
     })
 
-    // Enqueue generation job
-    await queues.briefing.add('generate-briefing', {
-      workspaceId,
-      requestedBy,
-      traceId,
-      windowMs,
-    }, { jobId: briefingId })
+    void windowMs; void queues  // keep imports referenced for future re-wiring
 
-    return reply.status(202).send({
-      success:   true,
-      data:      { briefingId, status: 'generating', traceId },
+    return reply.status(501).send({
+      success: false,
+      error:   'briefing-generator-not-wired',
+      message: 'No briefing worker exists. Enqueue path retired; ' +
+               'placeholder row stored as status=unimplemented for visibility.',
+      data:    { briefingId, status: 'unimplemented', traceId },
     })
   })
 
