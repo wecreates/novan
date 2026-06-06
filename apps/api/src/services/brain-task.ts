@@ -6639,6 +6639,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return findOverCapWorkspaces()
     },
   },
+  'brain.health': {
+    description: 'R253 — unified workspace health snapshot: cost cap, backup freshness, applier liveness, cron presence, error counts, skill win-rate. Returns {overall: healthy|degraded|critical, ...}. Single call replaces stitching 6 ops together.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { brainHealth } = await import('./r253-brain-health.js')
+      return brainHealth(ws)
+    },
+  },
   'memory.kv.decay': {
     description: 'R252 — run the workspace_memory decay sweep now (normally daily). Returns {decayed, pruned} row counts. Idempotent within a 7-day window per row.',
     risk: 'low',
