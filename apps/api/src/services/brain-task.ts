@@ -6599,6 +6599,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return brainMetrics(ws)
     },
   },
+  'applier.health': {
+    description: 'R231 — host-side applier daemon liveness: {status: alive|stale|unwired|never, lastEventAt, lastApplyAt, recentApplies24h, recentRollbacks24h}.',
+    risk: 'low',
+    handler: async () => {
+      const { applierHealth } = await import('./r231-applier-health.js')
+      return applierHealth()
+    },
+  },
   'backup.health': {
     description: 'R218 — newest *.sql.gz freshness in /backups (or BACKUP_DIR). Returns {dir, newestFilename, ageHours, status} where status ∈ fresh|stale|missing|unreachable.',
     risk: 'low',
