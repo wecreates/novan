@@ -6848,6 +6848,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { providers: await diverseProviders(p.n, task) }
     },
   },
+  'skill.evolve': {
+    description: 'R243 — auto-rewrite instructions of skills with low win rate (≥10 uses, <40% overall AND >60% recent losses, 24h cooldown). Resets wins/uses to give the new prompt a fresh bandit run. Returns {evolved, candidates, details}.',
+    risk: 'medium',
+    handler: async (ws) => {
+      const { evolveLosingSkills } = await import('./r243-skill-evolution.js')
+      return evolveLosingSkills(ws)
+    },
+  },
   'skill.thompsonPick': {
     description: 'R216 — sample a skill via Thompson sampling (Beta(wins+1, losses+1)). Params: { candidates? }',
     risk: 'low',
