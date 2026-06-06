@@ -6591,6 +6591,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return workflowRun(ws, p.name, p.args, p.resumeFromRunId ? { resumeFromRunId: p.resumeFromRunId } : {})
     },
   },
+  'brain.metrics': {
+    description: 'R219 — operator-visible metrics: skill leaderboard, recent outcomes, routing health, cost 24h, HTTP latency percentiles, workplace counts.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { brainMetrics } = await import('./r219-brain-metrics.js')
+      return brainMetrics(ws)
+    },
+  },
   'backup.health': {
     description: 'R218 — newest *.sql.gz freshness in /backups (or BACKUP_DIR). Returns {dir, newestFilename, ageHours, status} where status ∈ fresh|stale|missing|unreachable.',
     risk: 'low',
