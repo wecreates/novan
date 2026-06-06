@@ -6848,6 +6848,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { providers: await diverseProviders(p.n, task) }
     },
   },
+  'cron.presence.check': {
+    description: 'R245 — scan EXPECTED cron event types, return {missing, issuesOpened}. Opens issues for crons silent >2× interval. Cron-driven every 5min.',
+    risk: 'low',
+    handler: async () => {
+      const { checkCronPresence } = await import('./r245-cron-presence-watch.js')
+      return checkCronPresence()
+    },
+  },
   'skill.evolve': {
     description: 'R243 — auto-rewrite instructions of skills with low win rate (≥10 uses, <40% overall AND >60% recent losses, 24h cooldown). Resets wins/uses to give the new prompt a fresh bandit run. Returns {evolved, candidates, details}.',
     risk: 'medium',

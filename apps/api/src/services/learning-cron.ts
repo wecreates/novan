@@ -1307,6 +1307,7 @@ const INTERVALS = {
   // R146.193 — Novan Self-Dev auto-loop. Gated by feature flag inside handler.
   selfDevAutoLoop:        2 * 60 * 60_000,
   skillEvolve:           60 * 60_000,         // R146.244 — hourly skill-evolve sweep
+  cronPresence:           5 * 60_000,         // R146.245 — cron presence watchdog every 5 min
 }
 
 /**
@@ -1657,6 +1658,16 @@ async function runLoopClosure(): Promise<void> {
 
 // R146.186 — Wire R183 proactive scan every 5 min across all workspaces.
 // R146.193 — Novan Self-Dev autonomous inspect+propose cycle. Gated.
+// R146.245 — cron presence watchdog: opens issues when expected cron
+// types haven't fired in 2× their interval.
+async function runCronPresenceWatch(): Promise<void> {
+  try {
+    const { checkCronPresence } = await import('./r245-cron-presence-watch.js')
+    const r = await checkCronPresence()
+    if (r.issuesOpened > 0) await emit('cron.presence_watch_alerted', { opened: r.issuesOpened, missing: r.missing.length })
+  } catch (e) { await emit('cron.error', { task: 'cron_presence_watch', error: (e as Error).message }) }
+}
+
 // R146.244 — hourly tick to re-author losing skills.
 async function runSkillEvolve(): Promise<void> {
   try {
@@ -2154,6 +2165,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runSelfDevAutoLoop,             INTERVALS.selfDevAutoLoop))
   handles.push(scheduleJittered(runNlSchedules,                 INTERVALS.nlSchedules))
   handles.push(scheduleJittered(runSkillEvolve,                 INTERVALS.skillEvolve))
+  handles.push(scheduleJittered(runCronPresenceWatch,           INTERVALS.cronPresence))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

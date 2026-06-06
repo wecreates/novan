@@ -1,0 +1,85 @@
+/**
+ * R146.245 — Cron presence watchdog. Detects critical crons that
+ * haven't fired their expected heartbeat in the last 2× their interval
+ * and opens an issue. The R193 inspector creates findings but only
+ * over a 6h window and gated by self_dev_inspect_enabled. This is
+ * always-on and more aggressive — surfaces real outage signal fast.
+ */
+import { db } from '../db/client.js'
+import { events, issues } from '../db/schema.js'
+import { and, desc, eq, gte, sql } from 'drizzle-orm'
+import { v7 as uuidv7 } from 'uuid'
+
+interface ExpectedCron {
+  eventType:  string
+  maxAgeMs:   number  // expected interval × 2
+  severity:   'high' | 'medium' | 'low'
+}
+
+const EXPECTED: ExpectedCron[] = [
+  { eventType: 'cron.radar_scan',                maxAgeMs: 20 * 60_000, severity: 'medium' }, // 10min interval × 2
+  { eventType: 'cron.proactive_scan',            maxAgeMs: 20 * 60_000, severity: 'medium' },
+  { eventType: 'cron.session_sync_prune',        maxAgeMs: 2 * 60 * 60_000, severity: 'low' }, // hourly × 2
+  { eventType: 'cron.approved_reply_send',       maxAgeMs: 2 * 60 * 60_000, severity: 'low' },
+  { eventType: 'cron.incident_scan_completed',   maxAgeMs: 20 * 60_000, severity: 'high' },
+  { eventType: 'cron.platform_smoke_completed',  maxAgeMs: 2 * 60 * 60_000, severity: 'medium' },
+  { eventType: 'cron.frontier_consumer_tick',    maxAgeMs: 10 * 60_000, severity: 'low' },
+  { eventType: 'applier.cycle',                  maxAgeMs: 15 * 60_000, severity: 'medium' },
+]
+
+export interface PresenceResult {
+  missing: Array<{ eventType: string; lastSeenAt: number | null; ageMs: number | null; severity: string }>
+  issuesOpened: number
+}
+
+export async function checkCronPresence(): Promise<PresenceResult> {
+  const now = Date.now()
+  const missing: PresenceResult['missing'] = []
+  let opened = 0
+
+  for (const exp of EXPECTED) {
+    const [latest] = await db.select({ createdAt: events.createdAt })
+      .from(events)
+      .where(eq(events.type, exp.eventType))
+      .orderBy(desc(events.createdAt))
+      .limit(1)
+      .catch(() => [])
+    const lastSeenAt = latest?.createdAt ? Number(latest.createdAt) : null
+    const ageMs = lastSeenAt === null ? null : now - lastSeenAt
+    const isMissing = lastSeenAt === null || ageMs! > exp.maxAgeMs
+    if (!isMissing) continue
+    missing.push({ eventType: exp.eventType, lastSeenAt, ageMs, severity: exp.severity })
+
+    // Open issue if not already open for this cron in the last 2h.
+    const since = now - 2 * 60 * 60_000
+    const [existing] = await db.select({ id: issues.id })
+      .from(issues)
+      .where(and(
+        eq(issues.workspaceId, 'global'),
+        eq(issues.source, 'cron-presence-watch'),
+        eq(issues.status, 'open'),
+        sql`${issues.symptom} LIKE ${'%' + exp.eventType + '%'}`,
+        gte(issues.createdAt, since),
+      ))
+      .limit(1)
+      .catch(() => [])
+    if (existing) continue
+
+    const symptom = lastSeenAt === null
+      ? `cron ${exp.eventType} has never fired`
+      : `cron ${exp.eventType} hasn't fired in ${Math.round((ageMs || 0) / 60_000)}min (expected ≤${exp.maxAgeMs / 60_000}min)`
+    const fingerprint = `cron-presence:${exp.eventType}`
+    await db.insert(issues).values({
+      id: uuidv7(), workspaceId: 'global',
+      severity: exp.severity === 'high' ? 'critical' : exp.severity === 'medium' ? 'warning' : 'info',
+      status: 'open',
+      source: 'cron-presence-watch',
+      symptom, fingerprint,
+      detectedAt: now,
+      createdAt: now, updatedAt: now,
+    }).catch(() => null)
+    opened++
+  }
+
+  return { missing, issuesOpened: opened }
+}
