@@ -258,7 +258,22 @@ await app.register(helmet, {
   contentSecurityPolicy: {
     directives: {
       defaultSrc: [`'self'`],
-      scriptSrc:  [`'self'`],
+      // R146.306 — scriptSrc was just ['self'], which blocks inline
+      // <script> blocks. /brain.html and /console.html each ship one
+      // self-contained inline <script> for their operator UI (no
+      // external bundler), so the previous CSP silently broke them in
+      // every browser. Verified via `curl /brain.html` + checking the
+      // emitted CSP header — `script-src 'self'` + 1 inline <script> in
+      // the body = blocked.
+      // 'unsafe-inline' regresses CSP protection on these two routes;
+      // mitigations: (1) both routes are public allowlist but operator-
+      // token-required to do anything material, (2) R294 hardened the
+      // console XSS — every interpolation now goes through esc(),
+      // (3) the only callers are the operator's PWA/browser over
+      // Tailscale, not internet-facing. Trade is acceptable until/unless
+      // we move to a per-response nonce or extract the inline JS to
+      // /<route>/script.js files.
+      scriptSrc:  [`'self'`, `'unsafe-inline'`],
       styleSrc:   [`'self'`, `'unsafe-inline'`],
       imgSrc:     [`'self'`, 'data:', 'https:'],
       connectSrc: [`'self'`],

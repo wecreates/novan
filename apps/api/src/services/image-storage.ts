@@ -132,10 +132,19 @@ function awsSigningKey(secret: string, date: string, region: string, service: st
 }
 
 async function s3Put(key: string, bytes: Buffer, contentType: string): Promise<string> {
-  const bucket = process.env['AWS_S3_BUCKET']!
-  const region = process.env['AWS_S3_REGION']!
-  const accessKey = process.env['AWS_ACCESS_KEY_ID']!
-  const secretKey = process.env['AWS_SECRET_ACCESS_KEY']!
+  // R146.307 — fail-fast on missing AWS env. The previous `!` non-null
+  // assertions silenced the TS warning but at runtime an unset env
+  // becomes the literal string 'undefined', which AWS sigv4-signs with
+  // garbage credentials → S3 returns 403 with an opaque message. The
+  // upload silently fails and the operator's image disappears. Refuse
+  // to attempt the upload at all when the credentials aren't set.
+  const bucket = process.env['AWS_S3_BUCKET']
+  const region = process.env['AWS_S3_REGION']
+  const accessKey = process.env['AWS_ACCESS_KEY_ID']
+  const secretKey = process.env['AWS_SECRET_ACCESS_KEY']
+  if (!bucket || !region || !accessKey || !secretKey) {
+    throw new Error('[image-storage] S3 disabled: missing AWS_S3_BUCKET / AWS_S3_REGION / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY')
+  }
 
   const host = `${bucket}.s3.${region}.amazonaws.com`
   const url = `https://${host}/${encodeURIComponent(key)}`

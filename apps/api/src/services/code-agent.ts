@@ -449,11 +449,19 @@ async function callOpenAI(p: Proposal): Promise<{ files: PatchFile[]; tokensUsed
 }
 
 async function callAnthropic(p: Proposal): Promise<{ files: PatchFile[]; tokensUsed: number; costUsdUsed: number } | null> {
+  // R146.307 — guard against `'x-api-key': undefined` request that the
+  // previous `!` non-null assertion allowed. Return null (caller falls
+  // through to stub generation) instead of sending a 401-bound request.
+  const apiKey = process.env['ANTHROPIC_API_KEY']
+  if (!apiKey) {
+    console.warn('[code-agent] ANTHROPIC_API_KEY not set — skipping LLM patch synthesis')
+    return null
+  }
   const { system, user } = buildLlmMessages(p)
   const model = process.env['ANTHROPIC_CODE_MODEL'] ?? 'claude-opus-4-5'
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': process.env['ANTHROPIC_API_KEY']!, 'anthropic-version': '2023-06-01' },
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({
       model, max_tokens: 8000, temperature: 0.2, system,
       messages: [{ role: 'user', content: user + '\n\nReturn ONLY a JSON object {"files":[...]}—no prose.' }],
