@@ -6599,6 +6599,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return brainMetrics(ws)
     },
   },
+  'brain.capability.smoke': {
+    description: 'R236 — hit every R206-R234 brain op in sequence (read-only + cleanup-after writes). Returns probes:[{op, ok, ms}]. Useful end-to-end health check.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { capabilitySmoke } = await import('./r236-capability-smoke.js')
+      return capabilitySmoke(ws)
+    },
+  },
   'session.recap': {
     description: 'R233 — single-call summary of capability-layer activity over 24h. Skills total + active, brain loop runs, sub-agents, adversarial verdicts, workflows, memories, chapters, top skills by wins, cost.',
     risk: 'low',
