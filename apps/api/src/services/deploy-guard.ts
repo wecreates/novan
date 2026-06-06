@@ -52,6 +52,15 @@ export interface DeploymentRecord {
 
 const store = new Map<string, DeploymentRecord>()
 
+// R146.323 — deployment records accumulate forever in memory. Bounded
+// in practice by deploy frequency, but unbounded over years.
+// Soft-cap by dropping the oldest entry when over 5000.
+function capStore(): void {
+  if (store.size < 5000) return
+  const oldest = store.keys().next().value
+  if (oldest) store.delete(oldest)
+}
+
 // ─── Event emitter ────────────────────────────────────────────────────────────
 
 async function emit(workspaceId: string, type: string, payload: Record<string, unknown>): Promise<void> {
@@ -85,7 +94,7 @@ export async function startDeployment(config: DeployConfig): Promise<DeploymentR
       rollbackTriggered: false,
       startedAt:         Date.now(),
     }
-    store.set(record.id, record)
+    capStore(); store.set(record.id, record)
     await emit(config.workspaceId, 'deploy.blocked', {
       deploymentId: record.id,
       blockers: report.blockers.map(b => b.message),
@@ -104,7 +113,7 @@ export async function startDeployment(config: DeployConfig): Promise<DeploymentR
       rollbackTriggered: false,
       startedAt:         Date.now(),
     }
-    store.set(record.id, record)
+    capStore(); store.set(record.id, record)
     await emit(config.workspaceId, 'deploy.pending_approval', { deploymentId: record.id })
     return record
   }
@@ -119,7 +128,7 @@ export async function startDeployment(config: DeployConfig): Promise<DeploymentR
     rollbackTriggered: false,
     startedAt:         Date.now(),
   }
-  store.set(record.id, record)
+  capStore(); store.set(record.id, record)
   await emit(config.workspaceId, 'deploy.started', { deploymentId: record.id })
   return record
 }

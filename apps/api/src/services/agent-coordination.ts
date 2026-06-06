@@ -258,6 +258,14 @@ export async function execReversible<I, O>(input: {
   try {
     const r = await input.agent.begin(input.intent)
     intentId = r.intentId
+    // R146.323 — defensive cap. sweepStaleIntents is defined but never wired
+    // to a cron, so orphan intents (where the API process exits mid-flow,
+    // or an uncaught error skips delete) could grow the map without bound.
+    // When over cap, drop the oldest entry first.
+    if (_pendingIntents.size >= 5000) {
+      const oldest = _pendingIntents.keys().next().value
+      if (oldest) _pendingIntents.delete(oldest)
+    }
     _pendingIntents.set(intentId, { actionName: input.agent.name, intentId, openedAt: Date.now() })
   } catch (e) {
     return { ok: false, error: `begin failed: ${(e as Error).message}` }
