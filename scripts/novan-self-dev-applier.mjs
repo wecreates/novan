@@ -72,7 +72,11 @@ function safePath(p) {
 // R146.324 — also recreate periodically (every 30 min) since live observation
 // showed the pool entering a state where queries silently fail without
 // throwing recoverable errors. Cheap insurance against pool-rot.
-let pool = new pg.Pool({ connectionString: PG_URL })
+// R146.329 (#13) — tight idle timeout so connections age out fast after the
+// API container restarts and the docker network bridge churns. Was unset
+// (default ~10min); 25s means the next cycle reconnects fresh instead of
+// reusing a dead socket and burning the SASL retry budget.
+let pool = new pg.Pool({ connectionString: PG_URL, idleTimeoutMillis: 25_000 })
 let poolCreatedAt = Date.now()
 const POOL_MAX_AGE_MS = 30 * 60_000
 async function poolQuery(text, params) {
@@ -80,7 +84,7 @@ async function poolQuery(text, params) {
   if (Date.now() - poolCreatedAt > POOL_MAX_AGE_MS) {
     console.error('[applier] pool age-out — recreating')
     try { await pool.end() } catch {}
-    pool = new pg.Pool({ connectionString: PG_URL })
+    pool = new pg.Pool({ connectionString: PG_URL, idleTimeoutMillis: 25_000 })
     poolCreatedAt = Date.now()
   }
   try {
@@ -94,7 +98,7 @@ async function poolQuery(text, params) {
         || msg.includes('connection terminated') || msg.includes('socket') || msg.includes('timeout')) {
       console.error('[applier] pool reset after connection error:', e.message)
       try { await pool.end() } catch {}
-      pool = new pg.Pool({ connectionString: PG_URL })
+      pool = new pg.Pool({ connectionString: PG_URL, idleTimeoutMillis: 25_000 })
       poolCreatedAt = Date.now()
       return pool.query(text, params)
     }
@@ -283,7 +287,7 @@ async function waitForDb() {
     catch (e) {
       console.log(`[applier] PG not ready yet: ${e.message} — retry in 3s`)
       try { await pool.end() } catch {}
-      pool = new pg.Pool({ connectionString: PG_URL })
+      pool = new pg.Pool({ connectionString: PG_URL, idleTimeoutMillis: 25_000 })
       await new Promise(r => setTimeout(r, 3000))
     }
   }

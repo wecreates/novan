@@ -20,18 +20,19 @@ interface NavGroup {
   items: Array<{ label: string; to: string; hint?: string }>
 }
 
+// R146.329 (#8) — only routes that actually exist. Pruned: /chat, /voice,
+// /capabilities, /persona, /cost-governor (no React pages built).
 const NAV: NavGroup[] = [
   { label: 'Talk', items: [
-    { label: 'Chat',          to: '/chat',     hint: 'main conversation' },
-    { label: 'Voice',         to: '/voice',    hint: 'speak with Novan' },
-    { label: 'Briefing',      to: '/briefings', hint: 'today\'s summary' },
+    { label: 'Today',         to: '/today',          hint: 'main conversation' },
+    { label: 'Briefing',      to: '/briefings',      hint: 'today\'s summary' },
+    { label: 'Welcome',       to: '/welcome',        hint: 'onboarding' },
   ]},
   { label: 'Brain', items: [
-    { label: 'Brain Health',  to: '/brain',           hint: 'what\'s alive' },
-    { label: 'Memory',        to: '/memory-browser',  hint: 'long-term recall' },
-    { label: 'Capabilities',  to: '/capabilities',    hint: 'what Novan can do' },
-    { label: 'Skills',        to: '/skills',          hint: 'learned operations' },
-    { label: 'Insights',      to: '/insights',        hint: 'recent learnings' },
+    { label: 'Brain Health',  to: '/brain',          hint: 'what\'s alive' },
+    { label: 'Memory',        to: '/memory-browser', hint: 'long-term recall' },
+    { label: 'Skill Library', to: '/skill-library',  hint: 'learned operations' },
+    { label: 'Insights',      to: '/insights',       hint: 'recent learnings' },
   ]},
   { label: 'Build', items: [
     { label: 'Image Studio',  to: '/images',          hint: 'generate visuals' },
@@ -41,18 +42,17 @@ const NAV: NavGroup[] = [
     { label: 'Templates',     to: '/templates',       hint: 'reusable recipes' },
   ]},
   { label: 'Run', items: [
-    { label: 'Schedule',      to: '/scheduler',       hint: 'production cadence' },
-    { label: 'Businesses',    to: '/businesses',      hint: 'portfolio' },
+    { label: 'Tasks',         to: '/tasks',           hint: 'brain tasks queue' },
     { label: 'Approvals',     to: '/approvals',       hint: 'pending decisions' },
-    { label: 'Risks',         to: '/risks',           hint: 'open risks' },
+    { label: 'Issues',        to: '/issues',          hint: 'open issues' },
     { label: 'Goals',         to: '/goals',           hint: 'strategic targets' },
+    { label: 'Ideas',         to: '/ideas',           hint: 'idea backlog' },
   ]},
   { label: 'Tune', items: [
     { label: 'Settings',      to: '/account',         hint: 'preferences' },
     { label: 'Connectors',    to: '/connectors',      hint: 'wire external services' },
-    { label: 'Persona',       to: '/persona',         hint: 'voice + tone' },
-    { label: 'Cost Governor', to: '/cost-governor',   hint: 'spending limits' },
-    { label: 'Audit Trail',   to: '/audit',           hint: 'what happened' },
+    { label: 'Research',      to: '/research',        hint: 'research engine' },
+    { label: 'Notifications', to: '/notifications',   hint: 'alerts + history' },
   ]},
 ]
 

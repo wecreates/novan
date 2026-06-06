@@ -851,6 +851,16 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
     }
   } catch { /* non-fatal */ }
 
+  // R146.329 (#6) — auto-resolve a pending clarify_event with this message.
+  void import('./r329-extras.js').then(m =>
+    m.autoResolveClarify(i.workspaceId, i.conversationId ?? null, i.userMessage)
+  ).catch(() => null)
+
+  // R146.329 (#10) — promote commitment/fact-laden turns into long-term memory.
+  void import('./r329-extras.js').then(m =>
+    m.promoteIfImportant(i.workspaceId, i.userMessage)
+  ).catch(() => null)
+
   // R146.327 (#3) + R146.328 (#7) — entity extraction. Try LLM first (catches
   // "Yesterday I called Sarah"); regex fallback persisted via fire-and-forget.
   void (async () => {

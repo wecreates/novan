@@ -6834,6 +6834,51 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { ok: true }
     },
   },
+  // ─── R146.329 ─────────────────────────────────────────────────
+  'cost.cap_enforcement_check': {
+    description: 'R329 #4 — verify spend tracking, kill-switch presence, and surface gaps in the budget enforcement chain.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { costCapEnforcementCheck } = await import('./r329-extras.js')
+      return costCapEnforcementCheck(ws)
+    },
+  },
+  'workflow.attach_business': {
+    description: 'R329 #7 — set workflow_runs.metadata.businessId so cost.by_business sees real numbers.',
+    risk: 'medium',
+    handler: async (_ws, p) => {
+      const { attachWorkflowToBusiness } = await import('./r329-extras.js')
+      return attachWorkflowToBusiness(String(p['workflowRunId'] ?? ''), String(p['businessId'] ?? ''))
+    },
+  },
+  'export.all': {
+    description: 'R329 #9 — single JSON blob of workspace data (memory + relationships + businesses + earnings + setup + clarify + 30d events).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { exportAll } = await import('./r329-extras.js')
+      return exportAll(ws)
+    },
+  },
+  'memory.promote_if_important': {
+    description: 'R329 #10 — surface importance check on a user message (does it look like a commitment/fact worth remembering).',
+    risk: 'low',
+    handler: async (ws, p) => {
+      const { promoteIfImportant } = await import('./r329-extras.js')
+      return promoteIfImportant(ws, String(p['userMessage'] ?? ''))
+    },
+  },
+  'browser.approval_token': {
+    description: 'R329 #15 — generate a signed approval token for (domain, path-prefix) scope. Pass token to browser.action.',
+    risk: 'low',
+    handler: async (_ws, p) => {
+      const { browserApprovalKey, signBrowserApproval } = await import('./r329-extras.js')
+      const url = String(p['url'] ?? '')
+      const depth = Number(p['depth'] ?? 1)
+      const key = browserApprovalKey(url, depth)
+      return { key, token: signBrowserApproval(key) }
+    },
+  },
+
   // ─── R146.328 ─────────────────────────────────────────────────
   'cost.by_business': {
     description: 'R328 #14 — per-business cost rollup over a window. Joins ai_usage → workflow_runs → businessId.',

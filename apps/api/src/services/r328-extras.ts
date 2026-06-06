@@ -142,21 +142,25 @@ export async function chatFailoverTest(workspaceId: string): Promise<{
 }> {
   const chainAttempted: string[] = []
   try {
-    const mod = await import('./chat-providers.js') as unknown as {
-      runChatRound?: (input: { workspaceId: string; system: string; messages: Array<{ role: string; content: string }>; failoverTest?: boolean }) => Promise<{ provider: string; content: string }>
+    // R329 #1 — use the actual chat-providers entry point streamChat.
+    const { streamChat } = await import('./chat-providers.js')
+    let provider: string | null = null
+    const gen = streamChat(workspaceId, [
+      { role: 'system', content: 'Reply with the single character: OK' },
+      { role: 'user',   content: 'OK' },
+    ], { failoverTest: true } as never)
+    const collected: string[] = []
+    while (true) {
+      const r = await gen.next()
+      if (r.done) {
+        provider = r.value?.provider ?? null
+        if (provider) chainAttempted.push(provider)
+        break
+      }
+      if (r.value?.kind === 'provider') chainAttempted.push(String(r.value.provider))
+      if (r.value?.kind === 'delta')    collected.push(String(r.value.text ?? ''))
     }
-    if (!mod.runChatRound) {
-      return { chainAttempted: [], finalProvider: null, ok: false, reason: 'chat-providers.runChatRound not exported' }
-    }
-    // Force-fail anthropic by passing a marker — chat-providers logs it and
-    // falls through. We don't actually modify keys.
-    const r = await mod.runChatRound({
-      workspaceId, system: 'failover test — reply OK',
-      messages: [{ role: 'user', content: 'OK' }],
-      failoverTest: true,
-    })
-    chainAttempted.push(r.provider)
-    return { chainAttempted, finalProvider: r.provider, ok: true }
+    return { chainAttempted, finalProvider: provider, ok: collected.join('').length > 0 }
   } catch (e) {
     return { chainAttempted, finalProvider: null, ok: false, reason: (e as Error).message }
   }

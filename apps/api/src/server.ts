@@ -86,6 +86,7 @@ import researchEngineRoutes     from './routes/research-engine.js'
 import imageRoutes              from './routes/images.js'
 import platformStatusRoutes     from './routes/platform-status.js'
 import r328PublicRoutes         from './routes/r328-public.js'
+import r329BrainOpRoutes        from './routes/r329-brain-op.js'
 import operatorRoutes           from './routes/operator.js'
 import intelligenceRoutes       from './routes/intelligence.js'
 import { governanceRoutes, explainRoutes } from './routes/governance.js'
@@ -913,6 +914,7 @@ await app.register(workflowRoutes, { prefix: '/api/v1/workflows' })
 await app.register(maintenanceRoutes, { prefix: '/api/v1' })
 await app.register(pushRoutes,        { prefix: '/api/v1/push' })
 await app.register(r328PublicRoutes,  { prefix: '/api/v1' })
+await app.register(r329BrainOpRoutes, { prefix: '/api/v1' })
 await app.register(quickLinkRoutes,   { prefix: '/api/v1/auth/quick-link' })
 await app.register(memoryRoutes,   { prefix: '/api/v1/memory' })
 await app.register(eventRoutes,    { prefix: '/api/v1/events' })

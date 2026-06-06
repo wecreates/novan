@@ -45,6 +45,35 @@ probe 'task.honest_assess'   '{"task":"draft an email"}'        || FAIL=1
 probe 'brain.what_did_you_do_today' '{"windowHours":2}'         || FAIL=1
 probe 'relationship.recall'  '{"query":"smoke"}'                || FAIL=1
 
+# R329 (#3) — public routes. Mint a token via /bootstrap (if reusable env set)
+# OR fall back to ops_TOKEN env if operator pre-provisioned one.
+PUBLIC_TOKEN="${PUBLIC_TOKEN:-}"
+if [ -n "$PUBLIC_TOKEN" ]; then
+  echo
+  echo "[smoke] public route probes (auth-gated)"
+  probe_public() {
+    local path="$1"
+    local body
+    body=$(curl -s --max-time 15 -H "Authorization: Bearer $PUBLIC_TOKEN" "$API$path")
+    if echo "$body" | grep -q '"success":true'; then
+      echo "  ok    GET $path"
+      return 0
+    fi
+    echo "  FAIL  GET $path  →  $(echo "$body" | head -c 200)" >&2
+    return 1
+  }
+  probe_public '/api/v1/setup/state'                       || FAIL=1
+  probe_public '/api/v1/capabilities'                      || FAIL=1
+  probe_public '/api/v1/cost/forecast'                     || FAIL=1
+  probe_public '/api/v1/cost/by-business'                  || FAIL=1
+  probe_public '/api/v1/clarify/outcomes'                  || FAIL=1
+  probe_public '/api/v1/timeline/today?hours=2'            || FAIL=1
+  probe_public '/api/v1/relationships/recall?q=smoke'      || FAIL=1
+  probe_public '/api/v1/brain/ops?search=health'           || FAIL=1
+else
+  echo "[smoke] (skip public probes — set PUBLIC_TOKEN env to enable)"
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   echo "[smoke] FAILED — investigate before declaring deploy success" >&2
   exit 1
