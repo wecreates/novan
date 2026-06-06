@@ -67,15 +67,32 @@ function safePath(p) {
   return norm
 }
 
-const pool = new pg.Pool({ connectionString: PG_URL })
+// R146.273 — pool can get poisoned if PG isn't ready at first connect
+// (boot race: applier starts before postgres-1 finishes accepting SCRAM).
+// Wrap in a recreate-on-error layer.
+let pool = new pg.Pool({ connectionString: PG_URL })
+async function poolQuery(text, params) {
+  try {
+    return await pool.query(text, params)
+  } catch (e) {
+    const msg = (e?.message ?? '').toLowerCase()
+    if (msg.includes('sasl') || msg.includes('password must') || msg.includes('econnrefused')) {
+      console.error('[applier] pool reset after connection error:', e.message)
+      try { await pool.end() } catch {}
+      pool = new pg.Pool({ connectionString: PG_URL })
+      return pool.query(text, params)
+    }
+    throw e
+  }
+}
 
 async function isApplyEnabled() {
-  const r = await pool.query("SELECT enabled FROM feature_flag WHERE key='self_dev_apply_enabled' LIMIT 1")
+  const r = await poolQuery("SELECT enabled FROM feature_flag WHERE key='self_dev_apply_enabled' LIMIT 1")
   return r.rows[0]?.enabled === true
 }
 
 async function nextApproved() {
-  const r = await pool.query(`
+  const r = await poolQuery(`
     SELECT id, finding_id, workspace_id, title, rationale, files, risk_level, confidence
     FROM self_dev_proposal
     WHERE status='approved' AND applied_at IS NULL
@@ -85,17 +102,17 @@ async function nextApproved() {
 }
 
 async function markApplied(id, result) {
-  await pool.query(`
+  await poolQuery(`
     UPDATE self_dev_proposal SET status='applied', applied_at=$1, apply_result=$2 WHERE id=$3
   `, [Date.now(), JSON.stringify(result), id])
 }
 async function markFailed(id, error) {
-  await pool.query(`
+  await poolQuery(`
     UPDATE self_dev_proposal SET status='failed', applied_at=$1, apply_result=$2 WHERE id=$3
   `, [Date.now(), JSON.stringify({ error }), id])
 }
 async function markRolledBack(id, reason) {
-  await pool.query(`
+  await poolQuery(`
     UPDATE self_dev_proposal SET status='failed', rolled_back_at=$1, apply_result=$2 WHERE id=$3
   `, [Date.now(), JSON.stringify({ rolledBack: true, reason }), id])
 }
@@ -207,7 +224,7 @@ async function emitHeartbeat(detail) {
   try {
     const { randomUUID } = await import('node:crypto')
     const id = randomUUID()
-    await pool.query(
+    await poolQuery(
       `INSERT INTO events(id, type, workspace_id, payload, trace_id, correlation_id,
                           source, version, created_at)
        VALUES ($1, 'applier.cycle', 'global', $2::jsonb, $3, $3,
@@ -240,9 +257,28 @@ async function cycle() {
   console.log('[applier] cycle complete')
 }
 
+async function waitForDb() {
+  // R146.273 — explicit wait so the first cycle doesn't race PG readiness.
+  // Retries SELECT 1 for up to 60s before giving up (then the systemd
+  // RestartSec=30 will retry the whole daemon).
+  const deadline = Date.now() + 60_000
+  while (Date.now() < deadline) {
+    try { await pool.query('SELECT 1'); return true }
+    catch (e) {
+      console.log(`[applier] PG not ready yet: ${e.message} — retry in 3s`)
+      try { await pool.end() } catch {}
+      pool = new pg.Pool({ connectionString: PG_URL })
+      await new Promise(r => setTimeout(r, 3000))
+    }
+  }
+  throw new Error('PG did not become ready within 60s')
+}
+
 async function main() {
   console.log(`[applier] Novan Self-Dev Applier starting`)
   console.log(`[applier] REPO=${REPO} POLL=${POLL_MS}ms MAX_PER_CYCLE=${MAX_PER_CYCLE}`)
+  await waitForDb()
+  console.log('[applier] PG ready — entering cycle loop')
   while (true) {
     try { await cycle() }
     catch (e) { console.error('[applier] cycle error:', e.stack || e.message) }
