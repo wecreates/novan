@@ -1308,6 +1308,7 @@ const INTERVALS = {
   selfDevAutoLoop:        2 * 60 * 60_000,
   skillEvolve:           60 * 60_000,         // R146.244 — hourly skill-evolve sweep
   cronPresence:           5 * 60_000,         // R146.245 — cron presence watchdog every 5 min
+  wmDecay:               24 * 60 * 60_000,    // R146.252 — daily workspace_memory decay sweep
 }
 
 /**
@@ -1666,6 +1667,15 @@ async function runCronPresenceWatch(): Promise<void> {
     const r = await checkCronPresence()
     if (r.issuesOpened > 0) await emit('cron.presence_watch_alerted', { opened: r.issuesOpened, missing: r.missing.length })
   } catch (e) { await emit('cron.error', { task: 'cron_presence_watch', error: (e as Error).message }) }
+}
+
+// R146.252 — daily workspace_memory (R211 KV layer) decay + prune sweep.
+async function runWmDecaySweep(): Promise<void> {
+  try {
+    const { runMemoryDecay } = await import('./r252-memory-decay.js')
+    const r = await runMemoryDecay()
+    await emit('cron.wm_decay_completed', { decayed: r.decayed, pruned: r.pruned })
+  } catch (e) { await emit('cron.error', { task: 'wm_decay', error: (e as Error).message }) }
 }
 
 // R146.244 — hourly tick to re-author losing skills.
@@ -2166,6 +2176,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runNlSchedules,                 INTERVALS.nlSchedules))
   handles.push(scheduleJittered(runSkillEvolve,                 INTERVALS.skillEvolve))
   handles.push(scheduleJittered(runCronPresenceWatch,           INTERVALS.cronPresence))
+  handles.push(scheduleJittered(runWmDecaySweep,                INTERVALS.wmDecay))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

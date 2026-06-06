@@ -12,6 +12,7 @@ import { adversarialVerdicts } from '../db/schema.js'
 import { v7 as uuidv7 } from 'uuid'
 import { parallelSubagents } from './r208-subagent.js'
 import { diverseProviders } from './r216-routing.js'
+import { checkDailyCostCap } from './r248-cost-cap.js'
 
 export interface VerifyRequest {
   subject:    string
@@ -42,6 +43,23 @@ const VERDICT_SCHEMA = {
 export async function adversarialVerify(workspaceId: string, req: VerifyRequest): Promise<VerifyResult> {
   const voters = Math.max(2, Math.min(7, req.voters ?? 3))
   const threshold = req.threshold ?? Math.ceil(voters / 2)
+
+  // R146.251 — Cap gate. Adversarial verify costs voters × LLM call; if
+  // we're already over budget, fail closed (block) without spending more.
+  const cap = await checkDailyCostCap(workspaceId).catch(() => null)
+  if (cap?.over) {
+    const id = uuidv7()
+    const reason = `daily AI budget exhausted ($${cap.spent.toFixed(2)}/$${cap.cap.toFixed(2)}); blocked fail-closed`
+    await db.insert(adversarialVerdicts).values({
+      id, workspaceId,
+      subject: req.subject.slice(0, 500),
+      claim:   req.claim.slice(0, 1000),
+      voters: 0, refutedCount: voters, votes: [],
+      decision: 'block',
+      createdAt: Date.now(),
+    }).catch(() => null)
+    return { id, decision: 'block', voters: 0, refutedCount: voters, reasons: [reason], votes: [] }
+  }
 
   const lenses = ['correctness', 'safety', 'completeness', 'user-impact', 'side-effects', 'security', 'cost'].slice(0, voters)
   // R216 — each voter routed to a DIFFERENT provider so single-model bias

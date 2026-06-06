@@ -6639,6 +6639,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return findOverCapWorkspaces()
     },
   },
+  'memory.kv.decay': {
+    description: 'R252 — run the workspace_memory decay sweep now (normally daily). Returns {decayed, pruned} row counts. Idempotent within a 7-day window per row.',
+    risk: 'low',
+    handler: async () => {
+      const { runMemoryDecay } = await import('./r252-memory-decay.js')
+      return runMemoryDecay()
+    },
+  },
   'backup.health': {
     description: 'R218 — newest *.sql.gz freshness in /backups (or BACKUP_DIR). Returns {dir, newestFilename, ageHours, status} where status ∈ fresh|stale|missing|unreachable.',
     risk: 'low',

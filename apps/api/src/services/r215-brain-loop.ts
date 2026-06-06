@@ -20,6 +20,7 @@ import { spawnSubagent } from './r208-subagent.js'
 import { operatorSkillsAdvertisement, skillLoad, skillScore } from './r206-skills.js'
 import { memoryRemember, memoryDigest, chapterMark } from './r211-workplace.js'
 import { pickSkillSmart } from './r216-routing.js'
+import { checkDailyCostCap } from './r248-cost-cap.js'
 import { skillOutcomes } from '../db/schema.js'
 import { v7 as uuidv7 } from 'uuid'
 
@@ -229,6 +230,17 @@ export async function* runBrainLoop(
   const autoChapter = opts.autoChapter !== false
 
   const userMessage = [...messages].reverse().find(m => m.role === 'user')?.content ?? ''
+
+  // R146.250 — Cost cap gate. Hard short-circuit so autonomous loops
+  // can't keep spawning sub-agents past the daily budget.
+  const cap = await checkDailyCostCap(workspaceId).catch(() => null)
+  if (cap?.over) {
+    const msg = `_(daily AI budget exhausted: $${cap.spent.toFixed(2)} / $${cap.cap.toFixed(2)}. ` +
+                `Raise DAILY_AI_COST_CAP_USD or wait for UTC day rollover.)_`
+    yield { kind: 'delta', text: msg }
+    yield { kind: 'final', content: msg, steps: 0, costUsd: 0 }
+    return
+  }
 
   // 1. Skill auto-pick (Thompson sampling → LLM fallback per R216)
   let extraSys = ''
