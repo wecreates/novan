@@ -331,6 +331,18 @@ const isPublic = (url: string): boolean => {
   if (/^\/api\/v1\/webhooks\/[a-z0-9-]+\/trigger$/i.test(url))         return true
   // R146.188 — admin brain bridge has its own loopback+token auth.
   if (url === '/admin/brain' || url === '/admin/brain/ops')            return true
+  // R146.317 — intentionally-public ingest + asset routes that broke when
+  // ENFORCE_GLOBAL_AUTH=true was flipped on. These are designed to be hit
+  // anonymously from operator landing pages (funnel pixel), biometric
+  // devices, short-URL redirects, and Mixcraft/CapCut import scripts.
+  // workspaceId-shape validator (R146.58/R315) still runs on these, and
+  // /t handler enforces a whitelisted `kind`. The blast radius is bounded
+  // and these endpoints have been verified intended-public in code review.
+  if (/^\/t\/[A-Za-z0-9_-]{1,64}$/i.test(url))                          return true   // funnel tracker
+  if (/^\/bio\/[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{1,64}$/i.test(url))   return true   // biometric webhook
+  if (/^\/r\/[A-Za-z0-9_-]{1,20}$/i.test(url))                          return true   // short-URL redirect
+  if (/^\/mixcraft\/[A-Za-z0-9_-]+\//i.test(url))                       return true   // mixcraft adapter
+  if (/^\/capcut\/[A-Za-z0-9_-]+\//i.test(url))                         return true   // capcut adapter
   return false
 }
 
