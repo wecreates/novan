@@ -48,6 +48,25 @@ export async function checkCronPresence(): Promise<PresenceResult & { autoClosed
   let opened = 0
   let autoClosed = 0
 
+  // R146.274 — close orphaned presence issues whose eventType is no
+  // longer in EXPECTED (e.g. R269 switched session_sync_prune watch to
+  // its _tick variant; old issues sit forever otherwise).
+  const expectedFingerprints = new Set(EXPECTED.map(e => `cron-presence:${e.eventType}`))
+  const openPresence = await db.select({ id: issues.id, fingerprint: issues.fingerprint })
+    .from(issues)
+    .where(and(
+      eq(issues.source, 'cron-presence-watch'),
+      eq(issues.status, 'open'),
+    ))
+    .catch(() => [])
+  for (const o of openPresence) {
+    if (o.fingerprint && !expectedFingerprints.has(o.fingerprint)) {
+      await db.update(issues).set({ status: 'closed', updatedAt: now })
+        .where(eq(issues.id, o.id)).catch(() => null)
+      autoClosed++
+    }
+  }
+
   for (const exp of EXPECTED) {
     const [latest] = await db.select({ createdAt: events.createdAt })
       .from(events)

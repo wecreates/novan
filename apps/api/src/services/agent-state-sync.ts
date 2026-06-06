@@ -148,9 +148,13 @@ export async function selfRegister(input: AgentSelfRegister): Promise<void> {
         status: 'idle', lastHeartbeat: now,
         capabilities: input.capabilities, updatedAt: now,
       },
+      // R146.274 — compare capabilities by joined text instead of array.
+      // Drizzle's ${jsArray} inline yields a `record` literal, which the
+      // planner refuses to compare against text[] ('text[] <> record').
+      // The comma-joined string compare is type-safe and equally selective.
       setWhere: sql`
         ${agentRegistrations.status} <> 'idle'
-        OR ${agentRegistrations.capabilities} <> ${input.capabilities}
+        OR array_to_string(${agentRegistrations.capabilities}, ',') <> ${input.capabilities.join(',')}
         OR ${agentRegistrations.lastHeartbeat} < ${now - FRESH_HB_MS}
       `,
     }).catch((e: Error) => { console.error('[agent-state-sync]', e.message); return null })

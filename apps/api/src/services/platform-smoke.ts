@@ -174,7 +174,14 @@ async function probeOne(base: string, path: string): Promise<ProbeResult> {
   try {
     const ctrl = new AbortController()
     const t = setTimeout(() => ctrl.abort(), PER_PROBE_TIMEOUT)
-    const res = await fetch(`${base}${path}`, { signal: ctrl.signal })
+    // R146.275 — tag the probe so we can silence them in pino logs.
+    // (Auth not attempted — global auth preHandler requires JWT/API-token
+    // which smoke doesn't have, and 401 is already bucketed as
+    // 'auth_required' = effectively 'route wired correctly'.)
+    const res = await fetch(`${base}${path}`, {
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'novan-platform-smoke' },
+    })
     clearTimeout(t)
     const text = await res.text().catch(() => '')
     return { path, status: res.status, ms: Date.now() - start, bodyExcerpt: text.slice(0, 200) }
