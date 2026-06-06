@@ -26,6 +26,14 @@ export default defineConfig({
       exclude: ['src/test/**', 'src/telemetry.ts', 'src/server.ts'],
     },
 
+    // R146.240 — give tests a no-op DATABASE_URL so module imports that
+    // initialize a postgres client don't throw before tests run. The
+    // connection is never used unless a test explicitly hits the DB.
+    env: {
+      DATABASE_URL: process.env['DATABASE_URL'] || 'postgresql://test:test@127.0.0.1:5432/test',
+      NODE_ENV: process.env['NODE_ENV'] || 'test',
+    },
+
     // Timeout — allow app build + plugin registration
     testTimeout: 30_000,
     hookTimeout: 30_000,
