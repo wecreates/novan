@@ -56,6 +56,7 @@ const ConnectorsPage         = React.lazy(() => import('./pages/ConnectorsPage.j
 const TodayPage              = React.lazy(() => import('./pages/TodayPage.js'))
 const MainPage               = React.lazy(() => import('./pages/MainPage.js'))
 const WelcomePage            = React.lazy(() => import('./pages/WelcomePage.js'))
+const BrainBrowsePage        = React.lazy(() => import('./pages/BrainBrowsePage.js'))
 const IssuesPage             = React.lazy(() => import('./pages/IssuesPage.js'))
 const BrainTasksPage         = React.lazy(() => import('./pages/BrainTasksPage.js'))
 const NotificationsPage      = React.lazy(() => import('./pages/NotificationsPage.js'))
@@ -688,6 +689,8 @@ function AppRoutes() {
           <Route path="/"            element={<MainPage />} />
           {/* R146.328 (#4) — onboarding */}
           <Route path="/welcome"     element={<WelcomePage />} />
+          {/* R146.330 (#21) — brain op browser */}
+          <Route path="/brain-browse" element={<BrainBrowsePage />} />
           <Route path="/today-classic" element={<Navigate to="/today" replace />} />
           <Route path="/today"          element={<TodayPage />} />
           <Route path="/blueprint"      element={<BlueprintPage />} />
