@@ -57,31 +57,38 @@ async function writeState(workspaceId: string, patch: {
   lastReviewAt?:       number
   reviewCount?:        number
 }) {
-  const existing = await readState(workspaceId)
+  // R146.247 — atomic upsert relying on executiveState.workspaceId PK.
+  // Previously SELECT-then-(UPDATE-or-INSERT) was a TOCTOU race when
+  // two concurrent reviews fired (cron tick + manual review). The
+  // patch fields are only written when present; reviewCount increments
+  // via sql expression to avoid the read-modify-write race.
   const now = Date.now()
-  if (!existing) {
-    await db.insert(executiveState).values({
-      workspaceId,
-      topPriorities:       (patch.topPriorities ?? []),
-      activeRisks:         (patch.activeRisks ?? []),
-      strategicObjectives: (patch.strategicObjectives ?? []),
-      blockedInitiatives:  (patch.blockedInitiatives ?? []),
-      costPosture:         (patch.costPosture ?? null),
-      reliabilityPosture:  (patch.reliabilityPosture ?? null),
-      securityPosture:     (patch.securityPosture ?? null),
-      focusAreas:          patch.focusAreas ?? [],
-      lastReviewAt:        patch.lastReviewAt ?? now,
-      reviewCount:         patch.reviewCount ?? 1,
-      updatedAt:           now,
-    }).onConflictDoNothing().catch((e: Error) => { console.error('[executive-loop]', e.message); return null })
-  } else {
-    const update: Record<string, unknown> = { updatedAt: now, lastReviewAt: patch.lastReviewAt ?? now, reviewCount: (existing.reviewCount ?? 0) + 1 }
-    for (const k of ['topPriorities', 'activeRisks', 'strategicObjectives', 'blockedInitiatives', 'costPosture', 'reliabilityPosture', 'securityPosture', 'focusAreas'] as const) {
-      const v = patch[k]
-      if (v !== undefined) update[k] = v
-    }
-    await db.update(executiveState).set(update).where(eq(executiveState.workspaceId, workspaceId)).catch((e: Error) => { console.error('[executive-loop]', e.message); return null })
+  const setOnConflict: Record<string, unknown> = {
+    updatedAt: now,
+    lastReviewAt: patch.lastReviewAt ?? now,
+    reviewCount: sql`COALESCE(${executiveState.reviewCount}, 0) + 1`,
   }
+  for (const k of ['topPriorities', 'activeRisks', 'strategicObjectives', 'blockedInitiatives', 'costPosture', 'reliabilityPosture', 'securityPosture', 'focusAreas'] as const) {
+    const v = patch[k]
+    if (v !== undefined) setOnConflict[k] = v
+  }
+  await db.insert(executiveState).values({
+    workspaceId,
+    topPriorities:       (patch.topPriorities ?? []),
+    activeRisks:         (patch.activeRisks ?? []),
+    strategicObjectives: (patch.strategicObjectives ?? []),
+    blockedInitiatives:  (patch.blockedInitiatives ?? []),
+    costPosture:         (patch.costPosture ?? null),
+    reliabilityPosture:  (patch.reliabilityPosture ?? null),
+    securityPosture:     (patch.securityPosture ?? null),
+    focusAreas:          patch.focusAreas ?? [],
+    lastReviewAt:        patch.lastReviewAt ?? now,
+    reviewCount:         patch.reviewCount ?? 1,
+    updatedAt:           now,
+  }).onConflictDoUpdate({
+    target: executiveState.workspaceId,
+    set: setOnConflict,
+  }).catch((e: Error) => { console.error('[executive-loop]', e.message); return null })
 }
 
 // ─── Cycle implementations ──────────────────────────────────────────────────
