@@ -95,6 +95,18 @@ export interface FetchFailure {
  */
 export async function renderFetch(url: string, opts: { waitForSelector?: string } = {}): Promise<FetchResult | FetchFailure> {
   const start = Date.now()
+  // R146.312 — SSRF guard. The web.fetch brain op is risk:low (auto-callable
+  // by brain.loop), so an LLM under prompt-injection could feed cloud-IMDS
+  // (169.254.169.254) or container-internal addresses (postgres on 127.0.0.1
+  // host network) here. Cloud creds would land in r.text → next chat turn →
+  // exfiltrated. Block obvious internal targets before the browser dials.
+  // DNS rebinding is mitigated by playwright resolving fresh; if needed,
+  // upgrade to a resolved-IP recheck.
+  const { ssrfReject } = await import('../util/ssrf-guard.js')
+  const reject = ssrfReject(url)
+  if (reject) {
+    return { ok: false, url, reason: `SSRF guard: ${reject}`, status: 0, durationMs: Date.now() - start }
+  }
   const sb = await getBrowser()
   if (!sb) {
     return { ok: false, url, reason: 'playwright unavailable (not installed?)', status: 0, durationMs: Date.now() - start }
