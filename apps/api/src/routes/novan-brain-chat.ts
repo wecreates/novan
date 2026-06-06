@@ -188,13 +188,40 @@ async function send() {
 async function loadMetrics() {
   $('status').textContent = 'loading metrics…'
   try {
-    const m = await call('brain.metrics')
-    $('metrics-body').innerHTML = renderMetrics(m)
+    const [m, h] = await Promise.all([
+      call('brain.metrics'),
+      call('brain.health').catch(() => null),
+    ])
+    $('metrics-body').innerHTML = renderHealth(h) + renderMetrics(m)
     $('status').textContent = 'metrics refreshed ' + new Date().toLocaleTimeString()
   } catch (e) {
     $('metrics-body').innerHTML = \`<div class="empty">Error: \${escape(e.message)}</div>\`
     $('status').textContent = 'metrics error'
   }
+}
+
+// R146.261 — brain.health card at the top of the metrics tab.
+function renderHealth(h) {
+  if (!h) return ''
+  const color = h.overall === 'healthy' ? '#0c8' : h.overall === 'degraded' ? '#fa0' : '#f44'
+  const sym = h.overall === 'healthy' ? '✓' : h.overall === 'degraded' ? '⚠' : '✗'
+  const cells = [
+    { label: 'Cost', value: \`$\${h.cost.spent.toFixed(2)} / $\${h.cost.cap.toFixed(2)}\`, warn: h.cost.over },
+    { label: 'Backup', value: h.backup.status + (h.backup.ageHours !== null ? \` (\${h.backup.ageHours.toFixed(1)}h)\` : ''), warn: h.backup.status !== 'fresh' },
+    { label: 'Applier', value: h.applier.status, warn: h.applier.status !== 'alive' },
+    { label: 'Cron', value: h.cron.missing === 0 ? 'all firing' : \`\${h.cron.missing} missing\`, warn: h.cron.missing > 0 },
+    { label: 'Errors 1h', value: h.errors.last1h + '', warn: h.errors.last1h > 5 },
+    { label: 'Skills', value: \`\${h.skills.total}\${h.skills.recentWinRate !== null ? ' · ' + (h.skills.recentWinRate * 100).toFixed(0) + '% win' : ''}\`, warn: false },
+  ]
+  return \`<div class="card" style="border-left:3px solid \${color};margin-bottom:1em">
+    <h2 style="color:\${color}">\${sym} Platform Health: \${h.overall.toUpperCase()}</h2>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5em">
+      \${cells.map(c => \`<div class="row" style="\${c.warn ? 'color:#f44' : ''}">
+        <span class="label">\${c.label}</span>
+        <span class="val">\${escape(c.value)}</span>
+      </div>\`).join('')}
+    </div>
+  </div>\`
 }
 
 function renderMetrics(m) {
