@@ -201,18 +201,42 @@ async function applyOne(p) {
   return await markApplied(p.id, { baseline, after })
 }
 
+async function emitHeartbeat(detail) {
+  // R232 — write applier.cycle event so R231 applier.health can report
+  // 'alive'. Fire-and-forget; never blocks the cycle.
+  try {
+    const { randomUUID } = await import('node:crypto')
+    const id = randomUUID()
+    await pool.query(
+      `INSERT INTO events(id, type, workspace_id, payload, trace_id, correlation_id,
+                          source, version, created_at)
+       VALUES ($1, 'applier.cycle', 'global', $2::jsonb, $3, $3,
+               'r195-applier', 1, $4)`,
+      [id, JSON.stringify(detail), id, Date.now()]
+    )
+  } catch (e) {
+    console.error('[applier] heartbeat write failed:', e.message)
+  }
+}
+
 async function cycle() {
-  console.log(`[applier] cycle starting ${new Date().toISOString()}`)
-  if (!(await isApplyEnabled())) {
+  const startedAt = Date.now()
+  console.log(`[applier] cycle starting ${new Date(startedAt).toISOString()}`)
+  const enabled = await isApplyEnabled()
+  if (!enabled) {
     console.log('[applier] self_dev_apply_enabled is OFF — skip')
+    await emitHeartbeat({ enabled: false, durationMs: Date.now() - startedAt })
     return
   }
   const proposals = await nextApproved()
   if (proposals.length === 0) {
     console.log('[applier] no approved proposals')
+    await emitHeartbeat({ enabled: true, proposalsAvailable: 0, durationMs: Date.now() - startedAt })
     return
   }
-  for (const p of proposals) await applyOne(p)
+  let applied = 0
+  for (const p of proposals) { await applyOne(p); applied++ }
+  await emitHeartbeat({ enabled: true, proposalsAvailable: proposals.length, applied, durationMs: Date.now() - startedAt })
   console.log('[applier] cycle complete')
 }
 
