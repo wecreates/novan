@@ -32,10 +32,11 @@ export interface PresenceResult {
   issuesOpened: number
 }
 
-export async function checkCronPresence(): Promise<PresenceResult> {
+export async function checkCronPresence(): Promise<PresenceResult & { autoClosed: number }> {
   const now = Date.now()
   const missing: PresenceResult['missing'] = []
   let opened = 0
+  let autoClosed = 0
 
   for (const exp of EXPECTED) {
     const [latest] = await db.select({ createdAt: events.createdAt })
@@ -47,7 +48,27 @@ export async function checkCronPresence(): Promise<PresenceResult> {
     const lastSeenAt = latest?.createdAt ? Number(latest.createdAt) : null
     const ageMs = lastSeenAt === null ? null : now - lastSeenAt
     const isMissing = lastSeenAt === null || ageMs! > exp.maxAgeMs
-    if (!isMissing) continue
+
+    const fingerprint = `cron-presence:${exp.eventType}`
+    if (!isMissing) {
+      // R146.246 — recovery: auto-close any open issue with the
+      // matching fingerprint. Avoids the operator wading through
+      // stale alerts after the cron starts firing again.
+      const [openIssue] = await db.select({ id: issues.id })
+        .from(issues)
+        .where(and(
+          eq(issues.fingerprint, fingerprint),
+          eq(issues.status, 'open'),
+        ))
+        .limit(1)
+        .catch(() => [])
+      if (openIssue) {
+        await db.update(issues).set({ status: 'closed', updatedAt: now })
+          .where(eq(issues.id, openIssue.id)).catch(() => null)
+        autoClosed++
+      }
+      continue
+    }
     missing.push({ eventType: exp.eventType, lastSeenAt, ageMs, severity: exp.severity })
 
     // Open issue if not already open for this cron in the last 2h.
@@ -68,7 +89,6 @@ export async function checkCronPresence(): Promise<PresenceResult> {
     const symptom = lastSeenAt === null
       ? `cron ${exp.eventType} has never fired`
       : `cron ${exp.eventType} hasn't fired in ${Math.round((ageMs || 0) / 60_000)}min (expected ≤${exp.maxAgeMs / 60_000}min)`
-    const fingerprint = `cron-presence:${exp.eventType}`
     await db.insert(issues).values({
       id: uuidv7(), workspaceId: 'global',
       severity: exp.severity === 'high' ? 'critical' : exp.severity === 'medium' ? 'warning' : 'info',
@@ -81,5 +101,5 @@ export async function checkCronPresence(): Promise<PresenceResult> {
     opened++
   }
 
-  return { missing, issuesOpened: opened }
+  return { missing, issuesOpened: opened, autoClosed }
 }
