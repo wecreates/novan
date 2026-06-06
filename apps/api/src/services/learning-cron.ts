@@ -1748,6 +1748,8 @@ async function runApprovedReplySend(): Promise<void> {
       } catch (e) { await emit('cron.error', { task: 'approved_reply_send', workspace: ws, error: (e as Error).message }) }
     }
     const now = Date.now()
+    // R146.269 — unconditional heartbeat so cron-presence watchdog sees proof of life.
+    await emit('cron.approved_reply_send_tick', { workspaces: ids.length, sent: totalSent, failed: totalFailed })
     if (totalSent > 0 || totalFailed > 0 || now - _approvedSendLastEmit >= 23 * 60 * 60_000) {
       await emit('cron.approved_reply_send', { workspaces: ids.length, sent: totalSent, failed: totalFailed })
       _approvedSendLastEmit = now
@@ -1847,6 +1849,8 @@ async function runSessionSyncPrune(): Promise<void> {
     const r = await db.delete(sessionSync).where(drizzleSql`${sessionSync.lastPingAt} < ${cutoff}`)
     const pruned = (r as { rowCount?: number }).rowCount ?? 0
     const now = Date.now()
+    // R146.269 — unconditional heartbeat.
+    await emit('cron.session_sync_prune_tick', { pruned })
     if (pruned > 0 || now - _sessionPruneLastEmit >= 23 * 60 * 60_000) {
       await emit('cron.session_sync_prune', { pruned })
       _sessionPruneLastEmit = now

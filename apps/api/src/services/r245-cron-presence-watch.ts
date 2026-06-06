@@ -19,8 +19,11 @@ interface ExpectedCron {
 const EXPECTED: ExpectedCron[] = [
   { eventType: 'cron.radar_scan',                maxAgeMs: 20 * 60_000, severity: 'medium' }, // 10min interval × 2
   { eventType: 'cron.proactive_scan',            maxAgeMs: 20 * 60_000, severity: 'medium' },
-  { eventType: 'cron.session_sync_prune',        maxAgeMs: 2 * 60 * 60_000, severity: 'low' }, // hourly × 2
-  { eventType: 'cron.approved_reply_send',       maxAgeMs: 2 * 60 * 60_000, severity: 'low' },
+  // R146.269 — these two emit `cron.<name>_tick` unconditionally each
+  // run (and the un-suffixed event only when there's work or the 23h
+  // heartbeat fires). Watch the _tick variants for proof of life.
+  { eventType: 'cron.session_sync_prune_tick',   maxAgeMs: 2 * 60 * 60_000, severity: 'low' },
+  { eventType: 'cron.approved_reply_send_tick',  maxAgeMs: 2 * 60 * 60_000, severity: 'low' },
   { eventType: 'cron.incident_scan_completed',   maxAgeMs: 20 * 60_000, severity: 'high' },
   { eventType: 'cron.platform_smoke_completed',  maxAgeMs: 2 * 60 * 60_000, severity: 'medium' },
   { eventType: 'cron.frontier_consumer_tick',    maxAgeMs: 10 * 60_000, severity: 'low' },
