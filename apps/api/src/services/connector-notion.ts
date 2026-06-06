@@ -29,6 +29,9 @@ async function call<T>(token: string, path: string, body?: unknown, method: 'GET
     },
   }
   if (body !== undefined) init.body = JSON.stringify(body)
+  // R146.288 — 30s timeout. Notion search/read normally <5s; never legit
+  // beyond 30s. Without this a hung upstream blocks the caller forever.
+  init.signal = AbortSignal.timeout(30_000)
   const resp = await fetch(`${BASE}${path}`, init)
   if (!resp.ok) {
     const txt = await resp.text().catch(() => '')

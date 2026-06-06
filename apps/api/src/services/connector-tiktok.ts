@@ -132,6 +132,8 @@ export async function initVideoPublish(input: VideoPublishInput): Promise<{ ok: 
   const url = `${TIKTOK.baseUrl}/post/publish/video/init/`
   const r = await fetch(url, {
     method: 'POST',
+    // R146.288 — 30s timeout. TikTok publish init normally <5s.
+    signal: AbortSignal.timeout(30_000),
     headers: {
       'Authorization': `Bearer ${input.accessToken}`,
       'Content-Type':  'application/json; charset=UTF-8',

@@ -29,6 +29,8 @@ async function call<T>(token: string, path: string, body?: unknown, method: 'GET
     },
   }
   if (body !== undefined) init.body = JSON.stringify(body)
+  // R146.288 — 60s timeout to prevent hung-upstream lockup.
+  init.signal = AbortSignal.timeout(60_000)
   const resp = await fetch(`${BASE}${path}`, init)
   if (!resp.ok) {
     const txt = await resp.text().catch(() => '')

@@ -45,6 +45,10 @@ export const messages: ConnectorHandler = async (ctx, params) => {
       ...(temperature !== undefined ? { temperature } : {}),
       ...(system      !== undefined ? { system }      : {}),
     }),
+    // R146.288 — 60s timeout. Anthropic API can take 30-45s on a long
+    // response but never legitimately exceeds 60s for chat. Without this
+    // a hung connection from the upstream would lock the caller forever.
+    signal: AbortSignal.timeout(60_000),
   })
   if (!resp.ok) {
     const txt = await resp.text().catch(() => '')
