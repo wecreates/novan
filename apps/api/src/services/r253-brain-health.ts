@@ -27,6 +27,16 @@ import { and, eq, gte, sql } from 'drizzle-orm'
 
 export type Health = 'healthy' | 'degraded' | 'critical'
 
+// R146.268 — 30s in-process cache. brainHealth() is called from
+// novan-chat per turn (R260), the metrics tab (R261), and the alert
+// tick (R255). Without caching that's 6+ queries × N concurrent chats.
+const CACHE_TTL_MS = 30_000
+const _cache = new Map<string, { snap: BrainHealth; at: number }>()
+export function invalidateBrainHealth(workspaceId?: string): void {
+  if (workspaceId) _cache.delete(workspaceId)
+  else _cache.clear()
+}
+
 export interface BrainHealth {
   overall: Health
   cost:    { spent: number; cap: number; over: boolean }
@@ -39,6 +49,8 @@ export interface BrainHealth {
 }
 
 export async function brainHealth(workspaceId: string): Promise<BrainHealth> {
+  const cached = _cache.get(workspaceId)
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.snap
   const now = Date.now()
   const h1  = now - 60 * 60_000
   const d1  = now - 24 * 60 * 60_000
@@ -86,7 +98,7 @@ export async function brainHealth(workspaceId: string): Promise<BrainHealth> {
   if (c.over || b.status === 'missing' || a.status === 'never') overall = 'critical'
   else if (b.status !== 'fresh' || a.status !== 'alive' || cr.missing.length > 0 || errs1h > 5) overall = 'degraded'
 
-  return {
+  const snap: BrainHealth = {
     overall,
     cost:    { spent: c.spent, cap: c.cap, over: c.over },
     backup:  { ageHours: b.ageHours, status: b.status },
@@ -96,4 +108,6 @@ export async function brainHealth(workspaceId: string): Promise<BrainHealth> {
     skills:  { total: skillStats, recentWinRate },
     at: now,
   }
+  _cache.set(workspaceId, { snap, at: now })
+  return snap
 }
