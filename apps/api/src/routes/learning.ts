@@ -51,6 +51,17 @@ async function emitEvent(type: string, workspaceId: string, payload: Record<stri
   } catch { /* non-blocking */ }
 }
 
+// R146.319 — derive workspaceId from auth claim first, query/body second.
+// Same defense-in-depth fix as R318 for eng-agents: under ENFORCE_GLOBAL_AUTH=false,
+// anyone could query/post other workspaces' learning signals + patterns + feedback
+// by spoofing ?workspace_id=victim. Auth-first leaves the body fallback for the
+// no-auth dev path only.
+function wsOf(req: unknown, fallback?: string): string {
+  const auth = (req as { workspaceId?: string }).workspaceId
+  if (auth) return auth
+  return fallback ?? 'default'
+}
+
 // ─── Route plugin ─────────────────────────────────────────────────────────────
 
 const learningRoutes: FastifyPluginAsync = async (app) => {
@@ -58,7 +69,7 @@ const learningRoutes: FastifyPluginAsync = async (app) => {
   // GET /signals
   app.get('/signals', async (req, reply) => {
     const query = req.query as Record<string, string>
-    const workspaceId = query['workspace_id'] ?? 'default'
+    const workspaceId = wsOf(req, query['workspace_id'])
     const limit  = safeInt(query['limit'], 50, { min: 1, max: 200 })
     const offset = safeInt(query['offset'], 0, { min: 0 })
     const source = query['source']
@@ -81,7 +92,7 @@ const learningRoutes: FastifyPluginAsync = async (app) => {
   // POST /signals — manual signal creation
   app.post('/signals', async (req, reply) => {
     const body = req.body as Record<string, unknown>
-    const workspaceId = (body['workspace_id'] as string) ?? 'default'
+    const workspaceId = wsOf(req, body['workspace_id'] as string)
     const now  = Date.now()
 
     const signal = {
@@ -108,7 +119,7 @@ const learningRoutes: FastifyPluginAsync = async (app) => {
   // GET /patterns
   app.get('/patterns', async (req, reply) => {
     const query = req.query as Record<string, string>
-    const workspaceId   = query['workspace_id'] ?? 'default'
+    const workspaceId   = wsOf(req, query['workspace_id'])
     const limit         = safeInt(query['limit'], 50, { min: 1, max: 200 })
     const offset        = safeInt(query['offset'], 0, { min: 0 })
     const patternType   = query['pattern_type']
@@ -152,7 +163,7 @@ const learningRoutes: FastifyPluginAsync = async (app) => {
   // GET /insights
   app.get('/insights', async (req, reply) => {
     const query       = req.query as Record<string, string>
-    const workspaceId = query['workspace_id'] ?? 'default'
+    const workspaceId = wsOf(req, query['workspace_id'])
     const limit       = safeInt(query['limit'], 50, { min: 1, max: 200 })
     const offset      = safeInt(query['offset'], 0, { min: 0 })
     const status      = query['status']
@@ -228,7 +239,7 @@ const learningRoutes: FastifyPluginAsync = async (app) => {
   // GET /feedback
   app.get('/feedback', async (req, reply) => {
     const query       = req.query as Record<string, string>
-    const workspaceId = query['workspace_id'] ?? 'default'
+    const workspaceId = wsOf(req, query['workspace_id'])
     const limit       = safeInt(query['limit'], 50, { min: 1, max: 200 })
     const offset      = safeInt(query['offset'], 0, { min: 0 })
 
@@ -244,7 +255,7 @@ const learningRoutes: FastifyPluginAsync = async (app) => {
   // POST /feedback
   app.post('/feedback', async (req, reply) => {
     const body        = req.body as Record<string, unknown>
-    const workspaceId = (body['workspace_id'] as string) ?? 'default'
+    const workspaceId = wsOf(req, body['workspace_id'] as string)
     const now = Date.now()
 
     const record = {
@@ -275,7 +286,7 @@ const learningRoutes: FastifyPluginAsync = async (app) => {
   // GET /scores
   app.get('/scores', async (req, reply) => {
     const query       = req.query as Record<string, string>
-    const workspaceId = query['workspace_id'] ?? 'default'
+    const workspaceId = wsOf(req, query['workspace_id'])
     const entityType  = query['entity_type']
     const scoreType   = query['score_type']
     const limit       = safeInt(query['limit'], 100, { min: 1, max: 500 })
@@ -298,7 +309,7 @@ const learningRoutes: FastifyPluginAsync = async (app) => {
 
   // GET /health — learning system health summary
   app.get('/health', async (req, reply) => {
-    const workspaceId = (req.query as Record<string, string>)['workspace_id'] ?? 'default'
+    const workspaceId = wsOf(req, (req.query as Record<string, string>)['workspace_id'])
     const since       = Date.now() - 24 * 3600_000
 
     const [signalCount, patternCount, insightCount, pendingReviewCount, feedbackCount] = await Promise.all([
