@@ -6599,6 +6599,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return brainMetrics(ws)
     },
   },
+  'session.recap': {
+    description: 'R233 — single-call summary of capability-layer activity over 24h. Skills total + active, brain loop runs, sub-agents, adversarial verdicts, workflows, memories, chapters, top skills by wins, cost.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { sessionRecap } = await import('./r233-session-recap.js')
+      return sessionRecap(ws)
+    },
+  },
   'applier.health': {
     description: 'R231 — host-side applier daemon liveness: {status: alive|stale|unwired|never, lastEventAt, lastApplyAt, recentApplies24h, recentRollbacks24h}.',
     risk: 'low',
