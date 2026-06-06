@@ -71,14 +71,32 @@ async function call(op, params) {
   return j.result
 }
 
+// R146.294 — every interpolated string in this file used to go straight
+// into innerHTML with no escaping. action queue labels, niche names,
+// signal titles all come from the DB and many trace back to LLM output —
+// so an LLM-poisoned business name or proposal title could ship JS to
+// the operator console. Add a single esc() and route every potentially
+// user-controlled string through it.
+function esc(s) {
+  if (s === null || s === undefined) return ''
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function pill(severity) {
   const cls = severity === 'critical' || severity === 'urgent' ? 'crit'
     : severity === 'high' || severity === 'warn' ? 'warn' : 'ok'
-  return \`<span class="pill \${cls}">\${severity}</span>\`
+  return \`<span class="pill \${cls}">\${esc(severity)}</span>\`
 }
 
 function card(title, html) {
-  return \`<div class="card"><h2>\${title}</h2>\${html}</div>\`
+  // title comes from our own callers (static strings here) but stay
+  // defensive in case future callers pass DB-sourced labels.
+  return \`<div class="card"><h2>\${esc(title)}</h2>\${html}</div>\`
 }
 
 function render(grid) { $('grid').innerHTML = grid.join('') }
@@ -97,7 +115,7 @@ async function refresh() {
     cards.push(card('Action Queue', d.actionQueue.length === 0
       ? '<div class="empty">All clear.</div>'
       : '<div class="action-queue">' + d.actionQueue.map(a =>
-          \`<div class="item"><div><div class="item-title">\${a.label}</div><div class="item-meta">priority \${a.priority} · \${a.kind}</div></div></div>\`
+          \`<div class="item"><div><div class="item-title">\${esc(a.label)}</div><div class="item-meta">priority \${a.priority} · \${esc(a.kind)}</div></div></div>\`
         ).join('') + '</div>'
     ))
     cards.push(card('Audience', \`
@@ -153,29 +171,29 @@ async function refresh() {
     cards.push(card('Self-Dev · Pending Proposals', proposals.length === 0
       ? '<div class="empty">No pending proposals.</div>'
       : proposals.map(p => \`<div class="item">
-          <div class="item-title">\${pill(p.riskLevel)} \${p.title}</div>
+          <div class="item-title">\${pill(p.riskLevel)} \${esc(p.title)}</div>
           <div class="item-meta">confidence \${(p.confidence*100).toFixed(0)}% · \${new Date(p.createdAt).toISOString().slice(0,16)}</div>
-          <div style="margin-top:6px"><button onclick="approve('\${p.id}')">Approve</button> <button class="secondary" onclick="reject('\${p.id}')">Reject</button></div>
+          <div style="margin-top:6px"><button onclick="approve('\${esc(p.id)}')">Approve</button> <button class="secondary" onclick="reject('\${esc(p.id)}')">Reject</button></div>
         </div>\`).join('')
     ))
-  } catch (e) { cards.push(card('Self-Dev Proposals', \`<div class="err">\${e.message}</div>\`)) }
+  } catch (e) { cards.push(card('Self-Dev Proposals', \`<div class="err">\${esc(e.message)}</div>\`)) }
 
   // Health
   try {
     const cron = await fetch('/healthz/cron').then(r => r.json())
     const html = (cron.jobs || []).slice(0, 12).map(j =>
-      \`<div class="row"><span class="label">\${j.type}</span><span class="val">\${j.count} · \${Math.round(j.lastAgoSec/60)}m</span></div>\`
+      \`<div class="row"><span class="label">\${esc(j.type)}</span><span class="val">\${j.count} · \${Math.round(j.lastAgoSec/60)}m</span></div>\`
     ).join('')
     cards.push(card('Cron Health (48h)', html || '<div class="empty">No cron events.</div>'))
-  } catch (e) { cards.push(card('Cron Health', \`<div class="err">\${e.message}</div>\`)) }
+  } catch (e) { cards.push(card('Cron Health', \`<div class="err">\${esc(e.message)}</div>\`)) }
 
   // Feature flags
   try {
     const flags = await call('flag.list')
     cards.push(card('Feature Flags', flags.map(f =>
-      \`<div class="row"><span class="label" title="\${f.description || ''}">\${f.key}</span><span class="val">\${f.enabled ? pill('ok') : pill('warn')}</span></div>\`
+      \`<div class="row"><span class="label" title="\${esc(f.description || '')}">\${esc(f.key)}</span><span class="val">\${f.enabled ? pill('ok') : pill('warn')}</span></div>\`
     ).join('')))
-  } catch (e) { cards.push(card('Feature Flags', \`<div class="err">\${e.message}</div>\`)) }
+  } catch (e) { cards.push(card('Feature Flags', \`<div class="err">\${esc(e.message)}</div>\`)) }
 
   render(cards)
   $('status').textContent = 'refreshed ' + new Date().toLocaleTimeString()
