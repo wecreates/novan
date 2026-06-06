@@ -11,6 +11,7 @@
 import {
   pgTable, text, integer, bigint, boolean, jsonb,
   real, index, uniqueIndex, pgEnum, vector, primaryKey,
+  doublePrecision,
 } from 'drizzle-orm/pg-core'
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -7372,6 +7373,24 @@ export const eventHooks = pgTable('event_hooks', {
 }, (t) => [
   uniqueIndex('eh_ws_name_uniq').on(t.workspaceId, t.name),
   index('eh_pattern_idx').on(t.enabled, t.eventPattern),
+])
+
+// R146.262 — persisted brain.health snapshots for trend graphs.
+export const brainHealthSnapshots = pgTable('brain_health_snapshots', {
+  id:            text('id').primaryKey(),
+  workspaceId:   text('workspace_id').notNull(),
+  overall:       text('overall').notNull(),
+  costSpent:     doublePrecision('cost_spent').notNull().default(0),
+  costCap:       doublePrecision('cost_cap').notNull().default(0),
+  backupStatus:  text('backup_status').notNull().default('unknown'),
+  applierStatus: text('applier_status').notNull().default('unknown'),
+  cronMissing:   integer('cron_missing').notNull().default(0),
+  errors1h:      integer('errors_1h').notNull().default(0),
+  skillsTotal:   integer('skills_total').notNull().default(0),
+  snapshot:      jsonb('snapshot').$type<Record<string, unknown>>().notNull().default({}),
+  createdAt:     bigint('created_at', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('bhs_ws_created_idx').on(t.workspaceId, t.createdAt),
 ])
 
 export const nlSchedules = pgTable('nl_schedules', {

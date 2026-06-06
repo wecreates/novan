@@ -6639,6 +6639,24 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return findOverCapWorkspaces()
     },
   },
+  'brain.health.history': {
+    description: 'R262 — last N brain.health snapshots for trend graphs. Params: sinceMs? (default 24h), limit? (default 200). Newest first. Returns [{overall, costSpent, cronMissing, errors1h, createdAt}].',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { readHistory } = await import('./r262-brain-health-history.js')
+      const p = params as { sinceMs?: number; limit?: number }
+      return readHistory(ws, p.sinceMs, p.limit)
+    },
+  },
+  'brain.health.summary': {
+    description: 'R262 — aggregated brain.health for the period. Params: sinceMs? (default 24h). Returns {ticks, healthy, degraded, critical, maxCostSpent, maxCronMissing}.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { readSummary } = await import('./r262-brain-health-history.js')
+      const p = params as { sinceMs?: number }
+      return readSummary(ws, p.sinceMs)
+    },
+  },
   'hooks.seedDefaults': {
     description: 'R257 — seed default event hooks: brain.critical→issue.create(critical), brain.degraded→issue.create(warning). Idempotent (atomic onConflictDoNothing on workspace_id+name unique idx). Returns {created, skipped}.',
     risk: 'low',

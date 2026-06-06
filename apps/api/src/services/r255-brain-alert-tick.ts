@@ -46,6 +46,8 @@ export interface BrainAlertResult { workspaceId: string; prev: Health | null; no
 export async function tickBrainHealthAlert(workspaceId: string): Promise<BrainAlertResult> {
   const snap = await brainHealth(workspaceId).catch(() => null)
   if (!snap) return { workspaceId, prev: null, now: 'healthy', emitted: null }
+  // R146.262 — persist snapshot for trend history. Fire-and-forget; null on failure.
+  void import('./r262-brain-health-history.js').then(m => m.persistSnapshot(workspaceId, snap)).catch(() => null)
   const prev = await readPrev(workspaceId)
   let emitted: string | null = null
   if (prev !== snap.overall) {
