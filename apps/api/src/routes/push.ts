@@ -7,9 +7,19 @@
  *   POST   /api/v1/push/test                — fire a test notification to all subs
  *   GET    /api/v1/push/latest              — most recent broadcast payload (SW uses this)
  */
-import type { FastifyPluginAsync } from 'fastify'
+import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
 
 export const pushRoutes: FastifyPluginAsync = async (app) => {
+
+  // R146.316 — defense-in-depth auth on push mutations. The global R30/R308/R315
+  // IDOR guard exits early when authWs is unset (i.e. when ENFORCE_GLOBAL_AUTH=false
+  // or auth header missing). Without this preHandler, an unauthed caller could
+  // subscribe arbitrary endpoints to any workspace, spam test notifications, or
+  // read latest broadcast payload of any workspace. /public-key stays open since
+  // it's the VAPID public key everyone needs to subscribe in the first place.
+  type AuthFn = (req: FastifyRequest, reply: FastifyReply) => Promise<void>
+  const authenticate = (app as unknown as { authenticate: AuthFn }).authenticate
+  const gated = { onRequest: [authenticate] }
 
   app.get('/public-key', async (_req, reply) => {
     const { publicVapidKey } = await import('../services/web-push.js')
@@ -18,7 +28,7 @@ export const pushRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ success: true, data: { publicKey: key } })
   })
 
-  app.post<{ Body: { workspace_id?: string; subscription?: { endpoint?: string; keys?: { p256dh?: string; auth?: string } }; user_agent?: string } }>('/subscribe', async (req, reply) => {
+  app.post<{ Body: { workspace_id?: string; subscription?: { endpoint?: string; keys?: { p256dh?: string; auth?: string } }; user_agent?: string } }>('/subscribe', gated, async (req, reply) => {
     const b = req.body ?? {}
     const ws = b.workspace_id
     const s = b.subscription
@@ -51,7 +61,7 @@ export const pushRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ success: true })
   })
 
-  app.post<{ Body: { workspace_id?: string; endpoint?: string } }>('/unsubscribe', async (req, reply) => {
+  app.post<{ Body: { workspace_id?: string; endpoint?: string } }>('/unsubscribe', gated, async (req, reply) => {
     const ws = req.body?.workspace_id
     const endpoint = req.body?.endpoint
     if (!ws || !endpoint) return reply.code(400).send({ success: false, error: 'workspace_id + endpoint required' })
@@ -60,7 +70,7 @@ export const pushRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ success: true })
   })
 
-  app.post<{ Body: { workspace_id?: string; title?: string; body?: string; url?: string } }>('/test', async (req, reply) => {
+  app.post<{ Body: { workspace_id?: string; title?: string; body?: string; url?: string } }>('/test', gated, async (req, reply) => {
     const ws = req.body?.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     const { broadcastPush } = await import('../services/web-push.js')
@@ -73,7 +83,7 @@ export const pushRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ success: true, data: out })
   })
 
-  app.get<{ Querystring: { workspace_id?: string } }>('/latest', async (req, reply) => {
+  app.get<{ Querystring: { workspace_id?: string } }>('/latest', gated, async (req, reply) => {
     const ws = req.query.workspace_id
     if (!ws) return reply.code(400).send({ success: false, error: 'workspace_id required' })
     try {
