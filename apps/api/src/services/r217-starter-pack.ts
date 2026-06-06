@@ -76,6 +76,30 @@ If everything is 0, say "Platform is clean and idle, no action needed."`,
 - \`args\` — input parameters
 Then call \`wf.create\` with {name, description, script}. The operator runs it via \`wf.run\` afterward. Don't auto-run — the operator confirms.`,
   },
+  {
+    name: 'session-recap',
+    description: 'One-shot summary of what the capability layer has been doing — skills, sub-agents, workflows, cost',
+    whenToUse: 'when the operator asks "what have you been doing" / "recap" / "summary" / "show me activity"',
+    instructions: `Call \`session.recap\` and present the result as a 3-4 line summary. Always include: skillsActive/skillsTotal, brainLoopRuns24h, costUsd24h. If topSkills is non-empty, name the leader with its winRate. If recentCycleEvents has cron.error entries, mention them. End with a single follow-up question (e.g., "want me to dig into anything?").`,
+  },
+  {
+    name: 'workflow-runner',
+    description: 'Run one of the registered R210 workflows and report results',
+    whenToUse: 'when the operator wants to run a workflow ("run health-sweep", "execute skill-audit", "run the X workflow")',
+    instructions: `First call \`wf.list\` to see what's registered. If the operator named a specific workflow, call \`wf.run\` with {name}. Report: workflow name, runId, ms duration, content of result (truncated if long), and log if non-empty. If the requested workflow doesn't exist, suggest the closest match by name and ask to confirm before running.`,
+  },
+  {
+    name: 'feature-flag-triage',
+    description: 'List feature flags, identify which are off, suggest which to flip',
+    whenToUse: 'when the operator asks about feature flags, what is on or off, or wants to toggle a flag',
+    instructions: `Call \`flag.list\`. Group by enabled/disabled. For disabled flags, briefly explain what enabling them would do (the description field). Recommend enabling self_dev_inspect_enabled if not yet on. NEVER recommend enabling self_dev_apply_enabled without explicit operator confirmation — that's the kill switch for autonomous code shipping.`,
+  },
+  {
+    name: 'memory-pin',
+    description: 'Save an important fact to workspace memory with high importance',
+    whenToUse: 'when the operator says "remember that" / "save" / "note" / "important: X" — anything that should persist across sessions',
+    instructions: `Extract the key fact from the operator's message. Pick a short stable key (e.g. "launch_target", "primary_business"). Call \`memory.remember\` with importance: 80 (decisions) or 60 (preferences). Confirm what was stored. Don't store ephemeral chat.`,
+  },
 ]
 
 export async function seedStarterPack(workspaceId: string): Promise<{ created: number; existed: number }> {
