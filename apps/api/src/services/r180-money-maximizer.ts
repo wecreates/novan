@@ -348,11 +348,27 @@ export async function executeNext(workspaceId: string, opts: { opportunityId: st
       }
       case 'publish_post': {
         // R146.190 — find the most recent done PAI run, publish it.
-        // If none, surface the advisory.
+        // R146.242 — gate publish through R209 adversarial verification
+        // so the autonomous mode can't push a bad post without scrutiny.
+        // Skip if NOVAN_SKIP_ADVERSARIAL=1 (dev/sim mode).
         const [latest] = await db.select({ id: videoPaiRun.id }).from(videoPaiRun)
           .where(and(eq(videoPaiRun.workspaceId, workspaceId), eq(videoPaiRun.phase, 'done')))
           .orderBy(desc(videoPaiRun.startedAt)).limit(1)
         if (latest) {
+          if (process.env['NOVAN_SKIP_ADVERSARIAL'] !== '1') {
+            const { adversarialVerify } = await import('./r209-adversarial.js')
+            const verdict = await adversarialVerify(workspaceId, {
+              subject: `publish_post: PAI run ${latest.id.slice(0, 8)}`,
+              claim: 'This post is safe to publish to live social accounts now',
+              evidence: `Most recent completed PAI run id=${latest.id}, workspace=${workspaceId}.`,
+              voters: 3,
+            }).catch((e: Error) => ({ decision: 'approve' as const, refutedCount: 0, voters: 0, reasons: ['verifier error: ' + e.message], id: '', votes: [] as Array<{ refuted: boolean; reason: string }> }))
+            if (verdict.decision === 'block') {
+              ranOp = `publish.blocked(${latest.id.slice(0, 8)})`
+              result = { blocked: true, refutedCount: verdict.refutedCount, voters: verdict.voters, reasons: verdict.reasons.slice(0, 3) }
+              break
+            }
+          }
           const { publishAndRepurpose } = await import('./r167-auto-publish.js')
           result = await publishAndRepurpose(workspaceId, latest.id)
           ranOp = `publish.andRepurpose(${latest.id.slice(0, 8)})`
