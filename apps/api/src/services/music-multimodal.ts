@@ -135,6 +135,11 @@ async function loadImageAsBase64(input: FromImageInput): Promise<{ data: string;
     return { data: buf.toString('base64'), mime, ref: input.path }
   }
   if (input.url) {
+    // R146.313 — SSRF guard. input.url is operator/LLM-controlled and could
+    // point at cloud IMDS or container-internal services. Block before fetch.
+    const { ssrfReject } = await import('../util/ssrf-guard.js')
+    const reject = ssrfReject(input.url)
+    if (reject) return null
     try {
       const r = await fetch(input.url, { signal: AbortSignal.timeout(30_000) })
       if (!r.ok) return null
