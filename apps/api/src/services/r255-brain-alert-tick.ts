@@ -14,6 +14,7 @@ import { db } from '../db/client.js'
 import { workspaceMemory } from '../db/schema.js'
 import { and, eq } from 'drizzle-orm'
 import { brainHealth, type Health } from './r253-brain-health.js'
+import { incCounter } from './metrics.js'
 
 const STATE_KEY = '_brainHealthState'
 
@@ -52,6 +53,8 @@ export async function tickBrainHealthAlert(workspaceId: string): Promise<BrainAl
     else if (snap.overall === 'degraded') emitted = 'brain.degraded'
     else if (prev !== null)               emitted = 'brain.healthy'  // recovered
     if (emitted) {
+      // R146.259 — counter so Prometheus can graph state-transition rate.
+      incCounter('brain_health_transition_total', { to: snap.overall, from: prev ?? 'unknown' }, 1, 'Brain.health overall state transitions by from→to')
       const { hookDispatch } = await import('./r211-workplace.js')
       await hookDispatch(workspaceId, emitted, {
         prev: prev ?? 'unknown',
