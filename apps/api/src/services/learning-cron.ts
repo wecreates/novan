@@ -1306,6 +1306,7 @@ const INTERVALS = {
   approvedReplySend:     60 * 60_000,
   // R146.193 — Novan Self-Dev auto-loop. Gated by feature flag inside handler.
   selfDevAutoLoop:        2 * 60 * 60_000,
+  skillEvolve:           60 * 60_000,         // R146.244 — hourly skill-evolve sweep
 }
 
 /**
@@ -1656,6 +1657,22 @@ async function runLoopClosure(): Promise<void> {
 
 // R146.186 — Wire R183 proactive scan every 5 min across all workspaces.
 // R146.193 — Novan Self-Dev autonomous inspect+propose cycle. Gated.
+// R146.244 — hourly tick to re-author losing skills.
+async function runSkillEvolve(): Promise<void> {
+  try {
+    const ids = await listWorkspaceIds()
+    const { evolveLosingSkills } = await import('./r243-skill-evolution.js')
+    let totalEvolved = 0
+    for (const ws of ids) {
+      try {
+        const r = await evolveLosingSkills(ws)
+        totalEvolved += r.evolved
+      } catch (e) { await emit('cron.error', { task: 'skill_evolve', workspace: ws, error: (e as Error).message }) }
+    }
+    if (totalEvolved > 0) await emit('cron.skill_evolve', { evolved: totalEvolved })
+  } catch (e) { await emit('cron.error', { task: 'skill_evolve', error: (e as Error).message }) }
+}
+
 // R146.227 — fire R212 NL schedules on minute tick.
 async function runNlSchedules(): Promise<void> {
   try {
@@ -2136,6 +2153,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runApprovedReplySend,           INTERVALS.approvedReplySend))
   handles.push(scheduleJittered(runSelfDevAutoLoop,             INTERVALS.selfDevAutoLoop))
   handles.push(scheduleJittered(runNlSchedules,                 INTERVALS.nlSchedules))
+  handles.push(scheduleJittered(runSkillEvolve,                 INTERVALS.skillEvolve))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
