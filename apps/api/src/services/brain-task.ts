@@ -6639,6 +6639,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return findOverCapWorkspaces()
     },
   },
+  'hooks.seedDefaults': {
+    description: 'R257 — seed default event hooks: brain.critical→issue.create(critical), brain.degraded→issue.create(warning). Idempotent (atomic onConflictDoNothing on workspace_id+name unique idx). Returns {created, skipped}.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { seedDefaultHooks } = await import('./r257-seed-default-hooks.js')
+      return seedDefaultHooks(ws)
+    },
+  },
   'brain.health.alertTick': {
     description: 'R255 — manually trigger the brain.health state-change alert tick. Fires brain.degraded / brain.critical / brain.healthy via R212 event hooks ONLY on state change (no spam). Returns {prev, now, emitted}.',
     risk: 'low',
