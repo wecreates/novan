@@ -126,30 +126,34 @@ export interface AgentSelfRegister {
 }
 
 export async function selfRegister(input: AgentSelfRegister): Promise<void> {
+  // R146.222 — single atomic upsert via the new uniq index. setWhere
+  // skips no-op writes (same status + same capabilities + heartbeat
+  // <60s stale). Reduces ~113 writes/day per row to ~24 (one per heart-
+  // beat-stale boundary), about 4-5× cut while preserving liveness.
   const now = Date.now()
+  const FRESH_HB_MS = 60_000
   try {
-    // Upsert by agentName+workspace
-    const existing = await db.select({ id: agentRegistrations.id }).from(agentRegistrations)
-      .where(and(
-        eq(agentRegistrations.workspaceId, input.workspaceId),
-        eq(agentRegistrations.agentName, input.agentName),
-      )).limit(1).then(r => r[0]).catch(() => undefined)
-    if (existing) {
-      await db.update(agentRegistrations).set({
-        status: 'idle', lastHeartbeat: now, capabilities: input.capabilities, updatedAt: now,
-      }).where(eq(agentRegistrations.id, existing.id)).catch((e: Error) => { console.error('[agent-state-sync]', e.message); return null })
-    } else {
-      await db.insert(agentRegistrations).values({
-        id: uuidv7(),
-        workspaceId: input.workspaceId,
-        agentName: input.agentName,
-        capabilities: input.capabilities,
-        status: 'idle',
-        lastHeartbeat: now,
-        registeredAt: now,
-        updatedAt: now,
-      }).catch((e: Error) => { console.error('[agent-state-sync]', e.message); return null })
-    }
+    await db.insert(agentRegistrations).values({
+      id: uuidv7(),
+      workspaceId: input.workspaceId,
+      agentName: input.agentName,
+      capabilities: input.capabilities,
+      status: 'idle',
+      lastHeartbeat: now,
+      registeredAt: now,
+      updatedAt: now,
+    }).onConflictDoUpdate({
+      target: [agentRegistrations.workspaceId, agentRegistrations.agentName],
+      set: {
+        status: 'idle', lastHeartbeat: now,
+        capabilities: input.capabilities, updatedAt: now,
+      },
+      setWhere: sql`
+        ${agentRegistrations.status} <> 'idle'
+        OR ${agentRegistrations.capabilities} <> ${input.capabilities}
+        OR ${agentRegistrations.lastHeartbeat} < ${now - FRESH_HB_MS}
+      `,
+    }).catch((e: Error) => { console.error('[agent-state-sync]', e.message); return null })
   } catch { /* tolerated */ }
 }
 
