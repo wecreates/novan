@@ -6583,12 +6583,20 @@ export const OPERATIONS: Record<string, OpSpec> = {
     },
   },
   'wf.run': {
-    description: 'Execute an R210 workflow by name with optional args. Params: { name, args? }',
+    description: 'Execute an R210 workflow by name with optional args. Params: { name, args?, resumeFromRunId? }',
     risk: 'medium',
     handler: async (ws, params) => {
       const { workflowRun } = await import('./r210-workflow.js')
-      const p = params as { name: string; args?: unknown }
-      return workflowRun(ws, p.name, p.args)
+      const p = params as { name: string; args?: unknown; resumeFromRunId?: string }
+      return workflowRun(ws, p.name, p.args, p.resumeFromRunId ? { resumeFromRunId: p.resumeFromRunId } : {})
+    },
+  },
+  'skills.seedStarterPack': {
+    description: 'R217 — seed 8 starter skills (platform-status-check, cron-health-triage, cost-investigation, self-dev-review, memory-search, capability-discovery, event-pattern-analysis, workflow-author). Idempotent.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { seedStarterPack } = await import('./r217-starter-pack.js')
+      return seedStarterPack(ws)
     },
   },
 

@@ -64,10 +64,30 @@ export interface WorkflowRunResult {
 const MAX_RUN_MS  = 30_000
 const MAX_LOG_LEN = 10_000
 
-export async function workflowRun(workspaceId: string, name: string, args?: unknown): Promise<WorkflowRunResult> {
+export interface WorkflowRunOpts { resumeFromRunId?: string }
+
+export async function workflowRun(workspaceId: string, name: string, args?: unknown, opts: WorkflowRunOpts = {}): Promise<WorkflowRunResult> {
   const [wf] = await db.select().from(operatorWorkflows)
     .where(and(eq(operatorWorkflows.workspaceId, workspaceId), eq(operatorWorkflows.name, name))).limit(1)
   if (!wf) throw new Error(`workflow not found: ${name}`)
+
+  // R217 — resume cache: when resumeFromRunId is set, load completed
+  // journal steps so cached prefix returns instantly. First step whose
+  // input differs from the journal forces live execution from there.
+  let resumeCache: Map<number, { output: unknown; error?: string }> | null = null
+  if (opts.resumeFromRunId) {
+    const journaled = await db.select().from(workflowJournal)
+      .where(eq(workflowJournal.workflowRunId, opts.resumeFromRunId))
+      .catch(() => [])
+    if (journaled.length > 0) {
+      resumeCache = new Map()
+      for (const j of journaled) {
+        const entry: { output: unknown; error?: string } = { output: j.stepOutput }
+        if (j.stepError) entry.error = j.stepError
+        resumeCache.set(j.stepIndex, entry)
+      }
+    }
+  }
 
   const runId = uuidv7()
   const startedAt = Date.now()
@@ -99,6 +119,19 @@ export async function workflowRun(workspaceId: string, name: string, args?: unkn
   }
 
   const sandboxAgent = async (prompt: string, opts?: { schema?: Record<string, unknown> }) => {
+    // R217 — resume cache check
+    if (resumeCache) {
+      const cached = resumeCache.get(stepCounter)
+      if (cached && !cached.error) {
+        await recordStep('agent', { prompt: prompt.slice(0, 500) }, cached.output, undefined, 0)
+        const out = cached.output as { parsed?: unknown; text?: string } | unknown
+        if (out && typeof out === 'object' && 'parsed' in (out as object)) {
+          const o = out as { parsed?: unknown; text?: string }
+          return o.parsed ?? o.text
+        }
+        return out
+      }
+    }
     const t0 = Date.now()
     try {
       const r = await spawnSubagent(workspaceId, {
@@ -114,6 +147,16 @@ export async function workflowRun(workspaceId: string, name: string, args?: unkn
     }
   }
   const sandboxParallel = async (thunks: Array<() => Promise<unknown>>) => {
+    // R217 — resume cache check (only honored if cached step succeeded)
+    if (resumeCache) {
+      const cached = resumeCache.get(stepCounter)
+      if (cached && !cached.error) {
+        await recordStep('parallel', { count: thunks.length }, cached.output, undefined, 0)
+        const out = cached.output as { results?: unknown[] } | unknown
+        if (out && typeof out === 'object' && 'results' in (out as object)) return (out as { results: unknown[] }).results
+        return out
+      }
+    }
     const t0 = Date.now()
     const out = await Promise.all(thunks.map(t => t()))
     await recordStep('parallel', { count: thunks.length }, { results: out.length }, undefined, Date.now() - t0)
