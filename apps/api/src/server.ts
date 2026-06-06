@@ -272,7 +272,17 @@ await app.register(helmet, {
 })
 await app.register(rateLimit,   { max: 200, timeWindow: '1 minute' })
 
-await app.register(jwt,         { secret: process.env['AUTH_SECRET']! })
+// R146.301 — fail-fast on missing AUTH_SECRET. The previous `!` non-null
+// assertion was a TS-only silencer; at runtime an unset env would pass
+// `undefined` to @fastify/jwt and either crash on first verify or
+// silently sign with the string 'undefined' depending on plugin version,
+// making every JWT forgeable. Require explicit env, length ≥ 32 to
+// reject obvious low-entropy values.
+const _authSecret = process.env['AUTH_SECRET']
+if (!_authSecret || _authSecret.length < 32) {
+  throw new Error('[auth] AUTH_SECRET must be set and ≥ 32 chars before boot')
+}
+await app.register(jwt,         { secret: _authSecret })
 await app.register(requestContextPlugin)
 await app.register(errorHandlerPlugin)
 await app.register(auditPlugin)
