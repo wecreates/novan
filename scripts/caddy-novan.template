@@ -1,0 +1,54 @@
+# R146.237 — Caddyfile template for Novan production TLS termination.
+#
+# Caddy auto-provisions Let's Encrypt certs when a real domain points
+# at the droplet. Until then, the platform serves http://137.184.198.2.
+#
+# To use:
+#   1. Point a domain (A record) at 137.184.198.2
+#   2. Replace novan.example.com with your domain
+#   3. Install Caddy:
+#        sudo apt install -y caddy
+#   4. Copy this file:
+#        sudo cp scripts/caddy-novan.template /etc/caddy/Caddyfile
+#   5. Reload:
+#        sudo systemctl reload caddy
+#
+# Caddy will negotiate a Let's Encrypt cert + bind 80+443.
+# /admin/brain and /metrics stay behind loopback (already enforced
+# by ADMIN_LOOPBACK_TOKEN); Caddy proxies the public surface only.
+
+novan.example.com {
+    # Auto-managed HTTPS
+    encode gzip zstd
+
+    # Web (PWA) — same-origin /api proxy is handled by Caddy itself
+    handle /api/* {
+        reverse_proxy 127.0.0.1:3001
+    }
+    handle /admin/* {
+        # Loopback-only by token; if you want public, remove this block.
+        # By default we lock external admin to nothing.
+        respond 404
+    }
+    handle /metrics {
+        # Same — keep metrics private
+        respond 404
+    }
+
+    # PWA fall-through to the web container (Caddy on :8080 in compose)
+    handle {
+        reverse_proxy 127.0.0.1:3000
+    }
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "geolocation=(), microphone=(self), camera=()"
+    }
+}
+
+# Optional: HTTP → HTTPS redirect (Caddy does this automatically when
+# the site block has a domain, so this is informational only.)
