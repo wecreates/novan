@@ -874,6 +874,9 @@ async function runEventsPrune() {
       _sql`DELETE FROM skill_outcomes       WHERE created_at < ${subCutoff} RETURNING 1`,
       _sql`DELETE FROM adversarial_verdicts WHERE created_at < ${subCutoff} RETURNING 1`,
       _sql`DELETE FROM routing_decisions    WHERE decided_at < ${subCutoff} RETURNING 1`,
+      // R146.280 — R262 brain.health snapshot rows. ~96/day/workspace; without this,
+      // grows unbounded forever.
+      _sql`DELETE FROM brain_health_snapshots WHERE created_at < ${subCutoff} RETURNING 1`,
     ]) {
       try {
         const r = await db.execute(stmt)
