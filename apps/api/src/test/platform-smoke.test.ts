@@ -43,8 +43,9 @@ describe('platform-smoke: classify', () => {
   it('0 status → unreachable', () => {
     expect(classify({ path: '/x', status: 0, ms: 12000, bodyExcerpt: 'timeout' })).toBe('unreachable')
   })
-  it('401 → server_err (caller attention)', () => {
-    expect(classify({ path: '/x', status: 401, ms: 10, bodyExcerpt: '' })).toBe('server_err')
+  it('401/403 → auth_required (R189 — auth-gated routes are not a regression)', () => {
+    expect(classify({ path: '/x', status: 401, ms: 10, bodyExcerpt: '' })).toBe('auth_required')
+    expect(classify({ path: '/y', status: 403, ms: 10, bodyExcerpt: '' })).toBe('auth_required')
   })
 })
 

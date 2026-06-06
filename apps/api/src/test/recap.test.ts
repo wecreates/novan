@@ -31,6 +31,11 @@ vi.mock('../db/client.js', () => {
       const chain: Record<string, unknown> = {}
       Object.assign(chain, {
         values: (v: unknown) => { insertCalls.push(v); return chain },
+        // R146.199 — recap.ts now uses .onConflictDoNothing({target}) on
+        // the operator_presence upsert. R146.220 — also onConflictDoUpdate
+        // in some callers; expose both as no-op chains.
+        onConflictDoNothing: () => chain,
+        onConflictDoUpdate: () => chain,
         returning: () => makeChain([]),
         then: (r: (v: unknown[]) => unknown) => r([]),
         catch: () => chain,
