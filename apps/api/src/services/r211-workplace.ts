@@ -195,6 +195,62 @@ export async function scheduleList(workspaceId: string): Promise<Array<{ id: str
     .from(nlSchedules).where(eq(nlSchedules.workspaceId, workspaceId))
 }
 
+/** R146.227 — cron-driven NL schedule processor. Reads schedules whose
+ *  cron expression matches the current minute, runs the op, updates
+ *  lastRunAt. Called from learning-cron once per minute. Returns the
+ *  number of schedules fired. Pure 5-field cron parser; supports the
+ *  same forms nlToCron emits (no full crontab spec). */
+export async function processNlSchedules(now = new Date()): Promise<{ fired: number }> {
+  const rows = await db.select({
+    id: nlSchedules.id, workspaceId: nlSchedules.workspaceId,
+    cronExpr: nlSchedules.cronExpr, opName: nlSchedules.opName,
+    opParams: nlSchedules.opParams, lastRunAt: nlSchedules.lastRunAt,
+  }).from(nlSchedules).where(eq(nlSchedules.enabled, true)).catch(() => [])
+  let fired = 0
+  for (const r of rows) {
+    if (!cronMatchesNow(r.cronExpr, now)) continue
+    // Skip if already fired this minute (idempotency guard)
+    if (r.lastRunAt && now.getTime() - r.lastRunAt < 50_000) continue
+    try {
+      const { OPERATIONS } = await import('./brain-task.js')
+      const spec = OPERATIONS[r.opName]
+      if (!spec) continue
+      await spec.handler(r.workspaceId, (r.opParams ?? {}) as Record<string, unknown>).catch(() => null)
+      await db.update(nlSchedules).set({ lastRunAt: now.getTime(), updatedAt: now.getTime() })
+        .where(eq(nlSchedules.id, r.id)).catch(() => null)
+      fired++
+    } catch { /* tolerated */ }
+  }
+  return { fired }
+}
+
+/** Minimal cron matcher: 5 fields (min hour dom mon dow). Supports
+ *  literal, *, list (1,2,3), and step (*\/N). */
+export function cronMatchesNow(expr: string, now: Date): boolean {
+  const parts = expr.trim().split(/\s+/)
+  if (parts.length !== 5) return false
+  const fields: number[] = [
+    now.getUTCMinutes(),
+    now.getUTCHours(),
+    now.getUTCDate(),
+    now.getUTCMonth() + 1,
+    now.getUTCDay(),
+  ]
+  for (let i = 0; i < 5; i++) {
+    if (!matchField(parts[i]!, fields[i]!)) return false
+  }
+  return true
+}
+function matchField(expr: string, val: number): boolean {
+  if (expr === '*') return true
+  const stepMatch = expr.match(/^\*\/(\d+)$/)
+  if (stepMatch) return val % Number(stepMatch[1]) === 0
+  for (const token of expr.split(',')) {
+    if (Number(token) === val) return true
+  }
+  return false
+}
+
 // ─── R213 — Spawn-task chips ─────────────────────────────────────────
 
 export async function spawnTaskCreate(workspaceId: string, input: { title: string; tldr?: string; prompt: string }): Promise<{ id: string }> {

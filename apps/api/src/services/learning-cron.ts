@@ -1173,6 +1173,7 @@ const INTERVALS = {
   feeds:        10 * 60_000,   // 10 min — RSS/Atom ingestion (per-feed intervals enforced inside)
   stretchPurge: 60 * 60_000,   // 1 hour — expire stale AI cache rows
   eventsPrune:  24 * 60 * 60_000, // 24 hours — drop events older than EVENTS_RETENTION_DAYS (90 default)
+  nlSchedules:  60_000,            // R146.227 — minute tick to fire any NL schedules whose cron matches now
   // R146.98 — cadences for the new strategic ops
   strategicCeo:        6 * 60 * 60_000,   // every 6h — prioritize + diversification + reallocation proposal
   lessonDeprecation:  24 * 60 * 60_000,   // daily — deprecate stale non-evergreen memories
@@ -1655,6 +1656,15 @@ async function runLoopClosure(): Promise<void> {
 
 // R146.186 — Wire R183 proactive scan every 5 min across all workspaces.
 // R146.193 — Novan Self-Dev autonomous inspect+propose cycle. Gated.
+// R146.227 — fire R212 NL schedules on minute tick.
+async function runNlSchedules(): Promise<void> {
+  try {
+    const { processNlSchedules } = await import('./r211-workplace.js')
+    const r = await processNlSchedules()
+    if (r.fired > 0) await emit('cron.nl_schedules_fired', { fired: r.fired })
+  } catch (e) { await emit('cron.error', { task: 'nl_schedules', error: (e as Error).message }) }
+}
+
 async function runSelfDevAutoLoop(): Promise<void> {
   try {
     const ids = await listWorkspaceIds()
@@ -2125,6 +2135,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runSessionSyncPrune,            INTERVALS.sessionSyncPrune))
   handles.push(scheduleJittered(runApprovedReplySend,           INTERVALS.approvedReplySend))
   handles.push(scheduleJittered(runSelfDevAutoLoop,             INTERVALS.selfDevAutoLoop))
+  handles.push(scheduleJittered(runNlSchedules,                 INTERVALS.nlSchedules))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
