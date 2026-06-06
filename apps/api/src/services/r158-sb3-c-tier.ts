@@ -128,6 +128,15 @@ export async function bodyMetricCorr(workspaceId: string, opts: { metric: string
       GROUP BY date
     `) as unknown as Array<{ date: string; value: number }>
   } else {
+    // R146.293 — whitelist the column name. opts.outcome is typed as
+    // 'mood' | 'energy' | 'focus_min' at compile time, but reaches this
+    // function via brain-task.ts:2641 with `(p['outcome'] ?? 'mood')
+    // as ...` — a TS cast that does ZERO runtime validation, so an
+    // /admin/brain caller could inject arbitrary SQL through sql.raw.
+    const ALLOWED_OUTCOMES = new Set(['mood', 'energy'])
+    if (!ALLOWED_OUTCOMES.has(opts.outcome)) {
+      return { correlation: 0, pairs: 0, insight: `unknown outcome ${opts.outcome}` }
+    }
     outcomeRows = await db.execute(sql`
       SELECT date, AVG(${sql.raw(opts.outcome)})::real AS value
       FROM mood_logs WHERE workspace_id = ${workspaceId} AND date >= ${since}
