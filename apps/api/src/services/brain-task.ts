@@ -6623,6 +6623,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return backupHealth()
     },
   },
+  'workflows.seedStarterPack': {
+    description: 'R234 — seed 3 starter workflows (health-sweep, skill-audit, memory-condense). Operator can run via wf.run after.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { seedStarterWorkflows } = await import('./r234-starter-workflows.js')
+      return seedStarterWorkflows(ws)
+    },
+  },
   'skills.seedStarterPack': {
     description: 'R217 — seed 8 starter skills (platform-status-check, cron-health-triage, cost-investigation, self-dev-review, memory-search, capability-discovery, event-pattern-analysis, workflow-author). Idempotent.',
     risk: 'low',
