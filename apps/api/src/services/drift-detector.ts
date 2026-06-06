@@ -49,17 +49,11 @@ async function recordDrift(workspaceId: string, opts: {
   // marked resolved without action → next tick re-creates because
   // underlying low-confidence chains are still there. 97 resolved
   // low_confidence_loop warnings in 7d before this fix.
-  const existing = await db.select({ id: driftWarnings.id }).from(driftWarnings)
-    .where(and(
-      eq(driftWarnings.workspaceId, workspaceId),
-      eq(driftWarnings.kind, opts.kind),
-      sql`${driftWarnings.status} IN ('open', 'acknowledged')`,
-      opts.subjectId ? eq(driftWarnings.subjectId, opts.subjectId) : sql`${driftWarnings.subjectId} IS NULL`,
-    ))
-    .limit(1).then(r => r[0]).catch((e: Error) => { console.error('[drift-detector]', e.message); return null })
-  if (existing) return { created: false }
-
-  await db.insert(driftWarnings).values({
+  // R146.230 — atomic INSERT relying on the partial unique indexes from
+  // migration 0116. ON CONFLICT DO NOTHING returns no rows when the
+  // partial uniqueness predicate matched an existing row; returning()
+  // exposes that to the caller. Removes the SELECT-then-INSERT TOCTOU.
+  const inserted = await db.insert(driftWarnings).values({
     id: uuidv7(), workspaceId,
     kind: opts.kind, subjectId: opts.subjectId,
     severity: opts.severity,
@@ -67,8 +61,10 @@ async function recordDrift(workspaceId: string, opts: {
     recommendedAction: opts.recommendedAction,
     status: 'open',
     createdAt: Date.now(),
-  }).catch((e: Error) => { console.error('[drift-detector]', e.message); return null })
-  return { created: true }
+  }).onConflictDoNothing()
+    .returning({ id: driftWarnings.id })
+    .catch((e: Error) => { console.error('[drift-detector]', e.message); return [] as Array<{ id: string }> })
+  return { created: inserted.length > 0 }
 }
 
 async function detectRepeatedWrongPredictions(workspaceId: string): Promise<number> {
