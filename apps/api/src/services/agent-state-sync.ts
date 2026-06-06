@@ -162,6 +162,10 @@ export async function selfRegister(input: AgentSelfRegister): Promise<void> {
 }
 
 let heartbeatTimer: NodeJS.Timeout | null = null
+// R146.322 — re-entrancy guard. beat() runs every 60s, but DB UPDATEs can
+// stall under load; without this flag overlapping beats burn connections
+// and create undefined ordering between the two UPDATEs.
+let beatInFlight = false
 
 /**
  * Start periodic self-registration for the API process. Each cycle
@@ -172,6 +176,9 @@ export function startAgentHeartbeatTicker(workspaceId = 'default', intervalMs = 
   if (heartbeatTimer) return
   // Register the API-side agent set immediately, then on every tick.
   const beat = async () => {
+    if (beatInFlight) return
+    beatInFlight = true
+    try {
     const now = Date.now()
     try {
       // Heartbeat all agents in the workspace — any row that has been
@@ -203,6 +210,9 @@ export function startAgentHeartbeatTicker(workspaceId = 'default', intervalMs = 
         ))
         .catch((e: Error) => { console.error('[agent-state-sync]', e.message); return null })
     } catch { /* tolerated */ }
+    } finally {
+      beatInFlight = false
+    }
   }
   void beat()
   heartbeatTimer = setInterval(() => void beat(), intervalMs)
