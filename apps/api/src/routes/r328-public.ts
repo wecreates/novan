@@ -133,22 +133,46 @@ const r328PublicRoutes: FastifyPluginAsync = async (app) => {
       const base = process.env['NOVAN_PUBLIC_URL'] ?? `https://${req.headers.host}`
       const ex = await exchangeCode({ connectorId: req.params.connectorId, code, redirectBase: base })
       if (!ex.ok) return reply.code(400).type('text/html').send(`<html><body>OAuth exchange failed: ${ex.reason}</body></html>`)
-      // Persist into secrets_vault + connector_credentials
+      // Persist into secrets_vault + connector_credentials.
+      // R332 fix: actual export is `storeSecret({workspaceId,name,value})`,
+      // not `writeSecret(ws,key,value)`. Don't swallow errors — surface them
+      // in the response so a silent vault failure doesn't return "Connected!"
+      let persistError: string | null = null
       try {
-        const { writeSecret } = await import('../services/secrets-vault.js') as { writeSecret: (ws: string, key: string, value: string) => Promise<void> }
-        const vaultKey = `connector.${req.params.connectorId}.${v.workspaceId}.${Date.now()}`
-        await writeSecret(v.workspaceId, vaultKey, ex.accessToken ?? '')
-        if (ex.refreshToken) await writeSecret(v.workspaceId, `${vaultKey}.refresh`, ex.refreshToken)
+        const { storeSecret } = await import('../services/secrets-vault.js')
+        const baseName = `connector.${req.params.connectorId}.${v.workspaceId}.${Date.now()}`
+        await storeSecret({
+          workspaceId: v.workspaceId,
+          name:        baseName,
+          provider:    req.params.connectorId,
+          value:       ex.accessToken ?? '',
+          createdBy:   'oauth-callback',
+        })
+        if (ex.refreshToken) {
+          await storeSecret({
+            workspaceId: v.workspaceId,
+            name:        `${baseName}.refresh`,
+            provider:    req.params.connectorId,
+            value:       ex.refreshToken,
+            createdBy:   'oauth-callback',
+          })
+        }
         const { connectorCredCreate } = await import('../services/r327-misc.js')
         await connectorCredCreate({
           workspaceId: v.workspaceId,
           connectorId: req.params.connectorId,
           accountLabel: `operator@${req.params.connectorId}`,
-          vaultKey,
-          scopes:    [],
+          vaultKey:    baseName,
+          scopes:      [],
           ...(ex.expiresIn ? { expiresAt: Date.now() + ex.expiresIn * 1000 } : {}),
         })
-      } catch { /* persistence is best-effort; operator can re-run */ }
+      } catch (e) {
+        persistError = (e as Error).message.slice(0, 300)
+        req.log.error({ err: persistError, connectorId: req.params.connectorId }, '[oauth-callback] persistence failed')
+      }
+      if (persistError) {
+        return reply.code(500).type('text/html').send(`<html><body><h2>Almost there!</h2><p>Provider authorized, but Novan couldn't save the credential:</p><pre>${persistError}</pre><p>Operator can retry the OAuth flow once this is fixed.</p></body></html>`)
+      }
       return reply.type('text/html').send(`<html><body><h2>Connected!</h2><p>You can close this tab.</p><script>setTimeout(()=>window.close(),1500)</script></body></html>`)
     },
   )
