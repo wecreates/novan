@@ -22,6 +22,20 @@ export interface OAuthConfig {
 }
 
 export const OAUTH_PROVIDERS: Record<string, OAuthConfig> = {
+  printful: {
+    authUrl:  'https://www.printful.com/oauth/authorize',
+    tokenUrl: 'https://www.printful.com/oauth/token',
+    scopes:   ['orders', 'sync_products', 'file_library', 'webhooks'],
+    clientIdEnv:     'PRINTFUL_CLIENT_ID',
+    clientSecretEnv: 'PRINTFUL_CLIENT_SECRET',
+  },
+  etsy: {
+    authUrl:  'https://www.etsy.com/oauth/connect',
+    tokenUrl: 'https://api.etsy.com/v3/public/oauth/token',
+    scopes:   ['listings_w', 'shops_r', 'transactions_r', 'email_r'],
+    clientIdEnv:     'ETSY_CLIENT_ID',
+    clientSecretEnv: 'ETSY_CLIENT_SECRET',
+  },
   slack: {
     authUrl:  'https://slack.com/oauth/v2/authorize',
     tokenUrl: 'https://slack.com/api/oauth.v2.access',
