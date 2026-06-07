@@ -19,6 +19,9 @@ export interface OAuthConfig {
   // env names that hold the registered client id/secret
   clientIdEnv: string
   clientSecretEnv: string
+  // Printful uses non-standard `redirect_url` instead of the OAuth2 `redirect_uri`.
+  // Default 'redirect_uri'; override per-provider as needed.
+  redirectParamName?: string
 }
 
 export const OAUTH_PROVIDERS: Record<string, OAuthConfig> = {
@@ -28,6 +31,7 @@ export const OAUTH_PROVIDERS: Record<string, OAuthConfig> = {
     scopes:   ['orders', 'sync_products', 'file_library', 'webhooks'],
     clientIdEnv:     'PRINTFUL_CLIENT_ID',
     clientSecretEnv: 'PRINTFUL_CLIENT_SECRET',
+    redirectParamName: 'redirect_url',   // Printful-specific
   },
   etsy: {
     authUrl:  'https://www.etsy.com/oauth/connect',
@@ -79,9 +83,10 @@ export function startFlow(input: {
   if (!clientId) return { ok: false, reason: `${cfg.clientIdEnv} not configured — operator must set in env` }
   const nonce = randomBytes(16).toString('hex')
   const state = `${input.workspaceId}.${nonce}.${signState(input.workspaceId, nonce)}`
+  const redirectParam = cfg.redirectParamName ?? 'redirect_uri'
   const params = new URLSearchParams({
     client_id:     clientId,
-    redirect_uri:  `${input.redirectBase}/api/v1/oauth/${input.connectorId}/callback`,
+    [redirectParam]: `${input.redirectBase}/api/v1/oauth/${input.connectorId}/callback`,
     scope:         cfg.scopes.join(' '),
     state,
     response_type: 'code',
@@ -127,11 +132,12 @@ export async function exchangeCode(input: {
     return { ok: false, reason: `${cfg.clientIdEnv} and ${cfg.clientSecretEnv} must both be set` }
   }
   try {
+    const redirectParam = cfg.redirectParamName ?? 'redirect_uri'
     const body = new URLSearchParams({
       code:          input.code,
       client_id:     clientId,
       client_secret: clientSecret,
-      redirect_uri:  `${input.redirectBase}/api/v1/oauth/${input.connectorId}/callback`,
+      [redirectParam]: `${input.redirectBase}/api/v1/oauth/${input.connectorId}/callback`,
       grant_type:    'authorization_code',
     })
     const res = await fetch(cfg.tokenUrl, {
