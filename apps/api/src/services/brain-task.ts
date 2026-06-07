@@ -6834,6 +6834,16 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { ok: true }
     },
   },
+  // ─── R146.332 ─────────────────────────────────────────────────
+  'pod.platforms': {
+    description: 'R332 — directory of every POD-relevant platform: Printful auto-sync integrations (Etsy, Shopify, eBay, Amazon, etc.), social publish targets (TikTok, YouTube, IG, etc.), standalone POD marketplaces (Redbubble, TeePublic, etc.), payment processors. Each with signup URL, dev console URL, OAuth support, and Novan wiring status.',
+    risk: 'low',
+    handler: async () => {
+      const { podPlatforms } = await import('./r332-pod-platforms.js')
+      return podPlatforms()
+    },
+  },
+
   // ─── R146.331 (#1-100) ────────────────────────────────────────
   // POD pipeline (1-10)
   'pod.first_listing':       { description: 'R331 #1 — orchestrate POD first listing (Printful + Etsy).', risk: 'medium',
