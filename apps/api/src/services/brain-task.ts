@@ -6836,11 +6836,35 @@ export const OPERATIONS: Record<string, OpSpec> = {
   },
   // ─── R146.332 ─────────────────────────────────────────────────
   'pod.platforms': {
-    description: 'R332 — directory of every POD-relevant platform: Printful auto-sync integrations (Etsy, Shopify, eBay, Amazon, etc.), social publish targets (TikTok, YouTube, IG, etc.), standalone POD marketplaces (Redbubble, TeePublic, etc.), payment processors. Each with signup URL, dev console URL, OAuth support, and Novan wiring status.',
+    description: 'R332 — full POD ecosystem registry (Printful integrations, social publish targets, standalone PODs, payments) with cost + margin + price-tier metadata.',
     risk: 'low',
     handler: async () => {
       const { podPlatforms } = await import('./r332-pod-platforms.js')
       return podPlatforms()
+    },
+  },
+  'pod.free_storefronts': {
+    description: 'R332 — only Printful integrations with $0 monthly fee. Use NOW per operator constraint.',
+    risk: 'low',
+    handler: async () => {
+      const { freeStorefrontsOnly } = await import('./r332-pod-platforms.js')
+      return freeStorefrontsOnly()
+    },
+  },
+  'pod.unlocked_at_mrr': {
+    description: 'R332 — which Printful integrations are unlocked at the current MRR (free always; paid gated by unlockAtMrr).',
+    risk: 'low',
+    handler: async (_ws, p) => {
+      const { unlockedAtMrr } = await import('./r332-pod-platforms.js')
+      return unlockedAtMrr(Number(p['monthlyRevenueUsd'] ?? 0))
+    },
+  },
+  'pod.highest_margin_standalone': {
+    description: 'R332 — standalone POD marketplaces sorted by operator margin, filtered by customer-price tier (cheap | mid | premium).',
+    risk: 'low',
+    handler: async (_ws, p) => {
+      const { highestMarginStandalone } = await import('./r332-pod-platforms.js')
+      return highestMarginStandalone(String(p['maxPriceTier'] ?? 'mid') as 'cheap' | 'mid' | 'premium')
     },
   },
 
