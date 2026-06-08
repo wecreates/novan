@@ -244,6 +244,96 @@ export const OPERATIONS: Record<string, OpSpec> = {
     },
   },
 
+  // ─── R336-R339 closures ─────────────────────────────────────────────
+  'clarify.score_ambiguity': {
+    description: 'R336: Score ambiguity in a request 0-1 + propose clarify chips.',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { scoreAmbiguity, buildClarifyDecision } = await import('./r336-clarify-orchestrator.js')
+      const p = params as { request?: string }
+      const text = p.request ?? ''
+      const score = scoreAmbiguity(text)
+      return { score, decision: score.needsClarify ? buildClarifyDecision(text) : null }
+    },
+  },
+  'report.revenue_by_business': {
+    description: 'R336: Generate revenue-by-business report. Params: format?, daysBack?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { revenueByBusinessReport } = await import('./r336-operator-reports.js')
+      const p = params as { format?: 'csv' | 'tsv' | 'markdown'; daysBack?: number }
+      return revenueByBusinessReport(ws, p.format ?? 'csv', p.daysBack ?? 30)
+    },
+  },
+  'report.capability_parity': {
+    description: 'R336: Generate Claude-parity report as markdown/csv table.',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { capabilityParityReport } = await import('./r336-operator-reports.js')
+      const p = params as { format?: 'csv' | 'markdown' }
+      return capabilityParityReport(p.format ?? 'markdown')
+    },
+  },
+  'memory.recall': {
+    description: 'R337: Hybrid recall over workspace_memory. Params: query, limit?, scopes?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { recall, recallByTopic } = await import('./r337-semantic-recall.js')
+      const p = params as { query?: string; topic?: string; limit?: number; scopes?: string[] }
+      if (p.topic) return recallByTopic({ workspaceId: ws, topic: p.topic as 'lessons' })
+      return recall({ workspaceId: ws, query: p.query ?? '', limit: p.limit, ...(p.scopes ? { scopes: p.scopes } : {}) })
+    },
+  },
+  'policy.check_action': {
+    description: 'R337: Check a proposed action against hard-policy registry. Params: type, channel, fieldOrLabel, value?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { checkAction } = await import('./r337-hard-policy-registry.js')
+      const p = params as { type?: string; channel?: string; fieldOrLabel?: string; value?: string }
+      return checkAction({
+        type:         (p.type ?? 'submit_form_field') as 'submit_form_field' | 'click_button' | 'api_write' | 'browser_action',
+        channel:      p.channel ?? 'unknown',
+        fieldOrLabel: p.fieldOrLabel ?? '',
+        ...(p.value !== undefined ? { value: p.value } : {}),
+      })
+    },
+  },
+  'confidence.score_op': {
+    description: 'R338: Score Novan confidence to attempt a given op (0-1 + recommendation).',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { scoreConfidence } = await import('./r338-confidence-scoring.js')
+      const p = params as { op?: string }
+      return scoreConfidence({ workspaceId: ws, op: p.op ?? 'unknown' })
+    },
+  },
+  'platform.state_probe': {
+    description: 'R338: Probe platform state before running onboarding workflow (plot-twist detector). Params: platform.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { gateOnboarding, probeAll } = await import('./r338-platform-state-prober.js')
+      const p = params as { platform?: string; platforms?: string[] }
+      if (p.platforms) return probeAll(ws, p.platforms)
+      return gateOnboarding(ws, p.platform ?? 'tiktok_shop')
+    },
+  },
+  'closer.tick': {
+    description: 'R339: Continuous-closer tick — pick next parity gap, draft closure proposal, persist.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { closerTick } = await import('./r339-capability-closer-cron.js')
+      return closerTick(ws)
+    },
+  },
+  'platform.poll_all': {
+    description: 'R339: Poll every connected platform for state + alerts.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { pollAllPlatforms } = await import('./r339-platform-monitor.js')
+      return pollAllPlatforms(ws)
+    },
+  },
+
   // ─── Issue lifecycle ───────────────────────────────────────────
   'issue.ingest': {
     description: 'Convert recent cron-errors + incidents into issues.',
@@ -7981,6 +8071,10 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'privacy.check_submit', 'brand.dba_propagation_plan',
         'art.public_domain_fetch', 'decide.image_gen_fallback',
         'decide.return_address', 'lesson.applicable_for',
+        'clarify.score_ambiguity', 'report.revenue_by_business',
+        'report.capability_parity', 'memory.recall',
+        'policy.check_action', 'confidence.score_op',
+        'platform.state_probe', 'closer.tick', 'platform.poll_all',
         'color.autoCorrect', 'color.applyGrade', 'color.applyLut',
         'audio.duckMix',
         // channel.save / channel.delete REMOVED from skip list —
