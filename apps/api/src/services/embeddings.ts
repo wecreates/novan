@@ -15,13 +15,28 @@
  */
 import { fetchWithRetry } from './provider-retry.js'
 
-export type EmbedProvider = 'ollama' | 'openai' | 'gemini'
+export type EmbedProvider = 'ollama' | 'openai' | 'gemini' | 'huggingface' | 'cohere'
 
 export function configuredEmbedProvider(): EmbedProvider | null {
-  if (process.env['OLLAMA_URL'])     return 'ollama'
-  if (process.env['OPENAI_API_KEY']) return 'openai'
+  if (process.env['OLLAMA_URL'])      return 'ollama'
+  if (process.env['OPENAI_API_KEY'])  return 'openai'
+  if (process.env['COHERE_API_KEY'])  return 'cohere'              // R343 — free tier 5000/mo
+  if (process.env['HF_TOKEN'])        return 'huggingface'         // R343 — free tier via Inference API
   if (process.env['GEMINI_API_KEY']) return 'gemini'
   return null
+}
+
+// R343 — log-flood guard. Without this, when Gemini is over cap every
+// retry inside fetchWithRetry triggers a console.error AND the calling
+// code may itself retry. Each gemini embed failure was logging dozens
+// of "circuit-breaker-open" lines per minute. Throttle to 1/min/provider.
+const LAST_ERROR_LOG = new Map<string, number>()
+function maybeLogErr(provider: string, msg: string): void {
+  const now = Date.now()
+  const last = LAST_ERROR_LOG.get(provider) ?? 0
+  if (now - last < 60_000) return
+  LAST_ERROR_LOG.set(provider, now)
+  console.error(`[embeddings] ${provider} embed failed:`, msg)
 }
 
 async function embedOllama(text: string): Promise<number[]> {
@@ -105,9 +120,11 @@ export async function embedWithReason(text: string): Promise<{
   const provider = configuredEmbedProvider()
   if (!provider) return { vector: null, reason: 'no-provider-configured' }
   try {
-    const v = provider === 'ollama' ? await embedOllama(text)
-            : provider === 'openai' ? await embedOpenAI(text)
-            :                         await embedGemini(text)
+    const v = provider === 'ollama'      ? await embedOllama(text)
+            : provider === 'openai'      ? await embedOpenAI(text)
+            : provider === 'cohere'      ? await embedCohere(text)
+            : provider === 'huggingface' ? await embedHuggingFace(text)
+            :                              await embedGemini(text)
     let vector: number[]
     if      (v.length === 768) vector = v
     else if (v.length >  768)  vector = v.slice(0, 768)
@@ -115,9 +132,51 @@ export async function embedWithReason(text: string): Promise<{
     return { vector, reason: 'ok' }
   } catch (e) {
     const errorMessage = (e as Error).message
-    console.error(`[embeddings] ${provider} embed failed:`, errorMessage)
+    maybeLogErr(provider, errorMessage)
     return { vector: null, reason: 'provider-error', errorMessage }
   }
+}
+
+// R343 — Cohere free tier (5000 calls/mo, 384-dim — padded to 768)
+async function embedCohere(text: string): Promise<number[]> {
+  const key = process.env['COHERE_API_KEY']
+  if (!key) throw new Error('COHERE_API_KEY missing')
+  const out = await fetchWithRetry('embed:cohere', 'https://api.cohere.com/v2/embed', {
+    method:  'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model:       'embed-english-light-v3.0',
+      input_type:  'search_document',
+      embedding_types: ['float'],
+      texts:       [text.slice(0, 4096)],
+    }),
+    signal: AbortSignal.timeout(20_000),
+  })
+  if (!out.ok) throw new Error(`Cohere embeddings ${out.status}: ${out.statusText}`)
+  const body = await out.response.json() as { embeddings?: { float?: number[][] } }
+  const v = body.embeddings?.float?.[0]
+  if (!v) throw new Error('Cohere returned no embedding')
+  return v
+}
+
+// R343 — HuggingFace Inference API embeddings via sentence-transformers
+//        (e.g. all-MiniLM-L6-v2 → 384-dim, padded to 768 by caller)
+async function embedHuggingFace(text: string): Promise<number[]> {
+  const key = process.env['HF_TOKEN']
+  if (!key) throw new Error('HF_TOKEN missing')
+  const model = process.env['HF_EMBED_MODEL'] ?? 'sentence-transformers/all-MiniLM-L6-v2'
+  const out = await fetchWithRetry('embed:hf', `https://api-inference.huggingface.co/pipeline/feature-extraction/${model}`, {
+    method:  'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ inputs: text.slice(0, 4096), options: { wait_for_model: true } }),
+    signal: AbortSignal.timeout(30_000),
+  })
+  if (!out.ok) throw new Error(`HF embeddings ${out.status}: ${out.statusText}`)
+  const body = await out.response.json() as number[] | number[][]
+  // HF returns either [v] for single input or [[v]] depending on model
+  const v = Array.isArray(body[0]) ? body[0] as number[] : body as number[]
+  if (!v || v.length === 0) throw new Error('HF returned empty embedding')
+  return v
 }
 
 /** Cosine similarity between two equal-length vectors. */

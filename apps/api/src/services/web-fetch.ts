@@ -19,7 +19,10 @@ import { eq, and, desc }   from 'drizzle-orm'
 import { v7 as uuidv7 }    from 'uuid'
 import { redactSecrets, hasRawSecrets } from './secret-redactor.js'
 
-export const FETCH_TIMEOUT_MS = 10_000
+// R343 — bumped from 10s to 25s. RSS aggregators (hnrss.org, Anthropic news)
+// frequently take 8-12s on first byte before content streams. The 10s ceiling
+// was timing out 5-6 polls/day on slow feeds.
+export const FETCH_TIMEOUT_MS = 25_000
 export const MAX_BODY_BYTES   = 200_000
 export const DEFAULT_TTL_MS   = 24 * 60 * 60_000  // 1 day
 

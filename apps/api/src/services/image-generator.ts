@@ -214,7 +214,10 @@ async function genHorde(input: GenerateInput): Promise<{ imageUrl: string; raw: 
   const h = input.height ?? 1024
   // Horde requires width/height as multiples of 64 and <=3072
   const round = (n: number): number => Math.min(3072, Math.max(64, Math.round(n / 64) * 64))
-  const model = input.model ?? 'Flux.1-Schnell fp8 (Compact)'
+  // R343 — model default tuned for short Horde queue. Flux.1-Schnell had a
+  // ~1300s queue in live testing; AlbedoBase XL averages ~10-30s wait.
+  // Operator can pin a specific model via input.model.
+  const model = input.model ?? 'AlbedoBase XL (SDXL)'
 
   // Submit
   const submitRes = await fetchWithRetry('image:horde', 'https://stablehorde.net/api/v2/generate/async', {
