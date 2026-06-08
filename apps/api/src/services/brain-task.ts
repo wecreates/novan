@@ -409,6 +409,24 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { catalog: POD_PLATFORMS, plan: planSequencedRollout(p.currentMrrUsd ?? 0) }
     },
   },
+  'pod.revenue_projection': {
+    description: 'R345: Items-to-list math per platform for a target MRR. Params: targetMrrPerStoreUsd?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { projectItemsForTarget } = await import('./r345-pod-revenue-projection.js')
+      const p = params as { targetMrrPerStoreUsd?: number }
+      return projectItemsForTarget(p.targetMrrPerStoreUsd ?? 5000)
+    },
+  },
+  'pod.portfolio_plan': {
+    description: 'R345: Optimal multi-store allocation to hit a TOTAL MRR target across all platforms. Params: totalTargetMrrUsd?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { planPortfolio } = await import('./r345-pod-revenue-projection.js')
+      const p = params as { totalTargetMrrUsd?: number }
+      return planPortfolio(p.totalTargetMrrUsd ?? 35000)
+    },
+  },
 
   // ─── Issue lifecycle ───────────────────────────────────────────
   'issue.ingest': {
@@ -8154,6 +8172,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'verify.claim', 'review.source',
         'skill.list', 'skill.rank_for_request', 'mcp.plan_invocation',
         'prestaged.list', 'pod.account_kit',
+        'pod.revenue_projection', 'pod.portfolio_plan',
         'color.autoCorrect', 'color.applyGrade', 'color.applyLut',
         'audio.duckMix',
         // channel.save / channel.delete REMOVED from skip list —
