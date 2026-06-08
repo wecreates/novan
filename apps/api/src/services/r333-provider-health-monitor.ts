@@ -154,8 +154,58 @@ async function probeGroq(): Promise<ProbeResult> {
   }
 }
 
+async function probeHorde(): Promise<ProbeResult> {
+  const t0 = Date.now()
+  try {
+    // /api/v2/status/heartbeat is free + tells us workers are running
+    const res = await fetch('https://stablehorde.net/api/v2/status/heartbeat', { signal: AbortSignal.timeout(8_000) })
+    if (!res.ok) return mkResult('horde', false, 'network', t0, `status ${res.status}`)
+    return mkResult('horde', true, 'ok', t0, 'ok (anonymous tier always available)')
+  } catch (e) {
+    return mkResult('horde', false, 'network', t0, (e as Error).message.slice(0, 200))
+  }
+}
+
+async function probeHuggingFace(): Promise<ProbeResult> {
+  const t0 = Date.now()
+  const key = process.env['HF_TOKEN']
+  if (!key) return mkResult('huggingface', false, 'unknown', t0, 'no HF_TOKEN env (free signup at huggingface.co)')
+  try {
+    const res = await fetch('https://api-inference.huggingface.co/status/black-forest-labs/FLUX.1-schnell', {
+      headers: { Authorization: `Bearer ${key}` },
+      signal:  AbortSignal.timeout(8_000),
+    })
+    if (res.status === 401 || res.status === 403)
+      return mkResult('huggingface', false, 'auth_revoked', t0, `${res.status}`)
+    if (res.status === 429)
+      return mkResult('huggingface', false, 'rate_limited', t0, '429')
+    return mkResult('huggingface', res.ok, 'ok', t0, res.ok ? 'ok' : `status ${res.status}`)
+  } catch (e) {
+    return mkResult('huggingface', false, 'network', t0, (e as Error).message.slice(0, 200))
+  }
+}
+
+async function probeCloudflare(): Promise<ProbeResult> {
+  const t0 = Date.now()
+  const token = process.env['CF_API_TOKEN']
+  const acct  = process.env['CF_ACCOUNT_ID']
+  if (!token || !acct) return mkResult('cloudflare', false, 'unknown', t0, 'no CF_API_TOKEN + CF_ACCOUNT_ID env')
+  try {
+    const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${acct}/tokens/verify`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal:  AbortSignal.timeout(8_000),
+    })
+    if (res.status === 401 || res.status === 403)
+      return mkResult('cloudflare', false, 'auth_revoked', t0, `${res.status}`)
+    return mkResult('cloudflare', res.ok, 'ok', t0, res.ok ? 'ok' : `status ${res.status}`)
+  } catch (e) {
+    return mkResult('cloudflare', false, 'network', t0, (e as Error).message.slice(0, 200))
+  }
+}
+
 const PROBES: Array<() => Promise<ProbeResult>> = [
   probeFal, probeReplicate, probeGeminiImage, probeOpenAI, probeGroq,
+  probeHorde, probeHuggingFace, probeCloudflare,
 ]
 
 function mkResult(provider: string, ok: boolean, cls: FailureClass, t0: number, message: string): ProbeResult {
@@ -251,7 +301,7 @@ export async function filterHealthy(candidates: string[]): Promise<string[]> {
  */
 export async function canGenerateImagesNow(): Promise<{ ok: boolean; reason: string; healthyProviders: string[] }> {
   const snap = await getHealthSnapshot()
-  const imageProviders = ['fal', 'replicate', 'gemini_image', 'openai']
+  const imageProviders = ['fal', 'replicate', 'gemini_image', 'openai', 'horde', 'huggingface', 'cloudflare']
   const healthy = imageProviders.filter(p => snap[p]?.ok)
   if (healthy.length > 0) {
     return { ok: true, reason: `${healthy.length} provider(s) healthy`, healthyProviders: healthy }

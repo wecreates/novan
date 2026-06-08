@@ -13,7 +13,7 @@ import {
   quoteCost, listAvailableProviders, type ImageProvider,
 } from '../services/image-generator.js'
 
-const VALID_PROVIDERS: ImageProvider[] = ['openai', 'stability', 'replicate', 'fal']
+const VALID_PROVIDERS: ImageProvider[] = ['openai', 'stability', 'replicate', 'fal', 'horde', 'huggingface', 'cloudflare']
 
 const imageRoutes: FastifyPluginAsync = async (fastify) => {
 

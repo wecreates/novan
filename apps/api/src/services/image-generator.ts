@@ -24,7 +24,7 @@ import { isImageGenerationEnabled, defaultImageProvider } from './provider-valid
 import { checkBeforeAction, emitGovernorBlock } from './resource-governor.js'
 import { fetchWithRetry }                       from './provider-retry.js'
 
-export type ImageProvider = 'openai' | 'stability' | 'replicate' | 'fal'
+export type ImageProvider = 'openai' | 'stability' | 'replicate' | 'fal' | 'horde' | 'huggingface' | 'cloudflare'
 
 export interface GenerateInput {
   workspaceId:    string
@@ -68,7 +68,10 @@ function estimateCostUsd(provider: ImageProvider, opts: { width?: number; height
     case 'stability': return opts.model?.includes('ultra') ? 0.080 : 0.040
     case 'replicate': return opts.model?.includes('flux') ? 0.003 : 0.010
     case 'fal':       return 0.005
-    default:          return 0.050
+    case 'horde':       return 0           // anonymous tier free, paid via volunteer kudos
+    case 'huggingface': return 0           // free token, free tier
+    case 'cloudflare':  return 0           // 10k neurons/day free
+    default:            return 0.050
   }
 }
 
@@ -200,8 +203,143 @@ async function genFal(input: GenerateInput): Promise<{ imageUrl: string; raw: un
   return { imageUrl: url, raw: body }
 }
 
+// ─── R343 — Free / open-source image providers ──────────────────────────────
+// Stable Horde: crowd-sourced GPUs, anonymous tier free (apikey "0000000000"),
+// supports SDXL, Flux, SD 1.5. Quality is excellent (volunteer workers run
+// real GPUs), queue wait varies 30s-5min.
+
+async function genHorde(input: GenerateInput): Promise<{ imageUrl: string; raw: unknown }> {
+  const key = process.env['HORDE_API_KEY'] ?? '0000000000'   // anonymous tier works
+  const w = input.width  ?? 1024
+  const h = input.height ?? 1024
+  // Horde requires width/height as multiples of 64 and <=3072
+  const round = (n: number): number => Math.min(3072, Math.max(64, Math.round(n / 64) * 64))
+  const model = input.model ?? 'Flux.1-Schnell fp8 (Compact)'
+
+  // Submit
+  const submitRes = await fetchWithRetry('image:horde', 'https://stablehorde.net/api/v2/generate/async', {
+    method:  'POST',
+    headers: { 'apikey': key, 'Content-Type': 'application/json', 'Client-Agent': 'novan/1.0:operator@example.com' },
+    body: JSON.stringify({
+      prompt: input.prompt + (input.negativePrompt ? ` ### ${input.negativePrompt}` : ''),
+      params: {
+        sampler_name: 'k_euler',
+        width:  round(w),
+        height: round(h),
+        steps:  4,                        // Flux Schnell is 4-step
+        n:      1,
+        cfg_scale: 1.0,
+        karras: false,
+        clip_skip: 1,
+      },
+      models: [model],
+      r2: true,
+      nsfw: false,
+      shared: true,                       // earn kudos for the operator
+    }),
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (!submitRes.ok) throw new Error(`horde submit ${submitRes.status}: ${submitRes.statusText}`)
+  const submitBody = await submitRes.response.json() as { id?: string; message?: string }
+  if (!submitBody.id) throw new Error(`horde returned no id: ${submitBody.message ?? 'unknown'}`)
+  const id = submitBody.id
+
+  // Poll for completion (up to ~6 min)
+  const deadline = Date.now() + 360_000
+  let lastCheck: HordeCheck = { done: false, finished: 0, processing: 0, waiting: 1, queue_position: 0, wait_time: 60, restarted: 0, faulted: false }
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 4_000))
+    const checkRes = await fetch(`https://stablehorde.net/api/v2/generate/check/${id}`, { signal: AbortSignal.timeout(10_000) })
+    if (!checkRes.ok) continue
+    lastCheck = await checkRes.json() as HordeCheck
+    if (lastCheck.faulted) throw new Error('horde job faulted')
+    if (lastCheck.done) break
+  }
+  if (!lastCheck.done) throw new Error(`horde timeout (queue position ${lastCheck.queue_position}, est wait ${lastCheck.wait_time}s)`)
+
+  // Fetch the generated image URL
+  const statusRes = await fetch(`https://stablehorde.net/api/v2/generate/status/${id}`, { signal: AbortSignal.timeout(15_000) })
+  if (!statusRes.ok) throw new Error(`horde status ${statusRes.status}`)
+  const statusBody = await statusRes.json() as { generations?: Array<{ img?: string; seed?: string; model?: string; worker_name?: string }> }
+  const url = statusBody.generations?.[0]?.img
+  if (!url) throw new Error('horde returned no image url')
+  return { imageUrl: url, raw: statusBody }
+}
+
+interface HordeCheck {
+  done:           boolean
+  finished:       number
+  processing:     number
+  waiting:        number
+  queue_position: number
+  wait_time:      number
+  restarted:      number
+  faulted:        boolean
+}
+
+// Hugging Face Inference API — uses free token (operator sets HF_TOKEN env).
+// Models: black-forest-labs/FLUX.1-schnell (open weights, fast),
+//         stabilityai/sdxl-turbo. Returns raw image bytes; we save to disk
+//         and return the storage URL.
+
+async function genHuggingFace(input: GenerateInput): Promise<{ imageUrl: string; raw: unknown }> {
+  const key = process.env['HF_TOKEN']
+  if (!key) throw new Error('HF_TOKEN not configured (free at huggingface.co/settings/tokens)')
+  const model = input.model ?? 'black-forest-labs/FLUX.1-schnell'
+  const res = await fetchWithRetry('image:hf', `https://api-inference.huggingface.co/models/${model}`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      inputs:     input.prompt,
+      parameters: {
+        ...(input.negativePrompt ? { negative_prompt: input.negativePrompt } : {}),
+        width:  input.width  ?? 1024,
+        height: input.height ?? 1024,
+      },
+      options: { wait_for_model: true },
+    }),
+    signal: AbortSignal.timeout(120_000),
+  })
+  if (!res.ok) {
+    const text = await res.response.text().catch(() => '')
+    throw new Error(`hf ${res.status}: ${text.slice(0, 200)}`)
+  }
+  // HF returns the raw image bytes. Convert to data: URL inline (small enough)
+  // and let the storage layer persist via existing path.
+  const buf = Buffer.from(await res.response.arrayBuffer())
+  const dataUrl = `data:image/png;base64,${buf.toString('base64')}`
+  return { imageUrl: dataUrl, raw: { sizeBytes: buf.length, model } }
+}
+
+// Cloudflare Workers AI — generous free tier (10k neurons/day),
+// runs Flux.1-Schnell + SDXL. Requires CF_API_TOKEN + CF_ACCOUNT_ID.
+
+async function genCloudflare(input: GenerateInput): Promise<{ imageUrl: string; raw: unknown }> {
+  const token   = process.env['CF_API_TOKEN']
+  const account = process.env['CF_ACCOUNT_ID']
+  if (!token || !account) throw new Error('CF_API_TOKEN + CF_ACCOUNT_ID required (free at dash.cloudflare.com)')
+  const model = input.model ?? '@cf/black-forest-labs/flux-1-schnell'
+  const res = await fetchWithRetry('image:cf', `https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/${model}`, {
+    method:  'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt: input.prompt,
+      width:  input.width  ?? 1024,
+      height: input.height ?? 1024,
+      steps:  4,
+    }),
+    signal: AbortSignal.timeout(60_000),
+  })
+  if (!res.ok) throw new Error(`cf ${res.status}: ${res.statusText}`)
+  const body = await res.response.json() as { result?: { image?: string }; success?: boolean; errors?: unknown[] }
+  if (!body.success || !body.result?.image) throw new Error(`cf returned no image: ${JSON.stringify(body.errors ?? body).slice(0, 200)}`)
+  // Cloudflare returns base64 PNG
+  return { imageUrl: `data:image/png;base64,${body.result.image}`, raw: { model } }
+}
+
 const DRIVERS: Record<ImageProvider, (i: GenerateInput) => Promise<{ imageUrl: string; raw: unknown }>> = {
   openai: genOpenAI, stability: genStability, replicate: genReplicate, fal: genFal,
+  horde: genHorde, huggingface: genHuggingFace, cloudflare: genCloudflare,
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -433,5 +571,9 @@ export function listAvailableProviders(): ImageProvider[] {
   if (process.env['STABILITY_API_KEY'])   out.push('stability')
   if (process.env['REPLICATE_API_TOKEN']) out.push('replicate')
   if (process.env['FAL_KEY'])             out.push('fal')
+  // R343 — open-source / free providers always available
+  out.push('horde')                                              // anonymous tier works without key
+  if (process.env['HF_TOKEN'])            out.push('huggingface')
+  if (process.env['CF_API_TOKEN'] && process.env['CF_ACCOUNT_ID']) out.push('cloudflare')
   return out
 }
