@@ -459,6 +459,33 @@ export const OPERATIONS: Record<string, OpSpec> = {
     },
   },
 
+  // ── R347 publish mechanism routing ───────────────────────────────
+  'publish.mechanism_report': {
+    description: 'R347: Report which platforms publish via API (Novan autonomous) vs manual (operator). Codifies the no-browser-automation rule.',
+    risk: 'low',
+    handler: async () => {
+      const { publishMechanismReport, PUBLISH_PROFILES } = await import('./r347-publish-mechanism-registry.js')
+      return { report: publishMechanismReport(), profiles: PUBLISH_PROFILES }
+    },
+  },
+  'publish.route_for_platform': {
+    description: 'R347: Plan publish route for a single platform. Returns mechanism + ready/blocked + next action. Params: platformId',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { planPublishRoute } = await import('./r347-publish-mechanism-registry.js')
+      const p = params as { platformId?: string }
+      return planPublishRoute(p.platformId ?? 'gumroad')
+    },
+  },
+  'publish.list_ready': {
+    description: 'R347: List all platforms where Novan can publish autonomously right now.',
+    risk: 'low',
+    handler: async () => {
+      const { listReady, listBlockedNeedingOperator } = await import('./r347-publish-mechanism-registry.js')
+      return { ready: listReady(), blockedNeedingOperator: listBlockedNeedingOperator() }
+    },
+  },
+
   // ─── Issue lifecycle ───────────────────────────────────────────
   'issue.ingest': {
     description: 'Convert recent cron-errors + incidents into issues.',
@@ -8205,6 +8232,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'prestaged.list', 'pod.account_kit',
         'pod.revenue_projection', 'pod.portfolio_plan',
         'gumroad.whoami', 'gumroad.list_products', 'gumroad.publish_first_three',
+        'publish.mechanism_report', 'publish.route_for_platform', 'publish.list_ready',
         'color.autoCorrect', 'color.applyGrade', 'color.applyLut',
         'audio.duckMix',
         // channel.save / channel.delete REMOVED from skip list —
