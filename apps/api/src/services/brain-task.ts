@@ -389,6 +389,16 @@ export const OPERATIONS: Record<string, OpSpec> = {
     },
   },
 
+  // ─── R342 prestaged retrieval ───────────────────────────────────────
+  'prestaged.list': {
+    description: 'R342: List all pre-staged operator deliverables (portfolio, application, listings, policies).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { recall } = await import('./r337-semantic-recall.js')
+      return recall({ workspaceId: ws, query: 'prestaged', scopes: ['prestaged'], minImportance: 80, limit: 20 })
+    },
+  },
+
   // ─── Issue lifecycle ───────────────────────────────────────────
   'issue.ingest': {
     description: 'Convert recent cron-errors + incidents into issues.',
