@@ -120,10 +120,18 @@ const BASE_TAGS_BY_PLATFORM: Record<Platform, string[]> = {
 }
 
 const PRICE_BY_PLATFORM: Record<Platform, number> = {
-  gumroad: 9, inprnt: 0, fine_art_america: 0, society6: 0,
-  redbubble: 0, zazzle: 0, spreadshirt: 0, teepublic: 0, tiktok_shop: 0,
-  // The 0s mean: platform price is base + markup configured in profile (R343 set FAA);
-  // the operator-take is computed from there, not from price here.
+  // Direct retail (digital downloads): operator sets explicit price.
+  gumroad:           9,
+  // Profile-markup platforms: this is the operator-recommended MARKUP to set
+  // on the storefront (R349 doctrine). Platform handles base + markup math.
+  inprnt:            8,    // markup over INPRNT base; operator sets in profile
+  fine_art_america:  10,   // FAA markup per inch on prints
+  society6:          5,    // S6 storefront markup
+  redbubble:         20,   // RB margin % on apparel + prints
+  zazzle:            15,   // Zazzle designer royalty %
+  spreadshirt:       5,    // Spreadshirt designer markup per unit
+  teepublic:         0,    // TeePublic = fixed $4 base / $2 sale (operator can't change)
+  tiktok_shop:       18,   // TikTok Shop retail print incl Printful margin
 }
 
 const FILE_HINT_BY_PLATFORM: Record<Platform, string> = {
@@ -169,17 +177,28 @@ export function generateListing(input: {
   style:       DesignStyle
   designId?:   string                                  // for rotation seed
 }): ListingContent {
+  // Strip leading "vintage " from subject so "Vintage ${s}" templates don't
+  // double-vintage (e.g. "vintage peony illustration" → "peony illustration").
+  // Also strip trailing " illustration" / " print" so "${s} Illustration" templates
+  // don't double-illustrate.
+  const cleanSubject = input.subject
+    .replace(/^vintage\s+/i, '')
+    .replace(/\s+(illustration|print|drawing|engraving)$/i, '')
+    .trim()
+  const inputForTemplates = { ...input, subject: cleanSubject }
+
   // Use the design id (if provided) or a hash of subject+platform as the rotation seed
   const seed = input.designId
     ? Number.parseInt(input.designId.slice(-8), 16) || 0
-    : (input.subject + input.platform).split('').reduce((a, c) => a + c.charCodeAt(0), 0)
+    : (cleanSubject + input.platform).split('').reduce((a, c) => a + c.charCodeAt(0), 0)
 
-  const titleOptions = TITLE_PATTERNS[input.platform](input.subject, input.niche, input.style)
+  const titleOptions = TITLE_PATTERNS[input.platform](cleanSubject, input.niche, input.style)
   const title = rotate(titleOptions, seed)
-  const description = DESC_TEMPLATES[input.platform](input.subject, input.niche)
+  const description = DESC_TEMPLATES[input.platform](cleanSubject, input.niche)
+  void inputForTemplates  // (placeholder for future template-context expansion)
   const tags = [
     ...BASE_TAGS_BY_PLATFORM[input.platform],
-    input.subject.replace(/\s+/g, ''),
+    cleanSubject.replace(/\s+/g, ''),
     nicheLabel(input.niche).toLowerCase().replace(/\s+/g, ''),
   ]
   return {
