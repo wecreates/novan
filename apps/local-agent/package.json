@@ -1,0 +1,22 @@
+{
+  "name": "@ops/local-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "R357 — local Playwright agent that consumes the droplet's upload_queue and drives POD platform uploads using residential IP + persistent browser profile.",
+  "scripts": {
+    "start":     "tsx src/index.ts",
+    "dev":       "tsx watch src/index.ts",
+    "once":      "tsx src/index.ts --once",
+    "typecheck": "tsc --noEmit",
+    "install:browsers": "playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.50.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

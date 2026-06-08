@@ -525,6 +525,33 @@ export const OPERATIONS: Record<string, OpSpec> = {
       })
     },
   },
+  'design.get': {
+    description: 'R357: Fetch ONE design by id with the FULL image_url (not truncated). Used by the local-agent design cache. Params: designId',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { sql } = await import('drizzle-orm')
+      const { db } = await import('../db/client.js')
+      const p = params as { designId?: string }
+      if (!p.designId) return { ok: false, reason: 'designId required' }
+      const rows = await db.execute(sql`
+        SELECT id, niche, style, prompt, image_url, source_provider, created_at
+        FROM design_catalog
+        WHERE workspace_id = ${ws} AND id = ${p.designId}
+        LIMIT 1
+      `)
+      const r = (rows as unknown as Array<Record<string, unknown>>)[0]
+      if (!r) return { ok: false, reason: 'not found' }
+      return {
+        id:              String(r['id']),
+        niche:           String(r['niche']),
+        style:           String(r['style']),
+        prompt:          String(r['prompt']),
+        image_url:       String(r['image_url']),
+        source_provider: r['source_provider'] ? String(r['source_provider']) : null,
+        created_at:      Number(r['created_at']),
+      }
+    },
+  },
   'listing.generate': {
     description: 'R349: Generate platform-tuned listing content (title/desc/tags/price/file-hint). Params: platform, subject, niche, style, designId?',
     risk: 'low',
@@ -8440,7 +8467,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'pod.revenue_projection', 'pod.portfolio_plan',
         'gumroad.whoami', 'gumroad.list_products', 'gumroad.publish_first_three',
         'publish.mechanism_report', 'publish.route_for_platform', 'publish.list_ready',
-        'design.generate_batch', 'design.suggest_subjects', 'design.list',
+        'design.generate_batch', 'design.suggest_subjects', 'design.list', 'design.get',
         'listing.generate', 'listing.generate_multi',
         'upload_queue.add', 'upload_queue.next', 'upload_queue.stats', 'upload_queue.mark_uploaded',
         'briefing.daily_uploads', 'briefing.velocity_status',
