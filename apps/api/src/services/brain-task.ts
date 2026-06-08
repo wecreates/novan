@@ -608,6 +608,34 @@ export const OPERATIONS: Record<string, OpSpec> = {
     },
   },
 
+  // ── R350 Universal goal ladder ─────────────────────────────────────
+  'goal.ladder': {
+    description: 'R350: Show the universal goal-tier ladder (pre_first_sale -> $1m+) with tactics unlocked at each tier.',
+    risk: 'low',
+    handler: async () => {
+      const { LADDER } = await import('./r350-goal-ladder.js')
+      return LADDER
+    },
+  },
+  'goal.classify_tier': {
+    description: 'R350: Given an MRR amount, return the matching tier + tactics. Params: mrrUsd',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { nextMilestone } = await import('./r350-goal-ladder.js')
+      const p = params as { mrrUsd?: number }
+      return nextMilestone(p.mrrUsd ?? 0)
+    },
+  },
+  'goal.business_status': {
+    description: 'R350: Per-business goal status: which tier, gap to next, tactics unlocked/blocked. Params: businessId?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { businessGoalStatus } = await import('./r350-goal-ladder.js')
+      const p = params as { businessId?: string }
+      return businessGoalStatus(ws, p.businessId)
+    },
+  },
+
   // ─── Issue lifecycle ───────────────────────────────────────────
   'issue.ingest': {
     description: 'Convert recent cron-errors + incidents into issues.',
@@ -8359,6 +8387,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'listing.generate', 'listing.generate_multi',
         'upload_queue.add', 'upload_queue.mark_uploaded',
         'briefing.daily_uploads', 'briefing.velocity_status',
+        'goal.ladder', 'goal.classify_tier', 'goal.business_status',
         'color.autoCorrect', 'color.applyGrade', 'color.applyLut',
         'audio.duckMix',
         // channel.save / channel.delete REMOVED from skip list —
