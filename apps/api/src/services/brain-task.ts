@@ -334,6 +334,61 @@ export const OPERATIONS: Record<string, OpSpec> = {
     },
   },
 
+  // ─── R340 + R341 closures ──────────────────────────────────────────
+  'verify.claim': {
+    description: 'R340: Adversarial verification of a claim across 6 lenses (correctness/security/cost/privacy/regression/evidence).',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { verify } = await import('./r340-adversarial-verifier.js')
+      const p = params as { statement?: string; evidence?: string; impactTier?: 'low' | 'medium' | 'high' }
+      return verify({
+        statement:  p.statement ?? '',
+        evidence:   p.evidence ?? '',
+        impactTier: p.impactTier ?? 'medium',
+      })
+    },
+  },
+  'review.source': {
+    description: 'R340: Static review of source content. Params: fileHint, content.',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { reviewSource } = await import('./r340-code-review.js')
+      const p = params as { fileHint?: string; content?: string }
+      return reviewSource(p.fileHint ?? 'unknown', p.content ?? '')
+    },
+  },
+  'skill.list': {
+    description: 'R341: List domain-specialized Novan skills. Params: category?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { listSkills } = await import('./r341-domain-skill-registry.js')
+      const p = params as { category?: 'pod' | 'social' | 'seo' | 'analytics' | 'compliance' }
+      return listSkills(p.category)
+    },
+  },
+  'skill.rank_for_request': {
+    description: 'R341: Rank skills against a request given current op availability. Params: request, availableOps[].',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { rankForRequest } = await import('./r341-domain-skill-registry.js')
+      const p = params as { request?: string; availableOps?: string[] }
+      return rankForRequest(p.request ?? '', p.availableOps ?? [])
+    },
+  },
+  'mcp.plan_invocation': {
+    description: 'R341: Pick best MCP/op chain for a capability. Params: capability, preferCost?, excludeProviders?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { planInvocation } = await import('./r341-mcp-fallback-chains.js')
+      const p = params as { capability?: 'video_analyze' | 'image_generate' | 'web_search' | 'browser_drive'; preferCost?: 'free' | 'cheap' | 'any'; excludeProviders?: string[] }
+      return planInvocation({
+        capability: p.capability ?? 'image_generate',
+        ...(p.preferCost ? { preferCost: p.preferCost } : {}),
+        ...(p.excludeProviders ? { excludeProviders: p.excludeProviders } : {}),
+      })
+    },
+  },
+
   // ─── Issue lifecycle ───────────────────────────────────────────
   'issue.ingest': {
     description: 'Convert recent cron-errors + incidents into issues.',
@@ -8075,6 +8130,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'report.capability_parity', 'memory.recall',
         'policy.check_action', 'confidence.score_op',
         'platform.state_probe', 'closer.tick', 'platform.poll_all',
+        'verify.claim', 'review.source',
+        'skill.list', 'skill.rank_for_request', 'mcp.plan_invocation',
         'color.autoCorrect', 'color.applyGrade', 'color.applyLut',
         'audio.duckMix',
         // channel.save / channel.delete REMOVED from skip list —

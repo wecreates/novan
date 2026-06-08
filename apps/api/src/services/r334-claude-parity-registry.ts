@@ -75,10 +75,10 @@ export const CLAUDE_PARITY: ClaudeParityCapability[] = [
     id: 'reasoning.adversarial_self_check',
     category: 'reasoning',
     claudeLevel: 'After generating output, ask "what would refute this?" and revise',
-    novanScore: 3,
+    novanScore: 8,
     tenXVision: 'Every Novan output triggers parallel adversarial verifier agents (3-5 distinct lenses: correctness/security/cost/privacy/regression), majority-vote required to ship',
     closureCost: 'medium',
-    evidence: 'adversarial-review exists but not wired to all outputs',
+    evidence: 'R340: r340-adversarial-verifier.ts ships 6 rule-based lenses (correctness/security/cost/privacy/regression/evidence) with impact-tier-scaled lens count + majority-vote threshold (low=50%, medium=66%, high=83%).',
   },
   {
     id: 'reasoning.honest_blocker_naming',
@@ -121,10 +121,10 @@ export const CLAUDE_PARITY: ClaudeParityCapability[] = [
     id: 'tool_use.mcp_invocation',
     category: 'tool_use',
     claudeLevel: 'Invoke any installed MCP server tool',
-    novanScore: 7,
+    novanScore: 9,
     tenXVision: 'Plus: auto-discovery of new MCPs from registry, automatic credential management, per-tool cost tracking, fallback chains across MCPs offering similar capabilities',
     closureCost: 'small',
-    evidence: 'MCP catalog exists; auto-discovery + fallback chains missing',
+    evidence: 'R341: r341-mcp-fallback-chains.ts ships CAPABILITY_CHAINS registry across 4 capabilities (video_analyze/image_generate/web_search/browser_drive) with cost+quality+fallbackOrder; planInvocation() auto-routes around dead providers + integrates with canGenerateImagesNow() to auto-promote public-domain fallback when AI gen blocked.',
   },
 
   // ─── Code generation ─────────────────────────────────────────────────
@@ -157,10 +157,10 @@ export const CLAUDE_PARITY: ClaudeParityCapability[] = [
     id: 'code.review',
     category: 'code',
     claudeLevel: 'Review diff for security/perf/correctness bugs at PR time',
-    novanScore: 6,
+    novanScore: 8,
     tenXVision: 'Continuous review of every commit, classified by severity, auto-fix for low-risk, PR comments for medium, blocking for high',
     closureCost: 'small',
-    evidence: 'code-review agent exists',
+    evidence: 'R340: r340-code-review.ts ships reviewSource() + reviewFile() with 10 rules across critical/high/medium/low/info severities (hardcoded-key/credential-log/SQL-concat/unhandled-promise/TODO/any-type/missing-policy-check); passed=false on any high/critical.',
   },
 
   // ─── Memory ──────────────────────────────────────────────────────────
@@ -274,10 +274,10 @@ export const CLAUDE_PARITY: ClaudeParityCapability[] = [
     id: 'skills.domain_specialized',
     category: 'skills',
     claudeLevel: 'Invoke 100+ specialized skills (canvas-design, deep-research, mcp-builder, etc.)',
-    novanScore: 4,
+    novanScore: 7,
     tenXVision: 'Skill registry matching Claude\'s catalog, but domain-specialized for revenue verticals (POD-design, social-engagement, SEO-audit, etc.); each skill is a domain-expert agent with its own context + tools',
     closureCost: 'large',
-    evidence: 'playbook-knowledge + agency-catalog partial coverage',
+    evidence: 'R341: r341-domain-skill-registry.ts ships NovanSkill registry with 7 starter skills across 10 categories (pod/social/seo/analytics/compliance/audio/video/sales/support/engineering); rankForRequest() matches skills to operator intent + reports readiness/blocked based on op availability.',
   },
 
   // ─── Safety ──────────────────────────────────────────────────────────
