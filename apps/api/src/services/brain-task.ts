@@ -115,6 +115,135 @@ export const OPERATIONS: Record<string, OpSpec> = {
     },
   },
 
+  // ─── R333 Operator Capability Mirror ───────────────────────────
+  'provider.health.probe_all': {
+    description: 'R333: Probe every wired provider for liveness; classify failures (auth_revoked/billing_exhausted/rate_limited/network); persist for routers to skip dead providers.',
+    risk: 'low',
+    handler: async () => {
+      const { probeAll } = await import('./r333-provider-health-monitor.js')
+      return probeAll()
+    },
+  },
+  'provider.health.snapshot': {
+    description: 'R333: Read the latest health snapshot (no probe).',
+    risk: 'low',
+    handler: async () => {
+      const { getHealthSnapshot, canGenerateImagesNow } = await import('./r333-provider-health-monitor.js')
+      return { snapshot: await getHealthSnapshot(), imageGen: await canGenerateImagesNow() }
+    },
+  },
+  'capability.list': {
+    description: 'R333: List every operator capability + whether Novan does it autonomously yet.',
+    risk: 'low',
+    handler: async () => {
+      const { CAPABILITIES, capabilityReport } = await import('./r333-operator-capability-mirror.js')
+      return { all: CAPABILITIES, report: capabilityReport() }
+    },
+  },
+  'capability.gaps': {
+    description: 'R333: Just the gaps — capabilities not yet implemented at Novan-autonomous level.',
+    risk: 'low',
+    handler: async () => {
+      const { capabilityReport } = await import('./r333-operator-capability-mirror.js')
+      const r = capabilityReport()
+      return { gaps: r.gaps, summary: `${r.planned} planned + ${r.partial} partial of ${r.total} total` }
+    },
+  },
+
+  // ─── R334 Claude Parity Registry ───────────────────────────────────
+  'capability.parity_report': {
+    description: 'R334: Score Novan vs Claude across every capability category. Honest evidence-based scoring 0-10 per capability.',
+    risk: 'low',
+    handler: async () => {
+      const { parityReport, CLAUDE_PARITY } = await import('./r334-claude-parity-registry.js')
+      return { report: parityReport(), totalCapabilities: CLAUDE_PARITY.length }
+    },
+  },
+  'capability.next_target': {
+    description: 'R334: Pick the highest-leverage Claude-parity gap to attack next (gap-size × tractability).',
+    risk: 'low',
+    handler: async () => {
+      const { nextTarget, parityReport } = await import('./r334-claude-parity-registry.js')
+      const t = nextTarget()
+      const r = parityReport()
+      return {
+        nextTarget: t,
+        leverageRationale: `score ${t.novanScore}/10, cost ${t.closureCost}, category ${t.category}`,
+        currentAvg: r.averageScore,
+        totalGapPoints: r.totalGapPoints,
+      }
+    },
+  },
+  'privacy.check_submit': {
+    description: 'R334: Test the privacy runtime gate. Pass {channel, fieldName, value} to see if it would block.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { checkBeforeSubmit } = await import('./r334-privacy-runtime-gate.js')
+      const p = params as { channel?: string; fieldName?: string; value?: string }
+      return checkBeforeSubmit({
+        workspaceId: ws,
+        channel:     p.channel ?? 'tiktok_shop',
+        fieldName:   p.fieldName ?? 'return_address',
+        value:       p.value ?? '',
+      })
+    },
+  },
+  'brand.dba_propagation_plan': {
+    description: 'R334: Generate the plan to propagate DBA across every connected platform.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { planPropagation } = await import('./r334-brand-propagator.js')
+      return planPropagation(ws)
+    },
+  },
+
+  // ─── R335 closures ─────────────────────────────────────────────────
+  'art.public_domain_fetch': {
+    description: 'R335: Fetch CC0/public-domain art from Met/LoC/Smithsonian. Params: query, limit?, niche?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { fetchAcrossSources, fetchForNiche } = await import('./r335-public-domain-art-fetchers.js')
+      const p = params as { query?: string; limit?: number; niche?: string }
+      if (p.niche) return { source: 'niche', niche: p.niche, assets: await fetchForNiche(p.niche as 'botanical', p.limit ?? 10) }
+      return fetchAcrossSources({ query: p.query ?? 'botanical illustration', limit: p.limit ?? 5 })
+    },
+  },
+  'decide.image_gen_fallback': {
+    description: 'R335: When image-gen providers are down, score paths (public domain / topup / fresh key / cap raise / midjourney) against operator constraints.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { decide, imageGenFallbackPaths } = await import('./r335-free-first-decision-compiler.js')
+      return decide({
+        workspaceId: ws,
+        question:    'All image-gen providers are down. Which path?',
+        paths:       imageGenFallbackPaths(),
+        persist:     true,
+      })
+    },
+  },
+  'decide.return_address': {
+    description: 'R335: Return-address strategy decision (phase 1 case-by-case / virtual mailbox / PO box / home).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { decide, returnAddressPaths } = await import('./r335-free-first-decision-compiler.js')
+      return decide({
+        workspaceId: ws,
+        question:    'What return address strategy fits current MRR + privacy constraints?',
+        paths:       returnAddressPaths(),
+        persist:     true,
+      })
+    },
+  },
+  'lesson.applicable_for': {
+    description: 'R335: Pre-flight hook — return lessons applicable to an upcoming op. Params: op, tags?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { applicableLessonsFor } = await import('./r335-lesson-auto-capture.js')
+      const p = params as { op?: string; tags?: string[] }
+      return applicableLessonsFor(ws, p.op ?? '', p.tags ?? [])
+    },
+  },
+
   // ─── Issue lifecycle ───────────────────────────────────────────
   'issue.ingest': {
     description: 'Convert recent cron-errors + incidents into issues.',
@@ -7843,6 +7972,15 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'video.repurpose',
         'broll.generate', 'broll.generateBatch',
         'cache.stats', 'cache.clear',
+        // R333 — capability mirror + provider health ops. Descriptions
+        // mention 'bank/SSN' as illustrative blockedBy hard-policy fields,
+        // which legitimately surface to operator.
+        'capability.list', 'capability.gaps',
+        'capability.parity_report', 'capability.next_target',
+        'provider.health.probe_all', 'provider.health.snapshot',
+        'privacy.check_submit', 'brand.dba_propagation_plan',
+        'art.public_domain_fetch', 'decide.image_gen_fallback',
+        'decide.return_address', 'lesson.applicable_for',
         'color.autoCorrect', 'color.applyGrade', 'color.applyLut',
         'audio.duckMix',
         // channel.save / channel.delete REMOVED from skip list —
