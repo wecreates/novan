@@ -131,7 +131,12 @@ const r328PublicRoutes: FastifyPluginAsync = async (app) => {
       const v = verifyState(state)
       if (!v.ok || !v.workspaceId) return reply.code(400).send({ success: false, error: 'invalid state' })
       const base = process.env['NOVAN_PUBLIC_URL'] ?? `https://${req.headers.host}`
-      const ex = await exchangeCode({ connectorId: req.params.connectorId, code, redirectBase: base })
+      const ex = await exchangeCode({
+        connectorId: req.params.connectorId,
+        code,
+        redirectBase: base,
+        ...(v.codeVerifier ? { codeVerifier: v.codeVerifier } : {}),
+      })
       if (!ex.ok) return reply.code(400).type('text/html').send(`<html><body>OAuth exchange failed: ${ex.reason}</body></html>`)
       // Persist into secrets_vault + connector_credentials.
       // R332 fix: actual export is `storeSecret({workspaceId,name,value})`,

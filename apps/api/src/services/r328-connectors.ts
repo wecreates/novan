@@ -22,6 +22,8 @@ export interface OAuthConfig {
   // Printful uses non-standard `redirect_url` instead of the OAuth2 `redirect_uri`.
   // Default 'redirect_uri'; override per-provider as needed.
   redirectParamName?: string
+  // PKCE is required for Etsy v3 and is best-practice everywhere else.
+  pkce?: boolean
 }
 
 export const OAUTH_PROVIDERS: Record<string, OAuthConfig> = {
@@ -39,6 +41,7 @@ export const OAUTH_PROVIDERS: Record<string, OAuthConfig> = {
     scopes:   ['listings_w', 'shops_r', 'transactions_r', 'email_r'],
     clientIdEnv:     'ETSY_CLIENT_ID',
     clientSecretEnv: 'ETSY_CLIENT_SECRET',
+    pkce:            true,   // Etsy v3 mandates PKCE
   },
   slack: {
     authUrl:  'https://slack.com/oauth/v2/authorize',
@@ -70,7 +73,18 @@ export interface StartFlowResult {
   state?:    string
 }
 
-import { randomBytes, createHmac } from 'node:crypto'
+import { randomBytes, createHmac, createHash } from 'node:crypto'
+
+// R332 — PKCE helpers
+function base64UrlEncode(buf: Buffer): string {
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+function generateCodeVerifier(): string {
+  return base64UrlEncode(randomBytes(48))   // 64-char URL-safe
+}
+function computeCodeChallenge(verifier: string): string {
+  return base64UrlEncode(createHash('sha256').update(verifier).digest())
+}
 
 export function startFlow(input: {
   connectorId: string
@@ -82,7 +96,19 @@ export function startFlow(input: {
   const clientId = process.env[cfg.clientIdEnv]
   if (!clientId) return { ok: false, reason: `${cfg.clientIdEnv} not configured — operator must set in env` }
   const nonce = randomBytes(16).toString('hex')
-  const state = `${input.workspaceId}.${nonce}.${signState(input.workspaceId, nonce)}`
+
+  // PKCE: generate verifier, embed in state (signed) so callback can use it
+  let verifier = ''
+  let challenge = ''
+  let extraState = ''
+  if (cfg.pkce) {
+    verifier = generateCodeVerifier()
+    challenge = computeCodeChallenge(verifier)
+    extraState = `.${verifier}`
+  }
+  const stateCore = `${input.workspaceId}.${nonce}${extraState}`
+  const state = `${stateCore}.${signState(stateCore, '')}`
+
   const redirectParam = cfg.redirectParamName ?? 'redirect_uri'
   const params = new URLSearchParams({
     client_id:     clientId,
@@ -93,22 +119,32 @@ export function startFlow(input: {
     access_type:   'offline',
     prompt:        'consent',
   })
+  if (cfg.pkce) {
+    params.set('code_challenge', challenge)
+    params.set('code_challenge_method', 'S256')
+  }
   return { ok: true, redirectUrl: `${cfg.authUrl}?${params.toString()}`, state }
 }
 
-function signState(workspaceId: string, nonce: string): string {
+function signState(core: string, _unused: string): string {
   const secret = process.env['AUTH_SECRET'] ?? ''
-  return createHmac('sha256', secret).update(`${workspaceId}.${nonce}`).digest('hex').slice(0, 16)
+  return createHmac('sha256', secret).update(core).digest('hex').slice(0, 16)
 }
 
-export function verifyState(state: string): { ok: boolean; workspaceId?: string } {
+export function verifyState(state: string): { ok: boolean; workspaceId?: string; codeVerifier?: string } {
   const parts = state.split('.')
-  if (parts.length !== 3) return { ok: false }
-  const [ws, nonce, sig] = parts
-  if (!ws || !nonce || !sig) return { ok: false }
-  const expected = signState(ws, nonce)
-  if (sig !== expected) return { ok: false }
-  return { ok: true, workspaceId: ws }
+  // Legacy (no PKCE):  ws.nonce.sig            → 3 parts
+  // PKCE:              ws.nonce.verifier.sig   → 4 parts
+  if (parts.length !== 3 && parts.length !== 4) return { ok: false }
+  const sig  = parts[parts.length - 1]
+  const core = parts.slice(0, -1).join('.')
+  if (!sig || !core) return { ok: false }
+  if (signState(core, '') !== sig) return { ok: false }
+  const ws = parts[0]
+  if (!ws) return { ok: false }
+  const out: { ok: boolean; workspaceId?: string; codeVerifier?: string } = { ok: true, workspaceId: ws }
+  if (parts.length === 4) out.codeVerifier = parts[2]
+  return out
 }
 
 export interface ExchangeResult {
@@ -123,6 +159,7 @@ export async function exchangeCode(input: {
   connectorId: string
   code:        string
   redirectBase: string
+  codeVerifier?: string   // R332 — required when provider.pkce=true
 }): Promise<ExchangeResult> {
   const cfg = OAUTH_PROVIDERS[input.connectorId]
   if (!cfg) return { ok: false, reason: `no OAuth config for ${input.connectorId}` }
@@ -130,6 +167,9 @@ export async function exchangeCode(input: {
   const clientSecret = process.env[cfg.clientSecretEnv]
   if (!clientId || !clientSecret) {
     return { ok: false, reason: `${cfg.clientIdEnv} and ${cfg.clientSecretEnv} must both be set` }
+  }
+  if (cfg.pkce && !input.codeVerifier) {
+    return { ok: false, reason: `PKCE required for ${input.connectorId} but codeVerifier missing` }
   }
   try {
     const redirectParam = cfg.redirectParamName ?? 'redirect_uri'
@@ -140,6 +180,9 @@ export async function exchangeCode(input: {
       [redirectParam]: `${input.redirectBase}/api/v1/oauth/${input.connectorId}/callback`,
       grant_type:    'authorization_code',
     })
+    if (cfg.pkce && input.codeVerifier) {
+      body.set('code_verifier', input.codeVerifier)
+    }
     const res = await fetch(cfg.tokenUrl, {
       method:  'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
