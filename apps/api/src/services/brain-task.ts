@@ -574,6 +574,23 @@ export const OPERATIONS: Record<string, OpSpec> = {
       })
     },
   },
+  'upload_queue.next': {
+    description: 'R349: Pull the next N paste-ready items for a platform (priority DESC, queued_at ASC). Params: platform, limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { nextForPlatform } = await import('./r349-upload-queue.js')
+      const p = params as { platform?: string; limit?: number }
+      return nextForPlatform({ workspaceId: ws, platform: (p.platform ?? 'gumroad') as 'gumroad', limit: p.limit ?? 5 })
+    },
+  },
+  'upload_queue.stats': {
+    description: 'R349: Per-platform queue counts (queued / live / today) + safe daily velocity caps. Params: none.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { statsByPlatform } = await import('./r349-upload-queue.js')
+      return statsByPlatform(ws)
+    },
+  },
   'upload_queue.mark_uploaded': {
     description: 'R349: Mark a queue item as uploaded (operator confirms after manual upload). Params: queueItemId, externalUrl?',
     risk: 'low',
@@ -8425,7 +8442,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'publish.mechanism_report', 'publish.route_for_platform', 'publish.list_ready',
         'design.generate_batch', 'design.suggest_subjects', 'design.list',
         'listing.generate', 'listing.generate_multi',
-        'upload_queue.add', 'upload_queue.mark_uploaded',
+        'upload_queue.add', 'upload_queue.next', 'upload_queue.stats', 'upload_queue.mark_uploaded',
         'briefing.daily_uploads', 'briefing.velocity_status',
         'goal.ladder', 'goal.classify_tier', 'goal.business_status',
         'trends.list_all', 'trends.pick_batch', 'trends.run_pipeline',
