@@ -399,6 +399,17 @@ export const OPERATIONS: Record<string, OpSpec> = {
     },
   },
 
+  // ── R344 POD account kit ──────────────────────────────────────────
+  'pod.account_kit': {
+    description: 'R344: List all POD platforms with cost/margin/ban-risk + sequenced rollout plan.',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { POD_PLATFORMS, planSequencedRollout } = await import('./r344-pod-account-kit.js')
+      const p = params as { currentMrrUsd?: number }
+      return { catalog: POD_PLATFORMS, plan: planSequencedRollout(p.currentMrrUsd ?? 0) }
+    },
+  },
+
   // ─── Issue lifecycle ───────────────────────────────────────────
   'issue.ingest': {
     description: 'Convert recent cron-errors + incidents into issues.',
@@ -8142,6 +8153,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'platform.state_probe', 'closer.tick', 'platform.poll_all',
         'verify.claim', 'review.source',
         'skill.list', 'skill.rank_for_request', 'mcp.plan_invocation',
+        'prestaged.list', 'pod.account_kit',
         'color.autoCorrect', 'color.applyGrade', 'color.applyLut',
         'audio.duckMix',
         // channel.save / channel.delete REMOVED from skip list —
