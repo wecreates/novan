@@ -6,6 +6,8 @@
  * crashing the loop.
  */
 import { gumroadDriver } from './gumroad.js'
+import { inprntDriver } from './inprnt.js'
+import { fineArtAmericaDriver } from './fine_art_america.js'
 import type { PlatformDriver, DriverResult } from './_types.js'
 
 function stub(platform: string, loginUrl: string): PlatformDriver {
@@ -19,8 +21,8 @@ function stub(platform: string, loginUrl: string): PlatformDriver {
 
 export const DRIVERS: Record<string, PlatformDriver> = {
   gumroad:           gumroadDriver,
-  inprnt:            stub('inprnt',           'https://www.inprnt.com/account/login/'),
-  fine_art_america:  stub('fine_art_america', 'https://fineartamerica.com/loginform.html'),
+  inprnt:            inprntDriver,
+  fine_art_america:  fineArtAmericaDriver,
   redbubble:         stub('redbubble',        'https://www.redbubble.com/auth/login'),
   etsy:              stub('etsy',             'https://www.etsy.com/signin'),
   zazzle:            stub('zazzle',           'https://www.zazzle.com/auth/login'),

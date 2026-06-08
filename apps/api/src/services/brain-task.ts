@@ -601,6 +601,66 @@ export const OPERATIONS: Record<string, OpSpec> = {
       })
     },
   },
+  'agent.heartbeat': {
+    description: 'R358: Local-agent posts a heartbeat per tick. Params: agentId, platforms[], uploads, failures, versionTag?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { recordHeartbeat } = await import('./r358-agent-telemetry.js')
+      const p = params as { agentId?: string; platforms?: string[]; uploads?: number; failures?: number; versionTag?: string }
+      return recordHeartbeat({
+        workspaceId: ws,
+        agentId:     p.agentId   ?? 'unknown',
+        platforms:   p.platforms ?? [],
+        uploads:     p.uploads   ?? 0,
+        failures:    p.failures  ?? 0,
+        ...(p.versionTag ? { versionTag: p.versionTag } : {}),
+      })
+    },
+  },
+  'agent.report_event': {
+    description: 'R358: Local-agent posts an upload outcome. Params: agentId, platform, queueItemId, status (success|skipped|failed), externalUrl?, reason?, durationMs?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { recordUploadEvent } = await import('./r358-agent-telemetry.js')
+      const p = params as { agentId?: string; platform?: string; queueItemId?: string; status?: string; externalUrl?: string; reason?: string; durationMs?: number }
+      return recordUploadEvent({
+        workspaceId: ws,
+        agentId:     p.agentId     ?? 'unknown',
+        platform:    p.platform    ?? 'unknown',
+        queueItemId: p.queueItemId ?? 'unknown',
+        status:      (p.status     ?? 'failed') as 'success' | 'skipped' | 'failed',
+        ...(p.externalUrl ? { externalUrl: p.externalUrl } : {}),
+        ...(p.reason      ? { reason:      p.reason } : {}),
+        ...(p.durationMs !== undefined ? { durationMs: p.durationMs } : {}),
+      })
+    },
+  },
+  'agent.report_failure': {
+    description: 'R358: Local-agent reports a driver crash with screenshot + error context. Params: agentId, platform, queueItemId?, errorMessage, errorStack?, screenshotBase64?, pageUrl?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { recordFailureReport } = await import('./r358-agent-telemetry.js')
+      const p = params as { agentId?: string; platform?: string; queueItemId?: string; errorMessage?: string; errorStack?: string; screenshotBase64?: string; pageUrl?: string }
+      return recordFailureReport({
+        workspaceId:  ws,
+        agentId:      p.agentId  ?? 'unknown',
+        platform:     p.platform ?? 'unknown',
+        ...(p.queueItemId ? { queueItemId: p.queueItemId } : {}),
+        errorMessage: p.errorMessage ?? '(no message)',
+        ...(p.errorStack       ? { errorStack:       p.errorStack       } : {}),
+        ...(p.screenshotBase64 ? { screenshotBase64: p.screenshotBase64 } : {}),
+        ...(p.pageUrl          ? { pageUrl:          p.pageUrl          } : {}),
+      })
+    },
+  },
+  'account.birthdays': {
+    description: 'R358: Return per-platform account-creation timestamps from workspace_memory. Used by birthday-ramp to clamp day 1-7 velocity.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { getAllAccountBirthdays } = await import('./r358-agent-telemetry.js')
+      return getAllAccountBirthdays(ws)
+    },
+  },
   'upload_queue.next': {
     description: 'R349: Pull the next N paste-ready items for a platform (priority DESC, queued_at ASC). Params: platform, limit?',
     risk: 'low',
@@ -8470,6 +8530,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'design.generate_batch', 'design.suggest_subjects', 'design.list', 'design.get',
         'listing.generate', 'listing.generate_multi',
         'upload_queue.add', 'upload_queue.next', 'upload_queue.stats', 'upload_queue.mark_uploaded',
+        'agent.heartbeat', 'agent.report_event', 'agent.report_failure', 'account.birthdays',
         'briefing.daily_uploads', 'briefing.velocity_status',
         'goal.ladder', 'goal.classify_tier', 'goal.business_status',
         'trends.list_all', 'trends.pick_batch', 'trends.run_pipeline',

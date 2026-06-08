@@ -97,17 +97,25 @@ Each driver should:
 
 | Platform | Status |
 |---|---|
-| gumroad | ✅ working (R357 v1) |
-| inprnt | stub |
-| fine_art_america | stub |
+| gumroad | ✅ R357 v1 |
+| inprnt | ✅ R358 v2 (selectors may need tuning on first live run) |
+| fine_art_america | ✅ R358 v2 (multi-step flow; selectors may need tuning) |
 | redbubble | stub |
-| etsy | stub |
+| etsy | stub (mockup generation already wires in when implemented) |
 | zazzle | stub |
 | spreadshirt | stub |
 | teepublic | stub |
 | tiktok_shop | stub |
 | displate | stub |
 | threadless | stub |
+
+## R358 v2 additions
+
+- **Account-birthday ramp** — set `workspace_memory.account.<platform>.birthday` (epoch ms) and the agent auto-clamps day 1-7 to 1 upload/day, day 8-30 to 50% of cap, day 30+ to full cap. See `birthday-ramp.ts`.
+- **Telemetry** — every upload (success / skipped / failed) posts to droplet's `events` table via `agent.report_event`. Dashboard queries `agent.upload.*` event types for the activity feed.
+- **Heartbeat** — `agent.heartbeat` op posts each tick with running counters; absence = agent down (dashboard renders red).
+- **Self-healing screenshots** — on driver crash, the agent takes a page screenshot, base64-encodes it (truncated to 500 KB), and posts via `agent.report_failure`. Look in `events` where `type='agent.failure'` for the payload.
+- **Mockup generator** — `mockup-gen.ts` uses sharp to procedurally composite the design onto 5 scene backgrounds (bare, neutral wall, sage wall, walnut desk, gallery wall). Output: `<design>_mockup_<scene>.jpg` alongside the source. Etsy driver will pick these up by convention.
 
 Stubs return `ok: false` so the orchestrator skips the queue item without crashing the loop. The item stays queued for when the driver is implemented.
 
