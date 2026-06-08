@@ -1,0 +1,62 @@
+[
+  {
+    "id": "019ea8dd-dfec-754b-8d2f-fd39a7e84518",
+    "subject": "vintage chickadee bird perched on dogwood",
+    "niche": "animal_audubon",
+    "style": "watercolor",
+    "prompt": "vintage natural history illustration of vintage chickadee bird perched on dogwood, soft hand-colored watercolor on cream paper, after Audubon, fine detail",
+    "file": "/tmp/r354-designs/vintage_chickadee_bird_perched_on_dogwood.jpg",
+    "bytes": 218132,
+    "format": "jpg"
+  },
+  {
+    "id": "019ea8dd-d8a9-7019-996b-926639863dc0",
+    "subject": "vintage field guide illustration of edible vs poisonous mushrooms",
+    "niche": "natural_history",
+    "style": "watercolor",
+    "prompt": "vintage natural history illustration of vintage field guide illustration of edible vs poisonous mushrooms, hand-colored study, scientific accuracy with artistic warmth",
+    "file": "/tmp/r354-designs/vintage_field_guide_illustration_of_edible_vs_poisonous_mush.jpg",
+    "bytes": 330337,
+    "format": "jpg"
+  },
+  {
+    "id": "019ea8dd-d15a-718c-bfe0-1a7c33bc35bf",
+    "subject": "vintage human heart anatomical illustration with botanical border",
+    "niche": "natural_history",
+    "style": "watercolor",
+    "prompt": "vintage natural history illustration of vintage human heart anatomical illustration with botanical border, hand-colored study, scientific accuracy with artistic warmth",
+    "file": "/tmp/r354-designs/vintage_human_heart_anatomical_illustration_with_botanical_b.jpg",
+    "bytes": 405938,
+    "format": "jpg"
+  },
+  {
+    "id": "019ea8dd-c475-77bd-85f6-c378abb85e84",
+    "subject": "vintage scientific beetle specimen collection plate",
+    "niche": "natural_history",
+    "style": "watercolor",
+    "prompt": "vintage natural history illustration of vintage scientific beetle specimen collection plate, hand-colored study, scientific accuracy with artistic warmth",
+    "file": "/tmp/r354-designs/vintage_scientific_beetle_specimen_collection_plate.jpg",
+    "bytes": 187822,
+    "format": "jpg"
+  },
+  {
+    "id": "019ea8dd-ba84-73ce-9931-bd88707d14dd",
+    "subject": "cottagecore mushroom illustration with moss",
+    "niche": "natural_history",
+    "style": "watercolor",
+    "prompt": "vintage natural history illustration of cottagecore mushroom illustration with moss, hand-colored study, scientific accuracy with artistic warmth",
+    "file": "/tmp/r354-designs/cottagecore_mushroom_illustration_with_moss.jpg",
+    "bytes": 341146,
+    "format": "jpg"
+  },
+  {
+    "id": "019ea8dd-b21c-71c3-a590-952aa74c4891",
+    "subject": "vintage peony illustration",
+    "niche": "botanical",
+    "style": "watercolor",
+    "prompt": "vintage botanical illustration of vintage peony illustration, fine art print, gallery quality",
+    "file": "/tmp/r354-designs/vintage_peony_illustration.jpg",
+    "bytes": 375202,
+    "format": "jpg"
+  }
+]
