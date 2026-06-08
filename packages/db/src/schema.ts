@@ -7548,3 +7548,16 @@ export const clarifyEvents = pgTable('clarify_events', {
   createdAt:      bigint('created_at', { mode: 'number' }).notNull(),
   resolvedAt:     bigint('resolved_at', { mode: 'number' }),
 })
+
+// R146.333 — Continuous provider health probes. One row per provider
+// (latest state). Read by image-router / chat-providers via filterHealthy()
+// to skip known-dead providers before they waste a real call.
+export const providerHealth = pgTable('provider_health', {
+  id:           text('id').primaryKey(),
+  provider:     text('provider').notNull().unique(),
+  ok:           boolean('ok').notNull(),
+  failureClass: text('failure_class'),    // ok | auth_revoked | billing_exhausted | rate_limited | not_found | network | unknown
+  latencyMs:    integer('latency_ms'),
+  message:      text('message'),
+  probedAt:     bigint('probed_at', { mode: 'number' }).notNull(),
+})
