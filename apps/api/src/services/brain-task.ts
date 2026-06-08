@@ -486,6 +486,128 @@ export const OPERATIONS: Record<string, OpSpec> = {
     },
   },
 
+  // ── R349 Design factory + upload queue + daily briefing ──────────
+  'design.generate_batch': {
+    description: 'R349: Generate N designs in a niche. Params: niche, subjects[], styleOverride?, promptTemplateIndex?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { generateBatch } = await import('./r349-design-factory.js')
+      const p = params as { niche?: string; subjects?: string[]; styleOverride?: string; promptTemplateIndex?: number }
+      return generateBatch({
+        workspaceId:           ws,
+        niche:                 (p.niche ?? 'botanical') as 'botanical',
+        subjects:              p.subjects ?? ['iris flower'],
+        ...(p.styleOverride ? { styleOverride: p.styleOverride as 'watercolor' } : {}),
+        ...(p.promptTemplateIndex !== undefined ? { promptTemplateIndex: p.promptTemplateIndex } : {}),
+      })
+    },
+  },
+  'design.suggest_subjects': {
+    description: 'R349: List curated subject ideas per niche, drawn from POD bestseller patterns.',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { NICHE_SUBJECTS } = await import('./r349-design-factory.js')
+      const p = params as { niche?: string }
+      if (p.niche) return { niche: p.niche, subjects: NICHE_SUBJECTS[p.niche as 'botanical'] ?? [] }
+      return NICHE_SUBJECTS
+    },
+  },
+  'design.list': {
+    description: 'R349: List recent designs from the catalog. Params: niche?, limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { listDesigns } = await import('./r349-design-factory.js')
+      const p = params as { niche?: string; limit?: number }
+      return listDesigns({
+        workspaceId: ws,
+        ...(p.niche ? { niche: p.niche as 'botanical' } : {}),
+        ...(p.limit !== undefined ? { limit: p.limit } : {}),
+      })
+    },
+  },
+  'listing.generate': {
+    description: 'R349: Generate platform-tuned listing content (title/desc/tags/price/file-hint). Params: platform, subject, niche, style, designId?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { generateListing } = await import('./r349-listing-content-rotator.js')
+      const p = params as { platform?: string; subject?: string; niche?: string; style?: string; designId?: string }
+      return generateListing({
+        platform: (p.platform ?? 'gumroad') as 'gumroad',
+        subject:  p.subject  ?? 'iris',
+        niche:    (p.niche    ?? 'botanical') as 'botanical',
+        style:    (p.style    ?? 'watercolor') as 'watercolor',
+        ...(p.designId ? { designId: p.designId } : {}),
+      })
+    },
+  },
+  'listing.generate_multi': {
+    description: 'R349: Generate listing content for ONE design across MULTIPLE platforms. Params: platforms[], subject, niche, style, designId?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { generateMultiPlatform } = await import('./r349-listing-content-rotator.js')
+      const p = params as { platforms?: string[]; subject?: string; niche?: string; style?: string; designId?: string }
+      return generateMultiPlatform({
+        platforms: (p.platforms ?? ['gumroad', 'fine_art_america', 'inprnt']) as Array<'gumroad'>,
+        subject:   p.subject  ?? 'iris',
+        niche:     (p.niche    ?? 'botanical') as 'botanical',
+        style:     (p.style    ?? 'watercolor') as 'watercolor',
+        ...(p.designId ? { designId: p.designId } : {}),
+      })
+    },
+  },
+  'upload_queue.add': {
+    description: 'R349: Add a design to the upload queue for a platform. Params: designId, platform, title, description, tags[], priceUsd?, category?, priority?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { enqueue } = await import('./r349-upload-queue.js')
+      const p = params as { designId?: string; platform?: string; title?: string; description?: string; tags?: string[]; priceUsd?: number; category?: string; priority?: number }
+      return enqueue({
+        workspaceId: ws,
+        designId:    p.designId ?? '',
+        platform:    (p.platform ?? 'gumroad') as 'gumroad',
+        title:       p.title       ?? '',
+        description: p.description ?? '',
+        tags:        p.tags        ?? [],
+        ...(p.priceUsd !== undefined ? { priceUsd: p.priceUsd } : {}),
+        ...(p.category               ? { category: p.category } : {}),
+        ...(p.priority !== undefined ? { priority: p.priority } : {}),
+      })
+    },
+  },
+  'upload_queue.mark_uploaded': {
+    description: 'R349: Mark a queue item as uploaded (operator confirms after manual upload). Params: queueItemId, externalUrl?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { markUploaded } = await import('./r349-upload-queue.js')
+      const p = params as { queueItemId?: string; externalUrl?: string }
+      return markUploaded({
+        workspaceId: ws,
+        queueItemId: p.queueItemId ?? '',
+        ...(p.externalUrl ? { externalUrl: p.externalUrl } : {}),
+      })
+    },
+  },
+  'briefing.daily_uploads': {
+    description: 'R349: The morning briefing - what to upload to each platform today within safe velocity. Params: platforms? (default: all)',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { dailyBriefing } = await import('./r349-daily-briefing.js')
+      const p = params as { platforms?: string[] }
+      return dailyBriefing({
+        workspaceId: ws,
+        ...(p.platforms ? { platforms: p.platforms as Array<'gumroad'> } : {}),
+      })
+    },
+  },
+  'briefing.velocity_status': {
+    description: 'R349: Quick velocity-cap status per platform without item content.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { velocityStatus } = await import('./r349-daily-briefing.js')
+      return velocityStatus(ws)
+    },
+  },
+
   // ─── Issue lifecycle ───────────────────────────────────────────
   'issue.ingest': {
     description: 'Convert recent cron-errors + incidents into issues.',
@@ -8233,6 +8355,10 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'pod.revenue_projection', 'pod.portfolio_plan',
         'gumroad.whoami', 'gumroad.list_products', 'gumroad.publish_first_three',
         'publish.mechanism_report', 'publish.route_for_platform', 'publish.list_ready',
+        'design.generate_batch', 'design.suggest_subjects', 'design.list',
+        'listing.generate', 'listing.generate_multi',
+        'upload_queue.add', 'upload_queue.mark_uploaded',
+        'briefing.daily_uploads', 'briefing.velocity_status',
         'color.autoCorrect', 'color.applyGrade', 'color.applyLut',
         'audio.duckMix',
         // channel.save / channel.delete REMOVED from skip list —
