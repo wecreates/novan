@@ -224,29 +224,31 @@ export function planSequencedRollout(currentMrrUsd: number = 0): SequencedPlan {
   // Already-live or in-progress platforms — exclude
   const exclude = new Set(['tiktok_shop', 'inprnt'])
 
+  // R344 v2 (operator correction): standalone marketplaces have LOW ban risk
+  // for manual operator signups regardless of velocity. Tax-ID storefronts
+  // RETAIN real risk due to cross-platform SSN fraud detection (Square↔Block,
+  // eBay multi-account tracking). Friction signals drive the bucket:
+  //   - tax_id_required → nextWeek (14-day gap, max 1/week)
+  //   - instant_signup on standalone_marketplace / creator_platform → todayParallel
+  //   - instant_signup on free_storefront_pf_sync → thisWeek (2-3 day gap)
   for (const p of POD_PLATFORMS) {
     if (exclude.has(p.id)) continue
-    if (p.unlockAtMrrUsd > currentMrrUsd) {
-      blockedByMrr.push(p)
-      continue
-    }
-    if (p.friction === 'invite_only') {
-      inviteOnly.push(p)
-      continue
-    }
-    if (p.parallelSafe && p.friction === 'instant_signup') {
-      todayParallel.push(p)
-    } else if (p.friction === 'instant_signup') {
-      thisWeek.push(p)
+    if (p.unlockAtMrrUsd > currentMrrUsd) { blockedByMrr.push(p); continue }
+    if (p.friction === 'invite_only')      { inviteOnly.push(p); continue }
+    if (p.friction === 'tax_id_required')  { nextWeek.push(p);   continue }
+    // From here: instant_signup or application_review with no tax-ID gate
+    if (p.category === 'free_storefront_pf_sync') {
+      thisWeek.push(p)        // moderate velocity caution
     } else {
-      nextWeek.push(p)
+      todayParallel.push(p)    // standalone marketplaces + Gumroad — open today
     }
   }
 
   const notes: string[] = [
     `Currently live: TikTok Shop (CYZOR CREATIONS). In progress: INPRNT application.`,
-    `Etsy lesson R332: simultaneous registrations trigger fraud systems. Stagger free-storefront + tax-ID accounts by ${5}–${14} days.`,
-    `Standalone marketplaces (Society6/Redbubble/Zazzle/Gumroad) are parallel-safe — they don't share fraud signals.`,
+    `Operator correction R344 v2: standalone artist marketplaces have LOW ban risk for manual operator signups regardless of velocity — these platforms recruit artists.`,
+    `Tax-ID storefronts (TikTok Shop, Square, eBay) RETAIN real risk due to cross-platform SSN fraud detection. 14-day gap, max 1/week.`,
+    `Etsy dev-app registration (the R332 ban surface) retains highest risk — age dev accounts 7+ days, sandbox scope first.`,
     `Paid storefronts ($23–$39/mo) unlock once MRR ≥ $1k per operator constraint.`,
     `Displate requires existing portfolio. Apply AFTER INPRNT is live + a few months of activity.`,
   ]
