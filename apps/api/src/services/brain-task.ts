@@ -428,6 +428,37 @@ export const OPERATIONS: Record<string, OpSpec> = {
     },
   },
 
+  // ── R346 Gumroad autonomous publisher ─────────────────────────────
+  'gumroad.whoami': {
+    description: 'R346: Verify GUMROAD_ACCESS_TOKEN is configured and active.',
+    risk: 'low',
+    handler: async () => {
+      const { whoami } = await import('./r346-gumroad-api.js')
+      return whoami()
+    },
+  },
+  'gumroad.list_products': {
+    description: 'R346: List all existing Gumroad products.',
+    risk: 'low',
+    handler: async () => {
+      const { listProducts } = await import('./r346-gumroad-api.js')
+      return listProducts()
+    },
+  },
+  'gumroad.publish_first_three': {
+    description: 'R346: Autonomously publish the 3 prestaged first-listings (woodpecker, iris, vintage map) via Gumroad API. Params: dryRun?, skipIfNamedExists?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { publishFirstThree } = await import('./r346-gumroad-product-publisher.js')
+      const p = params as { dryRun?: boolean; skipIfNamedExists?: boolean }
+      return publishFirstThree({
+        workspaceId:        ws,
+        dryRun:             p.dryRun ?? false,
+        skipIfNamedExists:  p.skipIfNamedExists ?? true,
+      })
+    },
+  },
+
   // ─── Issue lifecycle ───────────────────────────────────────────
   'issue.ingest': {
     description: 'Convert recent cron-errors + incidents into issues.',
@@ -8173,6 +8204,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'skill.list', 'skill.rank_for_request', 'mcp.plan_invocation',
         'prestaged.list', 'pod.account_kit',
         'pod.revenue_projection', 'pod.portfolio_plan',
+        'gumroad.whoami', 'gumroad.list_products', 'gumroad.publish_first_three',
         'color.autoCorrect', 'color.applyGrade', 'color.applyLut',
         'audio.duckMix',
         // channel.save / channel.delete REMOVED from skip list —
