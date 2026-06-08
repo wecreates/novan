@@ -171,15 +171,19 @@ async function probeHuggingFace(): Promise<ProbeResult> {
   const key = process.env['HF_TOKEN']
   if (!key) return mkResult('huggingface', false, 'unknown', t0, 'no HF_TOKEN env (free signup at huggingface.co)')
   try {
-    const res = await fetch('https://api-inference.huggingface.co/status/black-forest-labs/FLUX.1-schnell', {
+    // R343 — router.huggingface.co/v1/models is the OpenAI-compatible
+    // catalog endpoint. Returns models the token can hit. Cheap probe.
+    const res = await fetch('https://router.huggingface.co/v1/models', {
       headers: { Authorization: `Bearer ${key}` },
       signal:  AbortSignal.timeout(8_000),
     })
     if (res.status === 401 || res.status === 403)
       return mkResult('huggingface', false, 'auth_revoked', t0, `${res.status}`)
+    if (res.status === 402)
+      return mkResult('huggingface', false, 'billing_exhausted', t0, '402 payment required')
     if (res.status === 429)
       return mkResult('huggingface', false, 'rate_limited', t0, '429')
-    return mkResult('huggingface', res.ok, 'ok', t0, res.ok ? 'ok' : `status ${res.status}`)
+    return mkResult('huggingface', res.ok, 'ok', t0, res.ok ? 'ok (router.huggingface.co reachable)' : `status ${res.status}`)
   } catch (e) {
     return mkResult('huggingface', false, 'network', t0, (e as Error).message.slice(0, 200))
   }

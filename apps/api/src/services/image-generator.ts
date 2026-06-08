@@ -280,26 +280,36 @@ interface HordeCheck {
   faulted:        boolean
 }
 
-// Hugging Face Inference API — uses free token (operator sets HF_TOKEN env).
-// Models: black-forest-labs/FLUX.1-schnell (open weights, fast),
-//         stabilityai/sdxl-turbo. Returns raw image bytes; we save to disk
-//         and return the storage URL.
+// Hugging Face Inference Router (R343 update) — uses router.huggingface.co/v1
+// which is OpenAI-compatible and routes through provider partners (wavespeed,
+// fal-ai, hyperbolic, replicate, etc.). HF handles auth + billing; we just
+// hit the OpenAI-style /images/generations endpoint with the model name.
+//
+// Models tested:
+//   black-forest-labs/FLUX.1-schnell  — fast, often free-tier eligible
+//   black-forest-labs/FLUX.1-dev      — higher quality, may incur provider fee
+//   stabilityai/stable-diffusion-3-medium-diffusers
+//
+// Operator can pin a specific provider via input.model with "?provider=wavespeed"
+// suffix, or set HF_PROVIDER env to force a router stop.
 
 async function genHuggingFace(input: GenerateInput): Promise<{ imageUrl: string; raw: unknown }> {
   const key = process.env['HF_TOKEN']
   if (!key) throw new Error('HF_TOKEN not configured (free at huggingface.co/settings/tokens)')
+  const provider = process.env['HF_PROVIDER']     // optional: 'wavespeed' | 'fal-ai' | 'hyperbolic' | 'replicate'
   const model = input.model ?? 'black-forest-labs/FLUX.1-schnell'
-  const res = await fetchWithRetry('image:hf', `https://api-inference.huggingface.co/models/${model}`, {
-    method: 'POST',
+  const url = provider
+    ? `https://router.huggingface.co/${provider}/v1/images/generations`
+    : `https://router.huggingface.co/v1/images/generations`
+  const res = await fetchWithRetry('image:hf', url, {
+    method:  'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      inputs:     input.prompt,
-      parameters: {
-        ...(input.negativePrompt ? { negative_prompt: input.negativePrompt } : {}),
-        width:  input.width  ?? 1024,
-        height: input.height ?? 1024,
-      },
-      options: { wait_for_model: true },
+      model,
+      prompt: input.prompt + (input.negativePrompt ? ` --no ${input.negativePrompt}` : ''),
+      size:   `${input.width ?? 1024}x${input.height ?? 1024}`,
+      n:      1,
+      response_format: 'b64_json',
     }),
     signal: AbortSignal.timeout(120_000),
   })
@@ -307,11 +317,12 @@ async function genHuggingFace(input: GenerateInput): Promise<{ imageUrl: string;
     const text = await res.response.text().catch(() => '')
     throw new Error(`hf ${res.status}: ${text.slice(0, 200)}`)
   }
-  // HF returns the raw image bytes. Convert to data: URL inline (small enough)
-  // and let the storage layer persist via existing path.
-  const buf = Buffer.from(await res.response.arrayBuffer())
-  const dataUrl = `data:image/png;base64,${buf.toString('base64')}`
-  return { imageUrl: dataUrl, raw: { sizeBytes: buf.length, model } }
+  const body = await res.response.json() as { data?: Array<{ b64_json?: string; url?: string }> }
+  const first = body.data?.[0]
+  if (!first) throw new Error('hf returned no image data')
+  if (first.url) return { imageUrl: first.url, raw: { model, via: provider ?? 'router-auto' } }
+  if (first.b64_json) return { imageUrl: `data:image/png;base64,${first.b64_json}`, raw: { model, via: provider ?? 'router-auto' } }
+  throw new Error('hf returned data row with neither url nor b64_json')
 }
 
 // Cloudflare Workers AI — generous free tier (10k neurons/day),

@@ -159,22 +159,23 @@ async function embedCohere(text: string): Promise<number[]> {
   return v
 }
 
-// R343 — HuggingFace Inference API embeddings via sentence-transformers
-//        (e.g. all-MiniLM-L6-v2 → 384-dim, padded to 768 by caller)
+// R343 — HuggingFace Inference Router embeddings (OpenAI-compatible
+// /v1/embeddings on router.huggingface.co). Same token works for both
+// images and embeddings. Default model: sentence-transformers/all-MiniLM-L6-v2
+// (384-dim, free, fast). Operator can override via HF_EMBED_MODEL.
 async function embedHuggingFace(text: string): Promise<number[]> {
   const key = process.env['HF_TOKEN']
   if (!key) throw new Error('HF_TOKEN missing')
   const model = process.env['HF_EMBED_MODEL'] ?? 'sentence-transformers/all-MiniLM-L6-v2'
-  const out = await fetchWithRetry('embed:hf', `https://api-inference.huggingface.co/pipeline/feature-extraction/${model}`, {
+  const out = await fetchWithRetry('embed:hf', 'https://router.huggingface.co/v1/embeddings', {
     method:  'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ inputs: text.slice(0, 4096), options: { wait_for_model: true } }),
+    body: JSON.stringify({ model, input: text.slice(0, 4096) }),
     signal: AbortSignal.timeout(30_000),
   })
   if (!out.ok) throw new Error(`HF embeddings ${out.status}: ${out.statusText}`)
-  const body = await out.response.json() as number[] | number[][]
-  // HF returns either [v] for single input or [[v]] depending on model
-  const v = Array.isArray(body[0]) ? body[0] as number[] : body as number[]
+  const body = await out.response.json() as { data?: Array<{ embedding?: number[] }> }
+  const v = body.data?.[0]?.embedding
   if (!v || v.length === 0) throw new Error('HF returned empty embedding')
   return v
 }
