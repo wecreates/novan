@@ -1,0 +1,49 @@
+#!/bin/bash
+set -e
+cd /root/novan
+TOKEN="ops_22fc979915bc00a7115b0903524dedd3e1d954faab5f4978472cfcd0323bafca"
+
+echo "=== Verify deployed listing-rotator has new code ==="
+grep -c "cleanSubject" /root/novan/apps/api/src/services/r349-listing-content-rotator.ts || echo "MISSING cleanSubject - new code NOT deployed"
+grep -c "redbubble:         20" /root/novan/apps/api/src/services/r349-listing-content-rotator.ts || echo "MISSING new price table"
+
+echo "=== Force module reload: full recreate api container ==="
+docker compose rm -sf api >/dev/null
+docker compose up -d api >/dev/null
+sleep 22
+curl -sS https://137-184-198-2.sslip.io/health --max-time 10
+echo ""
+
+echo "=== Wipe queue ==="
+cat > /tmp/wipe.sql <<'SQL'
+DELETE FROM design_upload_queue WHERE workspace_id = 'default';
+SELECT count(*) AS remaining FROM design_upload_queue WHERE workspace_id='default';
+SQL
+docker compose cp /tmp/wipe.sql postgres:/tmp/wipe.sql >/dev/null
+docker compose exec -T postgres bash -lc 'psql -U $POSTGRES_USER -d $POSTGRES_DB -f /tmp/wipe.sql' 2>&1 | tail -3
+
+echo "=== Re-fire pipeline ==="
+curl -sS -X POST https://137-184-198-2.sslip.io/api/v1/brain/task \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"workspace_id":"default","plan":[{"op":"trends.run_pipeline","params":{"provenCount":3,"breakoutCount":2,"nicheBreakoutCount":1}}]}' \
+  --max-time 480 -o /tmp/pipe.json
+node -e "
+const d=JSON.parse(require('fs').readFileSync('/tmp/pipe.json','utf8'));
+const r=d.data.results[0];
+if (!r.ok) { console.log('PIPELINE ERROR:', JSON.stringify(r).slice(0,400)); process.exit(0); }
+console.log('gen='+r.data.totals.designsGenerated+' queued='+r.data.totals.queueItemsCreated+' failed='+r.data.totals.designsFailed);
+"
+
+echo "=== Sanity sample: one row per platform from DB ==="
+cat > /tmp/sample.sql <<'SQL'
+SELECT platform, left(title, 60) AS title, price_usd
+FROM design_upload_queue
+WHERE workspace_id = 'default'
+ORDER BY platform, priority DESC, queued_at ASC
+LIMIT 9;
+SQL
+docker compose cp /tmp/sample.sql postgres:/tmp/sample.sql >/dev/null
+docker compose exec -T postgres bash -lc 'psql -U $POSTGRES_USER -d $POSTGRES_DB -f /tmp/sample.sql'
+
+echo "=== Run build to regenerate markdown ==="
+/tmp/r352-build.sh
