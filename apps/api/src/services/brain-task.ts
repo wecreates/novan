@@ -636,6 +636,46 @@ export const OPERATIONS: Record<string, OpSpec> = {
     },
   },
 
+  // ── R351 Trend Intelligence + Pipeline ─────────────────────────────
+  'trends.list_all': {
+    description: 'R351: List all currently-trending subjects across proven/breakout/niche-breakout tiers with conversion + saturation scores.',
+    risk: 'low',
+    handler: async () => {
+      const { PROVEN_SUBJECTS, BREAKOUT_SUBJECTS, NICHE_BREAKOUT_SUBJECTS } = await import('./r351-trend-catalog.js')
+      return {
+        proven:         PROVEN_SUBJECTS,
+        breakout:       BREAKOUT_SUBJECTS,
+        nicheBreakout:  NICHE_BREAKOUT_SUBJECTS,
+        totalSubjects:  PROVEN_SUBJECTS.length + BREAKOUT_SUBJECTS.length + NICHE_BREAKOUT_SUBJECTS.length,
+      }
+    },
+  },
+  'trends.pick_batch': {
+    description: 'R351: Pick today\'s trending batch (top-N by conversion per tier). Params: provenCount?, breakoutCount?, nicheBreakoutCount?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const { pickTrendingBatch } = await import('./r351-trend-catalog.js')
+      const p = params as { provenCount?: number; breakoutCount?: number; nicheBreakoutCount?: number }
+      return pickTrendingBatch(p)
+    },
+  },
+  'trends.run_pipeline': {
+    description: 'R351: End-to-end - pick trending subjects, generate designs via HF, queue listings across all platforms. Params: provenCount?, breakoutCount?, nicheBreakoutCount?, primaryOnly?, dryRun?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { runTrendingPipeline } = await import('./r351-trend-pipeline.js')
+      const p = params as { provenCount?: number; breakoutCount?: number; nicheBreakoutCount?: number; primaryOnly?: boolean; dryRun?: boolean }
+      return runTrendingPipeline({
+        workspaceId:        ws,
+        ...(p.provenCount !== undefined ? { provenCount: p.provenCount } : {}),
+        ...(p.breakoutCount !== undefined ? { breakoutCount: p.breakoutCount } : {}),
+        ...(p.nicheBreakoutCount !== undefined ? { nicheBreakoutCount: p.nicheBreakoutCount } : {}),
+        ...(p.primaryOnly !== undefined ? { primaryOnly: p.primaryOnly } : {}),
+        ...(p.dryRun !== undefined ? { dryRun: p.dryRun } : {}),
+      })
+    },
+  },
+
   // ─── Issue lifecycle ───────────────────────────────────────────
   'issue.ingest': {
     description: 'Convert recent cron-errors + incidents into issues.',
@@ -8388,6 +8428,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'upload_queue.add', 'upload_queue.mark_uploaded',
         'briefing.daily_uploads', 'briefing.velocity_status',
         'goal.ladder', 'goal.classify_tier', 'goal.business_status',
+        'trends.list_all', 'trends.pick_batch', 'trends.run_pipeline',
         'color.autoCorrect', 'color.applyGrade', 'color.applyLut',
         'audio.duckMix',
         // channel.save / channel.delete REMOVED from skip list —
