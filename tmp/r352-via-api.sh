@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 TOKEN="ops_22fc979915bc00a7115b0903524dedd3e1d954faab5f4978472cfcd0323bafca"
-PLATFORMS="gumroad fine_art_america inprnt society6 redbubble zazzle spreadshirt teepublic tiktok_shop"
+PLATFORMS="gumroad fine_art_america inprnt etsy redbubble zazzle spreadshirt teepublic tiktok_shop displate threadless"
 
 # Build a single brain/task plan that pulls top-3 for every platform in one call
 echo "=== Pulling top-3 per platform via upload_queue.next ==="
@@ -36,7 +36,7 @@ function parseTags(s){
 }
 let totalItems=0, platformsWithItems=0;
 // Reconstruct plan order: same as the order we built in the bash loop.
-const PLATFORM_ORDER = ['gumroad','fine_art_america','inprnt','society6','redbubble','zazzle','spreadshirt','teepublic','tiktok_shop'];
+const PLATFORM_ORDER = ['gumroad','fine_art_america','inprnt','etsy','redbubble','zazzle','spreadshirt','teepublic','tiktok_shop','displate','threadless'];
 for (let idx=0; idx<results.length; idx++) {
   const r = results[idx];
   // Prefer platform name from first item; fall back to plan order index.

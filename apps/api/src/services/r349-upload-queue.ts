@@ -39,12 +39,14 @@ export const SAFE_DAILY_VELOCITY: Record<Platform, number> = {
   gumroad:           20,    // creator marketplaces are bulk-friendly
   inprnt:            10,    // premium platform, modest pace looks natural
   fine_art_america:  15,
-  society6:          15,
   redbubble:         20,    // RB explicitly allows bulk via CSV
   zazzle:            15,
   spreadshirt:       15,
   teepublic:         20,
   tiktok_shop:       8,     // TikTok is the strictest fraud surface
+  etsy:              10,    // Etsy is strict on new sellers; ramp slowly
+  displate:          5,     // Displate is premium curated; slow pace looks natural
+  threadless:        10,    // Threadless apparel platform
 }
 
 // ─── Enqueue ────────────────────────────────────────────────────────────────

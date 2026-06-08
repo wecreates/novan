@@ -13,8 +13,10 @@ import { generateBatch } from './r349-design-factory.js'
 import { generateListing, type Platform } from './r349-listing-content-rotator.js'
 import { enqueue } from './r349-upload-queue.js'
 
-const DEFAULT_PRIMARY_PLATFORMS: Platform[] = ['gumroad', 'fine_art_america', 'inprnt']
-const DEFAULT_BACKGROUND_PLATFORMS: Platform[] = ['society6', 'redbubble', 'zazzle', 'spreadshirt', 'teepublic']
+const DEFAULT_PRIMARY_PLATFORMS: Platform[] = ['gumroad', 'fine_art_america', 'inprnt', 'etsy']
+const DEFAULT_BACKGROUND_PLATFORMS: Platform[] = ['redbubble', 'zazzle', 'spreadshirt', 'teepublic', 'displate', 'threadless']
+// Note: society6 removed (curated/invitation-only since Oct 2025).
+// Note: pixels.com is FAA's sister site; auto-syncs from FAA account = no separate queue entries needed.
 
 export interface RunTrendingPipelineInput {
   workspaceId:           string

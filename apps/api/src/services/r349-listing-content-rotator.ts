@@ -13,8 +13,11 @@
 import type { DesignNiche, DesignStyle } from './r349-design-factory.js'
 
 export type Platform =
-  | 'gumroad' | 'inprnt' | 'fine_art_america' | 'society6'
+  | 'gumroad' | 'inprnt' | 'fine_art_america'
   | 'redbubble' | 'zazzle' | 'spreadshirt' | 'teepublic' | 'tiktok_shop'
+  | 'etsy' | 'displate' | 'threadless'
+  // Note: society6 removed Oct 2025 (curated/invitation-only).
+  // Note: pixels.com inherits from fine_art_america automatically (no queue entries).
 
 export interface ListingContent {
   platform:     Platform
@@ -44,11 +47,6 @@ const TITLE_PATTERNS: Record<Platform, (subject: string, niche: DesignNiche, sty
     `${capitalize(s)} Antique Print`,
     `Classical ${capitalize(s)} Illustration`,
   ],
-  society6: (s, n) => [
-    `Vintage ${capitalize(s)} ${nicheLabel(n)} Print`,
-    `Antique ${capitalize(s)} Illustration`,
-    `${capitalize(s)} Botanical Vintage Art`,
-  ],
   redbubble: (s, n) => [
     `Vintage ${capitalize(s)} ${nicheLabel(n)} Antique Illustration`,
     `${capitalize(s)} Vintage Natural History Print`,
@@ -70,6 +68,19 @@ const TITLE_PATTERNS: Record<Platform, (subject: string, niche: DesignNiche, sty
   tiktok_shop: (s, n) => [
     `Vintage ${capitalize(s)} Wall Art Print | ${nicheLabel(n)}`,
     `${capitalize(s)} Vintage Print | Premium Gallery Art`,
+  ],
+  etsy: (s, n) => [
+    `Vintage ${capitalize(s)} Printable Wall Art | ${nicheLabel(n)} | Digital Download`,
+    `${capitalize(s)} Vintage Illustration Print | Botanical Wall Decor | Instant Download`,
+    `Antique ${capitalize(s)} Art Print | Cottagecore | Digital Print`,
+  ],
+  displate: (s, n) => [
+    `Vintage ${capitalize(s)} - ${nicheLabel(n)} Metal Print`,
+    `${capitalize(s)} Antique Botanical | Premium Metal Wall Art`,
+  ],
+  threadless: (s) => [
+    `Vintage ${capitalize(s)} Antique`,
+    `${capitalize(s)} - Botanical Vintage Design`,
   ],
 }
 
@@ -94,8 +105,6 @@ Pairs with botanical, natural-history, and antique cartography prints.`,
 
 Hand-prepared from archival public-domain sources in the tradition of 19th-century natural-history plates. Color-balanced for modern matte papers and frames. Available framed, on canvas, on metal, on acrylic, or as a poster. Shipped worldwide by Fine Art America's archival fulfillment.`,
 
-  society6: (s, n) => `Vintage ${s} - antique ${nicheLabel(n)} illustration for your gallery wall. Pairs with botanical and natural-history prints in matte or framed format.`,
-
   redbubble: (s, n) => `Vintage ${s} antique ${nicheLabel(n)} illustration. Perfect for gallery walls, vintage decor, and lovers of natural-history and classical illustration.`,
 
   zazzle: (s) => `Vintage ${s} illustration prepared for custom invitations, stationery, and gifts. Color-balanced for premium paper stock.`,
@@ -105,18 +114,36 @@ Hand-prepared from archival public-domain sources in the tradition of 19th-centu
   teepublic: (s) => `Vintage ${s} antique illustration print.`,
 
   tiktok_shop: (s) => `Vintage ${s} - premium gallery-quality wall art print. Choose your size and finish. Free shipping. Ships from Printful US fulfillment in 2-7 business days.`,
+
+  etsy: (s, n) => `**Vintage ${s} - Printable Wall Art (Instant Digital Download)**
+
+Hand-prepared ${nicheLabel(n)} illustration in the tradition of 19th-century natural-history plates. Soft, warm, archival aesthetic.
+
+**You receive (instant download):**
+- High-resolution JPEG (1024x1024+ px)
+- Print-ready at 8x10", 11x14", 16x20", A4, A3
+- Personal-use license (no resale of the file)
+
+Perfect for cottagecore decor, gallery walls, nursery art, and home offices. Print at home, send to a local print shop, or upload to Shutterfly/MPIX for archival paper.`,
+
+  displate: (s, n) => `Vintage ${s} - ${nicheLabel(n)} metal print. Hand-prepared antique illustration on premium metal substrate. Magnetic mount, no frame needed. Crisp matte finish.`,
+
+  threadless: (s) => `Vintage ${s} antique illustration design. For tees, hoodies, mugs, and tote bags. Color-balanced for direct-to-garment print.`,
 }
 
 const BASE_TAGS_BY_PLATFORM: Record<Platform, string[]> = {
   gumroad:           ['digital download', 'wall art', 'printable art', 'vintage print', 'fine art', 'instant download', 'home decor'],
   inprnt:            ['vintage', 'fine art print', 'natural history', 'gallery wall'],
   fine_art_america:  ['vintage', 'fine art print', 'natural history', 'antique illustration', 'gallery wall', 'wall art', 'archival', 'museum quality'],
-  society6:          ['vintage', 'antique', 'fine art', 'wall art', 'home decor', 'art print', 'illustration', 'gallery wall'],
   redbubble:         ['vintage', 'antique illustration', 'natural history', 'fine art print', 'wall art', 'home decor', 'gallery wall', 'victorian', 'art nouveau', 'museum'],
   zazzle:            ['vintage', 'classic', 'fine art', 'invitation', 'stationery', 'custom', 'wedding', 'event'],
   spreadshirt:       ['vintage', 'apparel', 'fine art', 't-shirt design'],
   teepublic:         ['vintage', 'illustration', 'fine art', 'antique'],
   tiktok_shop:       ['vintagewallart', 'finearthome', 'galleryart', 'antiqueillustration', 'homedecor', 'wallart', 'aesthetichomeward'],
+  // Etsy: 13 tag slots; needs broad keyword spread for SEO. Mix singular + plural + variants.
+  etsy:              ['vintage', 'wall art', 'printable art', 'digital download', 'instant download', 'cottagecore', 'botanical', 'natural history', 'antique', 'home decor', 'gallery wall', 'nursery art', 'farmhouse'],
+  displate:          ['vintage', 'metal print', 'wall decor', 'antique', 'botanical', 'home decor'],
+  threadless:        ['vintage', 'botanical', 'antique', 'cottagecore', 'illustration'],
 }
 
 const PRICE_BY_PLATFORM: Record<Platform, number> = {
@@ -126,24 +153,29 @@ const PRICE_BY_PLATFORM: Record<Platform, number> = {
   // on the storefront (R349 doctrine). Platform handles base + markup math.
   inprnt:            8,    // markup over INPRNT base; operator sets in profile
   fine_art_america:  10,   // FAA markup per inch on prints
-  society6:          5,    // S6 storefront markup
   redbubble:         20,   // RB margin % on apparel + prints
   zazzle:            15,   // Zazzle designer royalty %
   spreadshirt:       5,    // Spreadshirt designer markup per unit
   teepublic:         0,    // TeePublic = fixed $4 base / $2 sale (operator can't change)
   tiktok_shop:       18,   // TikTok Shop retail print incl Printful margin
+  // Direct retail (digital downloads): operator sets explicit price.
+  etsy:              7,    // Etsy printable wall art digital download
+  displate:          5,    // Displate designer royalty add-on per metal print
+  threadless:        6,    // Threadless designer markup per apparel unit
 }
 
 const FILE_HINT_BY_PLATFORM: Record<Platform, string> = {
   gumroad:           'Upload PNG (1024x1024+) as the digital download. Optional: pair with a print-ready PDF for the bundle SKU.',
   inprnt:            'Upload PNG at 1500x1500+ pixels minimum. INPRNT auto-crops for product sizing.',
   fine_art_america:  'Upload PNG at 2000x2000+ pixels for maximum print size eligibility. FAA scales down per product.',
-  society6:          'Upload PNG at 6500x6500+ pixels for full product catalog eligibility (large canvases need it).',
   redbubble:         'Upload PNG at 7632x6480+ pixels for all-product compatibility. Use Redbubble Design Wizard for placement.',
   zazzle:            'Upload PNG at 1500x1500+ pixels. For stationery products, 1800x1200 (landscape) recommended.',
   spreadshirt:       'Upload PNG with transparent background for apparel placement. 3000x3000+ recommended.',
   teepublic:         'Upload PNG at 4500x5400 pixels minimum for apparel.',
   tiktok_shop:       'Listing image: 800x800+ for primary, plus 4-6 lifestyle/scale shots. Product photos required.',
+  etsy:              'Upload JPEG (1024x1024+) as the digital download. Bundle 5 listing photo variants (mockups) for the Etsy listing carousel.',
+  displate:          'Upload PNG at 1465x2092 pixels minimum (3:2 portrait) for Displate metal print. Save with no transparency.',
+  threadless:        'Upload PNG at 3000x3000 pixels with transparent background for apparel placement.',
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
@@ -214,10 +246,11 @@ export function generateListing(input: {
 
 function categoryFor(platform: Platform, niche: DesignNiche): string | undefined {
   if (platform === 'fine_art_america') return 'Wall Art / Fine Art Prints / Vintage'
-  if (platform === 'society6')          return 'Art Prints / Vintage'
   if (platform === 'redbubble')         return 'Wall Art / Art Prints'
   if (platform === 'zazzle' && niche === 'botanical') return 'Stationery / Botanical'
   if (platform === 'gumroad')           return 'Digital Art / Printable Wall Art'
+  if (platform === 'etsy')              return 'Art & Collectibles / Prints / Digital Prints'
+  if (platform === 'displate')          return 'Wall Art / Vintage'
   return undefined
 }
 
