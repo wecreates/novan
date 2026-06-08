@@ -296,11 +296,15 @@ interface HordeCheck {
 async function genHuggingFace(input: GenerateInput): Promise<{ imageUrl: string; raw: unknown }> {
   const key = process.env['HF_TOKEN']
   if (!key) throw new Error('HF_TOKEN not configured (free at huggingface.co/settings/tokens)')
-  const provider = process.env['HF_PROVIDER']     // optional: 'wavespeed' | 'fal-ai' | 'hyperbolic' | 'replicate'
+  // R343.c — HF router REQUIRES provider prefix for images (verified live):
+  //   /together/v1/images/generations   → 200 (works with FLUX.1-schnell)
+  //   /nscale/v1/images/generations     → 200
+  //   /fal-ai/.../                       → 400 "Model not supported by provider fal-ai" (model has to be specific)
+  //   /v1/images/generations (no prefix) → 404
+  // Default to 'together' since it ships FLUX.1-schnell out of the box.
+  const provider = process.env['HF_PROVIDER'] ?? 'together'
   const model = input.model ?? 'black-forest-labs/FLUX.1-schnell'
-  const url = provider
-    ? `https://router.huggingface.co/${provider}/v1/images/generations`
-    : `https://router.huggingface.co/v1/images/generations`
+  const url = `https://router.huggingface.co/${provider}/v1/images/generations`
   const res = await fetchWithRetry('image:hf', url, {
     method:  'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },

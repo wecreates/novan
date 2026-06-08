@@ -159,25 +159,13 @@ async function embedCohere(text: string): Promise<number[]> {
   return v
 }
 
-// R343 — HuggingFace Inference Router embeddings (OpenAI-compatible
-// /v1/embeddings on router.huggingface.co). Same token works for both
-// images and embeddings. Default model: sentence-transformers/all-MiniLM-L6-v2
-// (384-dim, free, fast). Operator can override via HF_EMBED_MODEL.
-async function embedHuggingFace(text: string): Promise<number[]> {
-  const key = process.env['HF_TOKEN']
-  if (!key) throw new Error('HF_TOKEN missing')
-  const model = process.env['HF_EMBED_MODEL'] ?? 'sentence-transformers/all-MiniLM-L6-v2'
-  const out = await fetchWithRetry('embed:hf', 'https://router.huggingface.co/v1/embeddings', {
-    method:  'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, input: text.slice(0, 4096) }),
-    signal: AbortSignal.timeout(30_000),
-  })
-  if (!out.ok) throw new Error(`HF embeddings ${out.status}: ${out.statusText}`)
-  const body = await out.response.json() as { data?: Array<{ embedding?: number[] }> }
-  const v = body.data?.[0]?.embedding
-  if (!v || v.length === 0) throw new Error('HF returned empty embedding')
-  return v
+// R343.c — HF embeddings via router are not available on free tier
+// (verified live: /v1/embeddings returns 404, hf-inference prefix returns
+// 400 "Model not supported by provider"). Operator should use Cohere
+// instead — same shape, real free tier. This stub returns a clear error
+// so the precedence falls through to the next provider.
+async function embedHuggingFace(_text: string): Promise<number[]> {
+  throw new Error('HF embeddings not supported on free tier — use COHERE_API_KEY instead (5000 calls/mo free at cohere.com)')
 }
 
 /** Cosine similarity between two equal-length vectors. */
