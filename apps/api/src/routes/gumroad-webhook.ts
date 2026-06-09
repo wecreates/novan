@@ -111,6 +111,23 @@ export async function registerGumroadWebhook(app: FastifyInstance): Promise<void
         const { unmarkSale } = await import('../services/r521-price-thompson.js')
         await unmarkSale(refundWorkspace, permalink, refundCents)
       } catch { /* tolerated */ }
+      // R526 — re-evaluate tier after refund + emit event so the dashboard
+      // doesn't keep showing the pre-refund tier until the next sale lands.
+      try {
+        const { classifyTier } = await import('../services/r350-goal-ladder.js')
+        const sumRows = await db.execute(sql`
+          SELECT COALESCE(SUM(net_usd), 0) AS total FROM business_revenue
+          WHERE workspace_id = ${refundWorkspace} AND recorded_at >= ${Date.now() - 30 * 24 * 60 * 60_000}
+        `)
+        const mrr = Number((sumRows as Array<{ total: number }>)[0]?.total ?? 0)
+        const tier = classifyTier(mrr)
+        await db.execute(sql`
+          INSERT INTO events (id, type, workspace_id, payload, trace_id, correlation_id, source, version, created_at)
+          VALUES (${uuidv7()}, 'gumroad.sale_refunded', ${refundWorkspace},
+            ${JSON.stringify({ saleId, refundUsd: -refundAmount, newMrr: mrr, currentTier: tier })}::jsonb,
+            ${uuidv7()}, ${uuidv7()}, 'r522-refund', 1, ${Date.now()})
+        `).catch(() => {/* tolerated */})
+      } catch { /* tolerated */ }
       return reply.code(200).send({ ok: true, refunded: saleId, correctedUsd: -refundAmount })
     }
 

@@ -85,6 +85,28 @@ Signed:
   return { ok: true, claimId: id, noticeText }
 }
 
+// R528 — let operator advance the claim through its lifecycle. valid
+// transitions: drafted → sent → acknowledged → removed | rejected.
+const VALID_STATUS = new Set(['drafted', 'sent', 'acknowledged', 'removed', 'rejected'])
+export async function updateDmcaStatus(workspaceId: string, claimId: string, status: string, notes?: string): Promise<{ ok: boolean; reason?: string }> {
+  if (!VALID_STATUS.has(status)) return { ok: false, reason: `invalid status (allowed: ${[...VALID_STATUS].join('|')})` }
+  await ensureTable()
+  try {
+    const r = await db.execute(sql`
+      UPDATE dmca_claims SET status = ${status},
+                             updated_at = ${Date.now()},
+                             notes = COALESCE(${notes ?? null}, notes)
+      WHERE workspace_id = ${workspaceId} AND id = ${claimId}
+      RETURNING 1
+    `)
+    const a = (r as unknown as { rows?: unknown[] } | unknown[])
+    const hit = (Array.isArray(a) ? a : (a.rows ?? [])).length
+    return hit > 0 ? { ok: true } : { ok: false, reason: 'claim not found' }
+  } catch (e) {
+    return { ok: false, reason: (e as Error).message.slice(0, 80) }
+  }
+}
+
 export async function listDmcaClaims(workspaceId: string): Promise<Array<{ id: string; offendingUrl: string; platform: string | null; status: string; createdAt: number }>> {
   await ensureTable()
   try {

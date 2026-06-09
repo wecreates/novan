@@ -43,17 +43,23 @@ export interface TaxWatchResult {
   notified:   Array<{ workspaceId: string; source: string; bucket: string; ytdGross: number; threshold: number }>
 }
 
-export async function watchTaxThresholds(): Promise<TaxWatchResult> {
+// R527 — optional scopedWorkspaceId. R382 fires per-workspace; iterating
+// ALL workspaces inside the call yielded N² work + N duplicate pushes.
+export async function watchTaxThresholds(scopedWorkspaceId?: string): Promise<TaxWatchResult> {
   await ensureTable()
   const out: TaxWatchResult = { workspaces: 0, notified: [] }
   const year = new Date().getUTCFullYear()
   const yearStart = Date.UTC(year, 0, 1)
 
   let workspaceIds: string[] = []
-  try {
-    const r = await db.execute(sql`SELECT DISTINCT workspace_id FROM business_revenue WHERE source IS NOT NULL`)
-    workspaceIds = (r as unknown as Array<{ workspace_id: string }>).map(x => x.workspace_id).filter(Boolean)
-  } catch { return out }
+  if (scopedWorkspaceId) {
+    workspaceIds = [scopedWorkspaceId]
+  } else {
+    try {
+      const r = await db.execute(sql`SELECT DISTINCT workspace_id FROM business_revenue WHERE source IS NOT NULL`)
+      workspaceIds = (r as unknown as Array<{ workspace_id: string }>).map(x => x.workspace_id).filter(Boolean)
+    } catch { return out }
+  }
   out.workspaces = workspaceIds.length
 
   const { broadcastPush } = await import('./web-push.js')

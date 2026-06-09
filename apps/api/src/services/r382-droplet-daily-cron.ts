@@ -169,7 +169,7 @@ export async function runDailyCron(workspaceId: string, opts?: { force?: boolean
   // R510 — 1099-K threshold watch fires push at 80% and 100% of per-source thresholds.
   try {
     const { watchTaxThresholds } = await import('./r510-tax-threshold-watch.js')
-    await watchTaxThresholds()
+    await watchTaxThresholds(workspaceId)   // R527 — scope to current ws to avoid N²
   } catch (e) { console.error('[r382] tax watch:', (e as Error).message) }
 
   // R509 — refresh image-gen provider health probe so failover knows who's up.

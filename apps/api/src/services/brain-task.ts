@@ -906,7 +906,7 @@ export const OPERATIONS: Record<string, OpSpec> = {
     risk: 'low',
     handler: async (ws) => {
       const { watchTaxThresholds } = await import('./r510-tax-threshold-watch.js')
-      return watchTaxThresholds()
+      return watchTaxThresholds(ws)   // R527 — scope to caller's workspace
     },
   },
   'imagegen.provider_health': {
@@ -961,6 +961,16 @@ export const OPERATIONS: Record<string, OpSpec> = {
     handler: async (ws) => {
       const { listDmcaClaims } = await import('./r516-dmca.js')
       return { claims: await listDmcaClaims(ws) }
+    },
+  },
+  'dmca.update_status': {
+    description: 'R528: Advance a DMCA claim through its lifecycle. Params: claimId, status (drafted|sent|acknowledged|removed|rejected), notes?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { claimId?: string; status?: string; notes?: string }
+      if (!p.claimId || !p.status) throw new Error('dmca.update_status: claimId + status required')
+      const { updateDmcaStatus } = await import('./r516-dmca.js')
+      return updateDmcaStatus(ws, p.claimId, p.status, p.notes)
     },
   },
   'buyers.optin_count': {
@@ -8778,7 +8788,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
   'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights', 'platforms.list_disabled', 'mrr.project', 'sales.bulk_import', 'session.touch', 'session.ages', 'webhook.self_test',
   'platforms.earnings', 'metrics.period_comparison', 'tax.thresholds', 'imagegen.provider_health', 'backup.offsite_sync', 'dmca.list', 'buyers.optin_count',
-  'price.sample', 'price.mark_view', 'price.snapshot', 'buyers.list_optins',
+  'price.sample', 'price.mark_view', 'price.snapshot', 'buyers.list_optins', 'dmca.update_status',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -9080,6 +9090,12 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'portfolio.list', 'portfolio.improve', 'portfolio.report',
         'business.list', 'business.detail', 'business.feasibility', 'business.realityCheck',
         'business.create', 'business.sunset',
+        // R530 — new money-surfacing ops added since R138 list was last updated.
+        // Without these in the allowlist, the money-output guard redacts
+        // legitimate dollar figures the operator explicitly asked for.
+        'platforms.earnings', 'tax.thresholds', 'metrics.period_comparison',
+        'mrr.project', 'price.snapshot', 'price.sample', 'buyers.optin_count',
+        'buyers.list_optins', 'dmca.list', 'dmca.update_status',
         'revenue.list', 'revenue.rollup', 'revenue.byBusiness',
         'budget.list', 'budget.detail', 'budget.alerts',
         'cost.summary', 'cost.byBusiness', 'cost.byProvider',
@@ -9124,7 +9140,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
         'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights', 'platforms.list_disabled', 'mrr.project', 'sales.bulk_import', 'session.touch', 'session.ages', 'webhook.self_test',
   'platforms.earnings', 'metrics.period_comparison', 'tax.thresholds', 'imagegen.provider_health', 'backup.offsite_sync', 'dmca.list', 'buyers.optin_count',
-  'price.sample', 'price.mark_view', 'price.snapshot', 'buyers.list_optins',
+  'price.sample', 'price.mark_view', 'price.snapshot', 'buyers.list_optins', 'dmca.update_status',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
