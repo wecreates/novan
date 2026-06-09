@@ -58,7 +58,8 @@ interface DashboardState {
     projections:     Array<{ tier: string; daysToReach: number | null; reachableDate: string | null }>
   }
   cronHealth: Array<{ name: string; lastRanAt: number; lastStatus: string; lastDurationMs: number; lastError: string | null; staleHours: number }>  // R423
-  disabledPlatforms: Array<{ platform: string; disabledAt: number; reason: string }>      // R424
+  disabledPlatforms: Array<{ platform: string; disabledAt: number; reason: string; autoReenableAt?: number }>  // R424 + R490
+  selectorBreakers?: Array<{ key: string; fails: number; openUntilMs: number }>          // R491
   aiSpend?: { todayUsd: number; todayCallCount: number; bySource: Array<{ source: string; usd: number; calls: number }>; cap?: { dailyUsd: number; pctUsed: number; budgetExhausted: boolean } }  // R428
   autonomyPaused?: boolean                                                                // R482
   sparklines: {                                                                          // R394
@@ -240,6 +241,12 @@ export async function loadState(workspaceId: string): Promise<DashboardState> {
           name: x.name, lastRanAt: x.lastRanAt, lastStatus: x.lastStatus,
           lastDurationMs: x.lastDurationMs, lastError: x.lastError, staleHours: x.staleHours,
         }))
+      } catch { return [] }
+    })(),
+    selectorBreakers: await (async () => {
+      try {
+        const { selectorBreakerSnapshot } = await import('./r366-selector-improver.js')
+        return selectorBreakerSnapshot()
       } catch { return [] }
     })(),
     disabledPlatforms: await (async () => {
@@ -529,10 +536,28 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
   </div>` : ''}
 
   ${s.disabledPlatforms.length > 0 ? `<div class="card" style="grid-column: 1 / -1">
-    <h2>Disabled platforms (R424)</h2>
+    <h2>Disabled platforms (R424 · auto-probe in R490)</h2>
     <table>
-      <thead><tr><th>Platform</th><th>Disabled</th><th>Reason</th></tr></thead>
-      <tbody>${s.disabledPlatforms.map(p => `<tr><td>${escapeHtml(p.platform)}</td><td class="mini">${ago(p.disabledAt)}</td><td class="mini">${escapeHtml(p.reason)}</td></tr>`).join('')}</tbody>
+      <thead><tr><th>Platform</th><th>Disabled</th><th>Auto-probe in</th><th>Reason</th></tr></thead>
+      <tbody>${s.disabledPlatforms.map(p => {
+        const remaining = (p.autoReenableAt ?? 0) - Date.now()
+        const probeIn = remaining > 0 ? Math.round(remaining / 3_600_000) + 'h' : 'next 6h tick'
+        return `<tr><td>${escapeHtml(p.platform)}</td><td class="mini">${ago(p.disabledAt)}</td><td class="mini">${probeIn}</td><td class="mini">${escapeHtml(p.reason)}</td></tr>`
+      }).join('')}</tbody>
+    </table>
+  </div>` : ''}
+
+  ${s.selectorBreakers && s.selectorBreakers.length > 0 ? `<div class="card" style="grid-column: 1 / -1">
+    <h2>Selector improver breakers (R491)</h2>
+    <table>
+      <thead><tr><th>workspace|platform</th><th>Fails</th><th>State</th></tr></thead>
+      <tbody>${s.selectorBreakers.map(b => {
+        const state = b.openUntilMs > Date.now()
+          ? `open · retries in ${Math.round((b.openUntilMs - Date.now()) / 60_000)}min`
+          : `${b.fails}/3 fails`
+        const pill = b.openUntilMs > Date.now() ? 'pill-fail' : 'pill-tier'
+        return `<tr><td class="mini">${escapeHtml(b.key)}</td><td>${b.fails}</td><td><span class="pill ${pill}">${escapeHtml(state)}</span></td></tr>`
+      }).join('')}</tbody>
     </table>
   </div>` : ''}
 

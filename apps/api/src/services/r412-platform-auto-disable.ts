@@ -126,7 +126,7 @@ export async function autoReenableProbe(): Promise<{ probed: Array<{ workspaceId
   return { probed }
 }
 
-export async function listDisabledPlatforms(workspaceId: string): Promise<Array<{ platform: string; disabledAt: number; reason: string }>> {
+export async function listDisabledPlatforms(workspaceId: string): Promise<Array<{ platform: string; disabledAt: number; reason: string; autoReenableAt: number }>> {
   try {
     const r = await db.execute(sql`
       SELECT platform, disabled_at, reason FROM disabled_platforms WHERE workspace_id = ${workspaceId}
@@ -134,6 +134,8 @@ export async function listDisabledPlatforms(workspaceId: string): Promise<Array<
     `)
     return (r as unknown as Array<{ platform: string; disabled_at: number; reason: string }>).map(x => ({
       platform: x.platform, disabledAt: Number(x.disabled_at), reason: x.reason,
+      // R490 — compute auto-reenable ETA from R422 cooldown so dashboard can show "probes in N h"
+      autoReenableAt: Number(x.disabled_at) + REENABLE_COOLDOWN_MS,
     }))
   } catch { return [] }
 }

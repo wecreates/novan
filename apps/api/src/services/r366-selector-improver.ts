@@ -117,6 +117,15 @@ export async function recordSelectorOutcome(workspaceId: string, platform: strin
 // spamming a degraded provider.
 const SELECTOR_CB = new Map<string, { fails: number; openUntil: number }>()
 
+/** R491 — surface in-process breaker state to dashboard. */
+export function selectorBreakerSnapshot(): Array<{ key: string; fails: number; openUntilMs: number }> {
+  const out: Array<{ key: string; fails: number; openUntilMs: number }> = []
+  for (const [k, v] of SELECTOR_CB) {
+    if (v.openUntil > Date.now() || v.fails > 0) out.push({ key: k, fails: v.fails, openUntilMs: v.openUntil })
+  }
+  return out
+}
+
 export async function improveSelectors(input: ImproveSelectorsInput): Promise<ImproveSelectorsResult> {
   await ensureTable()
 

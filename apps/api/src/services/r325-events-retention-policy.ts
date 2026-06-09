@@ -17,6 +17,7 @@ import { sql, and, lt, like } from 'drizzle-orm'
 
 export const RETENTION_POLICY: Array<{ prefix: string; days: number; reason: string }> = [
   { prefix: 'applier.cycle',         days:   1, reason: 'heartbeats; only need recent for liveness' },
+  { prefix: 'agent.heartbeat',       days:   1, reason: 'R426 local-agent liveness; 1d retention' },
   { prefix: 'runtime.heartbeat',     days:   7, reason: 'host telemetry; 7d for trend' },
   { prefix: 'cron.metric',           days:  14, reason: 'cron timing; 14d for week-over-week' },
   { prefix: 'web_fetch.completed',   days:  30, reason: 'research history' },

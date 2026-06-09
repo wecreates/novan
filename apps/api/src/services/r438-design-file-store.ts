@@ -156,6 +156,11 @@ export async function deleteDesignFile(workspaceId: string, designId: string): P
     await db.execute(sql`
       DELETE FROM design_files WHERE workspace_id = ${workspaceId} AND design_id = ${designId}
     `).catch(() => {/* best effort */})
+    // R489 — clear the stale URL pointer in design_catalog. NULL is safer than
+    // leaving a 404'ing URL there; downstream R393 auto-pin will skip.
+    await db.execute(sql`
+      UPDATE design_catalog SET image_url = '' WHERE workspace_id = ${workspaceId} AND id = ${designId} AND image_url LIKE '/api/v1/designs/%'
+    `).catch(() => {/* best effort */})
     return { ok: true }
   } catch (e) {
     return { ok: false, reason: (e as Error).message.slice(0, 200) }
