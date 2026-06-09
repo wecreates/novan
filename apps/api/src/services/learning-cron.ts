@@ -1770,9 +1770,12 @@ async function runFirstSaleDetector(): Promise<void> {
 // to 3 times so transient errors self-heal between operator sessions.
 async function runFailedUploadRequeue(): Promise<void> {
   try {
-    const { requeueFailedUploads } = await import('./r402-failed-upload-auto-requeue.js')
-    const r = await requeueFailedUploads()
-    if (r.requeued.length > 0) await emit('cron.failed_requeued', { count: r.requeued.length, maxedOut: r.maxedOut })
+    const { withCronLock } = await import('./r504-cron-lock.js')
+    await withCronLock('R402-failed-requeue', async () => {       // R539
+      const { requeueFailedUploads } = await import('./r402-failed-upload-auto-requeue.js')
+      const r = await requeueFailedUploads()
+      if (r.requeued.length > 0) await emit('cron.failed_requeued', { count: r.requeued.length, maxedOut: r.maxedOut })
+    })
   } catch (e) { await emit('cron.error', { task: 'failed_requeue', error: (e as Error).message }) }
 }
 
@@ -1781,9 +1784,12 @@ async function runFailedUploadRequeue(): Promise<void> {
 async function runZeroSaleRelisting(): Promise<void> {
   try {
     if (new Date().getUTCHours() !== 15) return
-    const { relistZeroSaleListings } = await import('./r417-zero-sale-relisting.js')
-    const r = await relistZeroSaleListings()
-    if (r.relisted.length > 0) await emit('cron.zero_sale_relisted', { count: r.relisted.length })
+    const { withCronLock } = await import('./r504-cron-lock.js')
+    await withCronLock('R417-zero-sale-relisting', async () => {  // R539
+      const { relistZeroSaleListings } = await import('./r417-zero-sale-relisting.js')
+      const r = await relistZeroSaleListings()
+      if (r.relisted.length > 0) await emit('cron.zero_sale_relisted', { count: r.relisted.length })
+    })
   } catch (e) { await emit('cron.error', { task: 'zero_sale_relisting', error: (e as Error).message }) }
 }
 
@@ -1845,9 +1851,12 @@ async function runPlatformAutoDisable(): Promise<void> {
 // haven't been listed on yet (max 3 designs × 4 new platforms / hr).
 async function runAutoCrossListWinners(): Promise<void> {
   try {
-    const { autoCrossListWinners } = await import('./r411-auto-cross-list.js')
-    const r = await autoCrossListWinners()
-    if (r.triggered.length > 0) await emit('cron.auto_cross_list', { count: r.triggered.length, triggered: r.triggered })
+    const { withCronLock } = await import('./r504-cron-lock.js')
+    await withCronLock('R411-auto-cross-list', async () => {       // R539
+      const { autoCrossListWinners } = await import('./r411-auto-cross-list.js')
+      const r = await autoCrossListWinners()
+      if (r.triggered.length > 0) await emit('cron.auto_cross_list', { count: r.triggered.length, triggered: r.triggered })
+    })
   } catch (e) { await emit('cron.error', { task: 'auto_cross_list', error: (e as Error).message }) }
 }
 
@@ -1856,9 +1865,12 @@ async function runAutoCrossListWinners(): Promise<void> {
 // no longer has to manually trigger variant gen on proven winners.
 async function runAutoVariantsForWinnersTick(): Promise<void> {
   try {
-    const { runAutoVariantsForWinners } = await import('./r401-auto-variants-for-winners.js')
-    const r = await runAutoVariantsForWinners()
-    if (r.triggered.length > 0) await emit('cron.auto_variants_for_winners', { count: r.triggered.length, triggered: r.triggered })
+    const { withCronLock } = await import('./r504-cron-lock.js')
+    await withCronLock('R401-auto-variants', async () => {         // R539
+      const { runAutoVariantsForWinners } = await import('./r401-auto-variants-for-winners.js')
+      const r = await runAutoVariantsForWinners()
+      if (r.triggered.length > 0) await emit('cron.auto_variants_for_winners', { count: r.triggered.length, triggered: r.triggered })
+    })
   } catch (e) { await emit('cron.error', { task: 'auto_variants_for_winners', error: (e as Error).message }) }
 }
 
@@ -1899,9 +1911,12 @@ async function runPacingAutoLoosen(): Promise<void> {
   try {
     const hour = new Date().getUTCHours()
     if (hour !== 14) return
-    const { autoLoosenPacing } = await import('./r387-pacing-auto-loosen.js')
-    const r = await autoLoosenPacing()
-    if (r.promoted.length > 0) await emit('cron.pacing_loosened', { promoted: r.promoted.length })
+    const { withCronLock } = await import('./r504-cron-lock.js')
+    await withCronLock('R387-pacing-auto-loosen', async () => {    // R539
+      const { autoLoosenPacing } = await import('./r387-pacing-auto-loosen.js')
+      const r = await autoLoosenPacing()
+      if (r.promoted.length > 0) await emit('cron.pacing_loosened', { promoted: r.promoted.length })
+    })
   } catch (e) { await emit('cron.error', { task: 'pacing_auto_loosen', error: (e as Error).message }) }
 }
 
