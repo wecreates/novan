@@ -24,6 +24,7 @@ interface GumroadPingBody {
   email?:             string
   refunded?:          string
   test?:              string
+  seller_id?:         string                    // R420 — verified against GUMROAD_SELLER_ID
   workspace_id?:      string                    // optional override; defaults to 'default'
 }
 
@@ -46,6 +47,13 @@ export async function registerGumroadWebhook(app: FastifyInstance): Promise<void
     const expected = process.env['GUMROAD_WEBHOOK_TOKEN']
     if (!expected) return reply.code(503).send({ error: 'GUMROAD_WEBHOOK_TOKEN not configured' })
     if ((req.query.token ?? '') !== expected) return reply.code(401).send({ error: 'invalid token' })
+
+    // R420 — if GUMROAD_SELLER_ID is configured, also verify the seller_id
+    // field. Protects against token leak being used by anyone with the URL.
+    const expectedSeller = process.env['GUMROAD_SELLER_ID']
+    if (expectedSeller && String((req.body ?? {}).seller_id ?? '') !== expectedSeller) {
+      return reply.code(403).send({ error: 'seller_id mismatch' })
+    }
 
     const body = req.body ?? {}
     const saleId   = String(body.sale_id ?? '').trim()
