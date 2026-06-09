@@ -716,6 +716,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return bulkLoadPins({ workspaceId: ws, pins: p.pins ?? [] })
     },
   },
+  'next_actions.push': {
+    description: 'R386: For each workspace, if top action changed and score ≥ 60, send web-push to subscribed devices (4h dedup).',
+    risk: 'low',
+    handler: async () => {
+      const { pushNextActions } = await import('./r386-next-action-pusher.js')
+      return pushNextActions()
+    },
+  },
   'next_actions.list': {
     description: 'R385: Highest-impact actions the operator should take, sorted by score. Reads all signals (queue, pacing, pins, capability, sales, agent heartbeat).',
     risk: 'low',
@@ -731,6 +739,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       const { runDailyCron } = await import('./r382-droplet-daily-cron.js')
       const p = params as { force?: boolean }
       return runDailyCron(ws, { force: p.force === true })
+    },
+  },
+  'pacing.auto_loosen': {
+    description: 'R387: For each (workspace, platform), if 50+ uploads + 0 failures in 14d, shrink interval 30% (cap 3 tiers, floor 3min / 10min tiktok_shop).',
+    risk: 'low',
+    handler: async () => {
+      const { autoLoosenPacing } = await import('./r387-pacing-auto-loosen.js')
+      return autoLoosenPacing()
     },
   },
   'pacing.check_or_acquire': {
@@ -8449,7 +8465,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
   'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
   'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
-  'pacing.check_or_acquire', 'pacing.snapshot', 'daily_cron.run', 'next_actions.list',
+  'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -8793,7 +8809,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
         'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
         'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
-        'pacing.check_or_acquire', 'pacing.snapshot', 'daily_cron.run', 'next_actions.list',
+        'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',

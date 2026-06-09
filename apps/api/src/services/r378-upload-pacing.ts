@@ -47,6 +47,11 @@ const MIN_INTERVAL_MS: Record<string, number> = {
 
 const DEFAULT_INTERVAL_MS = 10 * 60_000
 
+/** R387 — exposed so R387 can compute reductions against the baseline. */
+export function __baselineFor(platform: string): number {
+  return MIN_INTERVAL_MS[platform] ?? DEFAULT_INTERVAL_MS
+}
+
 export interface CheckOrAcquireInput {
   workspaceId: string
   platform:    string
@@ -62,7 +67,13 @@ export interface CheckOrAcquireResult {
 
 export async function checkOrAcquire(input: CheckOrAcquireInput): Promise<CheckOrAcquireResult> {
   await ensureTable()
-  const min = MIN_INTERVAL_MS[input.platform] ?? DEFAULT_INTERVAL_MS
+  const baseline = MIN_INTERVAL_MS[input.platform] ?? DEFAULT_INTERVAL_MS
+  // R387 — honor auto-loosen override if it exists
+  let min = baseline
+  try {
+    const { effectiveMinIntervalMs } = await import('./r387-pacing-auto-loosen.js')
+    min = await effectiveMinIntervalMs(input.workspaceId, input.platform, baseline)
+  } catch { /* tolerated */ }
   const rows = await db.execute(sql`
     SELECT last_upload_at FROM upload_pacing
     WHERE workspace_id = ${input.workspaceId} AND platform = ${input.platform}

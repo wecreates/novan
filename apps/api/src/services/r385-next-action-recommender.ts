@@ -65,8 +65,9 @@ async function gatherSignals(workspaceId: string): Promise<Sig> {
   try {
     const { pacingSnapshot } = await import('./r378-upload-pacing.js')
     const snap = await pacingSnapshot(workspaceId)
-    for (const p of snap.platforms) {
-      if ((p.nextOkInMs ?? 0) > 0) s.pacingGated++
+    // pacingSnapshot returns Array<{ platform; lastUploadAgoMin; nextOkInMin }>
+    for (const p of snap as unknown as Array<{ nextOkInMin: number }>) {
+      if ((p.nextOkInMin ?? 0) > 0) s.pacingGated++
     }
   } catch { /* optional */ }
 

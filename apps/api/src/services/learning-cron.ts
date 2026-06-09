@@ -1748,6 +1748,27 @@ async function runDropletDailyCron(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'droplet_daily_cron', error: (e as Error).message }) }
 }
 
+// R387 — pacing auto-loosen tick: shrinks per-platform inter-upload minimum
+// when accounts have aged and stayed clean. Daily-ish cron (24h, gated to 14:00 UTC).
+async function runPacingAutoLoosen(): Promise<void> {
+  try {
+    const hour = new Date().getUTCHours()
+    if (hour !== 14) return
+    const { autoLoosenPacing } = await import('./r387-pacing-auto-loosen.js')
+    const r = await autoLoosenPacing()
+    if (r.promoted.length > 0) await emit('cron.pacing_loosened', { promoted: r.promoted.length })
+  } catch (e) { await emit('cron.error', { task: 'pacing_auto_loosen', error: (e as Error).message }) }
+}
+
+// R386 — next-action push notifier. 15-minute tick, dedup window 4h.
+async function runNextActionPusher(): Promise<void> {
+  try {
+    const { pushNextActions } = await import('./r386-next-action-pusher.js')
+    const r = await pushNextActions()
+    if (r.pushed > 0) await emit('cron.next_action_pushes', { pushed: r.pushed, workspaces: r.workspaces })
+  } catch (e) { await emit('cron.error', { task: 'next_action_pusher', error: (e as Error).message }) }
+}
+
 // R146.252 — daily workspace_memory (R211 KV layer) decay + prune sweep.
 async function runWmDecaySweep(): Promise<void> {
   try {
@@ -2268,6 +2289,10 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runRetentionSweepsTick,         INTERVALS.retentionSweeps))
   // R382 — droplet-side daily routine (sales+pipeline+self-test), hourly tick gated to 13:00 UTC.
   handles.push(scheduleJittered(runDropletDailyCron,            60 * 60_000))
+  // R386 — push notifier for next-action when top changes, 15-min tick.
+  handles.push(scheduleJittered(runNextActionPusher,            15 * 60_000))
+  // R387 — pacing auto-loosen, hourly tick gated to 14:00 UTC.
+  handles.push(scheduleJittered(runPacingAutoLoosen,            60 * 60_000))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
