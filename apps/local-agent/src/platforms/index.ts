@@ -8,6 +8,7 @@
 import { gumroadDriver } from './gumroad.js'
 import { inprntDriver } from './inprnt.js'
 import { fineArtAmericaDriver } from './fine_art_america.js'
+import { redbubbleDriver } from './redbubble.js'
 import type { PlatformDriver, DriverResult } from './_types.js'
 
 function stub(platform: string, loginUrl: string): PlatformDriver {
@@ -23,7 +24,7 @@ export const DRIVERS: Record<string, PlatformDriver> = {
   gumroad:           gumroadDriver,
   inprnt:            inprntDriver,
   fine_art_america:  fineArtAmericaDriver,
-  redbubble:         stub('redbubble',        'https://www.redbubble.com/auth/login'),
+  redbubble:         redbubbleDriver,
   etsy:              stub('etsy',             'https://www.etsy.com/signin'),
   zazzle:            stub('zazzle',           'https://www.zazzle.com/auth/login'),
   spreadshirt:       stub('spreadshirt',      'https://partner.spreadshirt.net/'),
