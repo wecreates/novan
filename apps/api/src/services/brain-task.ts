@@ -716,6 +716,15 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return bulkLoadPins({ workspaceId: ws, pins: p.pins ?? [] })
     },
   },
+  'daily_cron.run': {
+    description: 'R382: Headless half of the daily routine — sales sync + trend pipeline + self-test. Idempotent per UTC day. Params: force?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { runDailyCron } = await import('./r382-droplet-daily-cron.js')
+      const p = params as { force?: boolean }
+      return runDailyCron(ws, { force: p.force === true })
+    },
+  },
   'pacing.check_or_acquire': {
     description: 'R378: Check if a platform upload is allowed right now (per anti-flag inter-upload min). If yes, acquires the slot. Params: platform, acquire?',
     risk: 'low',
@@ -8432,7 +8441,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
   'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
   'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
-  'pacing.check_or_acquire', 'pacing.snapshot',
+  'pacing.check_or_acquire', 'pacing.snapshot', 'daily_cron.run',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -8776,7 +8785,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
         'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
         'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
-        'pacing.check_or_acquire', 'pacing.snapshot',
+        'pacing.check_or_acquire', 'pacing.snapshot', 'daily_cron.run',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
