@@ -1,111 +1,152 @@
 /**
- * R358 — INPRNT driver.
+ * R361 — INPRNT driver, portfolio-application mode.
+ *
+ * Operator clarified: INPRNT does NOT block uploads pending approval — the
+ * approval gate IS the portfolio application page itself. Until 5 portfolio
+ * images are uploaded and the application submitted, the regular /upload/
+ * route is unavailable.
  *
  * Flow:
- *   1. /upload (logged-in artists land on the upload form directly)
- *   2. Click file input → setInputFiles
- *   3. Fill Title
- *   4. Select Category (matched to niche)
- *   5. Fill tag list (comma-separated)
- *   6. Set markup slider/input
- *   7. Click Submit → wait for confirmation
+ *   1. Navigate to /application/ (logged-in required)
+ *   2. Fill bio + social links (if requested)
+ *   3. Upload 5 portfolio images via the file input
+ *   4. Submit for community-vote review
  *
- * INPRNT auto-crops + scales for product sizing, so no per-product
- * variant generation is needed.
+ * The driver's upload() processes ONE queue item per call, accumulating
+ * portfolio uploads via a memory cache. When 5 are accumulated, it submits
+ * the application and marks all 5 queue items as uploaded together.
  *
- * Selectors are best-effort from the INPRNT seller portal as of late 2025;
- * verify with `--dry-run` before going live and tighten if the DOM has
- * shifted.
+ * Once approved (3-14 days, manual operator check), swap this driver back to
+ * the post-approval /sell/{shop}/upload/ flow.
  */
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
 import type { Page } from 'playwright'
 import { humanType, humanClick, humanPause, sectionPause } from '../anti-flag.js'
 import type { DriverInput, DriverResult, PlatformDriver } from './_types.js'
 
+const PORTFOLIO_TARGET = 5
+const PORTFOLIO_STATE_FILE = '.profile/inprnt-portfolio.json'
+
+interface PortfolioState {
+  collectedDesignIds: string[]
+  collectedFiles:     string[]
+  submitted:          boolean
+  submittedAt?:       number
+  applicationUrl?:    string
+}
+
+async function loadState(): Promise<PortfolioState> {
+  try {
+    const raw = await fs.readFile(PORTFOLIO_STATE_FILE, 'utf8')
+    return JSON.parse(raw) as PortfolioState
+  } catch {
+    return { collectedDesignIds: [], collectedFiles: [], submitted: false }
+  }
+}
+async function saveState(s: PortfolioState): Promise<void> {
+  await fs.mkdir(path.dirname(PORTFOLIO_STATE_FILE), { recursive: true })
+  await fs.writeFile(PORTFOLIO_STATE_FILE, JSON.stringify(s, null, 2))
+}
+
 async function loginCheck(page: Page): Promise<boolean> {
-  // Navigate to a page that requires authentication. Logged-in users stay on
-  // the upload form; anonymous users get redirected to /accounts/login/.
-  await page.goto('https://www.inprnt.com/upload/', { waitUntil: 'domcontentloaded' })
+  // Navigate to the application page. Logged-out users get redirected.
+  await page.goto('https://www.inprnt.com/application/', { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(2000)
   const url = page.url()
   if (url.includes('/accounts/login') || url.includes('/login')) return false
-  // Additional positive signal: look for a logout link OR the user avatar OR upload form.
-  const positive = await page.locator(
-    'a[href*="/logout"], form[action*="upload"], input[type="file"]'
-  ).first().isVisible({ timeout: 4_000 }).catch(() => false)
-  return positive
-}
-
-const CATEGORY_BY_NICHE: Record<string, string> = {
-  botanical:           'Nature',
-  natural_history:     'Nature',
-  animal_audubon:      'Animals',
-  nautical:            'Travel',
-  vintage_map:         'Travel',
-  japanese_woodblock:  'Illustration',
-  antique_portrait:    'Portrait',
-  landscape:           'Landscape',
-  still_life:          'Illustration',
-  architecture:        'Architecture',
-  pattern_decorative:  'Pattern',
-  celestial:           'Space',
-  mythology:           'Fantasy',
-  art_nouveau:         'Illustration',
-  medieval_illumination: 'Illustration',
+  // Application page or shop-already-open page = logged in.
+  return true
 }
 
 async function upload(input: DriverInput): Promise<DriverResult> {
   const { page, item, designFilePath, dryRun } = input
+  const state = await loadState()
 
-  await page.goto('https://www.inprnt.com/upload', { waitUntil: 'domcontentloaded' })
+  // If already submitted, refuse: the operator needs to manually move past
+  // the review stage; auto-resubmitting would look like spam.
+  if (state.submitted) {
+    return {
+      ok: false,
+      reason: `INPRNT application already submitted at ${state.submittedAt ? new Date(state.submittedAt).toISOString() : '?'}. Wait for review (3-14 days) before more uploads.`,
+    }
+  }
+
+  // Accumulate this design into the portfolio (no submission yet)
+  if (!state.collectedDesignIds.includes(item.designId)) {
+    state.collectedDesignIds.push(item.designId)
+    state.collectedFiles.push(designFilePath)
+    await saveState(state)
+  }
+
+  const haveAll = state.collectedDesignIds.length >= PORTFOLIO_TARGET
+  if (!haveAll) {
+    const remaining = PORTFOLIO_TARGET - state.collectedDesignIds.length
+    return {
+      ok: true,
+      externalUrl: 'PENDING_PORTFOLIO_ACCUMULATION',
+      reason: `Accumulated ${state.collectedDesignIds.length}/${PORTFOLIO_TARGET} portfolio designs. Need ${remaining} more before submission.`,
+    }
+  }
+
+  // We have 5. Drive the application page.
+  await page.goto('https://www.inprnt.com/application/', { waitUntil: 'domcontentloaded' })
   await sectionPause()
 
-  // File upload
-  const fileInput = page.locator('input[type="file"]').first()
-  await fileInput.waitFor({ state: 'attached', timeout: 20_000 })
-  await fileInput.setInputFiles(designFilePath)
-  await page.waitForTimeout(4_000)              // INPRNT renders a thumb after upload
-
-  // Title
-  const titleField = page.locator('input[name="title"], input[id*="title"], input[placeholder*="title" i]').first()
-  await titleField.waitFor({ state: 'visible', timeout: 15_000 })
-  await humanType(titleField, item.title.slice(0, 100))
-  await humanPause()
-
-  // Description (INPRNT uses this for SEO meta)
-  const descField = page.locator('textarea[name="description"], textarea[id*="description"]').first()
-  if (await descField.count() > 0) {
-    await humanType(descField, item.description.slice(0, 500))
+  // Fill bio if there's a bio field (it's optional on most renderings)
+  const bioField = page.locator('textarea[name*="bio" i], textarea[id*="bio" i]').first()
+  if (await bioField.count() > 0) {
+    const bio = 'Original artwork by Chris Spangler / CYZOR CREATIONS. Botanical, natural-history, vintage-scientific, and cottagecore illustrations. Each print is hand-finished. Made for collectors who like books, gardens, and quiet rooms.'
+    await humanType(bioField, bio)
     await humanPause()
   }
 
-  // Tags — INPRNT uses a comma-separated text field
-  const tags = (item.tags || '').split(',').map(t => t.trim()).filter(Boolean).slice(0, 10).join(', ')
-  const tagsField = page.locator('input[name="tags"], input[id*="tags"], input[placeholder*="tag" i]').first()
-  if (await tagsField.count() > 0) {
-    await humanType(tagsField, tags)
-    await humanPause()
+  // Find the portfolio file input(s). INPRNT may use one multi-upload input
+  // or multiple single-file inputs. Try multi first.
+  const multiInput = page.locator('input[type="file"][multiple]').first()
+  if (await multiInput.count() > 0) {
+    await multiInput.setInputFiles(state.collectedFiles)
+    await page.waitForTimeout(8_000)         // wait for INPRNT thumbnail processing
+  } else {
+    // Fall back to N single inputs
+    const singleInputs = page.locator('input[type="file"]')
+    const count = await singleInputs.count()
+    for (let i = 0; i < Math.min(count, state.collectedFiles.length); i++) {
+      const file = state.collectedFiles[i]!
+      await singleInputs.nth(i).setInputFiles(file)
+      await page.waitForTimeout(2000)
+    }
   }
+  await sectionPause()
 
-  // Category — pick the niche-mapped option from a select (or click-through if combobox)
-  const niche = (item.notes?.match(/niche=(\w+)/)?.[1]) || 'natural_history'
-  const category = CATEGORY_BY_NICHE[niche] ?? 'Illustration'
-  const categorySelect = page.locator('select[name*="categ" i]').first()
-  if (await categorySelect.count() > 0) {
-    await categorySelect.selectOption({ label: category }).catch(() => {/* fallback below */})
+  if (dryRun) {
+    return {
+      ok: true,
+      externalUrl: page.url(),
+      reason: 'dry-run: portfolio loaded onto application page, did NOT submit',
+    }
   }
 
   // Submit
-  if (dryRun) return { ok: true, externalUrl: page.url(), reason: 'dry-run: stopped before submit' }
-
-  const submitBtn = page.locator('button[type="submit"], button:has-text("Upload"), button:has-text("Submit")').first()
-  if (await submitBtn.count() === 0) return { ok: false, reason: 'submit button not found' }
+  const submitBtn = page.locator('button[type="submit"], button:has-text("Submit"), button:has-text("Apply")').first()
+  if (await submitBtn.count() === 0) {
+    return { ok: false, reason: 'submit button not found on application page' }
+  }
   await humanClick(page, submitBtn)
-  await page.waitForLoadState('networkidle', { timeout: 60_000 }).catch(() => {/* slow uploads */})
+  await page.waitForLoadState('networkidle', { timeout: 60_000 }).catch(() => {/* slow */})
   await sectionPause()
 
-  // Pull the live URL — INPRNT lands you on the public image page after a successful upload
-  const url = page.url()
-  return { ok: true, externalUrl: url.includes('/gallery/') || url.includes('/print/') ? url : `https://www.inprnt.com${url}` }
+  // Persist submission state so we don't re-submit
+  state.submitted     = true
+  state.submittedAt   = Date.now()
+  state.applicationUrl = page.url()
+  await saveState(state)
+
+  return {
+    ok: true,
+    externalUrl: page.url(),
+    reason: `Submitted INPRNT portfolio application with ${state.collectedDesignIds.length} designs. Review takes 3-14 days.`,
+  }
 }
 
 export const inprntDriver: PlatformDriver = {
