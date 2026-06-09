@@ -12,8 +12,39 @@ import { sql } from 'drizzle-orm'
 import { v7 as uuidv7 } from 'uuid'
 import { db } from '../db/client.js'
 
-export const SAFE_PIN_VELOCITY = 5     // R350 anti-flag: pins/day max for new accounts
+// R350 anti-flag: pins/day max for new accounts. R416 scales this up as
+// the account ages and survives without strikes. Effective velocity is
+// returned by effectiveVelocity() — call sites should prefer that.
+export const SAFE_PIN_VELOCITY = 5     // baseline; honored by older code paths
 const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * R416 — Effective Pinterest pin velocity.
+ *
+ * Starts at 5/day. After 30d of zero failures and ≥30 successful posts,
+ * promote to 10/day. After 60d + ≥100 posts + 0 strikes, promote to 15/day.
+ */
+export async function effectivePinVelocity(workspaceId: string): Promise<number> {
+  try {
+    const r = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'posted')::int AS posted_total,
+        MIN(posted_at) FILTER (WHERE status = 'posted')::bigint AS first_posted,
+        COUNT(*) FILTER (WHERE status = 'failed')::int AS failed_total
+      FROM pinterest_pin_queue WHERE workspace_id = ${workspaceId}
+    `)
+    const stats = (r as Array<{ posted_total: number; first_posted: number; failed_total: number }>)[0]
+    if (!stats) return SAFE_PIN_VELOCITY
+    const postedTotal = Number(stats.posted_total) || 0
+    const firstPosted = Number(stats.first_posted) || 0
+    const failedTotal = Number(stats.failed_total) || 0
+    if (failedTotal > 0 || firstPosted === 0) return SAFE_PIN_VELOCITY
+    const ageDays = (Date.now() - firstPosted) / (24 * 60 * 60_000)
+    if (ageDays >= 60 && postedTotal >= 100) return 15
+    if (ageDays >= 30 && postedTotal >= 30) return 10
+    return SAFE_PIN_VELOCITY
+  } catch { return SAFE_PIN_VELOCITY }
+}
 
 async function ensureTable(): Promise<void> {
   await db.execute(sql`
@@ -86,7 +117,8 @@ export async function nextPin(workspaceId: string): Promise<PinItem | null> {
     WHERE workspace_id = ${workspaceId} AND status = 'posted' AND posted_at >= ${cutoff}
   `)
   const postedToday = Number((todayRows as unknown as Array<{ n: number }>)[0]?.n ?? 0)
-  if (postedToday >= SAFE_PIN_VELOCITY) return null
+  const velocity = await effectivePinVelocity(workspaceId)   // R416
+  if (postedToday >= velocity) return null
 
   const rows = await db.execute(sql`
     SELECT id, title, description, tags, link_url, board_name, design_file, priority
@@ -148,12 +180,13 @@ export async function pinStats(workspaceId: string): Promise<PinStats> {
     WHERE workspace_id = ${workspaceId}
   `)
   const r = (rows as unknown as Array<Record<string, number>>)[0] ?? { queued: 0, posted_total: 0, posted_today: 0, failed_total: 0 }
+  const velocity = await effectivePinVelocity(workspaceId)   // R416
   return {
     queued:         Number(r['queued']) || 0,
     postedTotal:    Number(r['posted_total']) || 0,
     postedToday:    Number(r['posted_today']) || 0,
     failedTotal:    Number(r['failed_total']) || 0,
-    remainingToday: Math.max(0, SAFE_PIN_VELOCITY - (Number(r['posted_today']) || 0)),
+    remainingToday: Math.max(0, velocity - (Number(r['posted_today']) || 0)),
   }
 }
 
