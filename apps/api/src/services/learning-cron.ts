@@ -1726,6 +1726,28 @@ async function runDailyRoutineTick(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'daily_routine', error: (e as Error).message }) }
 }
 
+// R382 — hourly tick that fires the droplet-side daily cron (sales sync +
+// trend pipeline + capability self-test) per workspace. runDailyCron is
+// idempotent per UTC day via daily_cron_runs, so 24 ticks/day = 1 actual run.
+// Gated to the 13:00 UTC hour (≈ 08:00 ET) so it fires before the operator's
+// morning routine but after midnight UTC rollover.
+async function runDropletDailyCron(): Promise<void> {
+  try {
+    const hour = new Date().getUTCHours()
+    if (hour !== 13) return
+    const ids = await listWorkspaceIds()
+    const { runDailyCron } = await import('./r382-droplet-daily-cron.js')
+    let ran = 0
+    for (const ws of ids) {
+      try {
+        const r = await runDailyCron(ws)
+        if (!r.alreadyRanToday) ran++
+      } catch (e) { await emit('cron.error', { task: 'droplet_daily_cron', workspace: ws, error: (e as Error).message }) }
+    }
+    await emit('cron.droplet_daily_cron', { workspaces: ids.length, ran })
+  } catch (e) { await emit('cron.error', { task: 'droplet_daily_cron', error: (e as Error).message }) }
+}
+
 // R146.252 — daily workspace_memory (R211 KV layer) decay + prune sweep.
 async function runWmDecaySweep(): Promise<void> {
   try {
@@ -2244,6 +2266,8 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runWmDecaySweep,                INTERVALS.wmDecay))
   handles.push(scheduleJittered(runBrainAlertTick,              INTERVALS.brainAlert))
   handles.push(scheduleJittered(runRetentionSweepsTick,         INTERVALS.retentionSweeps))
+  // R382 — droplet-side daily routine (sales+pipeline+self-test), hourly tick gated to 13:00 UTC.
+  handles.push(scheduleJittered(runDropletDailyCron,            60 * 60_000))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
