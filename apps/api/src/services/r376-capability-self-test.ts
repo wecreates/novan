@@ -114,6 +114,33 @@ export async function runCapabilitySelfTest(workspaceId: string): Promise<SelfTe
     return { status: 'ok', detail: 'dashboard module loaded' }
   }))
 
+  // R544 — honest blocker reports for provider readiness. Uses R334 orphans
+  // to produce structured "this is why X can't run yet" diagnostics instead
+  // of opaque 'missing' status.
+  probes.push(await probe('image-gen provider readiness', 'imagegen', async () => {
+    const { blockedByProviderBilling, blockedByProviderAuth } = await import('./r334-honest-blocker-reporter.js')
+    const hasReplicate = !!process.env['REPLICATE_API_TOKEN']
+    const hasFal       = !!process.env['FAL_KEY']
+    const hasOpenai    = !!process.env['OPENAI_API_KEY']
+    if (!hasReplicate && !hasFal && !hasOpenai) {
+      const block = blockedByProviderAuth('image-gen')
+      return { status: 'missing', detail: `${block.userMessage} — keys: REPLICATE_API_TOKEN | FAL_KEY | OPENAI_API_KEY` }
+    }
+    // Even one configured is fine — R509 failover will pick a working one.
+    try {
+      const { providerHealthSnapshot } = await import('./r509-imagegen-failover.js')
+      const snap = await providerHealthSnapshot()
+      const healthy = snap.filter(s => s.lastStatus === 'ok').length
+      if (healthy === 0 && snap.length > 0) {
+        const block = blockedByProviderBilling('image-gen')
+        return { status: 'degraded', detail: `${block.userMessage} — all probed providers down; verify billing/credits` }
+      }
+      return { status: 'ok', detail: `${healthy}/${snap.length} provider(s) healthy` }
+    } catch {
+      return { status: 'ok', detail: 'env configured (health probe pending)' }
+    }
+  }))
+
   const summary = { ok: 0, degraded: 0, missing: 0, error: 0, total: probes.length }
   for (const p of probes) summary[p.status]++
 

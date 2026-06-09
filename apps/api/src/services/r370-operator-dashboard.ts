@@ -64,6 +64,7 @@ interface DashboardState {
   platformEarnings?: Array<{ source: string; grossUsd: number; netUsd: number; saleCount: number; takeRate: number }>  // R519 — R511
   periodCompare?: { wowSalesDelta: number; wowGrossDelta: number; momSalesDelta: number; momGrossDelta: number; thisWeek: { sales: number; grossUsd: number }; thisMonth: { sales: number; grossUsd: number } }  // R519 — R513
   buyerOptInCount?: number                                                              // R531 — R517
+  offsiteBackupConfigured?: boolean                                                     // R543 — R508 env health
   aiSpend?: { todayUsd: number; todayCallCount: number; bySource: Array<{ source: string; usd: number; calls: number }>; cap?: { dailyUsd: number; pctUsed: number; budgetExhausted: boolean } }  // R428
   autonomyPaused?: boolean                                                                // R482
   sparklines: {                                                                          // R394
@@ -267,6 +268,12 @@ export async function loadState(workspaceId: string): Promise<DashboardState> {
         return await countOptIns(workspaceId)
       } catch { return 0 }
     })(),
+    offsiteBackupConfigured: (
+      !!process.env['NOVAN_OFFSITE_S3_ENDPOINT'] &&                          // R543
+      !!process.env['NOVAN_OFFSITE_S3_BUCKET'] &&
+      !!process.env['NOVAN_OFFSITE_S3_ACCESS_KEY'] &&
+      !!process.env['NOVAN_OFFSITE_S3_SECRET_KEY']
+    ),
     periodCompare: await (async () => {                                      // R519 — R513
       try {
         const { periodComparison } = await import('./r513-wow-mom-comparison.js')
@@ -438,6 +445,8 @@ ${token ? `<div style="margin-bottom:20px;padding:12px;background:#18181b;border
     <button type="submit" aria-label="Fire ${escapeHtml(action as string)}" style="background:#1e3a8a;border:1px solid #3b82f6;color:#dbeafe;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">${escapeHtml(label as string)}</button>
   </form>`).join('')}
 </div>` : ''}
+
+${!s.offsiteBackupConfigured ? `<div style="background:#7c2d12;border:1px solid #fb923c;border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;color:#fed7aa">⚠ R508 offsite backup not configured. Set NOVAN_OFFSITE_S3_ENDPOINT/REGION/BUCKET/ACCESS_KEY/SECRET_KEY in .env. Nightly backups are written locally to /var/lib/novan/backups but won't survive droplet loss.</div>` : ''}
 
 ${s.autonomyPaused ? `<div style="background:#7f1d1d;border:1px solid #fca5a5;border-radius:8px;padding:16px;margin-bottom:20px"><strong style="color:#fee2e2">⏸ Autonomy paused</strong><div style="color:#fecaca;font-size:13px;margin-top:4px">kill_switch.autonomous_writes is engaged for this workspace. R382/R401/R411/R421/R458 won't fire. Resume via brain-task: kill_switch.enable autonomous_writes</div></div>` : ''}
 

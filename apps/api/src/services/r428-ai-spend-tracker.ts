@@ -65,7 +65,11 @@ export async function spendSnapshot(workspaceId: string): Promise<SpendSnapshot>
   const todayUsd = bySource.reduce((a, b) => a + b.usd, 0)
   const todayCallCount = bySource.reduce((a, b) => a + b.calls, 0)
   const out: SpendSnapshot = { todayUsd, todayCallCount, bySource }
-  const dailyBudgetUsd = Number(process.env[DAILY_BUDGET_USD_ENV] ?? 0)
+  // R540 — sensible default of $10/day for a solo operator. Without this
+  // the gate is a no-op (cap of $0 == unlimited) so R524's check at the
+  // image-gen entry point would always pass — defeating the purpose.
+  // Operator can bump via NOVAN_DAILY_AI_BUDGET_USD env or disable with 0.
+  const dailyBudgetUsd = Number(process.env[DAILY_BUDGET_USD_ENV] ?? 10)
   if (dailyBudgetUsd > 0) {
     out.cap = {
       dailyUsd: dailyBudgetUsd,
@@ -79,7 +83,11 @@ export async function spendSnapshot(workspaceId: string): Promise<SpendSnapshot>
 /** Guard: returns true if today's spend has already exceeded the daily budget.
  *  Crons should check this before firing expensive ops. */
 export async function isBudgetExhausted(workspaceId: string): Promise<boolean> {
-  const dailyBudgetUsd = Number(process.env[DAILY_BUDGET_USD_ENV] ?? 0)
+  // R540 — sensible default of $10/day for a solo operator. Without this
+  // the gate is a no-op (cap of $0 == unlimited) so R524's check at the
+  // image-gen entry point would always pass — defeating the purpose.
+  // Operator can bump via NOVAN_DAILY_AI_BUDGET_USD env or disable with 0.
+  const dailyBudgetUsd = Number(process.env[DAILY_BUDGET_USD_ENV] ?? 10)
   if (dailyBudgetUsd <= 0) return false
   const snap = await spendSnapshot(workspaceId)
   return Boolean(snap.cap?.budgetExhausted)

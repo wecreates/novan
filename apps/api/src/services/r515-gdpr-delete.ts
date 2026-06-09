@@ -17,12 +17,15 @@ export interface GdprDeleteResult {
   redactedRevenue:    number
   redactedEvents:     number
   redactedBuyerOptin: number
+  redactedAudience:   number       // R541 — audience_captures + leads
+  redactedBios:       number       // R541 — bio_subscribers if present
 }
 
 export async function gdprDeleteEmail(workspaceId: string, email: string): Promise<GdprDeleteResult> {
-  if (!email || !email.includes('@')) return { ok: false, redactedRevenue: 0, redactedEvents: 0, redactedBuyerOptin: 0 }
+  if (!email || !email.includes('@')) return { ok: false, redactedRevenue: 0, redactedEvents: 0, redactedBuyerOptin: 0, redactedAudience: 0, redactedBios: 0 }
   const normalized = email.trim().toLowerCase()
   let redactedRevenue = 0, redactedEvents = 0, redactedBuyerOptin = 0
+  let redactedAudience = 0, redactedBios = 0
   try {
     // business_revenue: rewrite metadata.email → '<redacted>'
     const r1 = await db.execute(sql`
@@ -54,5 +57,30 @@ export async function gdprDeleteEmail(workspaceId: string, email: string): Promi
       redactedBuyerOptin = (Array.isArray(a3) ? a3 : (a3.rows ?? [])).length
     }
   } catch { /* table may not exist */ }
-  return { ok: true, redactedRevenue, redactedEvents, redactedBuyerOptin }
+  // R541 — also wipe owned-audience captures (R162 lead magnets). These hold
+  // raw email + name so GDPR mandates erasure.
+  try {
+    const r4 = await db.execute(sql`
+      DELETE FROM audience_captures
+      WHERE workspace_id = ${workspaceId} AND lower(email) = ${normalized}
+      RETURNING 1
+    `).catch(() => null)
+    if (r4) {
+      const a4 = (r4 as unknown as { rows?: unknown[] } | unknown[])
+      redactedAudience = (Array.isArray(a4) ? a4 : (a4.rows ?? [])).length
+    }
+  } catch { /* table may not exist */ }
+  // R541 — bio_subscribers captures public-bio opt-ins; same scope as buyer_emails.
+  try {
+    const r5 = await db.execute(sql`
+      DELETE FROM bio_subscribers
+      WHERE workspace_id = ${workspaceId} AND lower(email) = ${normalized}
+      RETURNING 1
+    `).catch(() => null)
+    if (r5) {
+      const a5 = (r5 as unknown as { rows?: unknown[] } | unknown[])
+      redactedBios = (Array.isArray(a5) ? a5 : (a5.rows ?? [])).length
+    }
+  } catch { /* table may not exist */ }
+  return { ok: true, redactedRevenue, redactedEvents, redactedBuyerOptin, redactedAudience, redactedBios }
 }
