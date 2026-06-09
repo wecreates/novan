@@ -716,6 +716,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return bulkLoadPins({ workspaceId: ws, pins: p.pins ?? [] })
     },
   },
+  'capability.self_test': {
+    description: 'R376: Exercise core ops + report what works, what is degraded, what is missing prerequisites.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { runCapabilitySelfTest } = await import('./r376-capability-self-test.js')
+      return runCapabilitySelfTest(ws)
+    },
+  },
   'sales.record': {
     description: 'R375: Record a sale from any platform (manual entry / webhook). Idempotent on externalSaleId. Auto-fires winner-variant generation. Params: platform, externalSaleId, grossUsd, netUsd?, productUrl?, productName?, occurredAt?',
     risk: 'low',
@@ -8354,7 +8362,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'account.birthdays', 'design.get',
   'selector.improve', 'selector.outcome', 'selector.stored',
   'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
-  'sales.record', 'sales.cross_platform_mrr',
+  'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -8696,7 +8704,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'agent.heartbeat', 'agent.report_event', 'agent.report_failure', 'account.birthdays',
         'selector.improve', 'selector.outcome', 'selector.stored',
         'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
-        'sales.record', 'sales.cross_platform_mrr',
+        'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
