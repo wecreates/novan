@@ -77,8 +77,23 @@ export async function runDailyCron(workspaceId: string, opts?: { force?: boolean
 
   let pipelineGenerated = 0, pipelineQueued = 0, pipelineFailed = 0
   try {
+    // R406 — use R405 niche-weight recommender to adapt pipeline counts to
+    // observed performance. Falls back to the static 5/3/2 mix if R405 hasn't
+    // got enough data yet.
+    let provenCount = 5, breakoutCount = 3, nicheBreakoutCount = 2
+    try {
+      const { recommendNicheWeights } = await import('./r405-pipeline-niche-weighter.js')
+      const rec = await recommendNicheWeights({ workspaceId, totalBudget: 10 })
+      const provenTotal = rec.recommendations.filter(r => r.reason.startsWith('proven')).reduce((a, r) => a + r.recommendedCount, 0)
+      const exploreTotal = rec.recommendations.filter(r => r.reason.startsWith('unexplored') || r.reason.includes('winners yet')).reduce((a, r) => a + r.recommendedCount, 0)
+      if (provenTotal > 0) {
+        provenCount = provenTotal
+        breakoutCount = Math.max(1, Math.floor(exploreTotal * 0.6))
+        nicheBreakoutCount = Math.max(1, Math.floor(exploreTotal * 0.4))
+      }
+    } catch { /* fallback to defaults */ }
     const { runTrendingPipeline } = await import('./r351-trend-pipeline.js')
-    const r = await runTrendingPipeline({ workspaceId, provenCount: 5, breakoutCount: 3, nicheBreakoutCount: 2 })
+    const r = await runTrendingPipeline({ workspaceId, provenCount, breakoutCount, nicheBreakoutCount })
     pipelineGenerated = r.totals.designsGenerated
     pipelineQueued    = r.totals.queueItemsCreated
     pipelineFailed    = r.totals.designsFailed
