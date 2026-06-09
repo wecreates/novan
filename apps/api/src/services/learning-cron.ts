@@ -1769,6 +1769,16 @@ async function runFailedUploadRequeue(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'failed_requeue', error: (e as Error).message }) }
 }
 
+// R412 — hourly platform auto-disable. Catches broken drivers before they
+// burn pipeline budget on failures-only paths.
+async function runPlatformAutoDisable(): Promise<void> {
+  try {
+    const { autoDisableBrokenPlatforms } = await import('./r412-platform-auto-disable.js')
+    const r = await autoDisableBrokenPlatforms()
+    if (r.newlyDisabled.length > 0) await emit('cron.platforms_disabled', { count: r.newlyDisabled.length, platforms: r.newlyDisabled })
+  } catch (e) { await emit('cron.error', { task: 'platform_auto_disable', error: (e as Error).message }) }
+}
+
 // R411 — hourly auto-cross-list: top winners get queued on platforms they
 // haven't been listed on yet (max 3 designs × 4 new platforms / hr).
 async function runAutoCrossListWinners(): Promise<void> {
@@ -2365,6 +2375,8 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runAutoVariantsForWinnersTick,  60 * 60_000))
   // R411 — auto-cross-list winners to missing platforms, hourly tick.
   handles.push(scheduleJittered(runAutoCrossListWinners,        60 * 60_000))
+  // R412 — platform auto-disable on chronic failures, hourly tick.
+  handles.push(scheduleJittered(runPlatformAutoDisable,         60 * 60_000))
   // R402 — failed-upload auto-requeue, hourly tick.
   handles.push(scheduleJittered(runFailedUploadRequeue,         60 * 60_000))
   // R403 — per-platform first-sale detector, hourly tick.

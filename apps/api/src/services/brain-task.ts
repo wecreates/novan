@@ -751,6 +751,24 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return rankNichePerformance(ws)
     },
   },
+  'platforms.list_disabled': {
+    description: 'R412: Workspace platforms auto-disabled due to 10+ failures + 0 success in 7d.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { listDisabledPlatforms } = await import('./r412-platform-auto-disable.js')
+      return { disabled: await listDisabledPlatforms(ws) }
+    },
+  },
+  'platforms.enable': {
+    description: 'R412: Operator re-enables a previously auto-disabled platform. Params: platform',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { platform?: string }
+      if (!p.platform) return { ok: false, reason: 'platform required' }
+      const { enablePlatform } = await import('./r412-platform-auto-disable.js')
+      return enablePlatform(ws, p.platform)
+    },
+  },
   'designs.coverage': {
     description: 'R410: Per-design platform coverage map (live/queued/failed/missing). Params: design_ids? (default: top 10 winners).',
     risk: 'low',
@@ -8533,7 +8551,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
   'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
   'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
-  'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights',
+  'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights', 'platforms.list_disabled',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -8877,7 +8895,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
         'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
         'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
-        'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights',
+        'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights', 'platforms.list_disabled',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',

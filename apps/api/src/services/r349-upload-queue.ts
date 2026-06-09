@@ -66,6 +66,14 @@ export interface EnqueueInput {
 
 export async function enqueue(input: EnqueueInput): Promise<{ ok: boolean; id?: string; reason?: string }> {
   try {
+    // R412 — refuse to enqueue on auto-disabled platforms (operator must
+    // re-enable via platforms.enable after fixing the driver).
+    try {
+      const { isPlatformDisabled } = await import('./r412-platform-auto-disable.js')
+      if (await isPlatformDisabled(input.workspaceId, input.platform)) {
+        return { ok: false, reason: `platform ${input.platform} is auto-disabled (R412)` }
+      }
+    } catch { /* tolerated */ }
     const id = uuidv7()
     await db.execute(sql`
       INSERT INTO design_upload_queue
