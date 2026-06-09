@@ -202,6 +202,79 @@ function nicheLabel(n: DesignNiche): string {
   return map[n]
 }
 
+export interface GeneratedListing extends ListingContent {
+  titleIdx:  number                                    // R377 — for outcome attribution
+  descIdx:   number
+  basedOn?:  string                                    // 'r377_best' | 'hash_rotation' | etc.
+}
+
+export async function generateListingWithAttribution(input: {
+  workspaceId?: string
+  platform:    Platform
+  subject:     string
+  niche:       DesignNiche
+  style:       DesignStyle
+  designId?:   string
+}): Promise<GeneratedListing> {
+  const cleanSubject = input.subject
+    .replace(/^vintage\s+/i, '')
+    .replace(/\s+(illustration|print|drawing|engraving)$/i, '')
+    .trim()
+
+  const titleOptions = TITLE_PATTERNS[input.platform](cleanSubject, input.niche, input.style)
+  let titleIdx = 0
+  let basedOn  = 'hash_rotation'
+
+  // R380 — prefer the highest-conversion variant if we have outcome data
+  if (input.workspaceId) {
+    try {
+      const { bestTemplateFor } = await import('./r377-listing-outcome-tracker.js')
+      const best = await bestTemplateFor(input.workspaceId, input.platform, input.niche)
+      if (best.basedOn !== 'no_data_fallback') {
+        titleIdx = Math.min(best.titleIdx, titleOptions.length - 1)
+        basedOn  = 'r377_best:' + best.basedOn
+      } else {
+        // Fall back to deterministic hash rotation
+        const seed = input.designId
+          ? Number.parseInt(input.designId.slice(-8), 16) || 0
+          : (cleanSubject + input.platform).split('').reduce((a, c) => a + c.charCodeAt(0), 0)
+        titleIdx = ((seed % titleOptions.length) + titleOptions.length) % titleOptions.length
+      }
+    } catch {
+      // Tracker unavailable; deterministic fallback
+      const seed = input.designId
+        ? Number.parseInt(input.designId.slice(-8), 16) || 0
+        : (cleanSubject + input.platform).split('').reduce((a, c) => a + c.charCodeAt(0), 0)
+      titleIdx = ((seed % titleOptions.length) + titleOptions.length) % titleOptions.length
+    }
+  } else {
+    const seed = input.designId
+      ? Number.parseInt(input.designId.slice(-8), 16) || 0
+      : (cleanSubject + input.platform).split('').reduce((a, c) => a + c.charCodeAt(0), 0)
+    titleIdx = ((seed % titleOptions.length) + titleOptions.length) % titleOptions.length
+  }
+
+  const title = titleOptions[titleIdx]!
+  const description = DESC_TEMPLATES[input.platform](cleanSubject, input.niche)
+
+  return {
+    platform:       input.platform,
+    title,
+    description,
+    tags: [
+      ...BASE_TAGS_BY_PLATFORM[input.platform],
+      cleanSubject.replace(/\s+/g, ''),
+      nicheLabel(input.niche).toLowerCase().replace(/\s+/g, ''),
+    ],
+    priceUsd:       PRICE_BY_PLATFORM[input.platform],
+    fileFormatHint: FILE_HINT_BY_PLATFORM[input.platform],
+    category:       categoryFor(input.platform, input.niche),
+    titleIdx,
+    descIdx: 0,
+    basedOn,
+  }
+}
+
 export function generateListing(input: {
   platform:    Platform
   subject:     string                                  // e.g. 'iris flower'
