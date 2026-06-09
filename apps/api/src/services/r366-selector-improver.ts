@@ -151,6 +151,17 @@ Page HTML excerpt (truncated):
 ${input.pageHtmlExcerpt.slice(0, 8000)}
 \`\`\``
 
+  // R465 — skip the LLM call if today's AI spend is already capped.
+  try {
+    const { isBudgetExhausted, recordSpend } = await import('./r428-ai-spend-tracker.js')
+    if (await isBudgetExhausted(input.workspaceId)) {
+      return { ok: false, suggestions: [], reason: 'daily AI budget exhausted (R428)' }
+    }
+    // Record an estimated 1¢ per Claude call (rough avg for ~800 token reply +
+    // ~8K prompt + screenshot). Actual cost varies by model.
+    await recordSpend(input.workspaceId, 'selector_improver', 1)
+  } catch { /* tolerated */ }
+
   let content: string
   try {
     const resp = await (routeChat as unknown as (req: unknown) => Promise<{ content: string }>) ({

@@ -344,6 +344,8 @@ const isPublic = (url: string): boolean => {
   if (url === '/api/v1/auth/bootstrap')                                return true
   if (/^\/api\/v1\/webhooks\/[a-z0-9-]+\/trigger$/i.test(url))         return true
   if (url === '/api/v1/webhooks/gumroad/sale')                         return true  // R389 — token in query param
+  if (url === '/api/v1/designs/upload')                                return true  // R464 — R438 upload, X-Novan-Token in header
+  if (/^\/api\/v1\/designs\/[A-Za-z0-9._-]+\/file$/.test(url))         return true  // R464 — R438 GET (workspace-scoped reads, considered low-risk)
   // R146.188 — admin brain bridge has its own loopback+token auth.
   if (url === '/admin/brain' || url === '/admin/brain/ops')            return true
   // R146.332 — OAuth callbacks must be public. The provider redirects the
@@ -1057,6 +1059,17 @@ app.get<{ Params: { id: string }; Querystring: { workspace_id?: string } }>('/ap
     return reply.code(500).send({ error: (e as Error).message })
   }
 })
+// R466 — delete a stored design file
+app.delete<{ Params: { id: string } }>('/api/v1/designs/:id/file', async (req, reply) => {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  const token = String(req.headers['x-novan-token'] ?? '')
+  if (!token || (ops && token !== ops)) return reply.code(401).send({ error: 'unauthorized' })
+  const ws = String(req.headers['x-novan-workspace'] ?? 'default')
+  const { deleteDesignFile } = await import('./services/r438-design-file-store.js')
+  const r = await deleteDesignFile(ws, req.params.id)
+  return reply.code(r.ok ? 200 : 400).send(r)
+})
+
 // Add raw octet-stream content type parser for the upload route
 if (!app.hasContentTypeParser('application/octet-stream')) {
   app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_req, body, done) => done(null, body))

@@ -128,6 +128,28 @@ export async function storeDesignFile(input: StoreInput): Promise<StoreResult> {
   } finally { UPLOAD_IN_FLIGHT-- }
 }
 
+/** R466 — operator deletes a design file (NOT the design row). */
+export async function deleteDesignFile(workspaceId: string, designId: string): Promise<{ ok: boolean; reason?: string }> {
+  try {
+    const r = await db.execute(sql`
+      SELECT stored_path FROM design_files WHERE workspace_id = ${workspaceId} AND design_id = ${designId} LIMIT 1
+    `)
+    const row = (r as unknown as Array<{ stored_path: string }>)[0]
+    if (!row) return { ok: false, reason: 'not found' }
+    const abs = path.isAbsolute(row.stored_path) ? row.stored_path : path.join(STORE_DIR, row.stored_path)
+    const storeAbs = path.resolve(STORE_DIR)
+    const absResolved = path.resolve(abs)
+    if (!absResolved.startsWith(storeAbs + path.sep)) return { ok: false, reason: 'path traversal blocked' }
+    try { await fs.promises.unlink(abs) } catch { /* file may already be gone */ }
+    await db.execute(sql`
+      DELETE FROM design_files WHERE workspace_id = ${workspaceId} AND design_id = ${designId}
+    `).catch(() => {/* best effort */})
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, reason: (e as Error).message.slice(0, 200) }
+  }
+}
+
 export async function readDesignFile(workspaceId: string, designId: string): Promise<{ path: string; mime: string; filename: string } | null> {
   try {
     const r = await db.execute(sql`
