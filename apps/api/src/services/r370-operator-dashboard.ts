@@ -47,6 +47,7 @@ interface DashboardState {
   activity: Array<{ ts: number; type: string; summary: string }>     // R379 — live activity feed
   nextActions: Array<{ id: string; title: string; detail: string; score: number; category: string }>  // R385
   failureClusters: Array<{ platform: string; signature: string; count: number; isLivePattern: boolean; suggestedFix: string; lastSeen: number }>  // R388
+  stuck: Array<{ id: string; platform: string; title: string; ageHours: number }>        // R407
   sparklines: {                                                                          // R394
     uploadsPerDay: number[]   // 14 days, oldest→newest
     salesPerDay:   number[]
@@ -203,6 +204,13 @@ export async function loadState(workspaceId: string): Promise<DashboardState> {
           count: c.count, isLivePattern: c.isLivePattern,
           suggestedFix: c.suggestedFix, lastSeen: c.lastSeen,
         }))
+      } catch { return [] }
+    })(),
+    stuck: await (async () => {
+      try {
+        const { detectStuckQueueItems } = await import('./r391-stuck-queue-detector.js')
+        const r = await detectStuckQueueItems(workspaceId, 5)
+        return r.items.map(i => ({ id: i.id, platform: i.platform, title: i.title.slice(0, 60), ageHours: i.ageHours }))
       } catch { return [] }
     })(),
     sparklines: await (async () => {
@@ -369,6 +377,16 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
     <h2>Recent failures (${s.uploads.recentFailures.length})</h2>
     ${s.uploads.recentFailures.length === 0 ? '<div class="mini">✓ no recent failures</div>' : `<table><thead><tr><th>When</th><th>Platform</th><th>Error</th></tr></thead><tbody>${s.uploads.recentFailures.map(f => `<tr><td>${ago(f.ts)}</td><td>${escapeHtml(f.platform)}</td><td class="mini">${escapeHtml(f.error)}</td></tr>`).join('')}</tbody></table>`}
   </div>
+
+  ${s.stuck.length > 0 ? `<div class="card" style="grid-column: 1 / -1">
+    <h2>Stuck queue items (R407 · queued >48h)</h2>
+    <table>
+      <thead><tr><th>Platform</th><th>Age</th><th>Title</th></tr></thead>
+      <tbody>
+        ${s.stuck.map(i => `<tr><td>${escapeHtml(i.platform)}</td><td class="mini">${i.ageHours}h</td><td>${escapeHtml(i.title)}</td></tr>`).join('')}
+      </tbody>
+    </table>
+  </div>` : ''}
 
   ${s.failureClusters.length > 0 ? `<div class="card" style="grid-column: 1 / -1">
     <h2>Failure patterns (R388 · last 7d)</h2>
