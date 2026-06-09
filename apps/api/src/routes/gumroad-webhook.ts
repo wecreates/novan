@@ -75,7 +75,11 @@ export async function registerGumroadWebhook(app: FastifyInstance): Promise<void
       .replace(/^http:\/\//i, 'https://')
       .replace(/\/$/, '')
       .toLowerCase()
-    const priceCents = Math.max(0, Math.round(Number(body.price ?? 0)))
+    // R550 — guard NaN from `body.price = "abc"` else net_usd inserts NaN
+    // and the postgres numeric column rejects the row → 500 to the webhook
+    // → Gumroad retries the same bad payload forever.
+    const rawPrice = Number(body.price ?? 0)
+    const priceCents = Math.max(0, Math.round(Number.isFinite(rawPrice) ? rawPrice : 0))
     const productName = String(body.product_name ?? '').slice(0, 200)
     if (!saleId || !permalink) {
       return reply.code(400).send({ error: 'missing sale_id or product_permalink' })
@@ -89,7 +93,8 @@ export async function registerGumroadWebhook(app: FastifyInstance): Promise<void
     // subtract it. Idempotent on the negative correction id.
     if (body.refunded === 'true') {
       const refundWorkspace = String(body.workspace_id ?? 'default').slice(0, 64)
-      const refundCents = Math.max(0, Math.round(Number(body.price ?? 0)))
+      const rawRefund = Number(body.price ?? 0)
+      const refundCents = Math.max(0, Math.round(Number.isFinite(rawRefund) ? rawRefund : 0))
       const refundAmount = refundCents / 100
       try {
         await db.execute(sql`

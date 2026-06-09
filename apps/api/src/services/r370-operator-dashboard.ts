@@ -65,6 +65,7 @@ interface DashboardState {
   periodCompare?: { wowSalesDelta: number; wowGrossDelta: number; momSalesDelta: number; momGrossDelta: number; thisWeek: { sales: number; grossUsd: number }; thisMonth: { sales: number; grossUsd: number } }  // R519 — R513
   buyerOptInCount?: number                                                              // R531 — R517
   offsiteBackupConfigured?: boolean                                                     // R543 — R508 env health
+  taxThresholdAlerts?: Array<{ source: string; bucket: string; ytdAtNotify: number }>   // R552 — R510 fired notifications
   aiSpend?: { todayUsd: number; todayCallCount: number; bySource: Array<{ source: string; usd: number; calls: number }>; cap?: { dailyUsd: number; pctUsed: number; budgetExhausted: boolean } }  // R428
   autonomyPaused?: boolean                                                                // R482
   sparklines: {                                                                          // R394
@@ -268,6 +269,19 @@ export async function loadState(workspaceId: string): Promise<DashboardState> {
         return await countOptIns(workspaceId)
       } catch { return 0 }
     })(),
+    taxThresholdAlerts: await (async () => {                                 // R552 — R510 active 1099-K warnings
+      try {
+        const yr = new Date().getUTCFullYear()
+        const r = await db.execute(sql`
+          SELECT source, bucket, ytd_at_notify FROM tax_threshold_notifications
+          WHERE workspace_id = ${workspaceId} AND year = ${yr}
+          ORDER BY notified_at DESC LIMIT 10
+        `).catch(() => [] as unknown[])
+        return (r as unknown as Array<{ source: string; bucket: string; ytd_at_notify: number }>).map(x => ({
+          source: x.source, bucket: x.bucket, ytdAtNotify: Number(x.ytd_at_notify),
+        }))
+      } catch { return [] }
+    })(),
     offsiteBackupConfigured: (
       !!process.env['NOVAN_OFFSITE_S3_ENDPOINT'] &&                          // R543
       !!process.env['NOVAN_OFFSITE_S3_BUCKET'] &&
@@ -447,6 +461,8 @@ ${token ? `<div style="margin-bottom:20px;padding:12px;background:#18181b;border
 </div>` : ''}
 
 ${!s.offsiteBackupConfigured ? `<div style="background:#7c2d12;border:1px solid #fb923c;border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;color:#fed7aa">⚠ R508 offsite backup not configured. Set NOVAN_OFFSITE_S3_ENDPOINT/REGION/BUCKET/ACCESS_KEY/SECRET_KEY in .env. Nightly backups are written locally to /var/lib/novan/backups but won't survive droplet loss.</div>` : ''}
+
+${s.taxThresholdAlerts && s.taxThresholdAlerts.length > 0 ? `<div style="background:#713f12;border:1px solid #facc15;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px;color:#fef3c7">📋 <strong>1099-K threshold alerts (${new Date().getUTCFullYear()})</strong>: ${s.taxThresholdAlerts.map(a => `${a.source} ${a.bucket} ($${a.ytdAtNotify.toFixed(0)} YTD)`).join(' · ')}. Operator should reserve tax cash + file Schedule C.</div>` : ''}
 
 ${s.autonomyPaused ? `<div style="background:#7f1d1d;border:1px solid #fca5a5;border-radius:8px;padding:16px;margin-bottom:20px"><strong style="color:#fee2e2">⏸ Autonomy paused</strong><div style="color:#fecaca;font-size:13px;margin-top:4px">kill_switch.autonomous_writes is engaged for this workspace. R382/R401/R411/R421/R458 won't fire. Resume via brain-task: kill_switch.enable autonomous_writes</div></div>` : ''}
 

@@ -119,7 +119,19 @@ export async function syncBackupsOffsite(localDir = '/var/lib/novan/backups'): P
         out.uploaded.push({ key: r.key, status: r.status, bytes: stat.size })
         fs.writeFileSync(marker, String(Date.now()))
       } else {
+        // R551 — surface s3 failures as events so dashboard/operator notices.
         out.failed.push({ file: name, reason: `HTTP ${r.status}` })
+        try {
+          const { db } = await import('../db/client.js')
+          const { sql } = await import('drizzle-orm')
+          const { v7: uuidv7 } = await import('uuid')
+          await db.execute(sql`
+            INSERT INTO events (id, type, workspace_id, payload, trace_id, correlation_id, source, version, created_at)
+            VALUES (${uuidv7()}, 'backup.offsite_failed', 'default',
+              ${JSON.stringify({ file: name, status: r.status })}::jsonb,
+              ${uuidv7()}, ${uuidv7()}, 'r508-offsite-backup', 1, ${Date.now()})
+          `).catch(() => {/* tolerated */})
+        } catch { /* tolerated */ }
       }
     } catch (e) {
       out.failed.push({ file: name, reason: (e as Error).message.slice(0, 200) })

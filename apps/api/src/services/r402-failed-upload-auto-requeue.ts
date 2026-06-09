@@ -19,7 +19,18 @@ const MAX_RETRIES = 3
 // R421 rate limiter — at most 1 LLM selector-improver call per (workspace,
 // platform) per hour. Bounded by # of platforms × workspaces so memory OK.
 const SELECTOR_IMPROVER_RL_WINDOW_MS = 60 * 60_000
+// R549 — bound the per-(workspace,platform) RL map. With 11 POD platforms ×
+// hundreds of workspaces this could otherwise grow unbounded. 500 entries
+// is far past any realistic concurrent failure scenario.
+const SELECTOR_IMPROVER_RL_MAX = 500
 const SELECTOR_IMPROVER_RL = new Map<string, number>()
+function recordSelectorImproverRL(key: string): void {
+  if (SELECTOR_IMPROVER_RL.size >= SELECTOR_IMPROVER_RL_MAX) {
+    const firstKey = SELECTOR_IMPROVER_RL.keys().next().value
+    if (firstKey !== undefined) SELECTOR_IMPROVER_RL.delete(firstKey)
+  }
+  SELECTOR_IMPROVER_RL.set(key, Date.now())
+}
 
 async function ensureColumn(): Promise<void> {
   await db.execute(sql`
@@ -94,7 +105,7 @@ export async function requeueFailedUploads(): Promise<RequeueResult> {
         `).catch(() => [] as unknown[])
         const ev = (failureEvent as unknown as Array<{ payload: Record<string, unknown> }>)[0]?.payload
         if (ev && ev['pageHtml'] && ev['errorMessage']) {
-          SELECTOR_IMPROVER_RL.set(rlKey, Date.now())
+          recordSelectorImproverRL(rlKey)
           const { improveSelectors } = await import('./r366-selector-improver.js')
           try {
             const { recordSpend } = await import('./r428-ai-spend-tracker.js')
