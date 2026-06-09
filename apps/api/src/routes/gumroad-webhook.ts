@@ -70,7 +70,7 @@ export async function registerGumroadWebhook(app: FastifyInstance): Promise<void
         VALUES
           (${uuidv7()}, ${workspaceId}, ${saleId}, 'gumroad', ${netUsd}, 'USD',
            ${JSON.stringify({ permalink, productName, via: 'webhook' })}::jsonb, ${Date.now()})
-        ON CONFLICT (workspace_id, external_sale_id) DO NOTHING
+        ON CONFLICT (workspace_id, external_sale_id) WHERE external_sale_id IS NOT NULL DO NOTHING
       `)
     } catch (e) {
       return reply.code(500).send({ error: (e as Error).message })
