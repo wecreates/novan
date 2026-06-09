@@ -43,6 +43,7 @@ interface DashboardState {
     remainingToday:  number
     recentPosts:     Array<{ title: string; externalUrl: string; postedAt: number }>
   }
+  activity: Array<{ ts: number; type: string; summary: string }>     // R379 — live activity feed
 }
 
 async function loadState(workspaceId: string): Promise<DashboardState> {
@@ -115,6 +116,14 @@ async function loadState(workspaceId: string): Promise<DashboardState> {
   `).catch(() => [] as unknown[])
   const pinStat = (pinRows as Array<Record<string, number>>)[0] ?? { queued: 0, posted_total: 0, posted_today: 0 }
 
+  // R379 — last 50 events (any type, recent first)
+  const activityRows = await db.execute(sql`
+    SELECT created_at, type, payload FROM events
+    WHERE workspace_id = ${workspaceId}
+    ORDER BY created_at DESC
+    LIMIT 50
+  `).catch(() => [] as unknown[])
+
   const recentPinRows = await db.execute(sql`
     SELECT title, external_url, posted_at FROM pinterest_pin_queue
     WHERE workspace_id = ${workspaceId} AND status = 'posted'
@@ -156,6 +165,19 @@ async function loadState(workspaceId: string): Promise<DashboardState> {
         title: r.title, externalUrl: r.external_url, postedAt: Number(r.posted_at) || 0,
       })),
     },
+    activity: (activityRows as Array<{ created_at: number; type: string; payload: Record<string, unknown> }>).map(r => {
+      const t = r.type
+      const p = r.payload
+      let summary = t
+      if (t === 'agent.upload.success')   summary = `✓ ${p['platform']} ${(p['externalUrl'] as string ?? '').slice(0, 60)}`
+      else if (t === 'agent.upload.failed') summary = `✗ ${p['platform']}: ${(p['reason'] as string ?? '').slice(0, 60)}`
+      else if (t === 'agent.upload.skipped') summary = `○ ${p['platform']}: ${(p['reason'] as string ?? '').slice(0, 60)}`
+      else if (t === 'agent.heartbeat')   summary = `♥ agent uploads=${p['uploads']} failures=${p['failures']}`
+      else if (t === 'agent.failure')     summary = `⚠ ${p['platform']}: ${(p['errorMessage'] as string ?? '').slice(0, 80)}`
+      else if (t === 'business.tier_unlocked') summary = `🎉 ${p['fromTier']} → ${p['toTier']} ($${p['mrrUsd']} MRR)`
+      else summary = `${t}`
+      return { ts: Number(r.created_at), type: t, summary }
+    }),
   }
 }
 
@@ -257,6 +279,16 @@ function renderHtml(s: DashboardState): string {
   <div class="card">
     <h2>Recent failures (${s.uploads.recentFailures.length})</h2>
     ${s.uploads.recentFailures.length === 0 ? '<div class="mini">✓ no recent failures</div>' : `<table><thead><tr><th>When</th><th>Platform</th><th>Error</th></tr></thead><tbody>${s.uploads.recentFailures.map(f => `<tr><td>${ago(f.ts)}</td><td>${escapeHtml(f.platform)}</td><td class="mini">${escapeHtml(f.error)}</td></tr>`).join('')}</tbody></table>`}
+  </div>
+
+  <div class="card" style="grid-column: 1 / -1">
+    <h2>Activity stream — last 50 events</h2>
+    <table>
+      <thead><tr><th style="width:90px">When</th><th>Event</th></tr></thead>
+      <tbody>
+        ${s.activity.map(a => `<tr><td class="mini">${ago(a.ts)}</td><td>${escapeHtml(a.summary)}</td></tr>`).join('')}
+      </tbody>
+    </table>
   </div>
 
 </div>
