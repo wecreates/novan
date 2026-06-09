@@ -61,6 +61,8 @@ interface DashboardState {
   disabledPlatforms: Array<{ platform: string; disabledAt: number; reason: string; autoReenableAt?: number }>  // R424 + R490
   selectorBreakers?: Array<{ key: string; fails: number; openUntilMs: number }>          // R491
   sessionAges?: Array<{ platform: string; ageDays: number; warningLevel: string }>      // R506
+  platformEarnings?: Array<{ source: string; grossUsd: number; netUsd: number; saleCount: number; takeRate: number }>  // R519 — R511
+  periodCompare?: { wowSalesDelta: number; wowGrossDelta: number; momSalesDelta: number; momGrossDelta: number; thisWeek: { sales: number; grossUsd: number }; thisMonth: { sales: number; grossUsd: number } }  // R519 — R513
   aiSpend?: { todayUsd: number; todayCallCount: number; bySource: Array<{ source: string; usd: number; calls: number }>; cap?: { dailyUsd: number; pctUsed: number; budgetExhausted: boolean } }  // R428
   autonomyPaused?: boolean                                                                // R482
   sparklines: {                                                                          // R394
@@ -250,6 +252,25 @@ export async function loadState(workspaceId: string): Promise<DashboardState> {
         const r = await sessionAges(workspaceId)
         return r.filter(s => s.warningLevel !== 'ok').map(s => ({ platform: s.platform, ageDays: s.ageDays, warningLevel: s.warningLevel }))
       } catch { return [] }
+    })(),
+    platformEarnings: await (async () => {                                  // R519 — R511
+      try {
+        const { platformEarningsBreakdown } = await import('./r511-platform-earnings-margin.js')
+        const r = await platformEarningsBreakdown(workspaceId, Date.now() - 30 * 24 * 60 * 60_000)
+        return r.items.slice(0, 11)
+      } catch { return [] }
+    })(),
+    periodCompare: await (async () => {                                      // R519 — R513
+      try {
+        const { periodComparison } = await import('./r513-wow-mom-comparison.js')
+        const c = await periodComparison(workspaceId)
+        return {
+          wowSalesDelta: c.wowSalesDelta, wowGrossDelta: c.wowGrossDelta,
+          momSalesDelta: c.momSalesDelta, momGrossDelta: c.momGrossDelta,
+          thisWeek: { sales: c.thisWeek.sales, grossUsd: c.thisWeek.grossUsd },
+          thisMonth: { sales: c.thisMonth.sales, grossUsd: c.thisMonth.grossUsd },
+        }
+      } catch { return undefined }
     })(),
     selectorBreakers: await (async () => {
       try {
@@ -541,6 +562,37 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
       <tbody>
         ${s.stuck.map(i => `<tr><td>${escapeHtml(i.platform)}</td><td class="mini">${i.ageHours}h</td><td>${escapeHtml(i.title)}</td></tr>`).join('')}
       </tbody>
+    </table>
+  </div>` : ''}
+
+  ${s.periodCompare ? `<div class="card" style="grid-column: 1 / -1">
+    <h2>Momentum (R519 · WoW + MoM)</h2>
+    <table>
+      <thead><tr><th>Window</th><th>Sales</th><th>Gross</th><th>vs prior</th></tr></thead>
+      <tbody>
+        <tr><td>This week</td><td>${s.periodCompare.thisWeek.sales}</td><td>$${s.periodCompare.thisWeek.grossUsd}</td>
+          <td class="mini" style="color:${s.periodCompare.wowGrossDelta >= 0 ? '#22c55e' : '#ef4444'}">
+            ${s.periodCompare.wowGrossDelta >= 0 ? '+' : ''}${(s.periodCompare.wowGrossDelta * 100).toFixed(0)}% gross · ${s.periodCompare.wowSalesDelta >= 0 ? '+' : ''}${(s.periodCompare.wowSalesDelta * 100).toFixed(0)}% sales
+          </td></tr>
+        <tr><td>This month</td><td>${s.periodCompare.thisMonth.sales}</td><td>$${s.periodCompare.thisMonth.grossUsd}</td>
+          <td class="mini" style="color:${s.periodCompare.momGrossDelta >= 0 ? '#22c55e' : '#ef4444'}">
+            ${s.periodCompare.momGrossDelta >= 0 ? '+' : ''}${(s.periodCompare.momGrossDelta * 100).toFixed(0)}% gross · ${s.periodCompare.momSalesDelta >= 0 ? '+' : ''}${(s.periodCompare.momSalesDelta * 100).toFixed(0)}% sales
+          </td></tr>
+      </tbody>
+    </table>
+  </div>` : ''}
+
+  ${s.platformEarnings && s.platformEarnings.length > 0 ? `<div class="card" style="grid-column: 1 / -1">
+    <h2>Earnings by platform · 30d (R519 · R511)</h2>
+    <table>
+      <thead><tr><th>Platform</th><th>Sales</th><th>Gross</th><th>Net after fees</th><th>Take rate</th></tr></thead>
+      <tbody>${s.platformEarnings.map(p => `<tr>
+        <td>${escapeHtml(p.source)}</td>
+        <td class="mini">${p.saleCount}</td>
+        <td>$${p.grossUsd.toFixed(2)}</td>
+        <td>$${p.netUsd.toFixed(2)}</td>
+        <td class="mini">${(p.takeRate * 100).toFixed(0)}%</td>
+      </tr>`).join('')}</tbody>
     </table>
   </div>` : ''}
 

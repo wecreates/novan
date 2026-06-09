@@ -1100,6 +1100,16 @@ app.post<{ Body: Buffer }>('/api/v1/designs/upload', { bodyLimit: 30 * 1024 * 10
   const expectSha = String(req.headers['x-novan-sha256'] ?? '').toLowerCase()
   const { storeDesignFile } = await import('./services/r438-design-file-store.js')
   const buf = req.body as Buffer
+  // R518 — R514 image-quality precheck. Reject degenerate uploads (tiny,
+  // 0x0 dims, missing JPEG SOF) BEFORE they ever reach platform agents and
+  // get accounts flagged.
+  try {
+    const { precheckImageBuffer } = await import('./services/r514-image-quality-precheck.js')
+    const verdict = precheckImageBuffer(buf)
+    if (!verdict.ok) {
+      return reply.code(400).send({ error: 'image quality precheck failed', reason: verdict.reason, bytes: verdict.bytes })
+    }
+  } catch { /* precheck is advisory if it throws — store anyway */ }
   // R487 — verify expected sha256 if operator supplied it
   if (expectSha) {
     const crypto = await import('node:crypto')

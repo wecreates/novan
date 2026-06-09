@@ -99,6 +99,18 @@ export async function registerGumroadWebhook(app: FastifyInstance): Promise<void
       return reply.code(500).send({ error: (e as Error).message })
     }
 
+    // R518 — R517 buyer-email opt-in capture. Gumroad sends `email` +
+    // `can_contact` ('true' string when buyer ticked the marketing-OK box).
+    // Strict consent gate: no consent → no store.
+    try {
+      const email = String((body as Record<string, unknown>)['email'] ?? '').trim()
+      const canContact = String((body as Record<string, unknown>)['can_contact'] ?? '').toLowerCase() === 'true'
+      if (email && canContact) {
+        const { captureOptIn } = await import('../services/r517-buyer-email-optin.js')
+        await captureOptIn(workspaceId, email, 'gumroad', true)
+      }
+    } catch { /* tolerated */ }
+
     // Fire variant generation for the winner — but only if autonomy isn't
     // killed for this workspace. R458 — webhook respects R443 gate too.
     try {
