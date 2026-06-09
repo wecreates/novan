@@ -359,7 +359,10 @@ async function runBrainBroadcastCron() {
     try {
       const now = new Date()
       if (now.getUTCDay() === 1) {   // Monday in UTC
-        await runMondayBriefing(ids)
+        // R525 — advisory-lock around Monday briefing so two replicas don't both
+        // post the same week's briefing into the operator chat.
+        const { withCronLock } = await import('./r504-cron-lock.js')
+        await withCronLock('R340-monday-briefing', async () => { await runMondayBriefing(ids) })
       }
     } catch (e) { await emit('cron.error', { task: 'monday_briefing', error: (e as Error).message }) }
   } catch (e) { await emit('cron.error', { task: 'brain_broadcast', error: (e as Error).message }) }
@@ -1804,12 +1807,18 @@ async function runWeeklyRecapPush(): Promise<void> {
 }
 
 // R429 — nightly pg_dump backup, hourly tick gated to 04:00 UTC.
+// R525 — wrapped in R504 advisory lock so a second replica can't double-fire
+// the backup script (which would race over the same /var/lib/novan/backups dir
+// and corrupt the .uploaded markers used by R508 offsite sync).
 async function runNightlyBackupTick(): Promise<void> {
   try {
     if (new Date().getUTCHours() !== 4) return
-    const { runNightlyBackup } = await import('./r429-nightly-backup.js')
-    const r = await runNightlyBackup()
-    await emit('cron.nightly_backup', { ok: r.ok, sizeBytes: r.sizeBytes ?? 0, prunedFiles: r.prunedFiles })
+    const { withCronLock } = await import('./r504-cron-lock.js')
+    await withCronLock('R429-nightly-backup', async () => {
+      const { runNightlyBackup } = await import('./r429-nightly-backup.js')
+      const r = await runNightlyBackup()
+      await emit('cron.nightly_backup', { ok: r.ok, sizeBytes: r.sizeBytes ?? 0, prunedFiles: r.prunedFiles })
+    })
   } catch (e) { await emit('cron.error', { task: 'nightly_backup', error: (e as Error).message }) }
 }
 
