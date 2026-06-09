@@ -1748,6 +1748,17 @@ async function runDropletDailyCron(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'droplet_daily_cron', error: (e as Error).message }) }
 }
 
+// R403 — hourly per-platform first-sale detector. Persists in
+// platform_first_sale and fires a celebration push the first time a
+// new platform's revenue lands.
+async function runFirstSaleDetector(): Promise<void> {
+  try {
+    const { detectAndPushFirstSales } = await import('./r403-first-sale-per-platform.js')
+    const r = await detectAndPushFirstSales()
+    if (r.detected.length > 0) await emit('cron.first_sale_pushed', { count: r.detected.length, platforms: r.detected.map(d => d.platform) })
+  } catch (e) { await emit('cron.error', { task: 'first_sale_detector', error: (e as Error).message }) }
+}
+
 // R402 — hourly failed-upload auto-requeue. Items failed >2h get retried up
 // to 3 times so transient errors self-heal between operator sessions.
 async function runFailedUploadRequeue(): Promise<void> {
@@ -2344,6 +2355,8 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runAutoVariantsForWinnersTick,  60 * 60_000))
   // R402 — failed-upload auto-requeue, hourly tick.
   handles.push(scheduleJittered(runFailedUploadRequeue,         60 * 60_000))
+  // R403 — per-platform first-sale detector, hourly tick.
+  handles.push(scheduleJittered(runFirstSaleDetector,           60 * 60_000))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
