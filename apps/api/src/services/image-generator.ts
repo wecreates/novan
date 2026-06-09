@@ -318,8 +318,13 @@ async function genHuggingFace(input: GenerateInput): Promise<{ imageUrl: string;
     signal: AbortSignal.timeout(120_000),
   })
   if (!res.ok) {
-    const text = await res.response.text().catch(() => '')
-    throw new Error(`hf ${res.status}: ${text.slice(0, 200)}`)
+    // R559 — fetchWithRetry returns a DISCRIMINATED union; on failure the
+    // type is { ok:false, status, statusText, attempts, circuitOpen? } —
+    // there is NO `response` field. Reading res.response.text() threw
+    // "Cannot read properties of undefined (reading 'text')" which masked
+    // the real error (e.g. 503 quota, 401 invalid HF_TOKEN) in 32 prod
+    // failures over 24h.
+    throw new Error(`hf ${res.status}: ${res.statusText}${res.circuitOpen ? ' (circuit breaker open)' : ''}`)
   }
   const body = await res.response.json() as { data?: Array<{ b64_json?: string; url?: string }> }
   const first = body.data?.[0]
