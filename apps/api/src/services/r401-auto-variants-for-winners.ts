@@ -51,6 +51,10 @@ export async function runAutoVariantsForWinners(): Promise<AutoVariantsResult> {
         .filter(d => !d.hasVariants && d.winnerScore >= MIN_WINNER_SCORE)
         .slice(0, MAX_PER_RUN)
       for (const c of candidates) {
+        // R499 — record ATTEMPTED spend (3 images at ~$0.04 = 12 cents) BEFORE
+        // the call so provider charges for partial generation aren't invisible.
+        // We over-record then reconcile if fewer are created.
+        await recordSpend(ws, 'auto_variants_attempted', 12)
         const gen = await generateWinnerVariants({ workspaceId: ws, parentDesignId: c.designId, count: 3 })
         if (gen.ok && gen.variantsCreated > 0) await recordSpend(ws, 'auto_variants', gen.variantsCreated * 4 /* ~$0.04 image-gen */)
         if (gen.ok && gen.variantsCreated > 0) {

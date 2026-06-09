@@ -1787,7 +1787,16 @@ async function runWeeklyRecapPush(): Promise<void> {
     const { pushWeeklyRecap } = await import('./r413-weekly-recap-push.js')
     const r = await pushWeeklyRecap()
     if (r.pushed > 0) await emit('cron.weekly_recap_pushed', { pushed: r.pushed })
-  } catch (e) { await emit('cron.error', { task: 'weekly_recap_push', error: (e as Error).message }) }
+    // R497 — parity with R398: "no work" = skipped not ok
+    else {
+      const { CronSkip } = await import('./r423-cron-health.js')
+      if (r.workspaces === 0) throw new CronSkip('no workspaces')
+      if (r.skipped.length === r.workspaces) throw new CronSkip(`all ${r.workspaces} workspaces gated by local day+hour`)
+    }
+  } catch (e) {
+    if ((e as Error).name === 'CronSkip') throw e
+    await emit('cron.error', { task: 'weekly_recap_push', error: (e as Error).message })
+  }
 }
 
 // R429 — nightly pg_dump backup, hourly tick gated to 04:00 UTC.

@@ -33,7 +33,12 @@ export async function isAutonomyAllowed(workspaceId: string): Promise<boolean> {
     const r = rows as unknown as { rows?: unknown[] } | unknown[]
     const arr = Array.isArray(r) ? r : (r.rows ?? [])
     if (arr.length > 0) allowed = false
-  } catch { /* tolerated — allow on error */ }
+  } catch {
+    // R500 — opt-in fail-closed. Default is fail-open (return true) because
+    // operator's intent on first install is autonomy ON. Set NOVAN_AUTONOMY_FAIL_CLOSED=1
+    // for production environments where DB unavailability should pause work.
+    if (process.env['NOVAN_AUTONOMY_FAIL_CLOSED'] === '1') allowed = false
+  }
   CACHE.set(workspaceId, { allowed, until: Date.now() + TTL_MS })
   return allowed
 }

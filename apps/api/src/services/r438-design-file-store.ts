@@ -21,8 +21,15 @@ import { db } from '../db/client.js'
 const STORE_DIR = process.env['NOVAN_DESIGN_STORE'] ?? '/var/lib/novan/design-files'
 
 // R445 — concurrency cap on uploads so operator can't exhaust file descriptors.
+// R498 — atomic check-and-increment via try-acquire pattern.
 let UPLOAD_IN_FLIGHT = 0
 const UPLOAD_MAX = 4
+function tryAcquireUploadSlot(): boolean {
+  if (UPLOAD_IN_FLIGHT >= UPLOAD_MAX) return false
+  UPLOAD_IN_FLIGHT++
+  return true
+}
+function releaseUploadSlot(): void { UPLOAD_IN_FLIGHT-- }
 
 async function ensureTable(): Promise<void> {
   await db.execute(sql`
@@ -70,8 +77,7 @@ function detectMimeFromMagic(bytes: Buffer): string | null {
 }
 
 export async function storeDesignFile(input: StoreInput): Promise<StoreResult> {
-  if (UPLOAD_IN_FLIGHT >= UPLOAD_MAX) return { ok: false, reason: 'too many concurrent uploads, retry shortly' }
-  UPLOAD_IN_FLIGHT++
+  if (!tryAcquireUploadSlot()) return { ok: false, reason: 'too many concurrent uploads, retry shortly' }
   try {
   await ensureTable()
   if (!input.designId || !input.bytes || input.bytes.length === 0) return { ok: false, reason: 'designId + bytes required' }
@@ -137,7 +143,7 @@ export async function storeDesignFile(input: StoreInput): Promise<StoreResult> {
   `).catch(() => {/* best effort */})
 
   return { ok: true, url, sha256: sha }
-  } finally { UPLOAD_IN_FLIGHT-- }
+  } finally { releaseUploadSlot() }
 }
 
 /** R466 — operator deletes a design file (NOT the design row). */
