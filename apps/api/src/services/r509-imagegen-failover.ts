@@ -99,9 +99,13 @@ export async function probeAllProviders(): Promise<{ probed: number; healthy: nu
       await captureLesson('default', {
         scope: 'image_gen_provider_failure',
         source: 'r509.probe_all_down',
-        observation: `All ${probed} image-gen providers reporting down/unconfigured at ${new Date().toISOString()}`,
-        recommendation: 'Verify provider keys, billing, and rate-limit quotas before queueing more image-gen work',
-      } as Parameters<typeof captureLesson>[1])
+        failureSummary: `All ${probed} image-gen providers reporting down or unconfigured`,
+        rootCause: 'Concurrent provider outage OR all keys missing/invalid OR rate-limit exhaustion across stack',
+        generalizable: true,
+        applicableTo: ['image-gen', 'pipeline_design', 'r401_auto_variants'],
+        recommendedAction: 'Verify provider keys, billing, and rate-limit quotas before queueing more image-gen work',
+        importance: 95,
+      })
     } catch { /* tolerated */ }
   }
   return { probed, healthy }
