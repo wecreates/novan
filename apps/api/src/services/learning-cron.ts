@@ -1748,6 +1748,17 @@ async function runDropletDailyCron(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'droplet_daily_cron', error: (e as Error).message }) }
 }
 
+// R398 — daily morning summary push at 14:00 UTC. Idempotent per UTC day.
+async function runDailySummaryPush(): Promise<void> {
+  try {
+    const hour = new Date().getUTCHours()
+    if (hour !== 14) return
+    const { pushDailySummary } = await import('./r398-daily-summary-push.js')
+    const r = await pushDailySummary()
+    if (r.pushed > 0) await emit('cron.daily_summary_pushed', { pushed: r.pushed })
+  } catch (e) { await emit('cron.error', { task: 'daily_summary_push', error: (e as Error).message }) }
+}
+
 // R387 — pacing auto-loosen tick: shrinks per-platform inter-upload minimum
 // when accounts have aged and stayed clean. Daily-ish cron (24h, gated to 14:00 UTC).
 async function runPacingAutoLoosen(): Promise<void> {
@@ -2293,6 +2304,8 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runNextActionPusher,            15 * 60_000))
   // R387 — pacing auto-loosen, hourly tick gated to 14:00 UTC.
   handles.push(scheduleJittered(runPacingAutoLoosen,            60 * 60_000))
+  // R398 — daily morning summary push, hourly tick gated to 14:00 UTC.
+  handles.push(scheduleJittered(runDailySummaryPush,            60 * 60_000))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
