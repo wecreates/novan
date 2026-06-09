@@ -1748,6 +1748,17 @@ async function runDropletDailyCron(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'droplet_daily_cron', error: (e as Error).message }) }
 }
 
+// R400 — hourly queue-low replenisher. Triggers trend pipeline ad-hoc when
+// queue depth falls below 30 (forces below 10). Prevents starvation when
+// operator drains aggressively between the 13:00 UTC R382 ticks.
+async function runQueueAutoReplenish(): Promise<void> {
+  try {
+    const { autoReplenishLowQueues } = await import('./r400-queue-auto-replenish.js')
+    const r = await autoReplenishLowQueues()
+    if (r.replenished.length > 0) await emit('cron.queue_replenished', { count: r.replenished.length, items: r.replenished })
+  } catch (e) { await emit('cron.error', { task: 'queue_auto_replenish', error: (e as Error).message }) }
+}
+
 // R398 — daily morning summary push at 14:00 UTC. Idempotent per UTC day.
 async function runDailySummaryPush(): Promise<void> {
   try {
@@ -2306,6 +2317,8 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runPacingAutoLoosen,            60 * 60_000))
   // R398 — daily morning summary push, hourly tick gated to 14:00 UTC.
   handles.push(scheduleJittered(runDailySummaryPush,            60 * 60_000))
+  // R400 — queue auto-replenish, hourly tick.
+  handles.push(scheduleJittered(runQueueAutoReplenish,          60 * 60_000))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
