@@ -8194,6 +8194,12 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'bridge.status', 'bridge.listJobs',
   'channel.list', 'schedule.list',
   'analytics.snapshot', 'analytics.snapshotMany',
+  // R359: local-agent ops bypass classifier when operator-provenance + risk=low.
+  // The external URLs they pass (cyzorcreations.gumroad.com/...) are the operator's
+  // OWN storefront, not untrusted page-derived input.
+  'upload_queue.next', 'upload_queue.stats', 'upload_queue.mark_uploaded',
+  'agent.heartbeat', 'agent.report_event', 'agent.report_failure',
+  'account.birthdays', 'design.get',
 ])
 
 /** R146.73 — recursive scan for <untrusted_content tag in any param

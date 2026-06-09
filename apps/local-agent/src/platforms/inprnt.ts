@@ -102,7 +102,7 @@ async function upload(input: DriverInput): Promise<DriverResult> {
 
 export const inprntDriver: PlatformDriver = {
   platform: 'inprnt',
-  loginUrl: 'https://www.inprnt.com/account/login/',
+  loginUrl: 'https://www.inprnt.com/accounts/login/',
   loginCheck,
   upload,
 }

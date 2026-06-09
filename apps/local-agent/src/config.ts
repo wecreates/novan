@@ -15,6 +15,7 @@ export interface AgentConfig {
   platforms:      string[]                // empty = all enabled
   runOnce:        boolean                 // CLI --once flag
   dryRun:         boolean                 // skip the final Publish click
+  loginMode:      boolean                 // open browser + wait, no automation
 }
 
 function envBool(name: string, fallback: boolean): boolean {
@@ -45,6 +46,7 @@ export function loadConfig(): AgentConfig {
     platforms:   envStr('NOVAN_PLATFORMS', '').split(',').map(s => s.trim()).filter(Boolean),
     runOnce:     args.includes('--once'),
     dryRun:      args.includes('--dry-run') || envBool('NOVAN_DRY_RUN', false),
+    loginMode:   args.includes('--login'),
   }
 }
 

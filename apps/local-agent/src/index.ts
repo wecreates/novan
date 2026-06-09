@@ -10,6 +10,23 @@
  *   NOVAN_OPS_TOKEN=ops_... pnpm --filter @ops/local-agent once
  *   NOVAN_OPS_TOKEN=ops_... NOVAN_DRY_RUN=1 pnpm --filter @ops/local-agent once
  */
+// Manual .env.local loader — runs BEFORE any other import so config.ts sees the vars.
+import fs from 'node:fs'
+import path from 'node:path'
+{
+  const envPath = path.resolve(process.cwd(), '.env.local')
+  if (fs.existsSync(envPath)) {
+    for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+      const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)$/)
+      if (!m) continue
+      const k = m[1]!
+      let v = m[2]!.trim()
+      if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1)
+      if (process.env[k] === undefined) process.env[k] = v
+    }
+  }
+}
+
 import { loadConfig, requireOpsToken } from './config.js'
 import { openContext, runOnce } from './orchestrator.js'
 import { sleep } from './anti-flag.js'
@@ -29,6 +46,30 @@ async function main(): Promise<void> {
   console.log('  once         =', cfg.runOnce)
 
   const ctx = await openContext(cfg)
+
+  // Login mode: open browser to platform login URLs, wait for operator to
+  // close the window, then save the cookies and exit. One-time setup per
+  // platform. Run with `pnpm login`.
+  if (cfg.loginMode) {
+    const { getDriver } = await import('./platforms/index.js')
+    const targets = (cfg.platforms.length > 0 ? cfg.platforms : ['gumroad','inprnt','fine_art_america'])
+    console.log('[agent] LOGIN MODE — opening tabs for:', targets.join(', '))
+    console.log('[agent] log in to each, then CLOSE THE WINDOW (X). Cookies will persist.')
+    for (const platform of targets) {
+      const d = getDriver(platform)
+      if (!d) continue
+      const page = await ctx.newPage()
+      await page.goto(d.loginUrl, { waitUntil: 'domcontentloaded' }).catch(() => {})
+    }
+    // Wait for operator to close the window (i.e. all pages close)
+    await new Promise<void>((resolve) => {
+      ctx.on('close', () => resolve())
+      // safety timeout: 15 min
+      setTimeout(() => resolve(), 15 * 60 * 1000)
+    })
+    console.log('[agent] login session ended; cookies persisted to', cfg.profilePath)
+    return
+  }
 
   // Single-pass mode (for debugging + first run)
   if (cfg.runOnce) {

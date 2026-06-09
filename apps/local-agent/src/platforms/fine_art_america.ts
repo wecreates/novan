@@ -87,7 +87,7 @@ async function upload(input: DriverInput): Promise<DriverResult> {
 
 export const fineArtAmericaDriver: PlatformDriver = {
   platform: 'fine_art_america',
-  loginUrl: 'https://fineartamerica.com/loginform.html',
+  loginUrl: 'https://fineartamerica.com/loginorcreateaccount.html',
   loginCheck,
   upload,
 }

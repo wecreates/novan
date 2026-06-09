@@ -5,8 +5,7 @@
  * access we decode + write to disk so Playwright can pass the local path to
  * each platform's file-input.
  */
-import { promises as fs } from 'node:fs'
-import { existsSync } from 'node:fs'
+import { promises as fs, existsSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fetchDesignFileUrl } from './api.js'
 import type { AgentConfig } from './config.js'
@@ -39,6 +38,6 @@ function writeWithExtSniff(dir: string, id: string, buf: Buffer): string {
   const ext = isPng ? '.png' : isJpg ? '.jpg' : '.bin'
   const p = path.join(dir, id + ext)
   // sync write is fine; files are 100-500 KB
-  require('node:fs').writeFileSync(p, buf)
+  writeFileSync(p, buf)
   return p
 }

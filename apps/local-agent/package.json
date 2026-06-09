@@ -8,6 +8,8 @@
     "start":     "tsx src/index.ts",
     "dev":       "tsx watch src/index.ts",
     "once":      "tsx src/index.ts --once",
+    "dry":       "tsx src/index.ts --once --dry-run",
+    "signin":    "tsx src/index.ts --login",
     "typecheck": "tsc --noEmit",
     "install:browsers": "playwright install chromium"
   },
