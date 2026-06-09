@@ -105,7 +105,34 @@ export async function syncGumroadSales(workspaceId: string, businessId = DEFAULT
     catch (e) { return { ok: false, fetched, persisted, newTotalUsd: before30dUsd, tierBefore, tierAfter: tierBefore, tierUnlocked: false, reason: (e as Error).message } }
     fetched += resp.sales.length
     for (const sale of resp.sales) {
-      if (sale.refunded) continue
+      if (sale.refunded) {
+        // R537 — emit a negative-correction row if we never saw the refund
+        // webhook (e.g. webhook missed, replay protection, env drift). Also
+        // stamp the original sale row as refunded so analytics + tier code
+        // stop counting it. Idempotent via "refund:" external_sale_id.
+        const refundCents = sale.price
+        const refundUsd = refundCents / 100
+        const normalizedPermalink = String(sale.permalink ?? '').trim()
+          .replace(/^http:\/\//i, 'https://').replace(/\/$/, '').toLowerCase()
+        try {
+          await db.execute(sql`
+            UPDATE business_revenue
+            SET metadata = jsonb_set(metadata, '{refunded_at}', to_jsonb(${Date.now()}::bigint), true)
+            WHERE workspace_id = ${workspaceId} AND external_sale_id = ${sale.id}
+          `).catch(() => {/* tolerated */})
+          await db.execute(sql`
+            INSERT INTO business_revenue (id, workspace_id, business_id, source, external_sale_id, net_usd, recorded_at, metadata)
+            VALUES (${uuidv7()}, ${workspaceId}, ${businessId}, ${SOURCE}, ${'refund:' + sale.id}, ${-refundUsd}, ${Date.now()},
+                    ${JSON.stringify({ refundOf: sale.id, permalink: normalizedPermalink, via: 'r367_poll_refund' })}::jsonb)
+            ON CONFLICT DO NOTHING
+          `).catch(() => {/* tolerated */})
+          try {
+            const { unmarkSale } = await import('./r521-price-thompson.js')
+            await unmarkSale(workspaceId, normalizedPermalink, refundCents)
+          } catch { /* tolerated */ }
+        } catch { /* tolerated */ }
+        continue
+      }
       const netCents = sale.partially_refunded ? Math.floor(sale.price / 2) : sale.price
       const netUsd = netCents / 100
       const ts = new Date(sale.created_at).getTime()
