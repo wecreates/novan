@@ -48,6 +48,8 @@ interface DashboardState {
   nextActions: Array<{ id: string; title: string; detail: string; score: number; category: string }>  // R385
   failureClusters: Array<{ platform: string; signature: string; count: number; isLivePattern: boolean; suggestedFix: string; lastSeen: number }>  // R388
   stuck: Array<{ id: string; platform: string; title: string; ageHours: number }>        // R407
+  niches: Array<{ niche: string; designCount: number; winnerRate: number; totalUsd: number }>  // R408
+  topDesigns: Array<{ designId: string; prompt: string; totalUsd: number; saleCount: number; winnerScore: number; hasVariants: boolean }>  // R409
   sparklines: {                                                                          // R394
     uploadsPerDay: number[]   // 14 days, oldest→newest
     salesPerDay:   number[]
@@ -203,6 +205,26 @@ export async function loadState(workspaceId: string): Promise<DashboardState> {
           platform: c.platform, signature: c.signature.slice(0, 100),
           count: c.count, isLivePattern: c.isLivePattern,
           suggestedFix: c.suggestedFix, lastSeen: c.lastSeen,
+        }))
+      } catch { return [] }
+    })(),
+    niches: await (async () => {
+      try {
+        const { rankNichePerformance } = await import('./r404-niche-performance.js')
+        const r = await rankNichePerformance(workspaceId)
+        return r.niches.slice(0, 6).map(n => ({
+          niche: n.niche, designCount: n.designCount, winnerRate: n.winnerRate, totalUsd: n.totalUsd,
+        }))
+      } catch { return [] }
+    })(),
+    topDesigns: await (async () => {
+      try {
+        const { rankDesignPerformance } = await import('./r395-design-performance.js')
+        const r = await rankDesignPerformance(workspaceId, 6)
+        return r.designs.map(d => ({
+          designId: d.designId, prompt: d.prompt.slice(0, 60),
+          totalUsd: d.totalUsd, saleCount: d.saleCount,
+          winnerScore: d.winnerScore, hasVariants: d.hasVariants,
         }))
       } catch { return [] }
     })(),
@@ -377,6 +399,37 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
     <h2>Recent failures (${s.uploads.recentFailures.length})</h2>
     ${s.uploads.recentFailures.length === 0 ? '<div class="mini">✓ no recent failures</div>' : `<table><thead><tr><th>When</th><th>Platform</th><th>Error</th></tr></thead><tbody>${s.uploads.recentFailures.map(f => `<tr><td>${ago(f.ts)}</td><td>${escapeHtml(f.platform)}</td><td class="mini">${escapeHtml(f.error)}</td></tr>`).join('')}</tbody></table>`}
   </div>
+
+  ${s.topDesigns.length > 0 ? `<div class="card">
+    <h2>Top designs (R409 · by revenue)</h2>
+    <table>
+      <thead><tr><th>Design</th><th>$</th><th>Sales</th><th>Score</th><th>Var.</th></tr></thead>
+      <tbody>
+        ${s.topDesigns.map(d => `<tr>
+          <td>${escapeHtml(d.prompt)}</td>
+          <td>$${d.totalUsd.toFixed(2)}</td>
+          <td>${d.saleCount}</td>
+          <td><span class="pill pill-up">${d.winnerScore}</span></td>
+          <td>${d.hasVariants ? '✓' : '—'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>` : ''}
+
+  ${s.niches.length > 0 ? `<div class="card">
+    <h2>Niches (R408)</h2>
+    <table>
+      <thead><tr><th>Niche</th><th>Designs</th><th>Win-rate</th><th>$</th></tr></thead>
+      <tbody>
+        ${s.niches.map(n => `<tr>
+          <td>${escapeHtml(n.niche)}</td>
+          <td>${n.designCount}</td>
+          <td class="mini">${(n.winnerRate * 100).toFixed(1)}%</td>
+          <td>$${n.totalUsd.toFixed(2)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>` : ''}
 
   ${s.stuck.length > 0 ? `<div class="card" style="grid-column: 1 / -1">
     <h2>Stuck queue items (R407 · queued >48h)</h2>
