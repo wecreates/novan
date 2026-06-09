@@ -63,6 +63,7 @@ interface DashboardState {
   sessionAges?: Array<{ platform: string; ageDays: number; warningLevel: string }>      // R506
   platformEarnings?: Array<{ source: string; grossUsd: number; netUsd: number; saleCount: number; takeRate: number }>  // R519 — R511
   periodCompare?: { wowSalesDelta: number; wowGrossDelta: number; momSalesDelta: number; momGrossDelta: number; thisWeek: { sales: number; grossUsd: number }; thisMonth: { sales: number; grossUsd: number } }  // R519 — R513
+  buyerOptInCount?: number                                                              // R531 — R517
   aiSpend?: { todayUsd: number; todayCallCount: number; bySource: Array<{ source: string; usd: number; calls: number }>; cap?: { dailyUsd: number; pctUsed: number; budgetExhausted: boolean } }  // R428
   autonomyPaused?: boolean                                                                // R482
   sparklines: {                                                                          // R394
@@ -259,6 +260,12 @@ export async function loadState(workspaceId: string): Promise<DashboardState> {
         const r = await platformEarningsBreakdown(workspaceId, Date.now() - 30 * 24 * 60 * 60_000)
         return r.items.slice(0, 11)
       } catch { return [] }
+    })(),
+    buyerOptInCount: await (async () => {                                    // R531 — R517
+      try {
+        const { countOptIns } = await import('./r517-buyer-email-optin.js')
+        return await countOptIns(workspaceId)
+      } catch { return 0 }
     })(),
     periodCompare: await (async () => {                                      // R519 — R513
       try {
@@ -566,6 +573,16 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
         ${s.stuck.map(i => `<tr><td>${escapeHtml(i.platform)}</td><td class="mini">${i.ageHours}h</td><td>${escapeHtml(i.title)}</td></tr>`).join('')}
       </tbody>
     </table>
+  </div>` : ''}
+
+  ${(s.buyerOptInCount ?? 0) > 0 && token ? `<div class="card" style="grid-column: 1 / -1">
+    <h2>Opted-in buyers (R531 · R517)</h2>
+    <div style="font-size:32px;font-weight:600;color:#fafafa">${s.buyerOptInCount}</div>
+    <div style="font-size:12px;color:#a1a1aa;margin-top:4px">Buyers who ticked "OK to contact" on a Gumroad sale.</div>
+    <div style="margin-top:12px">
+      <a href="/ops/buyers/export.csv?token=${encodeURIComponent(token)}&workspace=${encodeURIComponent(s.workspaceId ?? 'default')}"
+         style="background:#1e3a8a;border:1px solid #3b82f6;color:#dbeafe;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none">📧 Download CSV</a>
+    </div>
   </div>` : ''}
 
   ${s.periodCompare ? `<div class="card" style="grid-column: 1 / -1">
