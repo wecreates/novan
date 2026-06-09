@@ -56,6 +56,23 @@ export async function runOnce(cfg: AgentConfig, ctx: BrowserContext): Promise<{ 
       continue
     }
 
+    // R378 — server-side inter-upload pacing gate. Refuses if last upload was too recent.
+    try {
+      const res = await fetch(`${cfg.apiBase}/api/v1/brain/task`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${cfg.opsToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspace_id: cfg.workspaceId, plan: [{ op: 'pacing.check_or_acquire', params: { platform, acquire: false } }] }),
+      })
+      if (res.ok) {
+        const j = await res.json() as { data?: { results?: Array<{ ok: boolean; data: { allowed: boolean; retryAfterMs: number; minIntervalMs: number } }> } }
+        const d = j.data?.results?.[0]?.data
+        if (d && !d.allowed) {
+          console.log(`[${platform}] pacing: skip (retry in ${Math.round(d.retryAfterMs/60_000)}min, min interval ${Math.round(d.minIntervalMs/60_000)}min)`)
+          continue
+        }
+      }
+    } catch { /* pacing optional */ }
+
     const jobs = await fetchNextJobs(cfg, platform, 1).catch(e => { console.error(`[${platform}] fetch:`, (e as Error).message); return [] })
     if (jobs.length === 0) { console.log(`[${platform}] no jobs`); continue }
     const job = jobs[0]!
@@ -99,6 +116,14 @@ export async function runOnce(cfg: AgentConfig, ctx: BrowserContext): Promise<{ 
         await markUploaded(cfg, job.id, result.externalUrl).catch(e =>
           console.error(`[${platform}] markUploaded:`, (e as Error).message))
       }
+      // R378 — record the successful upload so pacing.check_or_acquire honors it next time
+      try {
+        await fetch(`${cfg.apiBase}/api/v1/brain/task`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${cfg.opsToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workspace_id: cfg.workspaceId, plan: [{ op: 'pacing.check_or_acquire', params: { platform, acquire: true } }] }),
+        })
+      } catch { /* best-effort */ }
       await postUploadEvent(cfg, AGENT_ID, {
         platform, queueItemId: job.id, status: 'success',
         ...(result.externalUrl ? { externalUrl: result.externalUrl } : {}),

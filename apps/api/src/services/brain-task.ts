@@ -716,6 +716,23 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return bulkLoadPins({ workspaceId: ws, pins: p.pins ?? [] })
     },
   },
+  'pacing.check_or_acquire': {
+    description: 'R378: Check if a platform upload is allowed right now (per anti-flag inter-upload min). If yes, acquires the slot. Params: platform, acquire?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { checkOrAcquire } = await import('./r378-upload-pacing.js')
+      const p = params as { platform?: string; acquire?: boolean }
+      return checkOrAcquire({ workspaceId: ws, platform: p.platform ?? 'unknown', acquire: p.acquire !== false })
+    },
+  },
+  'pacing.snapshot': {
+    description: 'R378: Per-platform last-upload-ago + next-ok-in (minutes).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { pacingSnapshot } = await import('./r378-upload-pacing.js')
+      return pacingSnapshot(ws)
+    },
+  },
   'listing.record_upload': {
     description: 'R377: Record which (titleIdx, descIdx) the rotator picked. Called from upload_queue.add. Params: platform, niche, titleIdx, descIdx?',
     risk: 'low',
@@ -8415,6 +8432,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
   'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
   'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
+  'pacing.check_or_acquire', 'pacing.snapshot',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -8758,6 +8776,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
         'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
         'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
+        'pacing.check_or_acquire', 'pacing.snapshot',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
