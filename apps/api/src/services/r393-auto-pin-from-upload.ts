@@ -72,13 +72,13 @@ export async function autoPinFromListing(input: AutoPinInput): Promise<AutoPinRe
     return { ok: true, enqueued: 0, skipped: TEMPLATES.length }
   }
 
-  // Look up design file from design_catalog
+  // Look up design file from design_catalog (column is image_url, not image_path)
   let designFile: string | undefined
   try {
     const r = await db.execute(sql`
-      SELECT image_path FROM design_catalog WHERE id = ${input.designId} LIMIT 1
+      SELECT image_url FROM design_catalog WHERE id = ${input.designId} LIMIT 1
     `)
-    designFile = (r as Array<{ image_path: string | null }>)[0]?.image_path ?? undefined
+    designFile = (r as unknown as Array<{ image_url: string | null }>)[0]?.image_url ?? undefined
   } catch { /* tolerated */ }
 
   const { enqueuePin } = await import('./r368-pinterest-pin-queue.js')

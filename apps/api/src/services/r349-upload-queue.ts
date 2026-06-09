@@ -83,7 +83,15 @@ export async function enqueue(input: EnqueueInput): Promise<{ ok: boolean; id?: 
          ${input.priority ?? 50}, ${input.title}, ${input.description},
          ${input.tags.join(',')}, ${input.priceUsd ?? null}, ${input.category ?? null},
          ${Date.now()}, ${input.notes ?? null})
-      ON CONFLICT (workspace_id, design_id, platform) DO NOTHING
+      ON CONFLICT (workspace_id, design_id, platform) DO UPDATE
+      SET status      = CASE WHEN design_upload_queue.status IN ('failed','skipped') THEN 'queued'      ELSE design_upload_queue.status END,
+          title       = CASE WHEN design_upload_queue.status IN ('failed','skipped') THEN EXCLUDED.title       ELSE design_upload_queue.title END,
+          description = CASE WHEN design_upload_queue.status IN ('failed','skipped') THEN EXCLUDED.description ELSE design_upload_queue.description END,
+          tags        = CASE WHEN design_upload_queue.status IN ('failed','skipped') THEN EXCLUDED.tags        ELSE design_upload_queue.tags END,
+          priority    = CASE WHEN design_upload_queue.status IN ('failed','skipped') THEN EXCLUDED.priority    ELSE design_upload_queue.priority END,
+          notes       = CASE WHEN design_upload_queue.status IN ('failed','skipped') THEN EXCLUDED.notes       ELSE design_upload_queue.notes END,
+          failed_at   = CASE WHEN design_upload_queue.status IN ('failed','skipped') THEN NULL                 ELSE design_upload_queue.failed_at END,
+          queued_at   = CASE WHEN design_upload_queue.status IN ('failed','skipped') THEN ${Date.now()}        ELSE design_upload_queue.queued_at END
     `)
     return { ok: true, id }
   } catch (e) {
