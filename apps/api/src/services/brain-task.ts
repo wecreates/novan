@@ -716,6 +716,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return bulkLoadPins({ workspaceId: ws, pins: p.pins ?? [] })
     },
   },
+  'next_actions.list': {
+    description: 'R385: Highest-impact actions the operator should take, sorted by score. Reads all signals (queue, pacing, pins, capability, sales, agent heartbeat).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { nextActions } = await import('./r385-next-action-recommender.js')
+      return nextActions(ws)
+    },
+  },
   'daily_cron.run': {
     description: 'R382: Headless half of the daily routine — sales sync + trend pipeline + self-test. Idempotent per UTC day. Params: force?',
     risk: 'low',
@@ -8441,7 +8449,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
   'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
   'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
-  'pacing.check_or_acquire', 'pacing.snapshot', 'daily_cron.run',
+  'pacing.check_or_acquire', 'pacing.snapshot', 'daily_cron.run', 'next_actions.list',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -8785,7 +8793,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
         'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
         'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
-        'pacing.check_or_acquire', 'pacing.snapshot', 'daily_cron.run',
+        'pacing.check_or_acquire', 'pacing.snapshot', 'daily_cron.run', 'next_actions.list',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',

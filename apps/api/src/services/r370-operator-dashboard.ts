@@ -44,6 +44,7 @@ interface DashboardState {
     recentPosts:     Array<{ title: string; externalUrl: string; postedAt: number }>
   }
   activity: Array<{ ts: number; type: string; summary: string }>     // R379 — live activity feed
+  nextActions: Array<{ id: string; title: string; detail: string; score: number; category: string }>  // R385
 }
 
 async function loadState(workspaceId: string): Promise<DashboardState> {
@@ -178,6 +179,13 @@ async function loadState(workspaceId: string): Promise<DashboardState> {
       else summary = `${t}`
       return { ts: Number(r.created_at), type: t, summary }
     }),
+    nextActions: await (async () => {
+      try {
+        const { nextActions } = await import('./r385-next-action-recommender.js')
+        const r = await nextActions(workspaceId)
+        return r.actions.slice(0, 3).map(a => ({ id: a.id, title: a.title, detail: a.detail, score: a.score, category: a.category }))
+      } catch { return [] }
+    })(),
   }
 }
 
@@ -231,6 +239,13 @@ function renderHtml(s: DashboardState): string {
 <body>
 <h1>🎨 Novan — CYZOR CREATIONS</h1>
 <div class="subtitle">Operator dashboard · auto-refresh 60s · ${new Date(s.ts).toLocaleString()}</div>
+
+${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3b82f6;border-radius:8px;padding:16px;margin-bottom:20px">
+  <div style="font-size:11px;color:#93c5fd;text-transform:uppercase;letter-spacing:0.6px;font-weight:600;margin-bottom:8px">Do this next · R385</div>
+  <div style="font-size:18px;font-weight:600;color:#fafafa;margin-bottom:4px">${escapeHtml(s.nextActions[0]!.title)}</div>
+  <div style="font-size:13px;color:#dbeafe;line-height:1.5">${escapeHtml(s.nextActions[0]!.detail)}</div>
+  ${s.nextActions.length > 1 ? `<div style="margin-top:12px;font-size:12px;color:#93c5fd">Then: ${s.nextActions.slice(1).map(a => escapeHtml(a.title)).join(' · ')}</div>` : ''}
+</div>` : ''}
 
 <div class="grid">
 
