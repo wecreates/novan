@@ -19,7 +19,10 @@ export async function exportRevenueCsv(workspaceId: string, opts?: { sinceMs?: n
       AND external_sale_id IS NOT NULL
       AND external_sale_id NOT LIKE '\\_\\_synthetic\\_test\\_\\_%' ESCAPE '\\'
     ORDER BY recorded_at ASC
+    LIMIT 100000
   `).catch(() => [] as unknown[])
+  // R547 — 100K row cap for revenue CSV. Schedule C will never need more
+  // than that for a single year; bigger queries should use a paginated brain op.
 
   const data = rows as unknown as Array<{ external_sale_id: string; source: string; net_usd: number; gross_usd: number; currency: string; recorded_at: number; metadata: Record<string, unknown> | null }>
 

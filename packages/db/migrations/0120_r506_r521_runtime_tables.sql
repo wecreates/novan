@@ -24,13 +24,16 @@ CREATE TABLE IF NOT EXISTS image_provider_health (
 );
 
 -- R510 — 1099-K threshold notification dedup
+-- R545 — matches what R510 ensureTable() actually creates (year/notified_at/ytd_at_notify),
+-- not the speculative tax_year/fired_at the migration was first written with.
 CREATE TABLE IF NOT EXISTS tax_threshold_notifications (
-  workspace_id  TEXT NOT NULL,
-  tax_year      INT  NOT NULL,
-  source        TEXT NOT NULL,
-  bucket        TEXT NOT NULL,           -- '80pct' | '100pct'
-  fired_at      BIGINT NOT NULL,
-  PRIMARY KEY (workspace_id, tax_year, source, bucket)
+  workspace_id   TEXT NOT NULL,
+  year           INTEGER NOT NULL,
+  source         TEXT NOT NULL,
+  bucket         TEXT NOT NULL,         -- '80pct' | '100pct'
+  notified_at    BIGINT NOT NULL,
+  ytd_at_notify  DOUBLE PRECISION NOT NULL,
+  PRIMARY KEY (workspace_id, year, source, bucket)
 );
 
 -- R516 — DMCA claim records

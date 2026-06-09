@@ -42,7 +42,9 @@ export async function registerGumroadWebhook(app: FastifyInstance): Promise<void
     })
   }
 
-  app.post('/api/v1/webhooks/gumroad/sale', async (req: FastifyRequest<{ Body: GumroadPingBody; Querystring: { token?: string } }>, reply) => {
+  // R548 — Gumroad webhook bodies are <2KB in practice; cap well above
+  // that to refuse abuse without breaking real pings.
+  app.post('/api/v1/webhooks/gumroad/sale', { bodyLimit: 64 * 1024 }, async (req: FastifyRequest<{ Body: GumroadPingBody; Querystring: { token?: string } }>, reply) => {
     // Token check
     const expected = process.env['GUMROAD_WEBHOOK_TOKEN']
     if (!expected) return reply.code(503).send({ error: 'GUMROAD_WEBHOOK_TOKEN not configured' })

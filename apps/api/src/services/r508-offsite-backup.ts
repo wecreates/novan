@@ -94,6 +94,16 @@ export async function syncBackupsOffsite(localDir = '/var/lib/novan/backups'): P
   const out: OffsiteSyncResult = { configured: cfg !== null, uploaded: [], failed: [] }
   if (!cfg) return out
   if (!fs.existsSync(localDir)) return out
+  // R546 — first prune orphan .uploaded markers whose underlying file was
+  // rotated out by R429 nightly-backup. Otherwise the markers accumulate
+  // forever and `fs.readdirSync` slows linearly with retention age.
+  for (const name of fs.readdirSync(localDir)) {
+    if (!name.endsWith('.uploaded')) continue
+    const sourceFile = path.join(localDir, name.replace(/\.uploaded$/, ''))
+    if (!fs.existsSync(sourceFile)) {
+      try { fs.unlinkSync(path.join(localDir, name)) } catch { /* tolerated */ }
+    }
+  }
   // Push files newer than 24h that haven't been uploaded yet (.uploaded marker)
   const cutoff = Date.now() - 25 * 60 * 60_000
   for (const name of fs.readdirSync(localDir)) {

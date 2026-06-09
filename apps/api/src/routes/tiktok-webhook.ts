@@ -43,7 +43,9 @@ interface TikTokPing {
 }
 
 export async function registerTikTokWebhook(app: FastifyInstance): Promise<void> {
-  app.post('/api/v1/webhooks/tiktok/order', async (req: FastifyRequest<{ Body: TikTokPing; Querystring: { token?: string } }>, reply) => {
+  // R548 — TikTok payloads can include nested product objects; 64KB still
+  // covers everything reasonable and rejects abuse cheaply.
+  app.post('/api/v1/webhooks/tiktok/order', { bodyLimit: 64 * 1024 }, async (req: FastifyRequest<{ Body: TikTokPing; Querystring: { token?: string } }>, reply) => {
     const expected = process.env['TIKTOK_WEBHOOK_TOKEN']
     if (!expected) return reply.code(503).send({ error: 'TIKTOK_WEBHOOK_TOKEN not configured' })
     if ((req.query.token ?? '') !== expected) return reply.code(401).send({ error: 'invalid token' })
