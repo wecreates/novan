@@ -1748,6 +1748,17 @@ async function runDropletDailyCron(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'droplet_daily_cron', error: (e as Error).message }) }
 }
 
+// R401 — hourly auto-variants for winners. Picks top-N designs with sales +
+// no variants yet and runs R374.generateWinnerVariants on each. Operator
+// no longer has to manually trigger variant gen on proven winners.
+async function runAutoVariantsForWinnersTick(): Promise<void> {
+  try {
+    const { runAutoVariantsForWinners } = await import('./r401-auto-variants-for-winners.js')
+    const r = await runAutoVariantsForWinners()
+    if (r.triggered.length > 0) await emit('cron.auto_variants_for_winners', { count: r.triggered.length, triggered: r.triggered })
+  } catch (e) { await emit('cron.error', { task: 'auto_variants_for_winners', error: (e as Error).message }) }
+}
+
 // R400 — hourly queue-low replenisher. Triggers trend pipeline ad-hoc when
 // queue depth falls below 30 (forces below 10). Prevents starvation when
 // operator drains aggressively between the 13:00 UTC R382 ticks.
@@ -2319,6 +2330,8 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runDailySummaryPush,            60 * 60_000))
   // R400 — queue auto-replenish, hourly tick.
   handles.push(scheduleJittered(runQueueAutoReplenish,          60 * 60_000))
+  // R401 — auto-variants for proven winners, hourly tick.
+  handles.push(scheduleJittered(runAutoVariantsForWinnersTick,  60 * 60_000))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
