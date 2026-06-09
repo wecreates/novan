@@ -48,6 +48,7 @@ import { authRoutes }            from './routes/auth.js'
 import { schedulerRoutes }       from './routes/scheduler.js'
 import { searchRoutes }          from './routes/search.js'
 import { webhooksRoutes }        from './routes/webhooks.js'
+import { registerGumroadWebhook } from './routes/gumroad-webhook.js'  // R389
 import { workersRoutes }        from './routes/workers.js'
 import { authPlugin }           from './plugins/auth.js'
 import { requestContextPlugin } from './plugins/requestContext.js'
@@ -342,6 +343,7 @@ const isPublic = (url: string): boolean => {
   if (url.startsWith('/api/v1/auth/quick-link'))                       return true
   if (url === '/api/v1/auth/bootstrap')                                return true
   if (/^\/api\/v1\/webhooks\/[a-z0-9-]+\/trigger$/i.test(url))         return true
+  if (url === '/api/v1/webhooks/gumroad/sale')                         return true  // R389 — token in query param
   // R146.188 — admin brain bridge has its own loopback+token auth.
   if (url === '/admin/brain' || url === '/admin/brain/ops')            return true
   // R146.332 — OAuth callbacks must be public. The provider redirects the
@@ -954,6 +956,7 @@ await app.register(authRoutes,          { prefix: '/api/v1/auth' })
 await app.register(schedulerRoutes,     { prefix: '/api/v1/scheduler' })
 await app.register(searchRoutes,        { prefix: '/api/v1/search' })
 await app.register(webhooksRoutes,      { prefix: '/api/v1/webhooks' })
+await registerGumroadWebhook(app)        // R389 — public, token-gated POST /api/v1/webhooks/gumroad/sale
 await app.register(workersRoutes,       { prefix: '/api/v1/workers' })
 await app.register(exportRoutes,        { prefix: '/api/v1/export' })
 await app.register(workspacesRoutes,    { prefix: '/api/v1/workspaces' })
