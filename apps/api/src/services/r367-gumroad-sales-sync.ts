@@ -179,6 +179,17 @@ async function emitTierUnlock(workspaceId: string, businessId: string, from: str
     INSERT INTO events (id, type, workspace_id, payload, trace_id, correlation_id, source, version, created_at)
     VALUES (${id}, 'business.tier_unlocked', ${workspaceId}, ${JSON.stringify(payload)}::jsonb, ${trace}, ${trace}, ${SOURCE}, 1, ${Date.now()})
   `).catch(() => {/* events table may not exist in some test envs */})
+
+  // R397 — fire web push so operator gets the celebration on their phone.
+  try {
+    const { broadcastPush } = await import('./web-push.js')
+    void broadcastPush(workspaceId, {
+      title: `🎉 Tier unlocked: ${to}`,
+      body:  `30d MRR $${payload.mrrUsd}. Next tier: ${payload.nextTier ?? 'top'} — $${payload.nextGapUsd} away.`,
+      url:   '/ops/dashboard',
+      tag:   `tier-${to}`,
+    })
+  } catch { /* tolerated */ }
 }
 
 export async function lastSyncSummary(workspaceId: string): Promise<{ ts: number; payload: Record<string, unknown> } | null> {
