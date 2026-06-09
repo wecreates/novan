@@ -95,7 +95,8 @@ async function main(): Promise<void> {
     headers: { 'Authorization': `Bearer ${cfg.opsToken}`, 'Content-Type': 'application/json' },
     body:    JSON.stringify({
       workspace_id: cfg.workspaceId,
-      plan: [{ op: 'pinterest.bulk_load', params: { pins } }],
+      // non_financial=true because pin descriptions reference price like "$9" but it's content, not a financial op
+      plan: [{ op: 'pinterest.bulk_load', params: { pins, non_financial: true } }],
     }),
   })
   const raw = await res.text()
