@@ -1748,6 +1748,16 @@ async function runDropletDailyCron(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'droplet_daily_cron', error: (e as Error).message }) }
 }
 
+// R402 — hourly failed-upload auto-requeue. Items failed >2h get retried up
+// to 3 times so transient errors self-heal between operator sessions.
+async function runFailedUploadRequeue(): Promise<void> {
+  try {
+    const { requeueFailedUploads } = await import('./r402-failed-upload-auto-requeue.js')
+    const r = await requeueFailedUploads()
+    if (r.requeued.length > 0) await emit('cron.failed_requeued', { count: r.requeued.length, maxedOut: r.maxedOut })
+  } catch (e) { await emit('cron.error', { task: 'failed_requeue', error: (e as Error).message }) }
+}
+
 // R401 — hourly auto-variants for winners. Picks top-N designs with sales +
 // no variants yet and runs R374.generateWinnerVariants on each. Operator
 // no longer has to manually trigger variant gen on proven winners.
@@ -2332,6 +2342,8 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runQueueAutoReplenish,          60 * 60_000))
   // R401 — auto-variants for proven winners, hourly tick.
   handles.push(scheduleJittered(runAutoVariantsForWinnersTick,  60 * 60_000))
+  // R402 — failed-upload auto-requeue, hourly tick.
+  handles.push(scheduleJittered(runFailedUploadRequeue,         60 * 60_000))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()
