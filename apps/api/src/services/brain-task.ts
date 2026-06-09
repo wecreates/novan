@@ -653,6 +653,69 @@ export const OPERATIONS: Record<string, OpSpec> = {
       })
     },
   },
+  'pinterest.enqueue': {
+    description: 'R368: Add a pin to the Pinterest queue. Params: title, description, tags[], linkUrl, boardName?, designFile?, priority?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { enqueuePin } = await import('./r368-pinterest-pin-queue.js')
+      const p = params as Record<string, unknown>
+      return enqueuePin({
+        workspaceId: ws,
+        title:       String(p['title'] ?? ''),
+        description: String(p['description'] ?? ''),
+        tags:        Array.isArray(p['tags']) ? (p['tags'] as string[]) : [],
+        linkUrl:     String(p['linkUrl'] ?? ''),
+        boardName:   String(p['boardName'] ?? 'Vintage Botanical Prints | CYZOR CREATIONS'),
+        ...(p['designFile'] ? { designFile: String(p['designFile']) } : {}),
+        ...(p['priority']   !== undefined ? { priority:   Number(p['priority']) } : {}),
+      })
+    },
+  },
+  'pinterest.next': {
+    description: 'R368: Pull the next pin to post (respects 5/day cap).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { nextPin } = await import('./r368-pinterest-pin-queue.js')
+      return nextPin(ws)
+    },
+  },
+  'pinterest.mark_posted': {
+    description: 'R368: Mark a pin as live. Params: pinQueueId, externalUrl',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { markPinPosted } = await import('./r368-pinterest-pin-queue.js')
+      const p = params as { pinQueueId?: string; externalUrl?: string }
+      await markPinPosted(ws, p.pinQueueId ?? '', p.externalUrl ?? '')
+      return { ok: true }
+    },
+  },
+  'pinterest.mark_failed': {
+    description: 'R368: Mark a pin as failed. Params: pinQueueId, reason',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { markPinFailed } = await import('./r368-pinterest-pin-queue.js')
+      const p = params as { pinQueueId?: string; reason?: string }
+      await markPinFailed(ws, p.pinQueueId ?? '', p.reason ?? 'unknown')
+      return { ok: true }
+    },
+  },
+  'pinterest.stats': {
+    description: 'R368: Pin queue stats (queued / posted / today / remaining).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { pinStats } = await import('./r368-pinterest-pin-queue.js')
+      return pinStats(ws)
+    },
+  },
+  'pinterest.bulk_load': {
+    description: 'R368: Bulk-load pins (idempotent on workspace+title). Params: pins[]',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { bulkLoadPins } = await import('./r368-pinterest-pin-queue.js')
+      const p = params as { pins?: Array<{ title: string; description: string; tags: string[]; linkUrl: string; boardName?: string; designFile?: string; priority?: number }> }
+      return bulkLoadPins({ workspaceId: ws, pins: p.pins ?? [] })
+    },
+  },
   'sales.sync_gumroad': {
     description: 'R367: Pull recent Gumroad sales, persist to business_revenue, auto-progress goal-ladder tier. Params: businessId?',
     risk: 'low',
@@ -8256,6 +8319,8 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'account.birthdays', 'design.get',
   'selector.improve', 'selector.outcome', 'selector.stored',
   'sales.sync_gumroad', 'sales.last_tier_unlock',
+  'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
+  'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
 
 /** R146.73 — recursive scan for <untrusted_content tag in any param
@@ -8595,6 +8660,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'agent.heartbeat', 'agent.report_event', 'agent.report_failure', 'account.birthdays',
         'selector.improve', 'selector.outcome', 'selector.stored',
         'sales.sync_gumroad', 'sales.last_tier_unlock',
+        'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
+        'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
         'goal.ladder', 'goal.classify_tier', 'goal.business_status',
         'trends.list_all', 'trends.pick_batch', 'trends.run_pipeline',
