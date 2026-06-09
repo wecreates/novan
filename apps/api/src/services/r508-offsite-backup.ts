@@ -125,9 +125,13 @@ export async function syncBackupsOffsite(localDir = '/var/lib/novan/backups'): P
           const { db } = await import('../db/client.js')
           const { sql } = await import('drizzle-orm')
           const { v7: uuidv7 } = await import('uuid')
+          // R554 — backup is a droplet-level concern, not workspace-scoped.
+          // The events table requires workspace_id NOT NULL so we use a
+          // reserved 'system' sentinel to make these visible to operator
+          // queries but not mistaken for a real workspace.
           await db.execute(sql`
             INSERT INTO events (id, type, workspace_id, payload, trace_id, correlation_id, source, version, created_at)
-            VALUES (${uuidv7()}, 'backup.offsite_failed', 'default',
+            VALUES (${uuidv7()}, 'backup.offsite_failed', 'system',
               ${JSON.stringify({ file: name, status: r.status })}::jsonb,
               ${uuidv7()}, ${uuidv7()}, 'r508-offsite-backup', 1, ${Date.now()})
           `).catch(() => {/* tolerated */})
