@@ -64,8 +64,24 @@ export interface EnqueueInput {
   notes?:       string
 }
 
+// R556 — known POD platforms. Typos like 'tiktokshop' or 'etzy' would
+// otherwise silently enqueue forever because no driver picks them up,
+// then R407 stuck-queue detector eventually flags them — but only after
+// 48h. Validating at enqueue catches the typo immediately.
+const VALID_PLATFORMS = new Set([
+  'gumroad', 'inprnt', 'fine_art_america', 'redbubble', 'etsy', 'zazzle',
+  'spreadshirt', 'teepublic', 'tiktok_shop', 'displate', 'threadless',
+  'pixels', 'society6',  // legacy/retired but still recognized
+  'pinterest',           // R368
+])
+
 export async function enqueue(input: EnqueueInput): Promise<{ ok: boolean; id?: string; reason?: string }> {
   try {
+    // R556 — fail fast on unknown platform string. Distinguishes typos
+    // from auto-disable so operator sees a different error message.
+    if (!VALID_PLATFORMS.has(input.platform)) {
+      return { ok: false, reason: `unknown platform '${input.platform}' (known: ${[...VALID_PLATFORMS].slice(0, 6).join(',')}...)` }
+    }
     // R412 — refuse to enqueue on auto-disabled platforms (operator must
     // re-enable via platforms.enable after fixing the driver).
     try {

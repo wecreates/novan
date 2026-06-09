@@ -90,6 +90,20 @@ export async function probeAllProviders(): Promise<{ probed: number; healthy: nu
           consecutive_fails = CASE WHEN EXCLUDED.last_status = 'ok' THEN 0 ELSE image_provider_health.consecutive_fails + 1 END
     `).catch(() => {/* tolerated */})
   }
+  // R557 — capture a cross-cutting lesson when ALL providers are down so
+  // the brain proactively warns about the same pattern next time (R335
+  // injection on related ops). Wires the previously-orphan captureLesson.
+  if (probed > 0 && healthy === 0) {
+    try {
+      const { captureLesson } = await import('./r335-lesson-auto-capture.js')
+      await captureLesson('default', {
+        scope: 'image_gen_provider_failure',
+        source: 'r509.probe_all_down',
+        observation: `All ${probed} image-gen providers reporting down/unconfigured at ${new Date().toISOString()}`,
+        recommendation: 'Verify provider keys, billing, and rate-limit quotas before queueing more image-gen work',
+      } as Parameters<typeof captureLesson>[1])
+    } catch { /* tolerated */ }
+  }
   return { probed, healthy }
 }
 
