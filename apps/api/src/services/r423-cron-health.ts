@@ -22,6 +22,13 @@ async function ensureTable(): Promise<void> {
   `).catch(() => {})
 }
 
+/**
+ * R468 — A cron may deliberately skip itself (wrong hour, kill switch, no
+ * data). Throwing CronSkip from the body records last_status='skipped' so
+ * the dashboard distinguishes "intentionally idle" from "actually broken".
+ */
+export class CronSkip extends Error { constructor(reason: string) { super(reason); this.name = 'CronSkip' } }
+
 /** Run a cron-tick body and record health. Use as: cronHealth('name', () => doStuff()). */
 export async function cronHealth<T>(name: string, body: () => Promise<T>): Promise<T | undefined> {
   await ensureTable()
@@ -38,6 +45,18 @@ export async function cronHealth<T>(name: string, body: () => Promise<T>): Promi
     `).catch(() => {/* tolerated */})
     return r
   } catch (e) {
+    // R468 — skipped is distinct from error
+    if (e instanceof CronSkip) {
+      const dur = Date.now() - start
+      await db.execute(sql`
+        INSERT INTO cron_health (name, last_ran_at, last_status, last_duration_ms, last_error, ok_count, error_count)
+        VALUES (${name}, ${start}, 'skipped', ${dur}, ${e.message.slice(0, 200)}, 0, 0)
+        ON CONFLICT (name) DO UPDATE
+        SET last_ran_at = ${start}, last_status = 'skipped', last_duration_ms = ${dur},
+            last_error = ${e.message.slice(0, 200)}
+      `).catch(() => {/* tolerated */})
+      return undefined
+    }
     const dur = Date.now() - start
     const msg = (e as Error).message.slice(0, 300)
     await db.execute(sql`

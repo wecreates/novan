@@ -1852,14 +1852,22 @@ async function runQueueAutoReplenish(): Promise<void> {
 }
 
 // R398 — daily morning summary push. R437 gates per-workspace by operator
-// local 8am, so the outer cron must fire HOURLY and let the per-workspace
+// local hour, so the outer cron fires HOURLY and lets the per-workspace
 // check decide. Idempotency is still per UTC day so worst-case = 1 fire/ws.
 async function runDailySummaryPush(): Promise<void> {
   try {
     const { pushDailySummary } = await import('./r398-daily-summary-push.js')
     const r = await pushDailySummary()
     if (r.pushed > 0) await emit('cron.daily_summary_pushed', { pushed: r.pushed })
-  } catch (e) { await emit('cron.error', { task: 'daily_summary_push', error: (e as Error).message }) }
+    // R468 — surface "nobody at preferred hour" as skipped not ok
+    else if (r.workspaces > 0 && r.skipped.length === r.workspaces) {
+      const { CronSkip } = await import('./r423-cron-health.js')
+      throw new CronSkip(`all ${r.workspaces} workspaces gated by local hour`)
+    }
+  } catch (e) {
+    if ((e as Error).name === 'CronSkip') throw e
+    await emit('cron.error', { task: 'daily_summary_push', error: (e as Error).message })
+  }
 }
 
 // R387 — pacing auto-loosen tick: shrinks per-platform inter-upload minimum

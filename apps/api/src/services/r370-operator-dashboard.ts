@@ -534,7 +534,7 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
       <tbody>${s.cronHealth.map(c => `<tr>
         <td>${escapeHtml(c.name)}</td>
         <td class="mini">${ago(c.lastRanAt)}</td>
-        <td>${c.lastStatus === 'ok' ? '<span class="pill pill-up">ok</span>' : '<span class="pill pill-fail">err</span>'}</td>
+        <td>${c.lastStatus === 'ok' ? '<span class="pill pill-up">ok</span>' : c.lastStatus === 'skipped' ? '<span class="pill pill-tier">skip</span>' : '<span class="pill pill-fail">err</span>'}</td>
         <td class="mini">${c.lastDurationMs}ms</td>
         <td class="mini">${escapeHtml(c.lastError ?? (c.staleHours > 25 ? `stale ${c.staleHours}h` : ''))}</td>
       </tr>`).join('')}</tbody>

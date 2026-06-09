@@ -112,6 +112,11 @@ export async function recordSelectorOutcome(workspaceId: string, platform: strin
  * suggestion in confidence order and reports back outcomes via
  * recordSelectorOutcome.
  */
+// R467 — per-(workspace, platform) circuit breaker: 3 consecutive LLM
+// failures opens the breaker for 30 min. Prevents the autonomous loop from
+// spamming a degraded provider.
+const SELECTOR_CB = new Map<string, { fails: number; openUntil: number }>()
+
 export async function improveSelectors(input: ImproveSelectorsInput): Promise<ImproveSelectorsResult> {
   await ensureTable()
 
@@ -157,10 +162,16 @@ ${input.pageHtmlExcerpt.slice(0, 8000)}
     if (await isBudgetExhausted(input.workspaceId)) {
       return { ok: false, suggestions: [], reason: 'daily AI budget exhausted (R428)' }
     }
-    // Record an estimated 1¢ per Claude call (rough avg for ~800 token reply +
-    // ~8K prompt + screenshot). Actual cost varies by model.
     await recordSpend(input.workspaceId, 'selector_improver', 1)
   } catch { /* tolerated */ }
+
+  // R467 — circuit breaker. If LLM has thrown N times in a row for this
+  // (workspace, platform), back off for 30 min before trying again.
+  const cbKey = `${input.workspaceId}|${input.platform}`
+  const cb = SELECTOR_CB.get(cbKey) ?? { fails: 0, openUntil: 0 }
+  if (Date.now() < cb.openUntil) {
+    return { ok: false, suggestions: [], reason: 'circuit open — recent LLM failures, retry in ' + Math.round((cb.openUntil - Date.now())/60000) + 'min' }
+  }
 
   let content: string
   try {
@@ -178,7 +189,14 @@ ${input.pageHtmlExcerpt.slice(0, 8000)}
       temperature: 0.2,
     })
     content = resp.content
+    // Success — reset breaker
+    SELECTOR_CB.set(cbKey, { fails: 0, openUntil: 0 })
   } catch (e) {
+    // Record breaker failure
+    const c = SELECTOR_CB.get(cbKey) ?? { fails: 0, openUntil: 0 }
+    c.fails++
+    if (c.fails >= 3) { c.openUntil = Date.now() + 30 * 60_000; c.fails = 0 }
+    SELECTOR_CB.set(cbKey, c)
     return { ok: false, suggestions: [], reason: 'LLM call failed: ' + (e as Error).message }
   }
 
