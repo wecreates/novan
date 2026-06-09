@@ -1769,6 +1769,17 @@ async function runFailedUploadRequeue(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'failed_requeue', error: (e as Error).message }) }
 }
 
+// R413 — Sunday 14:00 UTC weekly recap push. Idempotent per ISO week.
+async function runWeeklyRecapPush(): Promise<void> {
+  try {
+    const d = new Date()
+    if (d.getUTCDay() !== 0 || d.getUTCHours() !== 14) return  // Sun only
+    const { pushWeeklyRecap } = await import('./r413-weekly-recap-push.js')
+    const r = await pushWeeklyRecap()
+    if (r.pushed > 0) await emit('cron.weekly_recap_pushed', { pushed: r.pushed })
+  } catch (e) { await emit('cron.error', { task: 'weekly_recap_push', error: (e as Error).message }) }
+}
+
 // R412 — hourly platform auto-disable. Catches broken drivers before they
 // burn pipeline budget on failures-only paths.
 async function runPlatformAutoDisable(): Promise<void> {
@@ -2377,6 +2388,8 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runAutoCrossListWinners,        60 * 60_000))
   // R412 — platform auto-disable on chronic failures, hourly tick.
   handles.push(scheduleJittered(runPlatformAutoDisable,         60 * 60_000))
+  // R413 — weekly recap push, hourly tick gated to Sun 14:00 UTC.
+  handles.push(scheduleJittered(runWeeklyRecapPush,             60 * 60_000))
   // R402 — failed-upload auto-requeue, hourly tick.
   handles.push(scheduleJittered(runFailedUploadRequeue,         60 * 60_000))
   // R403 — per-platform first-sale detector, hourly tick.
