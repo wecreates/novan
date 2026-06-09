@@ -64,6 +64,6 @@ export async function getOperatorLocalDay(workspaceId: string): Promise<number> 
   try {
     const s = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(new Date())
     const map: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 }
-    return map[s] ?? new Date().getUTCDay() || 7
+    return map[s] ?? (new Date().getUTCDay() || 7)
   } catch { return new Date().getUTCDay() || 7 }
 }
