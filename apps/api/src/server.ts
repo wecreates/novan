@@ -607,14 +607,16 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/dashboard
 })
 
 // R432 — operator quick-action click dedup. Keys are (workspace|action),
-// values are last-fired timestamp. R452 — periodic eviction so long-running
-// processes don't accumulate stale keys (bounded but tidy).
+// values are last-fired timestamp. R452 — periodic eviction. R495 — interval
+// handle kept so graceful shutdown can clear it.
 const ACTION_DEDUP = new Map<string, number>()
 const ACTION_DEDUP_TTL_MS = 5 * 60_000
-setInterval(() => {
+const ACTION_DEDUP_INTERVAL = setInterval(() => {
   const cutoff = Date.now() - ACTION_DEDUP_TTL_MS
   for (const [k, ts] of ACTION_DEDUP) if (ts < cutoff) ACTION_DEDUP.delete(k)
-}, 60_000).unref()
+}, 60_000)
+ACTION_DEDUP_INTERVAL.unref()
+app.addHook('onClose', async () => { clearInterval(ACTION_DEDUP_INTERVAL) })
 
 // R427 — register form-urlencoded parser at app scope so dashboard POST
 // forms work whether or not the Gumroad webhook route registered it first.

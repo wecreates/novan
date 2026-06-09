@@ -1859,10 +1859,11 @@ async function runDailySummaryPush(): Promise<void> {
     const { pushDailySummary } = await import('./r398-daily-summary-push.js')
     const r = await pushDailySummary()
     if (r.pushed > 0) await emit('cron.daily_summary_pushed', { pushed: r.pushed })
-    // R468 — surface "nobody at preferred hour" as skipped not ok
-    else if (r.workspaces > 0 && r.skipped.length === r.workspaces) {
+    // R468/R493 — "no work to do" surfaces as skipped not ok.
+    else {
       const { CronSkip } = await import('./r423-cron-health.js')
-      throw new CronSkip(`all ${r.workspaces} workspaces gated by local hour`)
+      if (r.workspaces === 0) throw new CronSkip('no workspaces')
+      if (r.skipped.length === r.workspaces) throw new CronSkip(`all ${r.workspaces} workspaces gated by local hour`)
     }
   } catch (e) {
     if ((e as Error).name === 'CronSkip') throw e

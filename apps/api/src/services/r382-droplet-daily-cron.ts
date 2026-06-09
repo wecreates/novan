@@ -76,9 +76,15 @@ export async function runDailyCron(workspaceId: string, opts?: { force?: boolean
   } catch (e) { console.error('[r382] sales sync:', (e as Error).message) }
 
   // R443 — bail entirely if operator engaged the autonomous_writes kill switch.
+  // R494 — still record the "ran" row so we don't rerun on the next hourly tick.
   try {
     const { isAutonomyAllowed } = await import('./r443-autonomy-gate.js')
     if (!await isAutonomyAllowed(workspaceId)) {
+      await db.execute(sql`
+        INSERT INTO daily_cron_runs (workspace_id, day_yyyymmdd, ran_at, summary)
+        VALUES (${workspaceId}, ${yyyymmdd}, ${Date.now()}, ${JSON.stringify({ skipped: 'autonomy_paused' })}::jsonb)
+        ON CONFLICT (workspace_id, day_yyyymmdd) DO NOTHING
+      `).catch(() => {/* best effort */})
       return { ok: true, workspaceId, yyyymmdd, alreadyRanToday: false,
         salesPersisted, pipelineGenerated: 0, pipelineQueued: 0, pipelineFailed: 0,
         durationMs: Date.now() - started }

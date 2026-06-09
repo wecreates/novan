@@ -979,18 +979,26 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
       }
       const json = JSON.stringify(compact, null, 2).slice(0, wantHeavy ? 4000 : 1200)
       novanDashboardBlock = `\n\n## Live Novan POD dashboard (R425 ${wantHeavy ? 'full' : 'lite'} — answer status questions from this, do not invent numbers)\n\n\`\`\`json\n${json}\n\`\`\`\n`
-      // R456 — structured event for analytics: track how often + which mode.
+      // R456/R492 — structured event with FK guard. If workspaces row doesn't
+      // exist, log instead of erroring silently.
       try {
         const { db: db2 } = await import('../db/client.js')
         const { sql: sql2 } = await import('drizzle-orm')
         const { v7: uuidv7 } = await import('uuid')
-        const id = uuidv7(), trace = uuidv7()
-        await db2.execute(sql2`
-          INSERT INTO events (id, type, workspace_id, payload, trace_id, correlation_id, source, version, created_at)
-          VALUES (${id}, 'chat.dashboard_injected', ${i.workspaceId},
-            ${JSON.stringify({ mode: wantHeavy ? 'full' : 'lite', bytes: json.length })}::jsonb,
-            ${trace}, ${trace}, 'r425-chat-injection', 1, ${Date.now()})
-        `).catch(() => null)
+        const wsCheck = await db2.execute(sql2`SELECT 1 FROM workspaces WHERE id = ${i.workspaceId} LIMIT 1`)
+        const wsArr = wsCheck as unknown as { rows?: unknown[] } | unknown[]
+        const wsRows = Array.isArray(wsArr) ? wsArr : (wsArr.rows ?? [])
+        if (wsRows.length === 0) {
+          console.warn(`[r425] chat injection: workspace ${i.workspaceId} not in workspaces table; event skipped`)
+        } else {
+          const id = uuidv7(), trace = uuidv7()
+          await db2.execute(sql2`
+            INSERT INTO events (id, type, workspace_id, payload, trace_id, correlation_id, source, version, created_at)
+            VALUES (${id}, 'chat.dashboard_injected', ${i.workspaceId},
+              ${JSON.stringify({ mode: wantHeavy ? 'full' : 'lite', bytes: json.length })}::jsonb,
+              ${trace}, ${trace}, 'r425-chat-injection', 1, ${Date.now()})
+          `).catch((e: Error) => console.warn('[r425] event insert failed:', e.message))
+        }
       } catch { /* tolerated */ }
     }
   } catch { /* tolerated */ }
