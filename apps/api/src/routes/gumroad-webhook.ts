@@ -78,8 +78,35 @@ export async function registerGumroadWebhook(app: FastifyInstance): Promise<void
     if (!saleId || !permalink) {
       return reply.code(400).send({ error: 'missing sale_id or product_permalink' })
     }
-    if (body.refunded === 'true' || body.test === 'true') {
-      return reply.code(202).send({ ok: true, ignored: body.refunded === 'true' ? 'refund' : 'test' })
+    if (body.test === 'true') {
+      return reply.code(202).send({ ok: true, ignored: 'test' })
+    }
+    // R522 — refund handler. Previously refunds were silently ignored which
+    // left MRR / tier classification overstated. Mark the original sale as
+    // refunded and emit a negative correction row tagged so analytics can
+    // subtract it. Idempotent on the negative correction id.
+    if (body.refunded === 'true') {
+      const refundWorkspace = String(body.workspace_id ?? 'default').slice(0, 64)
+      const refundCents = Math.max(0, Math.round(Number(body.price ?? 0)))
+      const refundAmount = refundCents / 100
+      try {
+        await db.execute(sql`
+          UPDATE business_revenue
+          SET metadata = jsonb_set(metadata, '{refunded_at}', to_jsonb(${Date.now()}::bigint), true)
+          WHERE workspace_id = ${refundWorkspace} AND external_sale_id = ${saleId}
+        `).catch(() => {/* tolerated */})
+        await db.execute(sql`
+          INSERT INTO business_revenue
+            (id, workspace_id, external_sale_id, source, net_usd, currency, metadata, recorded_at)
+          VALUES
+            (${uuidv7()}, ${refundWorkspace}, ${'refund:' + saleId}, 'gumroad',
+             ${-refundAmount}, 'USD',
+             ${JSON.stringify({ permalink, productName, refundOf: saleId, via: 'webhook_refund' })}::jsonb,
+             ${Date.now()})
+          ON CONFLICT (workspace_id, external_sale_id) WHERE external_sale_id IS NOT NULL DO NOTHING
+        `).catch(() => {/* tolerated */})
+      } catch { /* tolerated */ }
+      return reply.code(200).send({ ok: true, refunded: saleId, correctedUsd: -refundAmount })
     }
 
     const workspaceId = String(body.workspace_id ?? 'default').slice(0, 64)
