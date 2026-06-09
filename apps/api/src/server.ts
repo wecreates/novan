@@ -1046,8 +1046,15 @@ app.post<{ Body: Buffer }>('/api/v1/designs/upload', { bodyLimit: 30 * 1024 * 10
   if (!designId) return reply.code(400).send({ error: 'X-Novan-Design-Id header required' })
   const mime = String(req.headers['content-type'] ?? 'application/octet-stream')
   const filename = String(req.headers['x-novan-filename'] ?? 'design.bin')
+  const expectSha = String(req.headers['x-novan-sha256'] ?? '').toLowerCase()
   const { storeDesignFile } = await import('./services/r438-design-file-store.js')
   const buf = req.body as Buffer
+  // R487 — verify expected sha256 if operator supplied it
+  if (expectSha) {
+    const crypto = await import('node:crypto')
+    const actual = crypto.createHash('sha256').update(buf).digest('hex')
+    if (actual !== expectSha) return reply.code(400).send({ error: 'sha256 mismatch', expected: expectSha, actual })
+  }
   const r = await storeDesignFile({ workspaceId: ws, designId, filename, mime, bytes: buf })
   return reply.code(r.ok ? 200 : 400).send(r)
 })

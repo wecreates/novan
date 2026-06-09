@@ -99,19 +99,31 @@ export async function runDailyCron(workspaceId: string, opts?: { force?: boolean
 
   let pipelineGenerated = 0, pipelineQueued = 0, pipelineFailed = 0
   try {
-    // R415 — scale pipeline budget with revenue. R463 — promotion thresholds
-    // sit BELOW demotion thresholds (10% gap) so a workspace bouncing around
-    // $99-$101 MRR doesn't flap between 10 and 15 designs/day.
+    // R415/R481 — real hysteresis. Promotion thresholds are 10% above
+    // demotion thresholds; current budget tier is persisted in
+    // workspace_settings so we don't oscillate when MRR brushes a boundary.
     let dailyBudget = 10
     try {
       const { projectMrr } = await import('./r414-mrr-projection.js')
+      const { getNumSetting, setSetting } = await import('./r437-operator-timezone.js')
       const proj = await projectMrr(workspaceId)
       const mrr = proj.currentMrr30d
-      // tier-up thresholds (need to exceed)
-      if (mrr >= 11_000)      dailyBudget = 50
-      else if (mrr >= 5_500)  dailyBudget = 40
-      else if (mrr >= 1_100)  dailyBudget = 25
-      else if (mrr >= 110)    dailyBudget = 15
+      const prev = await getNumSetting(workspaceId, 'r415_budget_tier', 10)
+      // (current tier, promote-up MRR, demote-down MRR)
+      const tiers: Array<{ budget: number; promoteAt: number; demoteAt: number }> = [
+        { budget: 10, promoteAt: 110,    demoteAt: 0 },
+        { budget: 15, promoteAt: 1_100,  demoteAt: 100 },
+        { budget: 25, promoteAt: 5_500,  demoteAt: 1_000 },
+        { budget: 40, promoteAt: 11_000, demoteAt: 5_000 },
+        { budget: 50, promoteAt: Infinity, demoteAt: 10_000 },
+      ]
+      // Find current tier; promote if MRR >= promoteAt, demote if MRR < demoteAt
+      let curIdx = tiers.findIndex(t => t.budget === prev)
+      if (curIdx < 0) curIdx = 0
+      while (curIdx < tiers.length - 1 && mrr >= tiers[curIdx]!.promoteAt) curIdx++
+      while (curIdx > 0 && mrr < tiers[curIdx]!.demoteAt) curIdx--
+      dailyBudget = tiers[curIdx]!.budget
+      if (dailyBudget !== prev) await setSetting(workspaceId, 'r415_budget_tier', String(dailyBudget))
     } catch { /* tolerated */ }
     // R406 — use R405 niche-weight recommender to adapt pipeline counts to
     // observed performance. Falls back to the static 5/3/2 mix if R405 hasn't

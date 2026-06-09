@@ -4105,6 +4105,9 @@ export const OPERATIONS: Record<string, OpSpec> = {
       if (rows.length === 0) {
         throw new Error(`kill_switch.enable: no row found for workspace+switch_type (run a kill_switch.list first)`)
       }
+      // R486 — invalidate R443 autonomy gate cache so the autonomous loops
+      // pick up the new state immediately instead of after 30s.
+      try { const { invalidateAutonomyCache } = await import('./r443-autonomy-gate.js'); invalidateAutonomyCache(workspaceId) } catch { /* tolerated */ }
       return { ok: true, switch_type: sw, enabled: true }
     },
   },
@@ -4126,6 +4129,9 @@ export const OPERATIONS: Record<string, OpSpec> = {
       if (rows.length === 0) {
         throw new Error(`kill_switch.disable: no row found for workspace+switch_type`)
       }
+      // R486 — invalidate R443 autonomy gate cache so the autonomous loops
+      // pick up the new state immediately.
+      try { const { invalidateAutonomyCache } = await import('./r443-autonomy-gate.js'); invalidateAutonomyCache(workspaceId) } catch { /* tolerated */ }
       return { ok: true, switch_type: sw, enabled: false }
     },
   },

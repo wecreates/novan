@@ -156,11 +156,14 @@ Page HTML excerpt (truncated):
 ${input.pageHtmlExcerpt.slice(0, 8000)}
 \`\`\``
 
-  // R465 — skip the LLM call if today's AI spend is already capped.
+  // R465/R488 — skip the LLM call if total or per-source daily AI spend is capped.
   try {
-    const { isBudgetExhausted, recordSpend } = await import('./r428-ai-spend-tracker.js')
+    const { isBudgetExhausted, isSourceBudgetExhausted, recordSpend } = await import('./r428-ai-spend-tracker.js')
     if (await isBudgetExhausted(input.workspaceId)) {
       return { ok: false, suggestions: [], reason: 'daily AI budget exhausted (R428)' }
+    }
+    if (await isSourceBudgetExhausted(input.workspaceId, 'selector_improver')) {
+      return { ok: false, suggestions: [], reason: 'selector_improver daily cap reached (R488)' }
     }
     await recordSpend(input.workspaceId, 'selector_improver', 1)
   } catch { /* tolerated */ }

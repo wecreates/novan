@@ -12,6 +12,12 @@ import { db } from '../db/client.js'
 const CACHE = new Map<string, { allowed: boolean; until: number }>()
 const TTL_MS = 30_000
 
+/** R485 — operator can call this after engaging/disengaging the switch so
+ *  the 30s autonomy-gate cache doesn't stay stale. */
+export function invalidateAutonomyCache(workspaceId?: string): void {
+  if (workspaceId) CACHE.delete(workspaceId); else CACHE.clear()
+}
+
 export async function isAutonomyAllowed(workspaceId: string): Promise<boolean> {
   const c = CACHE.get(workspaceId)
   if (c && c.until > Date.now()) return c.allowed

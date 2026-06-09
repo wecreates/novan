@@ -84,3 +84,17 @@ export async function isBudgetExhausted(workspaceId: string): Promise<boolean> {
   const snap = await spendSnapshot(workspaceId)
   return Boolean(snap.cap?.budgetExhausted)
 }
+
+/** R488 — per-source daily cap so operator can set, e.g., max $1/day on
+ *  selector_improver separately from image_gen. Looks up
+ *  workspace_settings.<source>_daily_cap_usd. Returns true when exhausted. */
+export async function isSourceBudgetExhausted(workspaceId: string, source: string): Promise<boolean> {
+  try {
+    const { getNumSetting } = await import('./r437-operator-timezone.js')
+    const capUsd = await getNumSetting(workspaceId, `${source}_daily_cap_usd`, 0)
+    if (capUsd <= 0) return false
+    const snap = await spendSnapshot(workspaceId)
+    const sourceUsd = snap.bySource.find(b => b.source === source)?.usd ?? 0
+    return sourceUsd >= capUsd
+  } catch { return false }
+}

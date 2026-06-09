@@ -60,6 +60,7 @@ interface DashboardState {
   cronHealth: Array<{ name: string; lastRanAt: number; lastStatus: string; lastDurationMs: number; lastError: string | null; staleHours: number }>  // R423
   disabledPlatforms: Array<{ platform: string; disabledAt: number; reason: string }>      // R424
   aiSpend?: { todayUsd: number; todayCallCount: number; bySource: Array<{ source: string; usd: number; calls: number }>; cap?: { dailyUsd: number; pctUsed: number; budgetExhausted: boolean } }  // R428
+  autonomyPaused?: boolean                                                                // R482
   sparklines: {                                                                          // R394
     uploadsPerDay: number[]   // 14 days, oldest→newest
     salesPerDay:   number[]
@@ -218,6 +219,12 @@ export async function loadState(workspaceId: string): Promise<DashboardState> {
           suggestedFix: c.suggestedFix, lastSeen: c.lastSeen,
         }))
       } catch { return [] }
+    })(),
+    autonomyPaused: await (async () => {
+      try {
+        const { isAutonomyAllowed } = await import('./r443-autonomy-gate.js')
+        return !await isAutonomyAllowed(workspaceId)
+      } catch { return false }
     })(),
     aiSpend: await (async () => {
       try {
@@ -384,6 +391,8 @@ ${token ? `<div style="margin-bottom:20px;padding:12px;background:#18181b;border
     <button type="submit" aria-label="Fire ${escapeHtml(action as string)}" style="background:#1e3a8a;border:1px solid #3b82f6;color:#dbeafe;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">${escapeHtml(label as string)}</button>
   </form>`).join('')}
 </div>` : ''}
+
+${s.autonomyPaused ? `<div style="background:#7f1d1d;border:1px solid #fca5a5;border-radius:8px;padding:16px;margin-bottom:20px"><strong style="color:#fee2e2">⏸ Autonomy paused</strong><div style="color:#fecaca;font-size:13px;margin-top:4px">kill_switch.autonomous_writes is engaged for this workspace. R382/R401/R411/R421/R458 won't fire. Resume via brain-task: kill_switch.enable autonomous_writes</div></div>` : ''}
 
 ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3b82f6;border-radius:8px;padding:16px;margin-bottom:20px">
   <div style="font-size:11px;color:#93c5fd;text-transform:uppercase;letter-spacing:0.6px;font-weight:600;margin-bottom:8px">Do this next · R385</div>
