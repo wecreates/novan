@@ -54,7 +54,7 @@ interface DashboardState {
   }
 }
 
-async function loadState(workspaceId: string): Promise<DashboardState> {
+export async function loadState(workspaceId: string): Promise<DashboardState> {
   const dayMs = 24 * 60 * 60 * 1000
   const cutoff = Date.now() - dayMs
 
@@ -399,6 +399,11 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
 </div>
 </body>
 </html>`
+}
+
+/** R399 — JSON dashboard snapshot for chat / brain-task consumption. */
+export async function dashboardSnapshot(workspaceId: string): Promise<DashboardState> {
+  return loadState(workspaceId)
 }
 
 export async function renderDashboard(workspaceId: string): Promise<string> {
