@@ -12,6 +12,7 @@
     "signin":    "tsx src/index.ts --login",
     "daily":     "tsx src/daily.ts",
     "drive":     "tsx src/drive-all.ts",
+    "seed-pins": "tsx src/seed-pins.ts",
     "typecheck": "tsc --noEmit",
     "install:browsers": "playwright install chromium"
   },
