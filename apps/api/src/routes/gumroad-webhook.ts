@@ -28,6 +28,19 @@ interface GumroadPingBody {
 }
 
 export async function registerGumroadWebhook(app: FastifyInstance): Promise<void> {
+  // Gumroad sends application/x-www-form-urlencoded; register a parser locally
+  // since this is the only public route in the app that needs it.
+  if (!app.hasContentTypeParser('application/x-www-form-urlencoded')) {
+    app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => {
+      try {
+        const params = new URLSearchParams(String(body))
+        const obj: Record<string, string> = {}
+        for (const [k, v] of params.entries()) obj[k] = v
+        done(null, obj)
+      } catch (e) { done(e as Error, undefined) }
+    })
+  }
+
   app.post('/api/v1/webhooks/gumroad/sale', async (req: FastifyRequest<{ Body: GumroadPingBody; Querystring: { token?: string } }>, reply) => {
     // Token check
     const expected = process.env['GUMROAD_WEBHOOK_TOKEN']
