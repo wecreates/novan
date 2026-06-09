@@ -75,6 +75,19 @@ export async function runDailyCron(workspaceId: string, opts?: { force?: boolean
     salesPersisted = r.persisted
   } catch (e) { console.error('[r382] sales sync:', (e as Error).message) }
 
+  // R428 — abort the expensive pipeline run if today's AI spend already
+  // exceeds the configured daily budget.
+  try {
+    const { isBudgetExhausted } = await import('./r428-ai-spend-tracker.js')
+    if (await isBudgetExhausted(workspaceId)) {
+      return {
+        ok: true, workspaceId, yyyymmdd, alreadyRanToday: false,
+        salesPersisted, pipelineGenerated: 0, pipelineQueued: 0, pipelineFailed: 0,
+        durationMs: Date.now() - started,
+      }
+    }
+  } catch { /* tolerated */ }
+
   let pipelineGenerated = 0, pipelineQueued = 0, pipelineFailed = 0
   try {
     // R415 — scale pipeline budget with revenue. Budget grows from 10 (pre-
@@ -110,6 +123,12 @@ export async function runDailyCron(workspaceId: string, opts?: { force?: boolean
     pipelineGenerated = r.totals.designsGenerated
     pipelineQueued    = r.totals.queueItemsCreated
     pipelineFailed    = r.totals.designsFailed
+    if (pipelineGenerated > 0) {
+      try {
+        const { recordSpend } = await import('./r428-ai-spend-tracker.js')
+        await recordSpend(workspaceId, 'pipeline_design', pipelineGenerated * 4 /* ~$0.04 image-gen */)
+      } catch { /* tolerated */ }
+    }
   } catch (e) { console.error('[r382] pipeline:', (e as Error).message) }
 
   let selfTestSummary

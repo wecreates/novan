@@ -36,12 +36,16 @@ export async function runAutoVariantsForWinners(): Promise<AutoVariantsResult> {
 
   for (const ws of workspaceIds) {
     try {
+      // R428 — bail on budget exhaustion before burning image-gen credits.
+      const { isBudgetExhausted, recordSpend } = await import('./r428-ai-spend-tracker.js')
+      if (await isBudgetExhausted(ws)) { result.skipped++; continue }
       const r = await rankDesignPerformance(ws, 10)
       const candidates = r.designs
         .filter(d => !d.hasVariants && d.winnerScore >= MIN_WINNER_SCORE)
         .slice(0, MAX_PER_RUN)
       for (const c of candidates) {
         const gen = await generateWinnerVariants({ workspaceId: ws, parentDesignId: c.designId, count: 3 })
+        if (gen.ok && gen.variantsCreated > 0) await recordSpend(ws, 'auto_variants', gen.variantsCreated * 4 /* ~$0.04 image-gen */)
         if (gen.ok && gen.variantsCreated > 0) {
           result.triggered.push({
             workspaceId: ws, designId: c.designId,

@@ -15,7 +15,7 @@
  */
 import { chromium, type BrowserContext, type Page } from 'playwright'
 import path from 'node:path'
-import { fetchNextJobs, fetchQueueStats, markUploaded } from './api.js'
+import { fetchNextJobs, fetchQueueStats, markUploaded, markFailed } from './api.js'
 import { sleep, pickInterUploadDelayMs } from './anti-flag.js'
 import { getDriver, DRIVERS } from './platforms/index.js'
 import { getDesignFilePath } from './design-cache.js'
@@ -149,6 +149,7 @@ export async function runOnce(cfg: AgentConfig, ctx: BrowserContext): Promise<{ 
 async function reportDriverFailure(cfg: AgentConfig, page: Page, platform: string, queueItemId: string, err: Error): Promise<void> {
   let screenshotBase64: string | undefined
   let pageUrl: string | undefined
+  let pageHtml: string | undefined
   try { pageUrl = page.url() } catch { /* ignore */ }
   try {
     const buf = await page.screenshot({ fullPage: false, timeout: 5000 })
@@ -156,6 +157,12 @@ async function reportDriverFailure(cfg: AgentConfig, page: Page, platform: strin
   } catch (e) {
     console.warn(`[${platform}] screenshot failed: ${(e as Error).message}`)
   }
+  // R426 — capture page HTML (stripped of script/style) so the server-side
+  // R421 selector improver can suggest revised selectors next attempt.
+  try {
+    const raw = await page.evaluate(() => document.documentElement?.outerHTML ?? '')
+    pageHtml = raw.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').slice(0, 8192)
+  } catch { /* tolerated */ }
   await postFailureReport(cfg, AGENT_ID, {
     platform, queueItemId,
     errorMessage: err.message,
@@ -164,6 +171,13 @@ async function reportDriverFailure(cfg: AgentConfig, page: Page, platform: strin
     ...(pageUrl           ? { pageUrl                              } : {}),
   })
   await postUploadEvent(cfg, AGENT_ID, { platform, queueItemId, status: 'failed', reason: err.message })
+  // R426 — flip the queue row to status='failed' so R402/R412/R421 can act.
+  // Without this, the self-healing loop sees zero failures even when drivers crash.
+  await markFailed(cfg, queueItemId, {
+    reason:  err.message,
+    ...(pageUrl  ? { pageUrl }  : {}),
+    ...(pageHtml ? { pageHtml } : {}),
+  }).catch(e => console.error(`[${platform}] markFailed:`, (e as Error).message))
 }
 
 export async function openContext(cfg: AgentConfig): Promise<BrowserContext> {

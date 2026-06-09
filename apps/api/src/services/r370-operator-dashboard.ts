@@ -58,6 +58,7 @@ interface DashboardState {
   }
   cronHealth: Array<{ name: string; lastRanAt: number; lastStatus: string; lastDurationMs: number; lastError: string | null; staleHours: number }>  // R423
   disabledPlatforms: Array<{ platform: string; disabledAt: number; reason: string }>      // R424
+  aiSpend?: { todayUsd: number; todayCallCount: number; bySource: Array<{ source: string; usd: number; calls: number }>; cap?: { dailyUsd: number; pctUsed: number; budgetExhausted: boolean } }  // R428
   sparklines: {                                                                          // R394
     uploadsPerDay: number[]   // 14 days, oldest→newest
     salesPerDay:   number[]
@@ -216,6 +217,12 @@ export async function loadState(workspaceId: string): Promise<DashboardState> {
         }))
       } catch { return [] }
     })(),
+    aiSpend: await (async () => {
+      try {
+        const { spendSnapshot } = await import('./r428-ai-spend-tracker.js')
+        return spendSnapshot(workspaceId)
+      } catch { return undefined }
+    })(),
     cronHealth: await (async () => {
       try {
         const { cronHealthSnapshot } = await import('./r423-cron-health.js')
@@ -369,7 +376,11 @@ ${token ? `<div style="margin-bottom:20px;padding:12px;background:#18181b;border
     ['requeue_failed',       '♻ Requeue failed'],
     ['pacing_auto_loosen',   '⚡ Auto-loosen pacing'],
     ['relist_zero_sales',    '✏ Relist zero-sale'],
-  ].map(([action, label]) => `<a href="/ops/dashboard/action?token=${encodeURIComponent(token)}&action=${action}" style="background:#1e3a8a;border:1px solid #3b82f6;color:#dbeafe;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600">${escapeHtml(label as string)}</a>`).join('')}
+  ].map(([action, label]) => `<form method="POST" action="/ops/dashboard/action" style="margin:0">
+    <input type="hidden" name="token" value="${escapeHtml(token)}">
+    <input type="hidden" name="action" value="${escapeHtml(action as string)}">
+    <button type="submit" style="background:#1e3a8a;border:1px solid #3b82f6;color:#dbeafe;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">${escapeHtml(label as string)}</button>
+  </form>`).join('')}
 </div>` : ''}
 
 ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3b82f6;border-radius:8px;padding:16px;margin-bottom:20px">
@@ -448,6 +459,14 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
     <h2>Recent failures (${s.uploads.recentFailures.length})</h2>
     ${s.uploads.recentFailures.length === 0 ? '<div class="mini">✓ no recent failures</div>' : `<table><thead><tr><th>When</th><th>Platform</th><th>Error</th></tr></thead><tbody>${s.uploads.recentFailures.map(f => `<tr><td>${ago(f.ts)}</td><td>${escapeHtml(f.platform)}</td><td class="mini">${escapeHtml(f.error)}</td></tr>`).join('')}</tbody></table>`}
   </div>
+
+  ${s.aiSpend ? `<div class="card">
+    <h2>AI spend today (R428)</h2>
+    <div class="stat"><span class="stat-val">$${s.aiSpend.todayUsd.toFixed(2)}</span><span class="stat-lbl">${s.aiSpend.todayCallCount} calls${s.aiSpend.cap ? ` · ${s.aiSpend.cap.pctUsed}% of $${s.aiSpend.cap.dailyUsd} cap` : ''}</span></div>
+    ${s.aiSpend.cap?.budgetExhausted ? '<div class="pill pill-fail" style="margin-top:8px">budget exhausted — autonomous gen paused</div>' : ''}
+    ${s.aiSpend.cap ? `<div class="bar" style="margin-top:6px"><div class="bar-fill" style="width:${Math.min(100, s.aiSpend.cap.pctUsed)}%;background:${s.aiSpend.cap.pctUsed >= 100 ? '#7f1d1d' : s.aiSpend.cap.pctUsed >= 80 ? '#fbbf24' : '#3b82f6'}"></div></div>` : ''}
+    ${s.aiSpend.bySource.length > 0 ? `<table style="margin-top:8px"><tbody>${s.aiSpend.bySource.map(b => `<tr><td class="mini">${escapeHtml(b.source)}</td><td>$${b.usd.toFixed(2)}</td><td class="mini">${b.calls}</td></tr>`).join('')}</tbody></table>` : ''}
+  </div>` : ''}
 
   ${s.mrrProjection ? `<div class="card" style="grid-column: 1 / -1">
     <h2>MRR projection (R414)</h2>

@@ -182,6 +182,56 @@ export async function markUploaded(opts: {
   }
 }
 
+/**
+ * R426 — Local agent reports a failure. Sets status='failed' + records the
+ * payload as an `agent.upload.failed` event so R421 (selector improver
+ * auto-trigger from R402) can pick it up.
+ */
+export async function markFailed(opts: {
+  workspaceId:        string
+  queueItemId:        string
+  reason:             string
+  step?:              string
+  pageUrl?:           string
+  pageHtml?:          string
+  previousSelectors?: string[]
+}): Promise<{ ok: boolean; reason?: string }> {
+  try {
+    const rows = await db.execute(sql`
+      UPDATE design_upload_queue
+      SET status = 'failed', failed_at = ${Date.now()}, notes = ${opts.reason.slice(0, 500)}
+      WHERE workspace_id = ${opts.workspaceId} AND id = ${opts.queueItemId}
+      RETURNING platform, design_id
+    `)
+    const r = (rows as unknown as Array<{ platform: string; design_id: string }>)[0]
+    if (!r) return { ok: false, reason: 'queue item not found' }
+    try {
+      const { db: db2 } = await import('../db/client.js')
+      const { events } = await import('../db/schema.js')
+      await db2.insert(events).values({
+        id: uuidv7(),
+        type: 'agent.upload.failed',
+        workspaceId: opts.workspaceId,
+        payload: {
+          platform: r.platform,
+          designId: r.design_id,
+          queueItemId: opts.queueItemId,
+          errorMessage: opts.reason,
+          step: opts.step ?? 'unknown',
+          pageUrl: opts.pageUrl ?? '',
+          pageHtml: opts.pageHtml ?? '',
+          previousSelectors: opts.previousSelectors ?? [],
+        },
+        traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
+        source: 'r426-mark-failed', version: 1, createdAt: Date.now(),
+      }).catch(() => null)
+    } catch { /* events table optional */ }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, reason: (e as Error).message.slice(0, 200) }
+  }
+}
+
 // ─── Stats ──────────────────────────────────────────────────────────────────
 
 export interface QueueStats {

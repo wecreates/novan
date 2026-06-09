@@ -52,6 +52,20 @@ export async function markUploaded(cfg: AgentConfig, queueItemId: string, extern
   }])
 }
 
+/** R426 — Report a driver failure back to the queue so R402/R412/R421 can act on it. */
+export async function markFailed(cfg: AgentConfig, queueItemId: string, opts: {
+  reason:        string
+  step?:         string         // 'upload_image', 'fill_title', 'click_publish', etc.
+  pageUrl?:      string
+  pageHtml?:     string         // first ~8KB stripped, helps R421 selector improver
+  previousSelectors?: string[]
+}): Promise<void> {
+  await brainTask<unknown>(cfg, [{
+    op:     'upload_queue.mark_failed',
+    params: { queueItemId, ...opts, reason: opts.reason.slice(0, 500), pageHtml: opts.pageHtml?.slice(0, 8192) },
+  }]).catch((e: unknown) => { console.error('[markFailed]', (e as Error).message) })
+}
+
 export async function fetchDesignFileUrl(cfg: AgentConfig, designId: string): Promise<string | null> {
   try {
     const [data] = await brainTask<{ image_url?: string }>(cfg, [{

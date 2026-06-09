@@ -604,16 +604,37 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/dashboard
   reply.type('text/html').send(html)
 })
 
-// R418 — operator quick-action endpoint. Triggered from dashboard buttons.
-// GET so it works as a simple link without CSRF. Token-gated, returns plain
-// text or redirects back to dashboard.
-app.get<{ Querystring: { token?: string; workspace?: string; action?: string } }>('/ops/dashboard/action', async (req, reply) => {
+// R427 — register form-urlencoded parser at app scope so dashboard POST
+// forms work whether or not the Gumroad webhook route registered it first.
+if (!app.hasContentTypeParser('application/x-www-form-urlencoded')) {
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => {
+    try {
+      const params = new URLSearchParams(String(body))
+      const obj: Record<string, string> = {}
+      for (const [k, v] of params.entries()) obj[k] = v
+      done(null, obj)
+    } catch (e) { done(e as Error, undefined) }
+  })
+}
+
+// R418/R427 — operator quick-action endpoint. POST-only to prevent CSRF via
+// image tags / cross-site links / referrer leak. Token must be in body, not
+// just query. Sec-Fetch-Site verifies same-origin.
+app.post<{ Querystring: { token?: string; workspace?: string; action?: string }; Body: { token?: string; workspace?: string; action?: string } }>('/ops/dashboard/action', async (req, reply) => {
+  const sfs = req.headers['sec-fetch-site']
+  if (sfs && sfs !== 'same-origin' && sfs !== 'none') {
+    return reply.code(403).type('text/plain').send('cross-site posts blocked')
+  }
+  const body = req.body ?? {}
+  const tokenInput = body.token ?? req.query.token  // body wins
+  const workspace  = body.workspace ?? req.query.workspace ?? 'default'
+  const actionInput = body.action ?? req.query.action
   const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
-  if (!req.query.token || (ops && req.query.token !== ops)) {
+  if (!tokenInput || (ops && tokenInput !== ops)) {
     return reply.code(401).type('text/plain').send('unauthorized')
   }
-  const ws = req.query.workspace ?? 'default'
-  const action = String(req.query.action ?? '')
+  const ws = workspace
+  const action = String(actionInput ?? '')
   const ALLOWED: Record<string, () => Promise<unknown>> = {
     'daily_cron':           async () => { const { runDailyCron } = await import('./services/r382-droplet-daily-cron.js'); return runDailyCron(ws, { force: true }) },
     'replenish_queue':      async () => { const { autoReplenishLowQueues } = await import('./services/r400-queue-auto-replenish.js'); return autoReplenishLowQueues() },
@@ -628,7 +649,7 @@ app.get<{ Querystring: { token?: string; workspace?: string; action?: string } }
   if (!fn) return reply.code(400).type('text/plain').send(`unknown action; allowed: ${Object.keys(ALLOWED).join(', ')}`)
   try {
     const result = await fn()
-    reply.type('text/html').send(`<!doctype html><meta http-equiv="refresh" content="2;url=/ops/dashboard?token=${encodeURIComponent(req.query.token ?? '')}"><body style="font-family:system-ui;background:#0a0a0b;color:#e5e7eb;padding:20px"><h2>✓ ${action} fired</h2><pre style="background:#18181b;padding:12px;border-radius:6px;overflow:auto;max-width:800px">${JSON.stringify(result, null, 2).slice(0, 4000)}</pre><p>Returning to dashboard…</p></body>`)
+    reply.type('text/html').send(`<!doctype html><meta http-equiv="refresh" content="2;url=/ops/dashboard?token=${encodeURIComponent(tokenInput)}"><body style="font-family:system-ui;background:#0a0a0b;color:#e5e7eb;padding:20px"><h2>✓ ${action} fired</h2><pre style="background:#18181b;padding:12px;border-radius:6px;overflow:auto;max-width:800px">${JSON.stringify(result, null, 2).slice(0, 4000)}</pre><p>Returning to dashboard…</p></body>`)
   } catch (e) {
     reply.code(500).type('text/plain').send(`error: ${(e as Error).message}`)
   }

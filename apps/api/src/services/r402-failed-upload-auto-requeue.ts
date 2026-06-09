@@ -16,6 +16,11 @@ import { db } from '../db/client.js'
 const RETRY_AFTER_MS = 2 * 60 * 60_000
 const MAX_RETRIES = 3
 
+// R421 rate limiter — at most 1 LLM selector-improver call per (workspace,
+// platform) per hour. Bounded by # of platforms × workspaces so memory OK.
+const SELECTOR_IMPROVER_RL_WINDOW_MS = 60 * 60_000
+const SELECTOR_IMPROVER_RL = new Map<string, number>()
+
 async function ensureColumn(): Promise<void> {
   await db.execute(sql`
     ALTER TABLE design_upload_queue ADD COLUMN IF NOT EXISTS retry_count INTEGER NOT NULL DEFAULT 0
@@ -64,8 +69,11 @@ export async function requeueFailedUploads(): Promise<RequeueResult> {
       result.requeued.push({ id: r.id, platform: r.platform, retryCount: rc + 1 })
 
       // R421 — auto-trigger R366 selector improver from the most recent
-      // failure event for this platform. The next agent attempt will pull
-      // stored selectors via resilientLocate.
+      // failure event for this platform. Rate-limited to 1 LLM call per
+      // (workspace, platform) per hour to cap spend.
+      const rlKey = `${r.workspace_id}|${r.platform}`
+      const rlLast = SELECTOR_IMPROVER_RL.get(rlKey) ?? 0
+      if (Date.now() - rlLast < SELECTOR_IMPROVER_RL_WINDOW_MS) continue
       try {
         const failureEvent = await db.execute(sql`
           SELECT payload FROM events
@@ -76,7 +84,12 @@ export async function requeueFailedUploads(): Promise<RequeueResult> {
         `).catch(() => [] as unknown[])
         const ev = (failureEvent as unknown as Array<{ payload: Record<string, unknown> }>)[0]?.payload
         if (ev && ev['pageHtml'] && ev['errorMessage']) {
+          SELECTOR_IMPROVER_RL.set(rlKey, Date.now())
           const { improveSelectors } = await import('./r366-selector-improver.js')
+          try {
+            const { recordSpend } = await import('./r428-ai-spend-tracker.js')
+            await recordSpend(r.workspace_id, 'selector_improver', 1 /* ~$0.01 Claude call */)
+          } catch { /* tolerated */ }
           void improveSelectors({
             workspaceId:      r.workspace_id,
             platform:         r.platform,

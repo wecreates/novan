@@ -761,6 +761,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return bulkImportSales(ws, rows)
     },
   },
+  'spend.snapshot': {
+    description: 'R428: Today\'s AI spend per source + cap status if NOVAN_DAILY_AI_BUDGET_USD configured.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { spendSnapshot } = await import('./r428-ai-spend-tracker.js')
+      return spendSnapshot(ws)
+    },
+  },
   'mrr.project': {
     description: 'R414: Forward MRR projection — 7d/14d rate, acceleration, projected days to each next tier.',
     risk: 'low',
@@ -1053,6 +1061,24 @@ export const OPERATIONS: Record<string, OpSpec> = {
         workspaceId: ws,
         queueItemId: p.queueItemId ?? '',
         ...(p.externalUrl ? { externalUrl: p.externalUrl } : {}),
+      })
+    },
+  },
+  'upload_queue.mark_failed': {
+    description: 'R426: Agent reports a driver failure. Flips status to failed + emits agent.upload.failed event. Params: queueItemId, reason, step?, pageUrl?, pageHtml?, previousSelectors?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { markFailed } = await import('./r349-upload-queue.js')
+      const p = params as { queueItemId?: string; reason?: string; step?: string; pageUrl?: string; pageHtml?: string; previousSelectors?: string[] }
+      if (!p.queueItemId || !p.reason) return { ok: false, reason: 'queueItemId + reason required' }
+      return markFailed({
+        workspaceId: ws,
+        queueItemId: p.queueItemId,
+        reason:      p.reason,
+        ...(p.step ? { step: p.step } : {}),
+        ...(p.pageUrl ? { pageUrl: p.pageUrl } : {}),
+        ...(p.pageHtml ? { pageHtml: p.pageHtml } : {}),
+        ...(p.previousSelectors ? { previousSelectors: p.previousSelectors } : {}),
       })
     },
   },
