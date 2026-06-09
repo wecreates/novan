@@ -22,9 +22,17 @@ import { humanType, humanClick, humanPause, sectionPause } from '../anti-flag.js
 import type { DriverInput, DriverResult, PlatformDriver } from './_types.js'
 
 async function loginCheck(page: Page): Promise<boolean> {
-  await page.goto('https://www.inprnt.com/', { waitUntil: 'domcontentloaded' })
-  return await page.locator('a[href*="/account"], a[href*="/dashboard"]').first()
-    .isVisible({ timeout: 5_000 }).catch(() => false)
+  // Navigate to a page that requires authentication. Logged-in users stay on
+  // the upload form; anonymous users get redirected to /accounts/login/.
+  await page.goto('https://www.inprnt.com/upload/', { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(2000)
+  const url = page.url()
+  if (url.includes('/accounts/login') || url.includes('/login')) return false
+  // Additional positive signal: look for a logout link OR the user avatar OR upload form.
+  const positive = await page.locator(
+    'a[href*="/logout"], form[action*="upload"], input[type="file"]'
+  ).first().isVisible({ timeout: 4_000 }).catch(() => false)
+  return positive
 }
 
 const CATEGORY_BY_NICHE: Record<string, string> = {
