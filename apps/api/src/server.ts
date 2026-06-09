@@ -334,7 +334,7 @@ await app.register(authPlugin)
 const isPublic = (url: string): boolean => {
   if (url === '/health'         || url.startsWith('/health/'))         return true
   if (url === '/healthz'        || url.startsWith('/healthz/'))        return true  // R146.263 — k8s/probes expect /healthz
-  if (url === '/ops/dashboard'   || url.startsWith('/ops/dashboard'))   return true  // R370 — dashboard has its own query-param token check
+  if (url === '/ops/dashboard'   || url.startsWith('/ops/dashboard'))   return true  // R370 — dashboard + R418 actions have their own query-param token check
   if (url === '/console.html' || url === '/console')                    return true
   if (url === '/brain.html'   || url === '/brain')                      return true
   if (url === '/api/v1/health'  || url.startsWith('/api/v1/health/'))  return true
@@ -600,8 +600,38 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/dashboard
     return
   }
   const { renderDashboard } = await import('./services/r370-operator-dashboard.js')
-  const html = await renderDashboard(req.query.workspace ?? 'default')
+  const html = await renderDashboard(req.query.workspace ?? 'default', req.query.token)
   reply.type('text/html').send(html)
+})
+
+// R418 — operator quick-action endpoint. Triggered from dashboard buttons.
+// GET so it works as a simple link without CSRF. Token-gated, returns plain
+// text or redirects back to dashboard.
+app.get<{ Querystring: { token?: string; workspace?: string; action?: string } }>('/ops/dashboard/action', async (req, reply) => {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  if (!req.query.token || (ops && req.query.token !== ops)) {
+    return reply.code(401).type('text/plain').send('unauthorized')
+  }
+  const ws = req.query.workspace ?? 'default'
+  const action = String(req.query.action ?? '')
+  const ALLOWED: Record<string, () => Promise<unknown>> = {
+    'daily_cron':           async () => { const { runDailyCron } = await import('./services/r382-droplet-daily-cron.js'); return runDailyCron(ws, { force: true }) },
+    'replenish_queue':      async () => { const { autoReplenishLowQueues } = await import('./services/r400-queue-auto-replenish.js'); return autoReplenishLowQueues() },
+    'auto_variants':        async () => { const { runAutoVariantsForWinners } = await import('./services/r401-auto-variants-for-winners.js'); return runAutoVariantsForWinners() },
+    'auto_cross_list':      async () => { const { autoCrossListWinners } = await import('./services/r411-auto-cross-list.js'); return autoCrossListWinners() },
+    'push_next_action':     async () => { const { pushNextActions } = await import('./services/r386-next-action-pusher.js'); return pushNextActions() },
+    'requeue_failed':       async () => { const { requeueFailedUploads } = await import('./services/r402-failed-upload-auto-requeue.js'); return requeueFailedUploads() },
+    'pacing_auto_loosen':   async () => { const { autoLoosenPacing } = await import('./services/r387-pacing-auto-loosen.js'); return autoLoosenPacing() },
+    'relist_zero_sales':    async () => { const { relistZeroSaleListings } = await import('./services/r417-zero-sale-relisting.js'); return relistZeroSaleListings() },
+  }
+  const fn = ALLOWED[action]
+  if (!fn) return reply.code(400).type('text/plain').send(`unknown action; allowed: ${Object.keys(ALLOWED).join(', ')}`)
+  try {
+    const result = await fn()
+    reply.type('text/html').send(`<!doctype html><meta http-equiv="refresh" content="2;url=/ops/dashboard?token=${encodeURIComponent(req.query.token ?? '')}"><body style="font-family:system-ui;background:#0a0a0b;color:#e5e7eb;padding:20px"><h2>✓ ${action} fired</h2><pre style="background:#18181b;padding:12px;border-radius:6px;overflow:auto;max-width:800px">${JSON.stringify(result, null, 2).slice(0, 4000)}</pre><p>Returning to dashboard…</p></body>`)
+  } catch (e) {
+    reply.code(500).type('text/plain').send(`error: ${(e as Error).message}`)
+  }
 })
 
 // R146.159 — Public knowledge garden. Serves chunks operator has published

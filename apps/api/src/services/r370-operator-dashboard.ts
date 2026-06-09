@@ -294,7 +294,7 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
 }
 
-function renderHtml(s: DashboardState): string {
+function renderHtml(s: DashboardState, token?: string): string {
   const ago = (ms: number): string => {
     if (!ms) return '—'
     const diff = Date.now() - ms
@@ -340,6 +340,19 @@ function renderHtml(s: DashboardState): string {
 <body>
 <h1>🎨 Novan — CYZOR CREATIONS</h1>
 <div class="subtitle">Operator dashboard · auto-refresh 60s · ${new Date(s.ts).toLocaleString()}</div>
+
+${token ? `<div style="margin-bottom:20px;padding:12px;background:#18181b;border:1px solid #27272a;border-radius:8px;display:flex;flex-wrap:wrap;gap:8px">
+  ${[
+    ['daily_cron',           '🌅 Run daily cron'],
+    ['replenish_queue',      '📦 Replenish queue'],
+    ['auto_variants',        '🎨 Variants for winners'],
+    ['auto_cross_list',      '🔁 Cross-list winners'],
+    ['push_next_action',     '📱 Push next-action'],
+    ['requeue_failed',       '♻ Requeue failed'],
+    ['pacing_auto_loosen',   '⚡ Auto-loosen pacing'],
+    ['relist_zero_sales',    '✏ Relist zero-sale'],
+  ].map(([action, label]) => `<a href="/ops/dashboard/action?token=${encodeURIComponent(token)}&action=${action}" style="background:#1e3a8a;border:1px solid #3b82f6;color:#dbeafe;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600">${escapeHtml(label as string)}</a>`).join('')}
+</div>` : ''}
 
 ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3b82f6;border-radius:8px;padding:16px;margin-bottom:20px">
   <div style="font-size:11px;color:#93c5fd;text-transform:uppercase;letter-spacing:0.6px;font-weight:600;margin-bottom:8px">Do this next · R385</div>
@@ -503,10 +516,10 @@ export async function dashboardSnapshot(workspaceId: string): Promise<DashboardS
   return loadState(workspaceId)
 }
 
-export async function renderDashboard(workspaceId: string): Promise<string> {
+export async function renderDashboard(workspaceId: string, token?: string): Promise<string> {
   try {
     const state = await loadState(workspaceId)
-    return renderHtml(state)
+    return renderHtml(state, token)
   } catch (e) {
     return `<!doctype html><body style="font-family:system-ui;padding:20px"><h1>Dashboard error</h1><pre>${escapeHtml((e as Error).stack ?? (e as Error).message)}</pre></body>`
   }
