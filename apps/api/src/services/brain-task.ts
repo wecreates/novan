@@ -913,8 +913,18 @@ export const OPERATIONS: Record<string, OpSpec> = {
     description: 'R509: Last seen health per image-gen provider (fal/replicate/stability/openai).',
     risk: 'low',
     handler: async () => {
-      const { healthyProviderOrder } = await import('./r509-imagegen-failover.js')
-      return { order: await healthyProviderOrder() }
+      const { healthyProviderOrder, providerHealthSnapshot } = await import('./r509-imagegen-failover.js')
+      return { order: await healthyProviderOrder(), snapshot: await providerHealthSnapshot() }
+    },
+  },
+  'buyers.list_optins': {
+    description: 'R517: List opted-in buyer emails (most recent first). Params: limit? (default 100, max 500)',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const limit = Math.max(1, Math.min(500, Number(p.limit ?? 100)))
+      const { listOptIns } = await import('./r517-buyer-email-optin.js')
+      return { items: await listOptIns(ws, limit) }
     },
   },
   'backup.offsite_sync': {
@@ -8768,7 +8778,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
   'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights', 'platforms.list_disabled', 'mrr.project', 'sales.bulk_import', 'session.touch', 'session.ages', 'webhook.self_test',
   'platforms.earnings', 'metrics.period_comparison', 'tax.thresholds', 'imagegen.provider_health', 'backup.offsite_sync', 'dmca.list', 'buyers.optin_count',
-  'price.sample', 'price.mark_view', 'price.snapshot',
+  'price.sample', 'price.mark_view', 'price.snapshot', 'buyers.list_optins',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -9114,7 +9124,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
         'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights', 'platforms.list_disabled', 'mrr.project', 'sales.bulk_import', 'session.touch', 'session.ages', 'webhook.self_test',
   'platforms.earnings', 'metrics.period_comparison', 'tax.thresholds', 'imagegen.provider_health', 'backup.offsite_sync', 'dmca.list', 'buyers.optin_count',
-  'price.sample', 'price.mark_view', 'price.snapshot',
+  'price.sample', 'price.mark_view', 'price.snapshot', 'buyers.list_optins',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',

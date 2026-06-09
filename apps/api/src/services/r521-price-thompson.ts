@@ -52,6 +52,16 @@ export async function markSale(workspaceId: string, productKey: string, priceCen
   `).catch(() => {/* tolerated */})
 }
 
+// R523 — undo a counted sale (called by refund handler). Clamped at 0.
+export async function unmarkSale(workspaceId: string, productKey: string, priceCents: number): Promise<void> {
+  await ensureTable()
+  await db.execute(sql`
+    UPDATE price_experiments
+       SET sales = GREATEST(0, sales - 1)
+     WHERE workspace_id = ${workspaceId} AND product_key = ${productKey} AND price_cents = ${priceCents}
+  `).catch(() => {/* tolerated */})
+}
+
 // Beta(α, β) sample via approximate marsaglia-style for integer params.
 // For our use-case (small ints), this naive form is sufficient.
 function sampleBeta(alpha: number, beta: number): number {

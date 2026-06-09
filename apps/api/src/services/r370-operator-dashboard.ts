@@ -422,6 +422,9 @@ ${token ? `<div style="margin-bottom:20px;padding:12px;background:#18181b;border
     ['pacing_auto_loosen',   '⚡ Auto-loosen pacing'],
     ['relist_zero_sales',    '✏ Relist zero-sale'],
     ['webhook_self_test',    '🧪 Test webhook'],
+    ['tax_threshold_watch',  '📊 Tax watch'],          // R523 → R510
+    ['imagegen_health_probe','🖼 Imagegen probe'],     // R523 → R509
+    ['offsite_backup_sync',  '☁ Offsite backup'],     // R523 → R508
   ].map(([action, label]) => `<form method="POST" action="/ops/dashboard/action" style="margin:0">
     <input type="hidden" name="token" value="${escapeHtml(token)}">
     <input type="hidden" name="action" value="${escapeHtml(action as string)}">

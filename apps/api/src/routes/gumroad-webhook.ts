@@ -106,6 +106,11 @@ export async function registerGumroadWebhook(app: FastifyInstance): Promise<void
           ON CONFLICT (workspace_id, external_sale_id) WHERE external_sale_id IS NOT NULL DO NOTHING
         `).catch(() => {/* tolerated */})
       } catch { /* tolerated */ }
+      // R523 — back out the bandit win so refunded conversions don't bias future sampling.
+      try {
+        const { unmarkSale } = await import('../services/r521-price-thompson.js')
+        await unmarkSale(refundWorkspace, permalink, refundCents)
+      } catch { /* tolerated */ }
       return reply.code(200).send({ ok: true, refunded: saleId, correctedUsd: -refundAmount })
     }
 
