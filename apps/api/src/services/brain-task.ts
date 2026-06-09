@@ -856,6 +856,33 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return dashboardSnapshot(ws)
     },
   },
+  'session.touch': {
+    description: 'R506: Local agent reports a successful upload or login check for this (workspace, platform). Params: platform, kind?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { platform?: string; kind?: 'upload_success' | 'explicit_login_check' }
+      if (!p.platform) return { ok: false, reason: 'platform required' }
+      const { touchSession } = await import('./r506-session-validity-probe.js')
+      await touchSession(ws, p.platform, p.kind ?? 'upload_success')
+      return { ok: true }
+    },
+  },
+  'session.ages': {
+    description: 'R506: How old is each platform session per workspace.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { sessionAges } = await import('./r506-session-validity-probe.js')
+      return { sessions: await sessionAges(ws) }
+    },
+  },
+  'webhook.self_test': {
+    description: 'R502: Fire a synthetic Gumroad ping at our own /webhooks/gumroad/sale to verify URL/token/parser/DB.',
+    risk: 'low',
+    handler: async () => {
+      const { selfTestGumroadWebhook } = await import('./r502-webhook-test.js')
+      return selfTestGumroadWebhook()
+    },
+  },
   'failures.cluster': {
     description: 'R388: Top recurring agent failures in last 7d, with normalized signature + suggested fix per cluster.',
     risk: 'low',
@@ -8629,7 +8656,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
   'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
   'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
-  'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights', 'platforms.list_disabled', 'mrr.project', 'sales.bulk_import',
+  'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights', 'platforms.list_disabled', 'mrr.project', 'sales.bulk_import', 'session.touch', 'session.ages', 'webhook.self_test',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -8973,7 +9000,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
         'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
         'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
-        'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights', 'platforms.list_disabled', 'mrr.project', 'sales.bulk_import',
+        'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights', 'platforms.list_disabled', 'mrr.project', 'sales.bulk_import', 'session.touch', 'session.ages', 'webhook.self_test',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',

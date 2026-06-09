@@ -60,6 +60,7 @@ interface DashboardState {
   cronHealth: Array<{ name: string; lastRanAt: number; lastStatus: string; lastDurationMs: number; lastError: string | null; staleHours: number }>  // R423
   disabledPlatforms: Array<{ platform: string; disabledAt: number; reason: string; autoReenableAt?: number }>  // R424 + R490
   selectorBreakers?: Array<{ key: string; fails: number; openUntilMs: number }>          // R491
+  sessionAges?: Array<{ platform: string; ageDays: number; warningLevel: string }>      // R506
   aiSpend?: { todayUsd: number; todayCallCount: number; bySource: Array<{ source: string; usd: number; calls: number }>; cap?: { dailyUsd: number; pctUsed: number; budgetExhausted: boolean } }  // R428
   autonomyPaused?: boolean                                                                // R482
   sparklines: {                                                                          // R394
@@ -243,6 +244,13 @@ export async function loadState(workspaceId: string): Promise<DashboardState> {
         }))
       } catch { return [] }
     })(),
+    sessionAges: await (async () => {
+      try {
+        const { sessionAges } = await import('./r506-session-validity-probe.js')
+        const r = await sessionAges(workspaceId)
+        return r.filter(s => s.warningLevel !== 'ok').map(s => ({ platform: s.platform, ageDays: s.ageDays, warningLevel: s.warningLevel }))
+      } catch { return [] }
+    })(),
     selectorBreakers: await (async () => {
       try {
         const { selectorBreakerSnapshot } = await import('./r366-selector-improver.js')
@@ -392,6 +400,7 @@ ${token ? `<div style="margin-bottom:20px;padding:12px;background:#18181b;border
     ['requeue_failed',       '♻ Requeue failed'],
     ['pacing_auto_loosen',   '⚡ Auto-loosen pacing'],
     ['relist_zero_sales',    '✏ Relist zero-sale'],
+    ['webhook_self_test',    '🧪 Test webhook'],
   ].map(([action, label]) => `<form method="POST" action="/ops/dashboard/action" style="margin:0">
     <input type="hidden" name="token" value="${escapeHtml(token)}">
     <input type="hidden" name="action" value="${escapeHtml(action as string)}">
@@ -533,6 +542,19 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
         ${s.stuck.map(i => `<tr><td>${escapeHtml(i.platform)}</td><td class="mini">${i.ageHours}h</td><td>${escapeHtml(i.title)}</td></tr>`).join('')}
       </tbody>
     </table>
+  </div>` : ''}
+
+  ${s.sessionAges && s.sessionAges.length > 0 ? `<div class="card" style="grid-column: 1 / -1">
+    <h2>Sessions aging (R506)</h2>
+    <table>
+      <thead><tr><th>Platform</th><th>Age</th><th>Status</th></tr></thead>
+      <tbody>${s.sessionAges.map(x => `<tr>
+        <td>${escapeHtml(x.platform)}</td>
+        <td class="mini">${x.ageDays}d</td>
+        <td><span class="pill ${x.warningLevel === 'stale' ? 'pill-fail' : 'pill-tier'}">${escapeHtml(x.warningLevel)}</span></td>
+      </tr>`).join('')}</tbody>
+    </table>
+    <div class="mini" style="margin-top:8px">Sessions >20d may auto-expire. Run <code>pnpm signin</code> on your laptop to refresh.</div>
   </div>` : ''}
 
   ${s.disabledPlatforms.length > 0 ? `<div class="card" style="grid-column: 1 / -1">

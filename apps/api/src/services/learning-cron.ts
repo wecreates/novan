@@ -1732,20 +1732,24 @@ async function runDailyRoutineTick(): Promise<void> {
 // Gated to the 13:00 UTC hour (≈ 08:00 ET) so it fires before the operator's
 // morning routine but after midnight UTC rollover.
 async function runDropletDailyCron(): Promise<void> {
-  try {
-    const hour = new Date().getUTCHours()
-    if (hour !== 13) return
-    const ids = await listWorkspaceIds()
-    const { runDailyCron } = await import('./r382-droplet-daily-cron.js')
-    let ran = 0
-    for (const ws of ids) {
-      try {
-        const r = await runDailyCron(ws)
-        if (!r.alreadyRanToday) ran++
-      } catch (e) { await emit('cron.error', { task: 'droplet_daily_cron', workspace: ws, error: (e as Error).message }) }
-    }
-    await emit('cron.droplet_daily_cron', { workspaces: ids.length, ran })
-  } catch (e) { await emit('cron.error', { task: 'droplet_daily_cron', error: (e as Error).message }) }
+  // R504 — advisory lock so a slow pipeline can't overlap with the next tick.
+  const { withCronLock } = await import('./r504-cron-lock.js')
+  await withCronLock('R382-droplet-daily', async () => {
+    try {
+      const hour = new Date().getUTCHours()
+      if (hour !== 13) return
+      const ids = await listWorkspaceIds()
+      const { runDailyCron } = await import('./r382-droplet-daily-cron.js')
+      let ran = 0
+      for (const ws of ids) {
+        try {
+          const r = await runDailyCron(ws)
+          if (!r.alreadyRanToday) ran++
+        } catch (e) { await emit('cron.error', { task: 'droplet_daily_cron', workspace: ws, error: (e as Error).message }) }
+      }
+      await emit('cron.droplet_daily_cron', { workspaces: ids.length, ran })
+    } catch (e) { await emit('cron.error', { task: 'droplet_daily_cron', error: (e as Error).message }) }
+  })
 }
 
 // R403 — hourly per-platform first-sale detector. Persists in

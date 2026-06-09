@@ -45,11 +45,13 @@ export async function fetchNextJobs(cfg: AgentConfig, platform: string, limit = 
   return items ?? []
 }
 
-export async function markUploaded(cfg: AgentConfig, queueItemId: string, externalUrl: string): Promise<void> {
-  await brainTask<unknown>(cfg, [{
-    op:     'upload_queue.mark_uploaded',
-    params: { queueItemId, externalUrl },
-  }])
+export async function markUploaded(cfg: AgentConfig, queueItemId: string, externalUrl: string, platform?: string): Promise<void> {
+  // R506 — also touch session validity so dashboard can warn before session expires.
+  const plan: Array<{ op: string; params: Record<string, unknown> }> = [
+    { op: 'upload_queue.mark_uploaded', params: { queueItemId, externalUrl } },
+  ]
+  if (platform) plan.push({ op: 'session.touch', params: { platform, kind: 'upload_success' } })
+  await brainTask<unknown>(cfg, plan)
 }
 
 /** R426 — Report a driver failure back to the queue so R402/R412/R421 can act on it. */

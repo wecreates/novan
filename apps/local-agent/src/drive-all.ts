@@ -83,7 +83,7 @@ async function main(): Promise<void> {
       }
       console.log(`[${platform}] ✓ ${result.externalUrl}`)
       if (!cfg.dryRun && result.externalUrl) {
-        await markUploaded(cfg, job.id, result.externalUrl).catch(e =>
+        await markUploaded(cfg, job.id, result.externalUrl, platform).catch(e =>
           console.error(`[${platform}] markUploaded:`, (e as Error).message))
       }
       await postUploadEvent(cfg, AGENT_ID, {

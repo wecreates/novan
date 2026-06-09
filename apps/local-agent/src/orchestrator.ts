@@ -113,7 +113,7 @@ export async function runOnce(cfg: AgentConfig, ctx: BrowserContext): Promise<{ 
       }
       console.log(`[${platform}] ✓ live at ${result.externalUrl} (${(durationMs/1000).toFixed(1)}s)`)
       if (!cfg.dryRun && result.externalUrl) {
-        await markUploaded(cfg, job.id, result.externalUrl).catch(e =>
+        await markUploaded(cfg, job.id, result.externalUrl, platform).catch(e =>
           console.error(`[${platform}] markUploaded:`, (e as Error).message))
       }
       // R378 — record the successful upload so pacing.check_or_acquire honors it next time

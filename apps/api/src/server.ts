@@ -658,6 +658,7 @@ app.post<{ Querystring: { token?: string; workspace?: string; action?: string };
     'requeue_failed':       async () => { const { requeueFailedUploads } = await import('./services/r402-failed-upload-auto-requeue.js'); return requeueFailedUploads() },
     'pacing_auto_loosen':   async () => { const { autoLoosenPacing } = await import('./services/r387-pacing-auto-loosen.js'); return autoLoosenPacing() },
     'relist_zero_sales':    async () => { const { relistZeroSaleListings } = await import('./services/r417-zero-sale-relisting.js'); return relistZeroSaleListings() },
+    'webhook_self_test':    async () => { const { selfTestGumroadWebhook } = await import('./services/r502-webhook-test.js'); return selfTestGumroadWebhook() },
   }
   const fn = ALLOWED[action]
   if (!fn) return reply.code(400).type('text/plain').send(`unknown action; allowed: ${Object.keys(ALLOWED).join(', ')}`)
@@ -1030,6 +1031,22 @@ await app.register(schedulerRoutes,     { prefix: '/api/v1/scheduler' })
 await app.register(searchRoutes,        { prefix: '/api/v1/search' })
 await app.register(webhooksRoutes,      { prefix: '/api/v1/webhooks' })
 await registerGumroadWebhook(app)        // R389 — public, token-gated POST /api/v1/webhooks/gumroad/sale
+
+// R503 — CSV export of business_revenue for accountant / Schedule C
+app.get<{ Querystring: { token?: string; workspace?: string; since?: string; until?: string } }>('/ops/export/revenue.csv', async (req, reply) => {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  if (!req.query.token || (ops && req.query.token !== ops)) return reply.code(401).type('text/plain').send('unauthorized')
+  const ws = req.query.workspace ?? 'default'
+  const opts: { sinceMs?: number; untilMs?: number } = {}
+  if (req.query.since) opts.sinceMs = Date.parse(req.query.since)
+  if (req.query.until) opts.untilMs = Date.parse(req.query.until)
+  const { exportRevenueCsv } = await import('./services/r503-csv-export.js')
+  const csv = await exportRevenueCsv(ws, opts)
+  return reply
+    .type('text/csv')
+    .header('Content-Disposition', `attachment; filename="novan-revenue-${ws}-${new Date().toISOString().slice(0, 10)}.csv"`)
+    .send(csv)
+})
 
 // R438 — design file store. POST uploads a file body for a design id; GET serves it.
 // R448 — token + design_id + workspace_id come from HEADERS instead of query
