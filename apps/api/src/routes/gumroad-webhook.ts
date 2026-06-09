@@ -99,10 +99,14 @@ export async function registerGumroadWebhook(app: FastifyInstance): Promise<void
       return reply.code(500).send({ error: (e as Error).message })
     }
 
-    // Fire variant generation for the winner
+    // Fire variant generation for the winner — but only if autonomy isn't
+    // killed for this workspace. R458 — webhook respects R443 gate too.
     try {
-      const { reactToNewSales } = await import('../services/r374-winner-variant-generator.js')
-      void reactToNewSales(workspaceId, [saleId])    // fire-and-forget
+      const { isAutonomyAllowed } = await import('../services/r443-autonomy-gate.js')
+      if (await isAutonomyAllowed(workspaceId)) {
+        const { reactToNewSales } = await import('../services/r374-winner-variant-generator.js')
+        void reactToNewSales(workspaceId, [saleId])    // fire-and-forget
+      }
     } catch { /* tolerated */ }
 
     // Tier-transition check

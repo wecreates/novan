@@ -54,6 +54,17 @@ export async function pushWeeklyRecap(): Promise<WeeklyRecapResult> {
 
   for (const ws of workspaceIds) {
     result.workspaces++
+    // R462 — fire on operator-local Sunday at their preferred summary_hour.
+    try {
+      const { getOperatorLocalDay, getOperatorLocalHour, getOperatorSummaryHour } = await import('./r437-operator-timezone.js')
+      const day = await getOperatorLocalDay(ws)
+      const hour = await getOperatorLocalHour(ws)
+      const targetHour = await getOperatorSummaryHour(ws)
+      if (day !== 7 || hour !== targetHour) {
+        result.skipped.push({ workspaceId: ws, reason: `day ${day} hour ${hour} != Sun ${targetHour}` })
+        continue
+      }
+    } catch { /* fall through to UTC */ }
     const exists = await db.execute(sql`
       SELECT 1 FROM weekly_recap_pushes WHERE workspace_id = ${ws} AND iso_week = ${week} LIMIT 1
     `).catch(() => [] as unknown[])

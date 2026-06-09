@@ -1780,11 +1780,10 @@ async function runZeroSaleRelisting(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'zero_sale_relisting', error: (e as Error).message }) }
 }
 
-// R413 — Sunday 14:00 UTC weekly recap push. Idempotent per ISO week.
+// R413 — weekly recap push. R462 — outer cron fires hourly; per-workspace
+// check inside honors operator timezone (Sun + their summary_hour).
 async function runWeeklyRecapPush(): Promise<void> {
   try {
-    const d = new Date()
-    if (d.getUTCDay() !== 0 || d.getUTCHours() !== 14) return  // Sun only
     const { pushWeeklyRecap } = await import('./r413-weekly-recap-push.js')
     const r = await pushWeeklyRecap()
     if (r.pushed > 0) await emit('cron.weekly_recap_pushed', { pushed: r.pushed })

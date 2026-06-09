@@ -38,7 +38,11 @@ export async function effectivePinVelocity(workspaceId: string): Promise<number>
     const postedTotal = Number(stats.posted_total) || 0
     const firstPosted = Number(stats.first_posted) || 0
     const failedTotal = Number(stats.failed_total) || 0
-    if (failedTotal > 0 || firstPosted === 0) return SAFE_PIN_VELOCITY
+    if (firstPosted === 0) return SAFE_PIN_VELOCITY
+    // R461 — forgive isolated failures: only demote when failure rate >= 5%.
+    // Old behavior: single failure → drop from 15/day → 5/day forever.
+    const failureRate = postedTotal > 0 ? failedTotal / (postedTotal + failedTotal) : 1
+    if (failureRate >= 0.05) return SAFE_PIN_VELOCITY
     const ageDays = (Date.now() - firstPosted) / (24 * 60 * 60_000)
     if (ageDays >= 60 && postedTotal >= 100) return 15
     if (ageDays >= 30 && postedTotal >= 30) return 10

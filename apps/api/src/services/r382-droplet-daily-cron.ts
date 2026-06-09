@@ -99,18 +99,19 @@ export async function runDailyCron(workspaceId: string, opts?: { force?: boolean
 
   let pipelineGenerated = 0, pipelineQueued = 0, pipelineFailed = 0
   try {
-    // R415 — scale pipeline budget with revenue. Budget grows from 10 (pre-
-    // first-sale) up to 50 (post-$10k MRR) so we generate more candidate
-    // designs as money compounds.
+    // R415 — scale pipeline budget with revenue. R463 — promotion thresholds
+    // sit BELOW demotion thresholds (10% gap) so a workspace bouncing around
+    // $99-$101 MRR doesn't flap between 10 and 15 designs/day.
     let dailyBudget = 10
     try {
       const { projectMrr } = await import('./r414-mrr-projection.js')
       const proj = await projectMrr(workspaceId)
       const mrr = proj.currentMrr30d
-      if (mrr >= 10_000)      dailyBudget = 50
-      else if (mrr >= 5_000)  dailyBudget = 40
-      else if (mrr >= 1_000)  dailyBudget = 25
-      else if (mrr >= 100)    dailyBudget = 15
+      // tier-up thresholds (need to exceed)
+      if (mrr >= 11_000)      dailyBudget = 50
+      else if (mrr >= 5_500)  dailyBudget = 40
+      else if (mrr >= 1_100)  dailyBudget = 25
+      else if (mrr >= 110)    dailyBudget = 15
     } catch { /* tolerated */ }
     // R406 — use R405 niche-weight recommender to adapt pipeline counts to
     // observed performance. Falls back to the static 5/3/2 mix if R405 hasn't

@@ -76,6 +76,13 @@ export async function storeDesignFile(input: StoreInput): Promise<StoreResult> {
   await ensureTable()
   if (!input.designId || !input.bytes || input.bytes.length === 0) return { ok: false, reason: 'designId + bytes required' }
   if (input.bytes.length > 25 * 1024 * 1024) return { ok: false, reason: 'too large (>25MB)' }
+  // R459 — verify design_id exists in design_catalog so we don't strand orphan files.
+  try {
+    const e = await db.execute(sql`SELECT 1 FROM design_catalog WHERE workspace_id = ${input.workspaceId} AND id = ${input.designId} LIMIT 1`)
+    const arr = (e as unknown as { rows?: unknown[] } | unknown[])
+    const rows = Array.isArray(arr) ? arr : (arr.rows ?? [])
+    if (rows.length === 0) return { ok: false, reason: 'designId not found in design_catalog' }
+  } catch { /* tolerated — fall through */ }
   const sniffed = detectMimeFromMagic(input.bytes)
   if (!sniffed) return { ok: false, reason: 'unrecognized image format (magic-byte check failed)' }
   if (sniffed.replace('jpeg','jpg') !== input.mime.replace('jpeg','jpg').toLowerCase() && !(input.mime.toLowerCase() === 'image/jpeg' && sniffed === 'image/jpeg')) {
@@ -96,7 +103,8 @@ export async function storeDesignFile(input: StoreInput): Promise<StoreResult> {
   const storeAbs = path.resolve(STORE_DIR)
   const storedAbs = path.resolve(stored)
   if (!storedAbs.startsWith(storeAbs + path.sep)) return { ok: false, reason: 'path traversal blocked' }
-  fs.writeFileSync(stored, input.bytes)
+  // R460 — async write so we don't block the event loop on large files.
+  await fs.promises.writeFile(stored, input.bytes)
 
   // R447 — persist RELATIVE path (relative to STORE_DIR) so restoring on a
   // different machine works.

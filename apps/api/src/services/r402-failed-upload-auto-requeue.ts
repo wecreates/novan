@@ -72,6 +72,12 @@ export async function requeueFailedUploads(): Promise<RequeueResult> {
       `).catch(() => {/* skip on error */})
       result.requeued.push({ id: r.id, platform: r.platform, retryCount: rc + 1 })
 
+      // R457 — respect kill_switch.autonomous_writes for the LLM-spending
+      // selector improver branch (the requeue itself is operator-friendly).
+      try {
+        const { isAutonomyAllowed } = await import('./r443-autonomy-gate.js')
+        if (!await isAutonomyAllowed(r.workspace_id)) continue
+      } catch { /* tolerated */ }
       // R421 — auto-trigger R366 selector improver from the most recent
       // failure event for this platform. Rate-limited to 1 LLM call per
       // (workspace, platform) per hour to cap spend.
