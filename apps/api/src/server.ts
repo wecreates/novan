@@ -333,6 +333,7 @@ await app.register(authPlugin)
 const isPublic = (url: string): boolean => {
   if (url === '/health'         || url.startsWith('/health/'))         return true
   if (url === '/healthz'        || url.startsWith('/healthz/'))        return true  // R146.263 — k8s/probes expect /healthz
+  if (url === '/ops/dashboard'   || url.startsWith('/ops/dashboard'))   return true  // R370 — dashboard has its own query-param token check
   if (url === '/console.html' || url === '/console')                    return true
   if (url === '/brain.html'   || url === '/brain')                      return true
   if (url === '/api/v1/health'  || url.startsWith('/api/v1/health/'))  return true
