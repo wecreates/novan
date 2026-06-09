@@ -589,6 +589,18 @@ await app.register(healthRoutes,   { prefix: '/api/v1/health' })
 // /healthz alias — k8s/UptimeRobot convention
 app.get('/healthz', async (_req, reply) => reply.send({ status: 'ok', timestamp: Date.now() }))
 
+// R370 — Operator dashboard. Read-only HTML, ops-token gated.
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/dashboard', async (req, reply) => {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  if (!req.query.token || (ops && req.query.token !== ops)) {
+    reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+    return
+  }
+  const { renderDashboard } = await import('./services/r370-operator-dashboard.js')
+  const html = await renderDashboard(req.query.workspace ?? 'default')
+  reply.type('text/html').send(html)
+})
+
 // R146.159 — Public knowledge garden. Serves chunks operator has published
 // via garden.publish. No auth — public by definition. Returns rendered HTML.
 app.get<{ Params: { slug: string } }>('/garden/:slug', async (req, reply) => {
