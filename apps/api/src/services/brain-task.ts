@@ -653,6 +653,43 @@ export const OPERATIONS: Record<string, OpSpec> = {
       })
     },
   },
+  'selector.improve': {
+    description: 'R366: When a driver crashes on a missing selector, post page HTML + screenshot + error → LLM proposes new selectors. Params: platform, step, errorMessage, pageUrl, pageHtmlExcerpt, screenshotBase64?, previousSelectors?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { improveSelectors } = await import('./r366-selector-improver.js')
+      const p = params as Record<string, unknown>
+      return improveSelectors({
+        workspaceId:       ws,
+        platform:          String(p['platform']      ?? 'unknown'),
+        step:              String(p['step']           ?? 'unknown'),
+        errorMessage:      String(p['errorMessage']   ?? ''),
+        pageUrl:           String(p['pageUrl']        ?? ''),
+        pageHtmlExcerpt:   String(p['pageHtmlExcerpt'] ?? '').slice(0, 8000),
+        ...(typeof p['screenshotBase64'] === 'string' ? { screenshotBase64: p['screenshotBase64'] as string } : {}),
+        ...(Array.isArray(p['previousSelectors']) ? { previousSelectors: (p['previousSelectors'] as string[]).filter(s => typeof s === 'string') } : {}),
+      })
+    },
+  },
+  'selector.outcome': {
+    description: 'R366: Report whether a selector worked. Improves future suggestions. Params: platform, step, selector, success (bool)',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { recordSelectorOutcome } = await import('./r366-selector-improver.js')
+      const p = params as Record<string, unknown>
+      await recordSelectorOutcome(ws, String(p['platform'] ?? 'unknown'), String(p['step'] ?? 'unknown'), String(p['selector'] ?? ''), p['success'] === true)
+      return { ok: true }
+    },
+  },
+  'selector.stored': {
+    description: 'R366: Get top-N stored selectors for (platform, step). Agent calls this BEFORE asking LLM. Params: platform, step, limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { getStoredSelectors } = await import('./r366-selector-improver.js')
+      const p = params as Record<string, unknown>
+      return getStoredSelectors(ws, String(p['platform'] ?? 'unknown'), String(p['step'] ?? 'unknown'), Number(p['limit']) || 3)
+    },
+  },
   'account.birthdays': {
     description: 'R358: Return per-platform account-creation timestamps from workspace_memory. Used by birthday-ramp to clamp day 1-7 velocity.',
     risk: 'low',
@@ -8200,6 +8237,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'upload_queue.next', 'upload_queue.stats', 'upload_queue.mark_uploaded',
   'agent.heartbeat', 'agent.report_event', 'agent.report_failure',
   'account.birthdays', 'design.get',
+  'selector.improve', 'selector.outcome', 'selector.stored',
 ])
 
 /** R146.73 — recursive scan for <untrusted_content tag in any param
@@ -8537,6 +8575,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'listing.generate', 'listing.generate_multi',
         'upload_queue.add', 'upload_queue.next', 'upload_queue.stats', 'upload_queue.mark_uploaded',
         'agent.heartbeat', 'agent.report_event', 'agent.report_failure', 'account.birthdays',
+        'selector.improve', 'selector.outcome', 'selector.stored',
         'briefing.daily_uploads', 'briefing.velocity_status',
         'goal.ladder', 'goal.classify_tier', 'goal.business_status',
         'trends.list_all', 'trends.pick_batch', 'trends.run_pipeline',

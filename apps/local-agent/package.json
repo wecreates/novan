@@ -11,6 +11,7 @@
     "dry":       "tsx src/index.ts --once --dry-run",
     "signin":    "tsx src/index.ts --login",
     "daily":     "tsx src/daily.ts",
+    "drive":     "tsx src/drive-all.ts",
     "typecheck": "tsc --noEmit",
     "install:browsers": "playwright install chromium"
   },
