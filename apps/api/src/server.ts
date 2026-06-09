@@ -662,6 +662,9 @@ app.post<{ Querystring: { token?: string; workspace?: string; action?: string };
     'pacing_auto_loosen':   async () => { const { autoLoosenPacing } = await import('./services/r387-pacing-auto-loosen.js'); return autoLoosenPacing() },
     'relist_zero_sales':    async () => { const { relistZeroSaleListings } = await import('./services/r417-zero-sale-relisting.js'); return relistZeroSaleListings() },
     'webhook_self_test':    async () => { const { selfTestGumroadWebhook } = await import('./services/r502-webhook-test.js'); return selfTestGumroadWebhook() },
+    'tax_threshold_watch':  async () => { const { watchTaxThresholds } = await import('./services/r510-tax-threshold-watch.js'); return watchTaxThresholds() },
+    'imagegen_health_probe':async () => { const { probeAllProviders } = await import('./services/r509-imagegen-failover.js'); return probeAllProviders() },
+    'offsite_backup_sync':  async () => { const { syncBackupsOffsite } = await import('./services/r508-offsite-backup.js'); return syncBackupsOffsite() },
   }
   const fn = ALLOWED[action]
   if (!fn) return reply.code(400).type('text/plain').send(`unknown action; allowed: ${Object.keys(ALLOWED).join(', ')}`)

@@ -166,6 +166,18 @@ export async function runDailyCron(workspaceId: string, opts?: { force?: boolean
     selfTestSummary = r.summary
   } catch (e) { console.error('[r382] self-test:', (e as Error).message) }
 
+  // R510 — 1099-K threshold watch fires push at 80% and 100% of per-source thresholds.
+  try {
+    const { watchTaxThresholds } = await import('./r510-tax-threshold-watch.js')
+    await watchTaxThresholds()
+  } catch (e) { console.error('[r382] tax watch:', (e as Error).message) }
+
+  // R509 — refresh image-gen provider health probe so failover knows who's up.
+  try {
+    const { probeAllProviders } = await import('./r509-imagegen-failover.js')
+    await probeAllProviders()
+  } catch (e) { console.error('[r382] imagegen probe:', (e as Error).message) }
+
   const summary = {
     salesPersisted, pipelineGenerated, pipelineQueued, pipelineFailed,
     ...(selfTestSummary ? { selfTestSummary } : {}),
