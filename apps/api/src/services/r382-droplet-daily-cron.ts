@@ -77,13 +77,26 @@ export async function runDailyCron(workspaceId: string, opts?: { force?: boolean
 
   let pipelineGenerated = 0, pipelineQueued = 0, pipelineFailed = 0
   try {
+    // R415 — scale pipeline budget with revenue. Budget grows from 10 (pre-
+    // first-sale) up to 50 (post-$10k MRR) so we generate more candidate
+    // designs as money compounds.
+    let dailyBudget = 10
+    try {
+      const { projectMrr } = await import('./r414-mrr-projection.js')
+      const proj = await projectMrr(workspaceId)
+      const mrr = proj.currentMrr30d
+      if (mrr >= 10_000)      dailyBudget = 50
+      else if (mrr >= 5_000)  dailyBudget = 40
+      else if (mrr >= 1_000)  dailyBudget = 25
+      else if (mrr >= 100)    dailyBudget = 15
+    } catch { /* tolerated */ }
     // R406 — use R405 niche-weight recommender to adapt pipeline counts to
     // observed performance. Falls back to the static 5/3/2 mix if R405 hasn't
     // got enough data yet.
     let provenCount = 5, breakoutCount = 3, nicheBreakoutCount = 2
     try {
       const { recommendNicheWeights } = await import('./r405-pipeline-niche-weighter.js')
-      const rec = await recommendNicheWeights({ workspaceId, totalBudget: 10 })
+      const rec = await recommendNicheWeights({ workspaceId, totalBudget: dailyBudget })
       const provenTotal = rec.recommendations.filter(r => r.reason.startsWith('proven')).reduce((a, r) => a + r.recommendedCount, 0)
       const exploreTotal = rec.recommendations.filter(r => r.reason.startsWith('unexplored') || r.reason.includes('winners yet')).reduce((a, r) => a + r.recommendedCount, 0)
       if (provenTotal > 0) {
