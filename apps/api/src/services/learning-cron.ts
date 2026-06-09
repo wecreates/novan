@@ -1769,6 +1769,16 @@ async function runFailedUploadRequeue(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'failed_requeue', error: (e as Error).message }) }
 }
 
+// R411 — hourly auto-cross-list: top winners get queued on platforms they
+// haven't been listed on yet (max 3 designs × 4 new platforms / hr).
+async function runAutoCrossListWinners(): Promise<void> {
+  try {
+    const { autoCrossListWinners } = await import('./r411-auto-cross-list.js')
+    const r = await autoCrossListWinners()
+    if (r.triggered.length > 0) await emit('cron.auto_cross_list', { count: r.triggered.length, triggered: r.triggered })
+  } catch (e) { await emit('cron.error', { task: 'auto_cross_list', error: (e as Error).message }) }
+}
+
 // R401 — hourly auto-variants for winners. Picks top-N designs with sales +
 // no variants yet and runs R374.generateWinnerVariants on each. Operator
 // no longer has to manually trigger variant gen on proven winners.
@@ -2353,6 +2363,8 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runQueueAutoReplenish,          60 * 60_000))
   // R401 — auto-variants for proven winners, hourly tick.
   handles.push(scheduleJittered(runAutoVariantsForWinnersTick,  60 * 60_000))
+  // R411 — auto-cross-list winners to missing platforms, hourly tick.
+  handles.push(scheduleJittered(runAutoCrossListWinners,        60 * 60_000))
   // R402 — failed-upload auto-requeue, hourly tick.
   handles.push(scheduleJittered(runFailedUploadRequeue,         60 * 60_000))
   // R403 — per-platform first-sale detector, hourly tick.
