@@ -961,6 +961,38 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { count: await countOptIns(ws) }
     },
   },
+  'price.sample': {
+    description: 'R521: Thompson-sample next price cents from candidates for productKey. Params: productKey, candidatesCents:[int]',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { productKey?: string; candidatesCents?: number[] }
+      if (!p.productKey || !Array.isArray(p.candidatesCents) || p.candidatesCents.length === 0) {
+        throw new Error('price.sample: productKey + candidatesCents[] required')
+      }
+      const { sampleNextPriceCents } = await import('./r521-price-thompson.js')
+      return sampleNextPriceCents(ws, p.productKey, p.candidatesCents.map(n => Math.max(0, Math.round(Number(n)))))
+    },
+  },
+  'price.mark_view': {
+    description: 'R521: Record a view at a price tier. Params: productKey, priceCents',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { productKey?: string; priceCents?: number }
+      if (!p.productKey || typeof p.priceCents !== 'number') throw new Error('productKey + priceCents required')
+      const { markView } = await import('./r521-price-thompson.js')
+      await markView(ws, p.productKey, Math.max(0, Math.round(p.priceCents)))
+      return { ok: true }
+    },
+  },
+  'price.snapshot': {
+    description: 'R521: Per-product price-experiment stats with conversion %. Params: productKey?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { productKey?: string }
+      const { snapshotPriceExperiments } = await import('./r521-price-thompson.js')
+      return { items: await snapshotPriceExperiments(ws, p.productKey) }
+    },
+  },
   'failures.cluster': {
     description: 'R388: Top recurring agent failures in last 7d, with normalized signature + suggested fix per cluster.',
     risk: 'low',
@@ -8736,6 +8768,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
   'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights', 'platforms.list_disabled', 'mrr.project', 'sales.bulk_import', 'session.touch', 'session.ages', 'webhook.self_test',
   'platforms.earnings', 'metrics.period_comparison', 'tax.thresholds', 'imagegen.provider_health', 'backup.offsite_sync', 'dmca.list', 'buyers.optin_count',
+  'price.sample', 'price.mark_view', 'price.snapshot',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -9081,6 +9114,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
         'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights', 'platforms.list_disabled', 'mrr.project', 'sales.bulk_import', 'session.touch', 'session.ages', 'webhook.self_test',
   'platforms.earnings', 'metrics.period_comparison', 'tax.thresholds', 'imagegen.provider_health', 'backup.offsite_sync', 'dmca.list', 'buyers.optin_count',
+  'price.sample', 'price.mark_view', 'price.snapshot',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',

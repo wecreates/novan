@@ -99,6 +99,12 @@ export async function registerGumroadWebhook(app: FastifyInstance): Promise<void
       return reply.code(500).send({ error: (e as Error).message })
     }
 
+    // R521 — feed price-experiment bandit. productKey = permalink for now.
+    try {
+      const { markSale } = await import('../services/r521-price-thompson.js')
+      await markSale(workspaceId, permalink, priceCents)
+    } catch { /* tolerated */ }
+
     // R518 — R517 buyer-email opt-in capture. Gumroad sends `email` +
     // `can_contact` ('true' string when buyer ticked the marketing-OK box).
     // Strict consent gate: no consent → no store.

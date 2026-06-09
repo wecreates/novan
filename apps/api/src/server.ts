@@ -338,6 +338,7 @@ const isPublic = (url: string): boolean => {
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
   if (url.startsWith('/ops/gdpr/'))                                     return true  // R515 — token in query
   if (url.startsWith('/ops/dmca/'))                                     return true  // R516 — token in query
+  if (url.startsWith('/ops/buyers/'))                                   return true  // R520 — token in query
   if (url === '/console.html' || url === '/console')                    return true
   if (url === '/brain.html'   || url === '/brain')                      return true
   if (url === '/api/v1/health'  || url.startsWith('/api/v1/health/'))  return true
@@ -1051,6 +1052,19 @@ app.get<{ Querystring: { token?: string; workspace?: string; since?: string; unt
   return reply
     .type('text/csv')
     .header('Content-Disposition', `attachment; filename="novan-revenue-${ws}-${new Date().toISOString().slice(0, 10)}.csv"`)
+    .send(csv)
+})
+
+// R520 — buyer-email opt-in CSV export. Mail-merge-ready download.
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/buyers/export.csv', async (req, reply) => {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  if (!req.query.token || (ops && req.query.token !== ops)) return reply.code(401).type('text/plain').send('unauthorized')
+  const ws = req.query.workspace ?? 'default'
+  const { exportBuyerOptInsCsv } = await import('./services/r520-buyer-csv-export.js')
+  const csv = await exportBuyerOptInsCsv(ws)
+  return reply
+    .type('text/csv')
+    .header('Content-Disposition', `attachment; filename="novan-buyer-optins-${ws}-${new Date().toISOString().slice(0, 10)}.csv"`)
     .send(csv)
 })
 
