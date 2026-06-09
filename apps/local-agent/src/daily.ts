@@ -34,6 +34,7 @@ import path from 'node:path'
 
 import { loadConfig, requireOpsToken } from './config.js'
 import { openContext, runOnce } from './orchestrator.js'
+import { postOnePin, loginCheckPinterest } from './platforms/pinterest.js'
 
 async function callPipeline(cfg: ReturnType<typeof loadConfig>): Promise<{ generated: number; queued: number; failed: number }> {
   const res = await fetch(`${cfg.apiBase}/api/v1/brain/task`, {
@@ -105,6 +106,23 @@ async function main(): Promise<void> {
       break
     }
   }
+  // R373 — Pinterest daily auto-post (1 pin per day, respects 5/day cap server-side)
+  console.log('[daily] step 3: post next Pinterest pin')
+  try {
+    const pinPage = await ctx.newPage()
+    const liveOnPinterest = await loginCheckPinterest(pinPage)
+    if (!liveOnPinterest) {
+      console.log('[daily] pinterest: not logged in — log into pinterest.com in the agent profile to enable auto-pin')
+    } else {
+      const result = await postOnePin(cfg, pinPage)
+      if (result.ok) console.log(`[daily] pinterest: ✓ pin live at ${result.externalUrl}`)
+      else console.log(`[daily] pinterest: skipped — ${result.reason}`)
+    }
+    await pinPage.close().catch(() => {})
+  } catch (e) {
+    console.log(`[daily] pinterest: crashed — ${(e as Error).message}`)
+  }
+
   await ctx.close().catch(() => {})
 
   const elapsedMs = Date.now() - startedAt
