@@ -33,22 +33,25 @@ export async function getDesignFilePath(cfg: AgentConfig, designId: string): Pro
 }
 
 function writeWithExtSniff(dir: string, id: string, buf: Buffer): string {
-  const isPng = buf[0]===0x89 && buf[1]===0x50 && buf[2]===0x4E && buf[3]===0x47
-  const isJpg = buf[0]===0xFF && buf[1]===0xD8 && buf[2]===0xFF
-  // R533 — refuse degenerate buffers before they ever land on disk. Same
-  // header-only checks as the API-side R514 precheck so local-agent doesn't
-  // attempt to upload a corrupt file (which would get the account flagged).
+  const isPng  = buf[0]===0x89 && buf[1]===0x50 && buf[2]===0x4E && buf[3]===0x47
+  const isJpg  = buf[0]===0xFF && buf[1]===0xD8 && buf[2]===0xFF
+  // R560 — accept WebP too (RIFF....WEBP). Local-agent was rejecting webp
+  // buffers despite the design-upload route advertising webp support.
+  const isWebp = buf.length >= 12 &&
+                 buf[0]===0x52 && buf[1]===0x49 && buf[2]===0x46 && buf[3]===0x46 &&
+                 buf[8]===0x57 && buf[9]===0x45 && buf[10]===0x42 && buf[11]===0x50
+  // R533 — refuse degenerate buffers before they ever land on disk.
   if (buf.length < 5 * 1024) {
     throw new Error(`design ${id}: file too small (${buf.length}B < 5KB) — R514 precheck`)
   }
-  if (!isPng && !isJpg) {
-    throw new Error(`design ${id}: unrecognized format (not PNG/JPEG) — R514 precheck`)
+  if (!isPng && !isJpg && !isWebp) {
+    throw new Error(`design ${id}: unrecognized format (not PNG/JPEG/WebP) — R514 precheck`)
   }
   if (isPng && buf.length >= 24) {
     const w = buf.readUInt32BE(16), h = buf.readUInt32BE(20)
     if (w < 100 || h < 100) throw new Error(`design ${id}: PNG ${w}x${h} too small for print — R514 precheck`)
   }
-  const ext = isPng ? '.png' : isJpg ? '.jpg' : '.bin'
+  const ext = isPng ? '.png' : isJpg ? '.jpg' : isWebp ? '.webp' : '.bin'
   const p = path.join(dir, id + ext)
   // sync write is fine; files are 100-500 KB
   writeFileSync(p, buf)

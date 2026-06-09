@@ -23,6 +23,15 @@ export function precheckImageBuffer(buf: Buffer): QualityVerdict {
   if (buf.length < 5 * 1024) return { ok: false, reason: 'file too small (<5KB)', bytes: buf.length }
   if (buf.length > 25 * 1024 * 1024) return { ok: false, reason: 'file too large (>25MB)', bytes: buf.length }
 
+  // R560 — WebP magic: 'RIFF' [size 4B] 'WEBP'. The upload route advertises
+  // image/webp support but precheck used to reject it for "unrecognized format".
+  if (buf.length >= 12 &&
+      buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&  // RIFF
+      buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) { // WEBP
+    // Could parse VP8/VP8L/VP8X chunk for dimensions; for now accept any WebP.
+    return { ok: true, bytes: buf.length }
+  }
+
   // PNG magic + IHDR width/height check
   if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
     // PNG IHDR at offset 16 (after 8-byte sig + 4-byte length + 4-byte 'IHDR')

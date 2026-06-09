@@ -14,13 +14,14 @@ CREATE TABLE IF NOT EXISTS platform_sessions (
 );
 
 -- R509 — image-gen provider health history (fal/replicate/stability/openai)
+-- R560 — column name must match what r509 ensureTable() creates: last_probed_at
 CREATE TABLE IF NOT EXISTS image_provider_health (
   provider          TEXT PRIMARY KEY,
-  last_status       TEXT NOT NULL,           -- 'ok' | 'down'
+  last_status       TEXT NOT NULL,           -- 'ok' | 'down' | 'unconfigured' | 'degraded'
   last_latency_ms   INT,
   consecutive_fails INT NOT NULL DEFAULT 0,
   last_error        TEXT,
-  last_probe_at     BIGINT NOT NULL
+  last_probed_at    BIGINT NOT NULL
 );
 
 -- R510 — 1099-K threshold notification dedup
