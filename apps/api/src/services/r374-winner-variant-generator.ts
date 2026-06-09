@@ -71,6 +71,56 @@ export async function generateWinnerVariants(input: GenerateWinnerVariantsInput)
   } as Parameters<typeof generateBatch>[0] & { parentDesignId: string }).catch(e => ({ generated: [], failed: variantSubjects.map(s => ({ subject: s, error: (e as Error).message })) }))
 
   const variantDesignIds: string[] = gen.generated.map(d => d.id)
+
+  // R381 — auto-queue variants on every platform the parent shipped on
+  if (variantDesignIds.length > 0) {
+    try {
+      const platformRows = await db.execute(sql`
+        SELECT DISTINCT platform FROM design_upload_queue
+        WHERE workspace_id = ${input.workspaceId} AND design_id = ${input.parentDesignId}
+      `).catch(() => [] as unknown[])
+      const platforms = (platformRows as Array<{ platform: string }>).map(r => r.platform)
+      if (platforms.length > 0) {
+        const { generateListingWithAttribution } = await import('./r349-listing-content-rotator.js')
+        const { enqueue } = await import('./r349-upload-queue.js')
+        let queued = 0
+        for (const designId of variantDesignIds) {
+          for (const platform of platforms) {
+            const designRow = (await db.execute(sql`
+              SELECT prompt, style FROM design_catalog WHERE id = ${designId}
+            `).catch(() => [] as unknown[])) as Array<{ prompt: string; style: string }>
+            const subject = (designRow[0]?.prompt ?? '').split(',')[0]?.trim() ?? 'design'
+            const style = designRow[0]?.style ?? 'watercolor'
+            const listing = await generateListingWithAttribution({
+              workspaceId: input.workspaceId,
+              platform:    platform as 'gumroad',
+              subject,
+              niche:       niche as 'botanical',
+              style:       style as 'watercolor',
+              designId,
+            })
+            const enqRes = await enqueue({
+              workspaceId: input.workspaceId,
+              designId,
+              platform:    platform as 'gumroad',
+              title:       listing.title,
+              description: listing.description,
+              tags:        listing.tags,
+              priceUsd:    listing.priceUsd,
+              priority:    80,                          // winner variants jump the queue
+              ...(listing.category ? { category: listing.category } : {}),
+              notes:       `winner_variant parent=${input.parentDesignId} titleIdx=${listing.titleIdx}`,
+            }).catch(() => ({ ok: false, reason: 'enqueue threw' } as { ok: boolean; reason?: string }))
+            if (enqRes.ok) queued++
+          }
+        }
+        console.log(`[r374] auto-queued ${queued} variant×platform pairs across ${platforms.length} platforms`)
+      }
+    } catch (e) {
+      console.error('[r374] auto-queue failed:', (e as Error).message)
+    }
+  }
+
   return {
     ok: true,
     parentDesignId: input.parentDesignId,
