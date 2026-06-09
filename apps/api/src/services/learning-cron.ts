@@ -1792,11 +1792,11 @@ async function runWeeklyRecapPush(): Promise<void> {
 }
 
 // R429 — nightly pg_dump backup, hourly tick gated to 04:00 UTC.
-async function runNightlyBackup(): Promise<void> {
+async function runNightlyBackupTick(): Promise<void> {
   try {
     if (new Date().getUTCHours() !== 4) return
-    const { runNightlyBackup: doIt } = await import('./r429-nightly-backup.js')
-    const r = await doIt()
+    const { runNightlyBackup } = await import('./r429-nightly-backup.js')
+    const r = await runNightlyBackup()
     await emit('cron.nightly_backup', { ok: r.ok, sizeBytes: r.sizeBytes ?? 0, prunedFiles: r.prunedFiles })
   } catch (e) { await emit('cron.error', { task: 'nightly_backup', error: (e as Error).message }) }
 }
@@ -2430,7 +2430,7 @@ export function startLearningCron(): void {
   // R422 — platform auto-re-enable probe, 6h tick.
   handles.push(scheduleJittered(monitored('R422-platform-reenable', runPlatformAutoReenable), 6 * 60 * 60_000))
   // R429 — nightly Novan-table pg_dump backup, hourly tick gated to 04:00 UTC.
-  handles.push(scheduleJittered(monitored('R429-nightly-backup', runNightlyBackup), 60 * 60_000))
+  handles.push(scheduleJittered(monitored('R429-nightly-backup', runNightlyBackupTick), 60 * 60_000))
   // R413 — weekly recap push, hourly tick gated to Sun 14:00 UTC.
   handles.push(scheduleJittered(monitored('R413-weekly-recap', runWeeklyRecapPush), 60 * 60_000))
   // R417 — zero-sale listing refresh, hourly tick gated to 15:00 UTC.
