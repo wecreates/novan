@@ -26,6 +26,7 @@ export async function isAutonomyAllowed(workspaceId: string): Promise<boolean> {
   const c = CACHE.get(workspaceId)
   if (c && c.until > Date.now()) return c.allowed
   let allowed = true
+  let cacheable = true                                                   // R558
   try {
     const rows = await db.execute(sql`
       SELECT 1 FROM kill_switches
@@ -42,13 +43,20 @@ export async function isAutonomyAllowed(workspaceId: string): Promise<boolean> {
     // operator's intent on first install is autonomy ON. Set NOVAN_AUTONOMY_FAIL_CLOSED=1
     // for production environments where DB unavailability should pause work.
     if (process.env['NOVAN_AUTONOMY_FAIL_CLOSED'] === '1') allowed = false
+    // R558 — DO NOT cache the assumed value when the DB throws. Otherwise a
+    // transient blip during which operator has engaged kill_switch leaves
+    // the fail-open `true` cached for 30s, ignoring the switch even after
+    // the DB recovers. Skip cache so the next call re-probes immediately.
+    cacheable = false
   }
-  // R542 — evict oldest when above the bound. Map iteration order is
-  // insertion order so first key is the oldest.
-  if (CACHE.size >= MAX_CACHE) {
-    const firstKey = CACHE.keys().next().value
-    if (firstKey !== undefined) CACHE.delete(firstKey)
+  if (cacheable) {                                                       // R558
+    // R542 — evict oldest when above the bound. Map iteration order is
+    // insertion order so first key is the oldest.
+    if (CACHE.size >= MAX_CACHE) {
+      const firstKey = CACHE.keys().next().value
+      if (firstKey !== undefined) CACHE.delete(firstKey)
+    }
+    CACHE.set(workspaceId, { allowed, until: Date.now() + TTL_MS })
   }
-  CACHE.set(workspaceId, { allowed, until: Date.now() + TTL_MS })
   return allowed
 }
