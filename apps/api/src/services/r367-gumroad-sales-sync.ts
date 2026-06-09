@@ -61,9 +61,14 @@ async function fetchPage(token: string, after?: string): Promise<{ sales: Gumroa
   url.searchParams.set('access_token', token)
   if (after) url.searchParams.set('after', after)
   url.searchParams.set('per_page', '100')
-  const res = await fetch(url.href)
-  if (!res.ok) throw new Error(`Gumroad sales API ${res.status}: ${(await res.text()).slice(0, 200)}`)
-  return await res.json() as { sales: GumroadSale[]; next_page_url?: string }
+  // R469 — 10s timeout so a hung Gumroad doesn't hang the cron tick.
+  const ac = new AbortController()
+  const t = setTimeout(() => ac.abort(), 10_000)
+  try {
+    const res = await fetch(url.href, { signal: ac.signal })
+    if (!res.ok) throw new Error(`Gumroad sales API ${res.status}: ${(await res.text()).slice(0, 200)}`)
+    return await res.json() as { sales: GumroadSale[]; next_page_url?: string }
+  } finally { clearTimeout(t) }
 }
 
 export async function syncGumroadSales(workspaceId: string, businessId = DEFAULT_BUSINESS_ID): Promise<SyncResult> {
