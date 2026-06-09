@@ -103,6 +103,18 @@ export async function storeDesignFile(input: StoreInput): Promise<StoreResult> {
   const storeAbs = path.resolve(STORE_DIR)
   const storedAbs = path.resolve(stored)
   if (!storedAbs.startsWith(storeAbs + path.sep)) return { ok: false, reason: 'path traversal blocked' }
+  // R475 — if a prior upload used a different extension, unlink it so disk
+  // doesn't leak when operator re-uploads (e.g., png → jpg).
+  try {
+    const r = await db.execute(sql`SELECT stored_path FROM design_files WHERE workspace_id = ${safeWsId} AND design_id = ${safeDesignId} LIMIT 1`)
+    const old = (r as unknown as Array<{ stored_path: string }>)[0]?.stored_path
+    if (old) {
+      const oldAbs = path.isAbsolute(old) ? old : path.join(STORE_DIR, old)
+      if (oldAbs !== stored && oldAbs.startsWith(storeAbs + path.sep)) {
+        await fs.promises.unlink(oldAbs).catch(() => {/* tolerated */})
+      }
+    }
+  } catch { /* tolerated */ }
   // R460 — async write so we don't block the event loop on large files.
   await fs.promises.writeFile(stored, input.bytes)
 

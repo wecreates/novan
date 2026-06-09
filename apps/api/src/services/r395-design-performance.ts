@@ -24,7 +24,20 @@ export interface DesignPerformance {
   winnerScore:        number     // higher = more likely a winner
 }
 
+// R480 — 60s memo so R401/R411 hourly ticks don't issue identical queries.
+const RANK_CACHE = new Map<string, { ts: number; result: { designs: DesignPerformance[]; totalRevenue: number; totalSales: number } }>()
+const RANK_TTL_MS = 60_000
+
 export async function rankDesignPerformance(workspaceId: string, limit = 10): Promise<{ designs: DesignPerformance[]; totalRevenue: number; totalSales: number }> {
+  const key = `${workspaceId}|${limit}`
+  const c = RANK_CACHE.get(key)
+  if (c && Date.now() - c.ts < RANK_TTL_MS) return c.result
+  const r = await _rankDesignPerformance(workspaceId, limit)
+  RANK_CACHE.set(key, { ts: Date.now(), result: r })
+  return r
+}
+
+async function _rankDesignPerformance(workspaceId: string, limit = 10): Promise<{ designs: DesignPerformance[]; totalRevenue: number; totalSales: number }> {
   let totalRevenue = 0, totalSales = 0
   let designs: DesignPerformance[] = []
   try {

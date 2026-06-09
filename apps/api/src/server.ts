@@ -1036,6 +1036,11 @@ app.post<{ Body: Buffer }>('/api/v1/designs/upload', { bodyLimit: 30 * 1024 * 10
   const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
   const token = String(req.headers['x-novan-token'] ?? '')
   if (!token || (ops && token !== ops)) return reply.code(401).send({ error: 'unauthorized' })
+  // R479 — friendlier message than fastify's default 415.
+  const ct = String(req.headers['content-type'] ?? '').toLowerCase()
+  if (!/^image\/(png|jpe?g|webp)(;|$)/i.test(ct)) {
+    return reply.code(415).send({ error: 'Content-Type must be image/png, image/jpeg, or image/webp' })
+  }
   const ws = String(req.headers['x-novan-workspace'] ?? 'default')
   const designId = String(req.headers['x-novan-design-id'] ?? '').trim()
   if (!designId) return reply.code(400).send({ error: 'X-Novan-Design-Id header required' })
@@ -1053,7 +1058,12 @@ app.get<{ Params: { id: string }; Querystring: { workspace_id?: string } }>('/ap
   if (!f) return reply.code(404).send({ error: 'not found' })
   try {
     const stream = (await import('node:fs')).createReadStream(f.path)
-    reply.type(f.mime).header('Content-Disposition', `inline; filename="${f.filename}"`)
+    // R474 — design files are immutable per design_id (we overwrite on
+    // upload but the URL changes only if the operator re-uploads). Browser+
+    // dashboard can safely cache for 1h.
+    reply.type(f.mime)
+      .header('Content-Disposition', `inline; filename="${f.filename}"`)
+      .header('Cache-Control', 'public, max-age=3600')
     return reply.send(stream)
   } catch (e) {
     return reply.code(500).send({ error: (e as Error).message })

@@ -62,6 +62,39 @@ export async function getOperatorSummaryHour(workspaceId: string): Promise<numbe
   return 8
 }
 
+/** R470 — generic workspace_settings get/set so operator can tune any
+ *  autonomous-loop knob without redeploy. */
+export async function getSetting(workspaceId: string, key: string, fallback: string): Promise<string> {
+  await ensureTable()
+  try {
+    const r = await db.execute(sql`
+      SELECT value FROM workspace_settings WHERE workspace_id = ${workspaceId} AND key = ${key} LIMIT 1
+    `)
+    const v = (r as unknown as Array<{ value: string }>)[0]?.value
+    if (v && typeof v === 'string') return v
+  } catch { /* tolerated */ }
+  return fallback
+}
+export async function setSetting(workspaceId: string, key: string, value: string): Promise<{ ok: boolean }> {
+  await ensureTable()
+  if (typeof key !== 'string' || key.length > 64 || typeof value !== 'string' || value.length > 200) return { ok: false }
+  await db.execute(sql`
+    INSERT INTO workspace_settings (workspace_id, key, value, updated_at)
+    VALUES (${workspaceId}, ${key}, ${value}, ${Date.now()})
+    ON CONFLICT (workspace_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+  `).catch(() => {/* best effort */})
+  return { ok: true }
+}
+export async function getNumSetting(workspaceId: string, key: string, fallback: number): Promise<number> {
+  const v = await getSetting(workspaceId, key, String(fallback))
+  const n = Number(v)
+  return Number.isFinite(n) ? n : fallback
+}
+export async function getBoolSetting(workspaceId: string, key: string, fallback: boolean): Promise<boolean> {
+  const v = await getSetting(workspaceId, key, fallback ? '1' : '0')
+  return v === '1' || v.toLowerCase() === 'true'
+}
+
 export async function setOperatorSummaryHour(workspaceId: string, hour: number): Promise<{ ok: boolean }> {
   await ensureTable()
   if (!Number.isInteger(hour) || hour < 0 || hour > 23) return { ok: false }

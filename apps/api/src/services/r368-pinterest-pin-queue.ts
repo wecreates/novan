@@ -124,12 +124,14 @@ export async function nextPin(workspaceId: string): Promise<PinItem | null> {
   const velocity = await effectivePinVelocity(workspaceId)   // R416
   if (postedToday >= velocity) return null
 
+  // R471 — SKIP LOCKED so two parallel agents can't grab the same pin.
   const rows = await db.execute(sql`
     SELECT id, title, description, tags, link_url, board_name, design_file, priority
     FROM pinterest_pin_queue
     WHERE workspace_id = ${workspaceId} AND status = 'queued'
     ORDER BY priority DESC, queued_at ASC
     LIMIT 1
+    FOR UPDATE SKIP LOCKED
   `)
   const r = (rows as unknown as Array<Record<string, unknown>>)[0]
   if (!r) return null

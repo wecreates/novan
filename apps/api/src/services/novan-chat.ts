@@ -947,7 +947,13 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
     // explicit Novan-status phrases.
     const heavyTriggers = ['novan status', 'novan dashboard', 'novan summary', 'dashboard snapshot']
     const wantHeavy = heavyTriggers.some(t => msg.includes(t))
-    if (triggers.some(t => msg.includes(t))) {
+    // R472 — operator opt-out via workspace_settings.chat_inject_enabled='0'
+    let injectEnabled = true
+    try {
+      const { getBoolSetting } = await import('./r437-operator-timezone.js')
+      injectEnabled = await getBoolSetting(i.workspaceId, 'chat_inject_enabled', true)
+    } catch { /* tolerated */ }
+    if (injectEnabled && triggers.some(t => msg.includes(t))) {
       const { dashboardSnapshot } = await import('./r370-operator-dashboard.js')
       const snap = await dashboardSnapshot(i.workspaceId)
       const compact = wantHeavy ? {

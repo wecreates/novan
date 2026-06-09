@@ -11,8 +11,8 @@
 import { db } from '../db/client.js'
 import { sql } from 'drizzle-orm'
 
-const MAX_PER_RUN = 3
-const MIN_WINNER_SCORE = 5      // anything below this is too low-signal to invest in variants
+const MAX_PER_RUN_DEFAULT = 3
+const MIN_WINNER_SCORE_DEFAULT = 5      // anything below this is too low-signal to invest in variants
 
 export interface AutoVariantsResult {
   workspaces:    number
@@ -42,6 +42,10 @@ export async function runAutoVariantsForWinners(): Promise<AutoVariantsResult> {
       // R428 — bail on budget exhaustion before burning image-gen credits.
       const { isBudgetExhausted, recordSpend } = await import('./r428-ai-spend-tracker.js')
       if (await isBudgetExhausted(ws)) { result.skipped++; continue }
+      // R470 — per-workspace tunables
+      const { getNumSetting } = await import('./r437-operator-timezone.js')
+      const MAX_PER_RUN = await getNumSetting(ws, 'r401_max_per_run', MAX_PER_RUN_DEFAULT)
+      const MIN_WINNER_SCORE = await getNumSetting(ws, 'r401_min_winner_score', MIN_WINNER_SCORE_DEFAULT)
       const r = await rankDesignPerformance(ws, 10)
       const candidates = r.designs
         .filter(d => !d.hasVariants && d.winnerScore >= MIN_WINNER_SCORE)

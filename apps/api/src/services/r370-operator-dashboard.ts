@@ -381,7 +381,7 @@ ${token ? `<div style="margin-bottom:20px;padding:12px;background:#18181b;border
   ].map(([action, label]) => `<form method="POST" action="/ops/dashboard/action" style="margin:0">
     <input type="hidden" name="token" value="${escapeHtml(token)}">
     <input type="hidden" name="action" value="${escapeHtml(action as string)}">
-    <button type="submit" style="background:#1e3a8a;border:1px solid #3b82f6;color:#dbeafe;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">${escapeHtml(label as string)}</button>
+    <button type="submit" aria-label="Fire ${escapeHtml(action as string)}" style="background:#1e3a8a;border:1px solid #3b82f6;color:#dbeafe;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">${escapeHtml(label as string)}</button>
   </form>`).join('')}
 </div>` : ''}
 

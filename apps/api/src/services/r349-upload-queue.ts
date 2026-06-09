@@ -187,6 +187,16 @@ export async function markUploaded(opts: {
  * payload as an `agent.upload.failed` event so R421 (selector improver
  * auto-trigger from R402) can pick it up.
  */
+// R476 — redact emails + tokens from agent failure payloads before storage.
+// The page HTML may contain operator's logged-in account email or session
+// tokens visible in DOM attributes.
+function redact(s: string): string {
+  return s
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '<email>')
+    .replace(/[?&](token|access_token|auth|key|secret|sid|sessionid|password)=[^&\s"']{4,}/gi, (_m, k) => `?${k}=<redacted>`)
+    .replace(/Bearer\s+[A-Za-z0-9._-]{20,}/gi, 'Bearer <redacted>')
+}
+
 export async function markFailed(opts: {
   workspaceId:        string
   queueItemId:        string
@@ -216,10 +226,10 @@ export async function markFailed(opts: {
           platform: r.platform,
           designId: r.design_id,
           queueItemId: opts.queueItemId,
-          errorMessage: opts.reason,
+          errorMessage: redact(opts.reason),
           step: opts.step ?? 'unknown',
-          pageUrl: opts.pageUrl ?? '',
-          pageHtml: opts.pageHtml ?? '',
+          pageUrl: redact(opts.pageUrl ?? ''),
+          pageHtml: redact(opts.pageHtml ?? ''),
           previousSelectors: opts.previousSelectors ?? [],
         },
         traceId: uuidv7(), correlationId: uuidv7(), causationId: null,
