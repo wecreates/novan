@@ -761,6 +761,24 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return bulkImportSales(ws, rows)
     },
   },
+  'workspace.set_timezone': {
+    description: 'R437: Set operator IANA timezone (e.g. America/Chicago). Reschedules daily/weekly pushes to operator local 8am instead of UTC. Params: timezone',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { timezone?: string }
+      if (!p.timezone) return { ok: false, reason: 'timezone required' }
+      const { setOperatorTimezone } = await import('./r437-operator-timezone.js')
+      return setOperatorTimezone(ws, p.timezone)
+    },
+  },
+  'workspace.get_timezone': {
+    description: 'R437: Get operator IANA timezone for this workspace.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { getOperatorTimezone, getOperatorLocalHour } = await import('./r437-operator-timezone.js')
+      return { timezone: await getOperatorTimezone(ws), localHour: await getOperatorLocalHour(ws) }
+    },
+  },
   'spend.snapshot': {
     description: 'R428: Today\'s AI spend per source + cap status if NOVAN_DAILY_AI_BUDGET_USD configured.',
     risk: 'low',

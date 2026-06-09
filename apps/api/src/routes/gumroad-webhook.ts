@@ -54,10 +54,25 @@ export async function registerGumroadWebhook(app: FastifyInstance): Promise<void
     if (expectedSeller && String((req.body ?? {}).seller_id ?? '') !== expectedSeller) {
       return reply.code(403).send({ error: 'seller_id mismatch' })
     }
+    // R430 — optional IP allowlist. GUMROAD_ALLOWED_IPS comma-separated.
+    // Honors X-Forwarded-For trustProxy behavior. Skip if not configured.
+    const allowedIps = process.env['GUMROAD_ALLOWED_IPS']
+    if (allowedIps) {
+      const allowed = allowedIps.split(',').map(s => s.trim()).filter(Boolean)
+      const reqIp = req.ip
+      if (!allowed.includes(reqIp)) {
+        return reply.code(403).send({ error: `ip ${reqIp} not allowlisted` })
+      }
+    }
 
     const body = req.body ?? {}
     const saleId   = String(body.sale_id ?? '').trim()
+    // R431 — normalize permalink so R367 polling + R389 webhook don't
+    // double-count by trailing-slash/protocol mismatch.
     const permalink = String(body.product_permalink ?? '').trim()
+      .replace(/^http:\/\//i, 'https://')
+      .replace(/\/$/, '')
+      .toLowerCase()
     const priceCents = Math.max(0, Math.round(Number(body.price ?? 0)))
     const productName = String(body.product_name ?? '').slice(0, 200)
     if (!saleId || !permalink) {

@@ -604,6 +604,10 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/dashboard
   reply.type('text/html').send(html)
 })
 
+// R432 — operator quick-action click dedup. Keys are (workspace|action),
+// values are last-fired timestamp. Bounded by # of distinct actions × workspaces.
+const ACTION_DEDUP = new Map<string, number>()
+
 // R427 — register form-urlencoded parser at app scope so dashboard POST
 // forms work whether or not the Gumroad webhook route registered it first.
 if (!app.hasContentTypeParser('application/x-www-form-urlencoded')) {
@@ -647,6 +651,14 @@ app.post<{ Querystring: { token?: string; workspace?: string; action?: string };
   }
   const fn = ALLOWED[action]
   if (!fn) return reply.code(400).type('text/plain').send(`unknown action; allowed: ${Object.keys(ALLOWED).join(', ')}`)
+  // R432 — server-side dedup so double-click doesn't double-fire (esp. for
+  // push_next_action which would dupe notifications). 5s window per action.
+  const dedupKey = `${ws}|${action}`
+  const last = ACTION_DEDUP.get(dedupKey) ?? 0
+  if (Date.now() - last < 5_000) {
+    return reply.type('text/html').send(`<!doctype html><meta http-equiv="refresh" content="2;url=/ops/dashboard?token=${encodeURIComponent(tokenInput)}"><body style="font-family:system-ui;background:#0a0a0b;color:#e5e7eb;padding:20px"><h2>⊘ ${action} skipped (deduped within 5s)</h2></body>`)
+  }
+  ACTION_DEDUP.set(dedupKey, Date.now())
   try {
     const result = await fn()
     reply.type('text/html').send(`<!doctype html><meta http-equiv="refresh" content="2;url=/ops/dashboard?token=${encodeURIComponent(tokenInput)}"><body style="font-family:system-ui;background:#0a0a0b;color:#e5e7eb;padding:20px"><h2>✓ ${action} fired</h2><pre style="background:#18181b;padding:12px;border-radius:6px;overflow:auto;max-width:800px">${JSON.stringify(result, null, 2).slice(0, 4000)}</pre><p>Returning to dashboard…</p></body>`)
@@ -1008,6 +1020,45 @@ await app.register(schedulerRoutes,     { prefix: '/api/v1/scheduler' })
 await app.register(searchRoutes,        { prefix: '/api/v1/search' })
 await app.register(webhooksRoutes,      { prefix: '/api/v1/webhooks' })
 await registerGumroadWebhook(app)        // R389 — public, token-gated POST /api/v1/webhooks/gumroad/sale
+
+// R438 — design file store. POST uploads a file body for a design id; GET serves it.
+app.post<{ Querystring: { token?: string; workspace_id?: string; design_id?: string; filename?: string }; Body: Buffer }>('/api/v1/designs/upload', { bodyLimit: 30 * 1024 * 1024 }, async (req, reply) => {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  if (!req.query.token || (ops && req.query.token !== ops)) return reply.code(401).send({ error: 'unauthorized' })
+  const ws = req.query.workspace_id ?? 'default'
+  const designId = String(req.query.design_id ?? '').trim()
+  if (!designId) return reply.code(400).send({ error: 'design_id query required' })
+  const mime = String(req.headers['content-type'] ?? 'application/octet-stream')
+  const filename = String(req.query.filename ?? 'design.bin')
+  const { storeDesignFile } = await import('./services/r438-design-file-store.js')
+  const buf = req.body as Buffer
+  const r = await storeDesignFile({ workspaceId: ws, designId, filename, mime, bytes: buf })
+  return reply.code(r.ok ? 200 : 400).send(r)
+})
+app.get<{ Params: { id: string }; Querystring: { workspace_id?: string } }>('/api/v1/designs/:id/file', async (req, reply) => {
+  const ws = req.query.workspace_id ?? 'default'
+  const { readDesignFile } = await import('./services/r438-design-file-store.js')
+  const f = await readDesignFile(ws, req.params.id)
+  if (!f) return reply.code(404).send({ error: 'not found' })
+  try {
+    const stream = (await import('node:fs')).createReadStream(f.path)
+    reply.type(f.mime).header('Content-Disposition', `inline; filename="${f.filename}"`)
+    return reply.send(stream)
+  } catch (e) {
+    return reply.code(500).send({ error: (e as Error).message })
+  }
+})
+// Add raw octet-stream content type parser for the upload route
+if (!app.hasContentTypeParser('application/octet-stream')) {
+  app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_req, body, done) => done(null, body))
+}
+const IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
+for (const m of IMAGE_MIMES) {
+  if (!app.hasContentTypeParser(m)) {
+    app.addContentTypeParser(m, { parseAs: 'buffer' }, (_req, body, done) => done(null, body))
+  }
+}
+
 await app.register(workersRoutes,       { prefix: '/api/v1/workers' })
 await app.register(exportRoutes,        { prefix: '/api/v1/export' })
 await app.register(workspacesRoutes,    { prefix: '/api/v1/workspaces' })

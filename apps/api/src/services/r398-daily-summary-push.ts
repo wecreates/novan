@@ -38,6 +38,9 @@ export async function pushDailySummary(): Promise<DailySummaryResult> {
   await ensureTable()
   const result: DailySummaryResult = { workspaces: 0, pushed: 0, skipped: [] }
   const yyyymmdd = todayYYYYMMDD()
+  // R437 — only fire when the operator's local hour matches their preferred
+  // daily-summary hour (default 8am). Gate evaluated per workspace inside loop.
+  const { getOperatorLocalHour, getOperatorTimezone } = await import('./r437-operator-timezone.js')
 
   let workspaceIds: string[] = []
   try {
@@ -50,6 +53,14 @@ export async function pushDailySummary(): Promise<DailySummaryResult> {
 
   for (const ws of workspaceIds) {
     result.workspaces++
+    // R437 — skip workspaces whose operator local hour isn't ~8am.
+    try {
+      const localHour = await getOperatorLocalHour(ws)
+      if (localHour !== 8) {
+        result.skipped.push({ workspaceId: ws, reason: `local hour ${localHour} != 8 (tz ${await getOperatorTimezone(ws)})` })
+        continue
+      }
+    } catch { /* fall through to fire */ }
     // Idempotency
     const exists = await db.execute(sql`
       SELECT 1 FROM daily_summary_pushes WHERE workspace_id = ${ws} AND day_yyyymmdd = ${yyyymmdd} LIMIT 1

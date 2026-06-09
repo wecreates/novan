@@ -932,7 +932,16 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
   let novanDashboardBlock = ''
   try {
     const msg = i.userMessage.toLowerCase()
-    const triggers = ['status', 'mrr', 'revenue', 'queue', 'winner', 'pacing', 'dashboard', 'next action', 'how am i doing', 'summary', 'sales', 'novan']
+    // R434 — narrower triggers so generic words like "sales" or "status" in
+    // unrelated chats don't pull in the dashboard. Requires either a Novan-
+    // specific phrase or a money/queue/winner phrase that implies the loop.
+    const triggers = [
+      'my mrr', 'my revenue', 'my sales', 'my queue', 'my pacing',
+      'how am i doing', 'novan status', 'novan dashboard', 'novan summary',
+      'next action', 'winner score', 'top design', 'top winner',
+      'pod status', 'queue depth', 'queue empty', 'queue full',
+      'dashboard snapshot',
+    ]
     if (triggers.some(t => msg.includes(t))) {
       const { dashboardSnapshot } = await import('./r370-operator-dashboard.js')
       const snap = await dashboardSnapshot(i.workspaceId)

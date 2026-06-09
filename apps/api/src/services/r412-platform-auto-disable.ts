@@ -39,11 +39,11 @@ export async function autoDisableBrokenPlatforms(): Promise<DisableSweepResult> 
 
   const rows = await db.execute(sql`
     SELECT workspace_id, platform,
-      COUNT(*) FILTER (WHERE status = 'failed' AND COALESCE(failed_at, queued_at) >= ${cutoff})::int AS failures,
+      COUNT(*) FILTER (WHERE status = 'failed' AND failed_at IS NOT NULL AND failed_at >= ${cutoff})::int AS failures,
       COUNT(*) FILTER (WHERE status = 'uploaded' AND uploaded_at >= ${cutoff})::int AS uploads
     FROM design_upload_queue
     GROUP BY workspace_id, platform
-    HAVING COUNT(*) FILTER (WHERE status = 'failed' AND COALESCE(failed_at, queued_at) >= ${cutoff}) >= ${FAILURE_THRESHOLD}
+    HAVING COUNT(*) FILTER (WHERE status = 'failed' AND failed_at IS NOT NULL AND failed_at >= ${cutoff}) >= ${FAILURE_THRESHOLD}
        AND COUNT(*) FILTER (WHERE status = 'uploaded' AND uploaded_at >= ${cutoff}) = 0
   `).catch(() => [] as unknown[])
 

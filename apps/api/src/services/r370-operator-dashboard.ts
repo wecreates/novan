@@ -18,6 +18,7 @@ import { classifyTier, nextMilestone } from './r350-goal-ladder.js'
 
 interface DashboardState {
   ts:               number
+  workspaceId?:     string                                                                // R440
   uploads: {
     queueByPlatform: Array<{ platform: string; queued: number; uploaded: number }>
     recentUploads:   Array<{ platform: string; externalUrl: string; title: string; postedAt: number }>
@@ -152,6 +153,7 @@ export async function loadState(workspaceId: string): Promise<DashboardState> {
 
   return {
     ts: Date.now(),
+    workspaceId,
     uploads: {
       queueByPlatform: (queueRows as Array<{ platform: string; queued: number; uploaded: number }>).map(r => ({
         platform: r.platform, queued: Number(r.queued) || 0, uploaded: Number(r.uploaded) || 0,
@@ -364,7 +366,7 @@ function renderHtml(s: DashboardState, token?: string): string {
 </head>
 <body>
 <h1>🎨 Novan — CYZOR CREATIONS</h1>
-<div class="subtitle">Operator dashboard · auto-refresh 60s · ${new Date(s.ts).toLocaleString()}</div>
+<div class="subtitle">Operator dashboard · auto-refresh 60s · ${new Date(s.ts).toLocaleString()}${s.workspaceId && s.workspaceId !== 'default' ? ` · workspace=${escapeHtml(s.workspaceId)}` : ''}</div>
 
 ${token ? `<div style="margin-bottom:20px;padding:12px;background:#18181b;border:1px solid #27272a;border-radius:8px;display:flex;flex-wrap:wrap;gap:8px">
   ${[
@@ -570,14 +572,27 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
 </html>`
 }
 
+// R433 — 30s in-memory snapshot cache so 60s auto-refresh + chat injection
+// don't pound the DB with 25 queries per hit. Per-workspace.
+const SNAPSHOT_CACHE = new Map<string, { ts: number; state: DashboardState }>()
+const SNAPSHOT_TTL_MS = 30_000
+
+async function loadStateCached(workspaceId: string): Promise<DashboardState> {
+  const c = SNAPSHOT_CACHE.get(workspaceId)
+  if (c && Date.now() - c.ts < SNAPSHOT_TTL_MS) return c.state
+  const state = await loadState(workspaceId)
+  SNAPSHOT_CACHE.set(workspaceId, { ts: Date.now(), state })
+  return state
+}
+
 /** R399 — JSON dashboard snapshot for chat / brain-task consumption. */
 export async function dashboardSnapshot(workspaceId: string): Promise<DashboardState> {
-  return loadState(workspaceId)
+  return loadStateCached(workspaceId)
 }
 
 export async function renderDashboard(workspaceId: string, token?: string): Promise<string> {
   try {
-    const state = await loadState(workspaceId)
+    const state = await loadStateCached(workspaceId)
     return renderHtml(state, token)
   } catch (e) {
     return `<!doctype html><body style="font-family:system-ui;padding:20px"><h1>Dashboard error</h1><pre>${escapeHtml((e as Error).stack ?? (e as Error).message)}</pre></body>`

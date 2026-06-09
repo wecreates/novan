@@ -105,10 +105,13 @@ export async function syncGumroadSales(workspaceId: string, businessId = DEFAULT
       const netUsd = netCents / 100
       const ts = new Date(sale.created_at).getTime()
       if (!Number.isFinite(ts) || ts <= 0) continue
+      // R431 — normalize permalink so webhook + poll dedupe correctly via metadata->>'permalink'
+      const normalizedPermalink = String(sale.permalink ?? '').trim()
+        .replace(/^http:\/\//i, 'https://').replace(/\/$/, '').toLowerCase()
       // Idempotent insert: same external_sale_id won't dupe
       const res = await db.execute(sql`
         INSERT INTO business_revenue (id, workspace_id, business_id, source, external_sale_id, gross_usd, net_usd, recorded_at, metadata)
-        VALUES (${uuidv7()}, ${workspaceId}, ${businessId}, ${SOURCE}, ${sale.id}, ${sale.price / 100}, ${netUsd}, ${ts}, ${JSON.stringify({ product: sale.product_name ?? '', permalink: sale.permalink ?? '' })}::jsonb)
+        VALUES (${uuidv7()}, ${workspaceId}, ${businessId}, ${SOURCE}, ${sale.id}, ${sale.price / 100}, ${netUsd}, ${ts}, ${JSON.stringify({ product: sale.product_name ?? '', permalink: normalizedPermalink })}::jsonb)
         ON CONFLICT DO NOTHING
         RETURNING id
       `).catch(() => undefined)

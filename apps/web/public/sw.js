@@ -12,7 +12,8 @@
  * Versioning: bump CACHE_VERSION when shell assets change so old caches
  * get pruned on the next activate.
  */
-const CACHE_VERSION = 'novan-v1'
+// R439 — bump on every Novan release so stale shell caches get pruned.
+const CACHE_VERSION = 'novan-r428'
 const SHELL_CACHE   = `${CACHE_VERSION}-shell`
 const API_CACHE     = `${CACHE_VERSION}-api`
 const SHELL_ASSETS = [
