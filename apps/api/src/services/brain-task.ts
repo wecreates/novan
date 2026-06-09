@@ -716,6 +716,57 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return bulkLoadPins({ workspaceId: ws, pins: p.pins ?? [] })
     },
   },
+  'listing.record_upload': {
+    description: 'R377: Record which (titleIdx, descIdx) the rotator picked. Called from upload_queue.add. Params: platform, niche, titleIdx, descIdx?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { recordTemplateUpload } = await import('./r377-listing-outcome-tracker.js')
+      const p = params as { platform?: string; niche?: string; titleIdx?: number; descIdx?: number }
+      await recordTemplateUpload({
+        workspaceId: ws,
+        platform:    p.platform ?? 'gumroad',
+        niche:       p.niche    ?? 'botanical',
+        titleIdx:    Number(p.titleIdx) || 0,
+        ...(p.descIdx !== undefined ? { descIdx: Number(p.descIdx) } : {}),
+      })
+      return { ok: true }
+    },
+  },
+  'listing.record_sale': {
+    description: 'R377: Attribute a sale to its (platform, niche, titleIdx, descIdx). Called from sales sync. Params: platform, niche, titleIdx, descIdx?, revenueUsd',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { recordTemplateSale } = await import('./r377-listing-outcome-tracker.js')
+      const p = params as { platform?: string; niche?: string; titleIdx?: number; descIdx?: number; revenueUsd?: number }
+      await recordTemplateSale({
+        workspaceId: ws,
+        platform:    p.platform ?? 'gumroad',
+        niche:       p.niche    ?? 'botanical',
+        titleIdx:    Number(p.titleIdx) || 0,
+        revenueUsd:  Number(p.revenueUsd) || 0,
+        ...(p.descIdx !== undefined ? { descIdx: Number(p.descIdx) } : {}),
+      })
+      return { ok: true }
+    },
+  },
+  'listing.best_template': {
+    description: 'R377: Highest-converting (titleIdx, descIdx) for a (platform, niche). Used by listing-rotator to pick winners. Params: platform, niche',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { bestTemplateFor } = await import('./r377-listing-outcome-tracker.js')
+      const p = params as { platform?: string; niche?: string }
+      return bestTemplateFor(ws, p.platform ?? 'gumroad', p.niche ?? 'botanical')
+    },
+  },
+  'listing.rankings': {
+    description: 'R377: Template performance leaderboard. Params: platform?, niche?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { getRankings } = await import('./r377-listing-outcome-tracker.js')
+      const p = params as { platform?: string; niche?: string }
+      return getRankings(ws, p.platform, p.niche)
+    },
+  },
   'capability.self_test': {
     description: 'R376: Exercise core ops + report what works, what is degraded, what is missing prerequisites.',
     risk: 'low',
@@ -8363,6 +8414,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'selector.improve', 'selector.outcome', 'selector.stored',
   'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
   'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
+  'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -8705,6 +8757,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'selector.improve', 'selector.outcome', 'selector.stored',
         'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
         'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
+        'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
