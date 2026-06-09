@@ -729,7 +729,12 @@ app.get<{ Params: { workspaceId: string; slug: string } }>('/m/:workspaceId/:slu
   }
 })
 
-app.post<{ Params: { workspaceId: string; slug: string }; Body: { email?: string; name?: string } }>('/m/:workspaceId/:slug', async (req, reply) => {
+// R563 — rate-limit lead-magnet POST per IP. Public-facing form has no auth
+// so a bot could fill the buyer-email list. 10 submits/hr/IP is generous for
+// real humans (single buyer ≈ 1 submit) and blocks scraper floods.
+app.post<{ Params: { workspaceId: string; slug: string }; Body: { email?: string; name?: string } }>('/m/:workspaceId/:slug', {
+  config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
+}, async (req, reply) => {
   const { workspaceId, slug } = req.params
   const body = (req.body ?? {}) as { email?: string; name?: string }
   if (!body.email) return reply.code(400).type('text/html').send('<p>Email required. <a href="">Back</a></p>')

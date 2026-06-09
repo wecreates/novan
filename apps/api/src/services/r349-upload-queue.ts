@@ -82,6 +82,21 @@ export async function enqueue(input: EnqueueInput): Promise<{ ok: boolean; id?: 
     if (!VALID_PLATFORMS.has(input.platform)) {
       return { ok: false, reason: `unknown platform '${input.platform}' (known: ${[...VALID_PLATFORMS].slice(0, 6).join(',')}...)` }
     }
+    // R561 — enforce reasonable string-length caps so a runaway prompt
+    // generator can't fill the queue with megabyte titles that platform
+    // forms truncate or reject. Etsy: title 140, INPRNT: 50, Redbubble: 50.
+    if (!input.title?.trim() || input.title.length > 200) {
+      return { ok: false, reason: `title length ${input.title?.length ?? 0} out of bounds (1..200)` }
+    }
+    if ((input.description?.length ?? 0) > 5000) {
+      return { ok: false, reason: `description length ${input.description.length} exceeds 5000 chars` }
+    }
+    if (input.tags.length > 20) {
+      return { ok: false, reason: `${input.tags.length} tags exceeds 20-tag cap (Etsy/Redbubble enforce 13)` }
+    }
+    if (input.tags.some(t => !t || t.length > 50)) {
+      return { ok: false, reason: 'one or more tags empty or > 50 chars' }
+    }
     // R412 — refuse to enqueue on auto-disabled platforms (operator must
     // re-enable via platforms.enable after fixing the driver).
     try {

@@ -94,9 +94,20 @@ export async function watchTaxThresholds(scopedWorkspaceId?: string): Promise<Ta
         const body  = c.bucket === '100pct'
           ? `${r.source} will issue a 1099-K for ${year}. Make sure your records match — pnpm download CSV via /ops/export/revenue.csv.`
           : `Heads up: ${r.source} sales at $${ytd.toFixed(0)} of $${threshold} 1099 threshold. Start consolidating receipts.`
+        // R565 — quiet-hours guard. Push tax warning only between 9am-9pm
+        // operator local time. Tax thresholds aren't time-sensitive enough
+        // to wake operator at 3am.
+        let quiet = false
         try {
-          void broadcastPush(ws, { title, body, url: '/ops/dashboard', tag: `tax-${r.source}-${c.bucket}` } as Parameters<typeof broadcastPush>[1])
+          const { getOperatorLocalHour } = await import('./r437-operator-timezone.js')
+          const hour = await getOperatorLocalHour(ws)
+          if (Number.isFinite(hour) && (hour < 9 || hour >= 21)) quiet = true
         } catch { /* tolerated */ }
+        if (!quiet) {
+          try {
+            void broadcastPush(ws, { title, body, url: '/ops/dashboard', tag: `tax-${r.source}-${c.bucket}` } as Parameters<typeof broadcastPush>[1])
+          } catch { /* tolerated */ }
+        }
         await db.execute(sql`
           INSERT INTO tax_threshold_notifications (workspace_id, year, source, bucket, notified_at, ytd_at_notify)
           VALUES (${ws}, ${year}, ${r.source}, ${c.bucket}, ${Date.now()}, ${ytd})

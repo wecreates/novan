@@ -82,5 +82,18 @@ export async function gdprDeleteEmail(workspaceId: string, email: string): Promi
       redactedBios = (Array.isArray(a5) ? a5 : (a5.rows ?? [])).length
     }
   } catch { /* table may not exist */ }
+  // R564 — emit audit event so GDPR action is forensically traceable.
+  // Stores hash(email) not the email itself (we just deleted it!).
+  try {
+    const { createHash } = await import('node:crypto')
+    const { v7: uuidv7 } = await import('uuid')
+    const emailHash = createHash('sha256').update(normalized).digest('hex').slice(0, 16)
+    await db.execute(sql`
+      INSERT INTO events (id, type, workspace_id, payload, trace_id, correlation_id, source, version, created_at)
+      VALUES (${uuidv7()}, 'gdpr.deletion_completed', ${workspaceId},
+        ${JSON.stringify({ emailHash, redactedRevenue, redactedEvents, redactedBuyerOptin, redactedAudience, redactedBios })}::jsonb,
+        ${uuidv7()}, ${uuidv7()}, 'r515-gdpr-delete', 1, ${Date.now()})
+    `).catch(() => {/* tolerated */})
+  } catch { /* tolerated */ }
   return { ok: true, redactedRevenue, redactedEvents, redactedBuyerOptin, redactedAudience, redactedBios }
 }
