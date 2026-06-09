@@ -724,6 +724,24 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return pushNextActions()
     },
   },
+  'variants.generate_for_design': {
+    description: 'R390: Force-generate winner variants for any designId (operator override; sale-triggered path also calls this). Params: design_id, count?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { design_id?: string; count?: number }
+      if (!p.design_id) return { ok: false, reason: 'design_id required' }
+      const { generateWinnerVariants } = await import('./r374-winner-variant-generator.js')
+      return generateWinnerVariants({ workspaceId: ws, parentDesignId: p.design_id, count: p.count ?? 3 })
+    },
+  },
+  'queue.stuck': {
+    description: 'R391: Items queued >48h with no attempt. Operator may want to reprioritize, switch platform, or kill.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { detectStuckQueueItems } = await import('./r391-stuck-queue-detector.js')
+      return detectStuckQueueItems(ws)
+    },
+  },
   'failures.cluster': {
     description: 'R388: Top recurring agent failures in last 7d, with normalized signature + suggested fix per cluster.',
     risk: 'low',
@@ -8473,7 +8491,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
   'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
   'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
-  'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster',
+  'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -8817,7 +8835,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
         'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
         'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
-        'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster',
+        'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
