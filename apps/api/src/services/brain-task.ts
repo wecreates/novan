@@ -734,6 +734,15 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return generateWinnerVariants({ workspaceId: ws, parentDesignId: p.design_id, count: p.count ?? 3 })
     },
   },
+  'niches.recommend_weights': {
+    description: 'R405: Recommended per-niche generation counts for the next pipeline. 70% to proven niches (softmax over winner_rate), 30% to exploration. Params: total_budget?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { total_budget?: number }
+      const { recommendNicheWeights } = await import('./r405-pipeline-niche-weighter.js')
+      return recommendNicheWeights({ workspaceId: ws, totalBudget: p.total_budget })
+    },
+  },
   'niches.performance': {
     description: 'R404: Revenue/sales/winner-rate aggregated by niche. Drives next pipeline focus.',
     risk: 'low',
@@ -8515,7 +8524,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
   'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
   'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
-  'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'dashboard.snapshot', 'niches.performance',
+  'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -8859,7 +8868,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
         'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
         'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
-        'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'dashboard.snapshot', 'niches.performance',
+        'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
