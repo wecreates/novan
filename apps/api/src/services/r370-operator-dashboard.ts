@@ -50,6 +50,12 @@ interface DashboardState {
   stuck: Array<{ id: string; platform: string; title: string; ageHours: number }>        // R407
   niches: Array<{ niche: string; designCount: number; winnerRate: number; totalUsd: number }>  // R408
   topDesigns: Array<{ designId: string; prompt: string; totalUsd: number; saleCount: number; winnerScore: number; hasVariants: boolean }>  // R409
+  mrrProjection?: {                                                                       // R414
+    rate7dUsdPerDay: number
+    rate14dUsdPerDay: number
+    rateChangePct:   number
+    projections:     Array<{ tier: string; daysToReach: number | null; reachableDate: string | null }>
+  }
   sparklines: {                                                                          // R394
     uploadsPerDay: number[]   // 14 days, oldest→newest
     salesPerDay:   number[]
@@ -207,6 +213,18 @@ export async function loadState(workspaceId: string): Promise<DashboardState> {
           suggestedFix: c.suggestedFix, lastSeen: c.lastSeen,
         }))
       } catch { return [] }
+    })(),
+    mrrProjection: await (async () => {
+      try {
+        const { projectMrr } = await import('./r414-mrr-projection.js')
+        const r = await projectMrr(workspaceId)
+        return {
+          rate7dUsdPerDay: r.rate7dUsdPerDay,
+          rate14dUsdPerDay: r.rate14dUsdPerDay,
+          rateChangePct: r.rateChangePct,
+          projections: r.projections.slice(0, 3).map(p => ({ tier: p.tier, daysToReach: p.daysToReach, reachableDate: p.reachableDate })),
+        }
+      } catch { return undefined }
     })(),
     niches: await (async () => {
       try {
@@ -399,6 +417,14 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
     <h2>Recent failures (${s.uploads.recentFailures.length})</h2>
     ${s.uploads.recentFailures.length === 0 ? '<div class="mini">✓ no recent failures</div>' : `<table><thead><tr><th>When</th><th>Platform</th><th>Error</th></tr></thead><tbody>${s.uploads.recentFailures.map(f => `<tr><td>${ago(f.ts)}</td><td>${escapeHtml(f.platform)}</td><td class="mini">${escapeHtml(f.error)}</td></tr>`).join('')}</tbody></table>`}
   </div>
+
+  ${s.mrrProjection ? `<div class="card" style="grid-column: 1 / -1">
+    <h2>MRR projection (R414)</h2>
+    <div class="stat">
+      <span class="stat-val">$${s.mrrProjection.rate7dUsdPerDay.toFixed(2)}</span><span class="stat-lbl">7d/day · 14d/day $${s.mrrProjection.rate14dUsdPerDay.toFixed(2)} · trend ${s.mrrProjection.rateChangePct >= 0 ? '+' : ''}${s.mrrProjection.rateChangePct.toFixed(1)}%</span>
+    </div>
+    ${s.mrrProjection.projections.length > 0 ? `<table style="margin-top:8px"><thead><tr><th>Next tier</th><th>Days</th><th>Date</th></tr></thead><tbody>${s.mrrProjection.projections.map(p => `<tr><td>${escapeHtml(p.tier)}</td><td>${p.daysToReach ?? '—'}</td><td class="mini">${escapeHtml(p.reachableDate ?? '—')}</td></tr>`).join('')}</tbody></table>` : ''}
+  </div>` : ''}
 
   ${s.topDesigns.length > 0 ? `<div class="card">
     <h2>Top designs (R409 · by revenue)</h2>
