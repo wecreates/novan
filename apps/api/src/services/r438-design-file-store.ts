@@ -54,12 +54,20 @@ export async function storeDesignFile(input: StoreInput): Promise<StoreResult> {
   if (input.bytes.length > 25 * 1024 * 1024) return { ok: false, reason: 'too large (>25MB)' }
   if (!/^image\/(png|jpe?g|webp)$/i.test(input.mime)) return { ok: false, reason: 'mime must be image/png|jpg|webp' }
 
+  // R442 — sanitize designId so it can't break out of the workspace dir via '../'.
+  const safeDesignId = String(input.designId).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 100)
+  const safeWsId     = String(input.workspaceId).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 100)
+  if (!safeDesignId || !safeWsId) return { ok: false, reason: 'designId/workspaceId became empty after sanitization' }
   const sha = crypto.createHash('sha256').update(input.bytes).digest('hex')
   const safeName = path.basename(input.filename).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 100) || 'design.bin'
   const ext = path.extname(safeName) || '.bin'
-  const wsDir = path.join(STORE_DIR, input.workspaceId)
+  const wsDir = path.join(STORE_DIR, safeWsId)
   try { fs.mkdirSync(wsDir, { recursive: true }) } catch { /* tolerated */ }
-  const stored = path.join(wsDir, `${input.designId}${ext}`)
+  const stored = path.join(wsDir, `${safeDesignId}${ext}`)
+  // Resolve to absolute and verify it stays inside STORE_DIR
+  const storeAbs = path.resolve(STORE_DIR)
+  const storedAbs = path.resolve(stored)
+  if (!storedAbs.startsWith(storeAbs + path.sep)) return { ok: false, reason: 'path traversal blocked' }
   fs.writeFileSync(stored, input.bytes)
 
   await db.execute(sql`
