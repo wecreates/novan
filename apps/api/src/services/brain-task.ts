@@ -716,6 +716,32 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return bulkLoadPins({ workspaceId: ws, pins: p.pins ?? [] })
     },
   },
+  'sales.record': {
+    description: 'R375: Record a sale from any platform (manual entry / webhook). Idempotent on externalSaleId. Auto-fires winner-variant generation. Params: platform, externalSaleId, grossUsd, netUsd?, productUrl?, productName?, occurredAt?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { recordSale } = await import('./r375-cross-platform-sales.js')
+      const p = params as Record<string, unknown>
+      return recordSale({
+        workspaceId:    ws,
+        platform:       String(p['platform'] ?? 'gumroad') as 'gumroad',
+        externalSaleId: String(p['externalSaleId'] ?? ''),
+        grossUsd:       Number(p['grossUsd']) || 0,
+        ...(p['netUsd']      !== undefined ? { netUsd:      Number(p['netUsd']) } : {}),
+        ...(p['productUrl']                 ? { productUrl:  String(p['productUrl']) } : {}),
+        ...(p['productName']                ? { productName: String(p['productName']) } : {}),
+        ...(p['occurredAt']  !== undefined ? { occurredAt:  Number(p['occurredAt']) } : {}),
+      })
+    },
+  },
+  'sales.cross_platform_mrr': {
+    description: 'R375: Cross-platform 30d MRR breakdown by platform + current tier.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { getCrossPlatformMrr } = await import('./r375-cross-platform-sales.js')
+      return getCrossPlatformMrr(ws)
+    },
+  },
   'winner.generate_variants': {
     description: 'R374: Given a winning parent_design_id, generate 3 variants (color-shift / crop / reframe) and queue them. Params: parentDesignId, count?',
     risk: 'low',
@@ -8328,6 +8354,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'account.birthdays', 'design.get',
   'selector.improve', 'selector.outcome', 'selector.stored',
   'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
+  'sales.record', 'sales.cross_platform_mrr',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -8669,6 +8696,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'agent.heartbeat', 'agent.report_event', 'agent.report_failure', 'account.birthdays',
         'selector.improve', 'selector.outcome', 'selector.stored',
         'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
+        'sales.record', 'sales.cross_platform_mrr',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
