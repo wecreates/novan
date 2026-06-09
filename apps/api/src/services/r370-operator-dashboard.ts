@@ -30,6 +30,7 @@ interface DashboardState {
     gapUsd:          number
     percentToNext:   number
     unlockedTactics: string[]
+    nextUnlocks?:    string[]   // R396 — tactics that unlock at next tier
   }
   agent: {
     lastHeartbeat:   number
@@ -161,6 +162,7 @@ async function loadState(workspaceId: string): Promise<DashboardState> {
       gapUsd:          Math.round(ms.gapUsd * 100) / 100,
       percentToNext:   ms.percentToNext,
       unlockedTactics: ms.current.unlockedTactics.slice(0, 5),
+      nextUnlocks:     ms.next?.unlockedTactics.slice(0, 5),
     },
     agent: { lastHeartbeat, uploadsToday, failuresToday },
     pinterest: {
@@ -327,6 +329,7 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
     ${s.ladder.nextTier ? `<div class="mini" style="margin-top:8px">Next: <strong>${escapeHtml(s.ladder.nextTier)}</strong> — gap $${s.ladder.gapUsd.toFixed(2)} (${s.ladder.percentToNext.toFixed(1)}%)</div><div class="bar"><div class="bar-fill" style="width:${s.ladder.percentToNext}%"></div></div>` : '<div class="mini">No next tier — top of ladder</div>'}
     <h2 style="margin-top:16px">Unlocked tactics</h2>
     <ul>${s.ladder.unlockedTactics.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul>
+    ${s.ladder.nextUnlocks && s.ladder.nextUnlocks.length > 0 ? `<h2 style="margin-top:16px">Coming up @ ${escapeHtml(s.ladder.nextTier ?? '')}</h2><ul style="opacity:0.6">${s.ladder.nextUnlocks.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul>` : ''}
   </div>
 
   <div class="card">
