@@ -61,11 +61,19 @@ async function main(): Promise<void> {
       const page = await ctx.newPage()
       await page.goto(d.loginUrl, { waitUntil: 'domcontentloaded' }).catch(() => {})
     }
-    // Wait for operator to close the window (i.e. all pages close)
+    // Wait for operator to close the window. We poll pages.length() instead
+    // of subscribing to the close event because the close event can fire
+    // spuriously during initial page loads. Only consider the window closed
+    // when pages.length() drops to 0 AFTER a 30s grace period from launch.
+    await new Promise<void>(resolve => setTimeout(resolve, 30_000))
     await new Promise<void>((resolve) => {
-      ctx.on('close', () => resolve())
-      // safety timeout: 15 min
-      setTimeout(() => resolve(), 15 * 60 * 1000)
+      const check = setInterval(() => {
+        try {
+          if (ctx.pages().length === 0) { clearInterval(check); resolve() }
+        } catch { clearInterval(check); resolve() }
+      }, 2000)
+      // safety timeout: 30 min
+      setTimeout(() => { clearInterval(check); resolve() }, 30 * 60 * 1000)
     })
     console.log('[agent] login session ended; cookies persisted to', cfg.profilePath)
     return
