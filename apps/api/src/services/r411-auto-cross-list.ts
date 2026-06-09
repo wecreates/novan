@@ -42,6 +42,9 @@ export async function autoCrossListWinners(): Promise<AutoCrossListResult> {
 
   for (const ws of workspaceIds) {
     try {
+      // R443 — skip if operator engaged the autonomous_writes kill switch.
+      const { isAutonomyAllowed } = await import('./r443-autonomy-gate.js')
+      if (!await isAutonomyAllowed(ws)) { out.skipped++; continue }
       const perf = await rankDesignPerformance(ws, 10)
       const winners = perf.designs.filter(d => d.totalUsd >= MIN_USD_TO_CROSS_LIST).slice(0, MAX_WINNERS)
       if (winners.length === 0) continue
@@ -61,8 +64,10 @@ export async function autoCrossListWinners(): Promise<AutoCrossListResult> {
         for (const platform of toAdd) {
           try {
             const listing = await generateListingWithAttribution({
-              workspaceId: ws, platform: platform as 'gumroad',
-              subject, niche: designNiche as 'botanical', style: designStyle as 'watercolor',
+              workspaceId: ws, platform: platform as Parameters<typeof generateListingWithAttribution>[0]['platform'],
+              subject,
+              niche: designNiche as Parameters<typeof generateListingWithAttribution>[0]['niche'],
+              style: designStyle as Parameters<typeof generateListingWithAttribution>[0]['style'],
               designId: cov.designId,
             })
             const r = await enqueue({

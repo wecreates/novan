@@ -942,11 +942,15 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
       'pod status', 'queue depth', 'queue empty', 'queue full',
       'dashboard snapshot',
     ]
+    // R455 — pick a LITE compact snapshot for short/casual queries so we
+    // don't burn ~1k tokens per "what's my MRR" turn. Full snapshot only on
+    // explicit Novan-status phrases.
+    const heavyTriggers = ['novan status', 'novan dashboard', 'novan summary', 'dashboard snapshot']
+    const wantHeavy = heavyTriggers.some(t => msg.includes(t))
     if (triggers.some(t => msg.includes(t))) {
       const { dashboardSnapshot } = await import('./r370-operator-dashboard.js')
       const snap = await dashboardSnapshot(i.workspaceId)
-      // Strip noise; keep only operator-relevant fields
-      const compact = {
+      const compact = wantHeavy ? {
         ts: snap.ts,
         ladder: snap.ladder,
         agent: snap.agent,
@@ -958,9 +962,30 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
         failureClusters: snap.failureClusters?.slice(0, 3),
         disabledPlatforms: snap.disabledPlatforms,
         queueByPlatform: snap.uploads?.queueByPlatform,
+      } : {
+        // LITE: just the headline numbers — ~250 tokens
+        mrr30d: snap.ladder?.mrr30d, tier: snap.ladder?.tier,
+        agent: snap.agent,
+        rate7dUsd: snap.mrrProjection?.rate7dUsdPerDay,
+        topAction: snap.nextActions?.[0]?.title,
+        topDesign: snap.topDesigns?.[0]?.prompt,
+        queueByPlatform: snap.uploads?.queueByPlatform,
       }
-      const json = JSON.stringify(compact, null, 2).slice(0, 4000)
-      novanDashboardBlock = `\n\n## Live Novan POD dashboard (R425 — answer status questions from this, do not invent numbers)\n\n\`\`\`json\n${json}\n\`\`\`\n`
+      const json = JSON.stringify(compact, null, 2).slice(0, wantHeavy ? 4000 : 1200)
+      novanDashboardBlock = `\n\n## Live Novan POD dashboard (R425 ${wantHeavy ? 'full' : 'lite'} — answer status questions from this, do not invent numbers)\n\n\`\`\`json\n${json}\n\`\`\`\n`
+      // R456 — structured event for analytics: track how often + which mode.
+      try {
+        const { db: db2 } = await import('../db/client.js')
+        const { sql: sql2 } = await import('drizzle-orm')
+        const { v7: uuidv7 } = await import('uuid')
+        const id = uuidv7(), trace = uuidv7()
+        await db2.execute(sql2`
+          INSERT INTO events (id, type, workspace_id, payload, trace_id, correlation_id, source, version, created_at)
+          VALUES (${id}, 'chat.dashboard_injected', ${i.workspaceId},
+            ${JSON.stringify({ mode: wantHeavy ? 'full' : 'lite', bytes: json.length })}::jsonb,
+            ${trace}, ${trace}, 'r425-chat-injection', 1, ${Date.now()})
+        `).catch(() => null)
+      } catch { /* tolerated */ }
     }
   } catch { /* tolerated */ }
 

@@ -761,6 +761,16 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return bulkImportSales(ws, rows)
     },
   },
+  'workspace.set_summary_hour': {
+    description: 'R454: Operator preferred daily-summary hour (0-23) in their tz. Default 8.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { hour?: number }
+      if (p.hour === undefined) return { ok: false, reason: 'hour required' }
+      const { setOperatorSummaryHour } = await import('./r437-operator-timezone.js')
+      return setOperatorSummaryHour(ws, Number(p.hour))
+    },
+  },
   'workspace.set_timezone': {
     description: 'R437: Set operator IANA timezone (e.g. America/Chicago). Reschedules daily/weekly pushes to operator local 8am instead of UTC. Params: timezone',
     risk: 'low',

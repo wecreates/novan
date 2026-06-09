@@ -53,11 +53,14 @@ export async function pushDailySummary(): Promise<DailySummaryResult> {
 
   for (const ws of workspaceIds) {
     result.workspaces++
-    // R437 — skip workspaces whose operator local hour isn't ~8am.
+    // R437/R454 — fire when operator's local hour matches their preferred
+    // summary_hour (default 8am, configurable via workspace.set_summary_hour).
     try {
       const localHour = await getOperatorLocalHour(ws)
-      if (localHour !== 8) {
-        result.skipped.push({ workspaceId: ws, reason: `local hour ${localHour} != 8 (tz ${await getOperatorTimezone(ws)})` })
+      const { getOperatorSummaryHour } = await import('./r437-operator-timezone.js')
+      const target = await getOperatorSummaryHour(ws)
+      if (localHour !== target) {
+        result.skipped.push({ workspaceId: ws, reason: `local hour ${localHour} != ${target} (tz ${await getOperatorTimezone(ws)})` })
         continue
       }
     } catch { /* fall through to fire */ }

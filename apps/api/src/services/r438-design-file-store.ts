@@ -15,7 +15,14 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { db } from '../db/client.js'
 
-const STORE_DIR = process.env['NOVAN_DESIGN_STORE'] ?? '/root/novan/design-files'
+// R444 — moved outside the bind-mounted project dir so docker compose
+// down -v can't wipe operator design files. Operator should mount this on
+// a separate volume or back it up via R429b.
+const STORE_DIR = process.env['NOVAN_DESIGN_STORE'] ?? '/var/lib/novan/design-files'
+
+// R445 — concurrency cap on uploads so operator can't exhaust file descriptors.
+let UPLOAD_IN_FLIGHT = 0
+const UPLOAD_MAX = 4
 
 async function ensureTable(): Promise<void> {
   await db.execute(sql`
@@ -48,11 +55,32 @@ export interface StoreResult {
   reason?:   string
 }
 
+// R446 — magic-byte signatures. Reject anything whose first bytes don't
+// match the declared MIME, even if extension says .png.
+function detectMimeFromMagic(bytes: Buffer): string | null {
+  if (bytes.length < 4) return null
+  // PNG: 89 50 4E 47
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png'
+  // JPEG: FF D8 FF
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg'
+  // WebP: "RIFF...WEBP"
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+      && bytes.length >= 12 && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'image/webp'
+  return null
+}
+
 export async function storeDesignFile(input: StoreInput): Promise<StoreResult> {
+  if (UPLOAD_IN_FLIGHT >= UPLOAD_MAX) return { ok: false, reason: 'too many concurrent uploads, retry shortly' }
+  UPLOAD_IN_FLIGHT++
+  try {
   await ensureTable()
   if (!input.designId || !input.bytes || input.bytes.length === 0) return { ok: false, reason: 'designId + bytes required' }
   if (input.bytes.length > 25 * 1024 * 1024) return { ok: false, reason: 'too large (>25MB)' }
-  if (!/^image\/(png|jpe?g|webp)$/i.test(input.mime)) return { ok: false, reason: 'mime must be image/png|jpg|webp' }
+  const sniffed = detectMimeFromMagic(input.bytes)
+  if (!sniffed) return { ok: false, reason: 'unrecognized image format (magic-byte check failed)' }
+  if (sniffed.replace('jpeg','jpg') !== input.mime.replace('jpeg','jpg').toLowerCase() && !(input.mime.toLowerCase() === 'image/jpeg' && sniffed === 'image/jpeg')) {
+    return { ok: false, reason: `declared MIME ${input.mime} doesn't match magic bytes (${sniffed})` }
+  }
 
   // R442 — sanitize designId so it can't break out of the workspace dir via '../'.
   const safeDesignId = String(input.designId).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 100)
@@ -70,9 +98,12 @@ export async function storeDesignFile(input: StoreInput): Promise<StoreResult> {
   if (!storedAbs.startsWith(storeAbs + path.sep)) return { ok: false, reason: 'path traversal blocked' }
   fs.writeFileSync(stored, input.bytes)
 
+  // R447 — persist RELATIVE path (relative to STORE_DIR) so restoring on a
+  // different machine works.
+  const relStored = path.relative(STORE_DIR, stored)
   await db.execute(sql`
     INSERT INTO design_files (workspace_id, design_id, filename, mime, bytes, sha256, stored_path, uploaded_at)
-    VALUES (${input.workspaceId}, ${input.designId}, ${safeName}, ${input.mime}, ${input.bytes.length}, ${sha}, ${stored}, ${Date.now()})
+    VALUES (${input.workspaceId}, ${input.designId}, ${safeName}, ${input.mime}, ${input.bytes.length}, ${sha}, ${relStored}, ${Date.now()})
     ON CONFLICT (workspace_id, design_id) DO UPDATE SET
       filename = EXCLUDED.filename, mime = EXCLUDED.mime, bytes = EXCLUDED.bytes,
       sha256 = EXCLUDED.sha256, stored_path = EXCLUDED.stored_path, uploaded_at = EXCLUDED.uploaded_at
@@ -86,6 +117,7 @@ export async function storeDesignFile(input: StoreInput): Promise<StoreResult> {
   `).catch(() => {/* best effort */})
 
   return { ok: true, url, sha256: sha }
+  } finally { UPLOAD_IN_FLIGHT-- }
 }
 
 export async function readDesignFile(workspaceId: string, designId: string): Promise<{ path: string; mime: string; filename: string } | null> {
@@ -95,6 +127,8 @@ export async function readDesignFile(workspaceId: string, designId: string): Pro
     `)
     const row = (r as unknown as Array<{ stored_path: string; mime: string; filename: string }>)[0]
     if (!row) return null
-    return { path: row.stored_path, mime: row.mime, filename: row.filename }
+    // R447 — stored_path is relative; resolve against STORE_DIR for read.
+    const abs = path.isAbsolute(row.stored_path) ? row.stored_path : path.join(STORE_DIR, row.stored_path)
+    return { path: abs, mime: row.mime, filename: row.filename }
   } catch { return null }
 }

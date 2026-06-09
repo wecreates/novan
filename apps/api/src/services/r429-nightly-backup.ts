@@ -13,7 +13,10 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
-const BACKUP_DIR = process.env['NOVAN_BACKUP_DIR'] ?? '/root/novan/backups'
+// R449 — moved backups outside the project dir so docker compose down -v can't
+// touch them, and so git status stays clean.
+const BACKUP_DIR = process.env['NOVAN_BACKUP_DIR'] ?? '/var/lib/novan/backups'
+const DESIGN_STORE = process.env['NOVAN_DESIGN_STORE'] ?? '/var/lib/novan/design-files'
 const RETENTION_DAYS = Number(process.env['NOVAN_BACKUP_RETENTION_DAYS'] ?? 14)
 const NOVAN_TABLES = [
   'business_revenue', 'design_catalog', 'design_upload_queue',
@@ -24,6 +27,11 @@ const NOVAN_TABLES = [
   'daily_cron_runs', 'daily_summary_pushes', 'weekly_recap_pushes',
   'next_action_pushes',
   'listing_template_outcomes',
+  'design_files',
+  'workspace_settings',
+  // R450 — include events so the agent.upload.failed payloads R421 reads
+  // for selector improvement survive a DB rebuild.
+  'events',
 ]
 
 function todayYYYYMMDD(): string {
@@ -32,12 +40,14 @@ function todayYYYYMMDD(): string {
 }
 
 export interface BackupResult {
-  ok:           boolean
-  path?:        string
-  sizeBytes?:   number
-  durationMs:   number
-  prunedFiles:  string[]
-  error?:       string
+  ok:               boolean
+  path?:            string
+  sizeBytes?:       number
+  durationMs:       number
+  prunedFiles:      string[]
+  designTarPath?:   string
+  designTarBytes?:  number
+  error?:           string
 }
 
 export async function runNightlyBackup(): Promise<BackupResult> {
@@ -68,6 +78,21 @@ export async function runNightlyBackup(): Promise<BackupResult> {
   let sizeBytes = 0
   try { sizeBytes = fs.statSync(file).size } catch { /* tolerated */ }
 
+  // R451 — also tar the design-files dir so R438-uploaded image bytes survive.
+  let designTarPath: string | undefined
+  let designTarBytes = 0
+  try {
+    if (fs.existsSync(DESIGN_STORE)) {
+      designTarPath = path.join(BACKUP_DIR, `novan-designs-${todayYYYYMMDD()}.tar.gz`)
+      await new Promise<void>((resolve, reject) => {
+        const tar = spawn('tar', ['-czf', designTarPath!, '-C', path.dirname(DESIGN_STORE), path.basename(DESIGN_STORE)])
+        tar.on('error', e => reject(e))
+        tar.on('close', code => code === 0 ? resolve() : reject(new Error(`tar exit ${code}`)))
+      })
+      try { designTarBytes = fs.statSync(designTarPath).size } catch { /* tolerated */ }
+    }
+  } catch (e) { console.error('[r429] design tar:', (e as Error).message) }
+
   // Retention: prune files older than RETENTION_DAYS
   const pruned: string[] = []
   try {
@@ -82,5 +107,5 @@ export async function runNightlyBackup(): Promise<BackupResult> {
     }
   } catch { /* tolerated */ }
 
-  return { ok: true, path: file, sizeBytes, durationMs: Date.now() - start, prunedFiles: pruned }
+  return { ok: true, path: file, sizeBytes, durationMs: Date.now() - start, prunedFiles: pruned, designTarPath, designTarBytes }
 }

@@ -36,12 +36,38 @@ export async function getOperatorTimezone(workspaceId: string): Promise<string> 
 
 export async function setOperatorTimezone(workspaceId: string, tz: string): Promise<{ ok: boolean }> {
   await ensureTable()
-  // Validate via Intl.DateTimeFormat
+  // R453 — reject obviously-bogus oversized input before invoking Intl.
+  if (typeof tz !== 'string' || tz.length > 64 || !/^[A-Za-z][A-Za-z0-9_+\-/]+$/.test(tz)) return { ok: false }
   try { new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date()) }
   catch { return { ok: false } }
   await db.execute(sql`
     INSERT INTO workspace_settings (workspace_id, key, value, updated_at)
     VALUES (${workspaceId}, 'timezone', ${tz}, ${Date.now()})
+    ON CONFLICT (workspace_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+  `).catch(() => {/* best effort */})
+  return { ok: true }
+}
+
+/** R454 — operator's preferred daily-summary hour (default 8am). */
+export async function getOperatorSummaryHour(workspaceId: string): Promise<number> {
+  await ensureTable()
+  try {
+    const r = await db.execute(sql`
+      SELECT value FROM workspace_settings WHERE workspace_id = ${workspaceId} AND key = 'summary_hour' LIMIT 1
+    `)
+    const v = (r as unknown as Array<{ value: string }>)[0]?.value
+    const n = Number(v)
+    if (Number.isInteger(n) && n >= 0 && n <= 23) return n
+  } catch { /* tolerated */ }
+  return 8
+}
+
+export async function setOperatorSummaryHour(workspaceId: string, hour: number): Promise<{ ok: boolean }> {
+  await ensureTable()
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) return { ok: false }
+  await db.execute(sql`
+    INSERT INTO workspace_settings (workspace_id, key, value, updated_at)
+    VALUES (${workspaceId}, 'summary_hour', ${String(hour)}, ${Date.now()})
     ON CONFLICT (workspace_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
   `).catch(() => {/* best effort */})
   return { ok: true }

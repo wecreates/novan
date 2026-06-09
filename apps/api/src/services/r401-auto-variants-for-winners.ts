@@ -36,6 +36,9 @@ export async function runAutoVariantsForWinners(): Promise<AutoVariantsResult> {
 
   for (const ws of workspaceIds) {
     try {
+      // R443 — skip if operator engaged the autonomous_writes kill switch.
+      const { isAutonomyAllowed } = await import('./r443-autonomy-gate.js')
+      if (!await isAutonomyAllowed(ws)) { result.skipped++; continue }
       // R428 — bail on budget exhaustion before burning image-gen credits.
       const { isBudgetExhausted, recordSpend } = await import('./r428-ai-spend-tracker.js')
       if (await isBudgetExhausted(ws)) { result.skipped++; continue }

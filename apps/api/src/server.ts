@@ -605,8 +605,14 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/dashboard
 })
 
 // R432 — operator quick-action click dedup. Keys are (workspace|action),
-// values are last-fired timestamp. Bounded by # of distinct actions × workspaces.
+// values are last-fired timestamp. R452 — periodic eviction so long-running
+// processes don't accumulate stale keys (bounded but tidy).
 const ACTION_DEDUP = new Map<string, number>()
+const ACTION_DEDUP_TTL_MS = 5 * 60_000
+setInterval(() => {
+  const cutoff = Date.now() - ACTION_DEDUP_TTL_MS
+  for (const [k, ts] of ACTION_DEDUP) if (ts < cutoff) ACTION_DEDUP.delete(k)
+}, 60_000).unref()
 
 // R427 — register form-urlencoded parser at app scope so dashboard POST
 // forms work whether or not the Gumroad webhook route registered it first.
@@ -1022,14 +1028,17 @@ await app.register(webhooksRoutes,      { prefix: '/api/v1/webhooks' })
 await registerGumroadWebhook(app)        // R389 — public, token-gated POST /api/v1/webhooks/gumroad/sale
 
 // R438 — design file store. POST uploads a file body for a design id; GET serves it.
-app.post<{ Querystring: { token?: string; workspace_id?: string; design_id?: string; filename?: string }; Body: Buffer }>('/api/v1/designs/upload', { bodyLimit: 30 * 1024 * 1024 }, async (req, reply) => {
+// R448 — token + design_id + workspace_id come from HEADERS instead of query
+// so they don't leak via Referer. Body is the raw image bytes.
+app.post<{ Body: Buffer }>('/api/v1/designs/upload', { bodyLimit: 30 * 1024 * 1024 }, async (req, reply) => {
   const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
-  if (!req.query.token || (ops && req.query.token !== ops)) return reply.code(401).send({ error: 'unauthorized' })
-  const ws = req.query.workspace_id ?? 'default'
-  const designId = String(req.query.design_id ?? '').trim()
-  if (!designId) return reply.code(400).send({ error: 'design_id query required' })
+  const token = String(req.headers['x-novan-token'] ?? '')
+  if (!token || (ops && token !== ops)) return reply.code(401).send({ error: 'unauthorized' })
+  const ws = String(req.headers['x-novan-workspace'] ?? 'default')
+  const designId = String(req.headers['x-novan-design-id'] ?? '').trim()
+  if (!designId) return reply.code(400).send({ error: 'X-Novan-Design-Id header required' })
   const mime = String(req.headers['content-type'] ?? 'application/octet-stream')
-  const filename = String(req.query.filename ?? 'design.bin')
+  const filename = String(req.headers['x-novan-filename'] ?? 'design.bin')
   const { storeDesignFile } = await import('./services/r438-design-file-store.js')
   const buf = req.body as Buffer
   const r = await storeDesignFile({ workspaceId: ws, designId, filename, mime, bytes: buf })
