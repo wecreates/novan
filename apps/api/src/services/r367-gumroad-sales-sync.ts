@@ -135,6 +135,25 @@ export async function syncGumroadSales(workspaceId: string, businessId = DEFAULT
     await emitTierUnlock(workspaceId, businessId, tierBefore, tierAfter, after30dUsd)
   }
 
+  // R374 — if any new sales landed, trigger variant generation for the winning designs
+  if (persisted > 0) {
+    try {
+      const newSaleRows = await db.execute(sql`
+        SELECT external_sale_id FROM business_revenue
+        WHERE workspace_id = ${workspaceId} AND business_id = ${businessId} AND source = ${SOURCE}
+          AND recorded_at >= ${lastAtMs || (Date.now() - 7 * 24 * 3600 * 1000)}
+      `)
+      const newIds = (newSaleRows as Array<{ external_sale_id: string }>).map(r => r.external_sale_id).filter(Boolean)
+      if (newIds.length > 0) {
+        const { reactToNewSales } = await import('./r374-winner-variant-generator.js')
+        const r = await reactToNewSales(workspaceId, newIds)
+        console.log(`[r367] R374 winner-variant generator: triggered=${r.triggered} skipped=${r.skipped} variants=${r.totalVariants}`)
+      }
+    } catch (e) {
+      console.error('[r367] R374 winner-variant trigger failed:', (e as Error).message)
+    }
+  }
+
   return {
     ok: true, fetched, persisted,
     newTotalUsd: after30dUsd, tierBefore, tierAfter, tierUnlocked,

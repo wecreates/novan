@@ -716,6 +716,15 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return bulkLoadPins({ workspaceId: ws, pins: p.pins ?? [] })
     },
   },
+  'winner.generate_variants': {
+    description: 'R374: Given a winning parent_design_id, generate 3 variants (color-shift / crop / reframe) and queue them. Params: parentDesignId, count?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { generateWinnerVariants } = await import('./r374-winner-variant-generator.js')
+      const p = params as { parentDesignId?: string; count?: number }
+      return generateWinnerVariants({ workspaceId: ws, parentDesignId: p.parentDesignId ?? '', ...(p.count !== undefined ? { count: p.count } : {}) })
+    },
+  },
   'sales.sync_gumroad': {
     description: 'R367: Pull recent Gumroad sales, persist to business_revenue, auto-progress goal-ladder tier. Params: businessId?',
     risk: 'low',
@@ -8318,7 +8327,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'agent.heartbeat', 'agent.report_event', 'agent.report_failure',
   'account.birthdays', 'design.get',
   'selector.improve', 'selector.outcome', 'selector.stored',
-  'sales.sync_gumroad', 'sales.last_tier_unlock',
+  'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -8659,7 +8668,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'upload_queue.add', 'upload_queue.next', 'upload_queue.stats', 'upload_queue.mark_uploaded',
         'agent.heartbeat', 'agent.report_event', 'agent.report_failure', 'account.birthdays',
         'selector.improve', 'selector.outcome', 'selector.stored',
-        'sales.sync_gumroad', 'sales.last_tier_unlock',
+        'sales.sync_gumroad', 'sales.last_tier_unlock', 'winner.generate_variants',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
