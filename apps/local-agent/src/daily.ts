@@ -60,6 +60,21 @@ async function main(): Promise<void> {
   const startedAt = Date.now()
 
   console.log('[daily] ' + new Date().toISOString())
+  console.log('[daily] step 0: sync Gumroad sales + check goal-ladder tier')
+  try {
+    const res = await fetch(`${cfg.apiBase}/api/v1/brain/task`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${cfg.opsToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace_id: cfg.workspaceId, plan: [{ op: 'sales.sync_gumroad', params: {} }] }),
+    })
+    if (res.ok) {
+      const j = await res.json() as { data?: { results?: Array<{ ok: boolean; data: { fetched?: number; persisted?: number; tierBefore?: string; tierAfter?: string; tierUnlocked?: boolean; newTotalUsd?: number } }> } }
+      const d = j.data?.results?.[0]?.data ?? {}
+      console.log(`[daily] sales: persisted=${d.persisted ?? 0} 30d_mrr=$${(d.newTotalUsd ?? 0).toFixed(2)} tier=${d.tierAfter ?? '?'}${d.tierUnlocked ? ` (🎉 ${d.tierBefore} → ${d.tierAfter})` : ''}`)
+    } else {
+      console.log(`[daily] sales sync skipped: HTTP ${res.status}`)
+    }
+  } catch (e) { console.log(`[daily] sales sync skipped: ${(e as Error).message}`) }
   console.log('[daily] step 1: fire trends.run_pipeline')
 
   let pipe: Awaited<ReturnType<typeof callPipeline>>

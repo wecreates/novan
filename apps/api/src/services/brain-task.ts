@@ -653,6 +653,23 @@ export const OPERATIONS: Record<string, OpSpec> = {
       })
     },
   },
+  'sales.sync_gumroad': {
+    description: 'R367: Pull recent Gumroad sales, persist to business_revenue, auto-progress goal-ladder tier. Params: businessId?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const { syncGumroadSales } = await import('./r367-gumroad-sales-sync.js')
+      const p = params as { businessId?: string }
+      return syncGumroadSales(ws, p.businessId ?? 'cyzor_creations')
+    },
+  },
+  'sales.last_tier_unlock': {
+    description: 'R367: Most-recent tier-unlock event for this workspace.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { lastSyncSummary } = await import('./r367-gumroad-sales-sync.js')
+      return lastSyncSummary(ws)
+    },
+  },
   'selector.improve': {
     description: 'R366: When a driver crashes on a missing selector, post page HTML + screenshot + error → LLM proposes new selectors. Params: platform, step, errorMessage, pageUrl, pageHtmlExcerpt, screenshotBase64?, previousSelectors?',
     risk: 'low',
@@ -8238,6 +8255,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'agent.heartbeat', 'agent.report_event', 'agent.report_failure',
   'account.birthdays', 'design.get',
   'selector.improve', 'selector.outcome', 'selector.stored',
+  'sales.sync_gumroad', 'sales.last_tier_unlock',
 ])
 
 /** R146.73 — recursive scan for <untrusted_content tag in any param
@@ -8576,6 +8594,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'upload_queue.add', 'upload_queue.next', 'upload_queue.stats', 'upload_queue.mark_uploaded',
         'agent.heartbeat', 'agent.report_event', 'agent.report_failure', 'account.birthdays',
         'selector.improve', 'selector.outcome', 'selector.stored',
+        'sales.sync_gumroad', 'sales.last_tier_unlock',
         'briefing.daily_uploads', 'briefing.velocity_status',
         'goal.ladder', 'goal.classify_tier', 'goal.business_status',
         'trends.list_all', 'trends.pick_batch', 'trends.run_pipeline',
