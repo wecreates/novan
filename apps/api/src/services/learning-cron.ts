@@ -1769,6 +1769,17 @@ async function runFailedUploadRequeue(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'failed_requeue', error: (e as Error).message }) }
 }
 
+// R417 — daily 15:00 UTC zero-sale listing refresh. Pulls items uploaded
+// >30d with 0 sales and re-enqueues with refreshed listing copy via R380.
+async function runZeroSaleRelisting(): Promise<void> {
+  try {
+    if (new Date().getUTCHours() !== 15) return
+    const { relistZeroSaleListings } = await import('./r417-zero-sale-relisting.js')
+    const r = await relistZeroSaleListings()
+    if (r.relisted.length > 0) await emit('cron.zero_sale_relisted', { count: r.relisted.length })
+  } catch (e) { await emit('cron.error', { task: 'zero_sale_relisting', error: (e as Error).message }) }
+}
+
 // R413 — Sunday 14:00 UTC weekly recap push. Idempotent per ISO week.
 async function runWeeklyRecapPush(): Promise<void> {
   try {
@@ -2390,6 +2401,8 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runPlatformAutoDisable,         60 * 60_000))
   // R413 — weekly recap push, hourly tick gated to Sun 14:00 UTC.
   handles.push(scheduleJittered(runWeeklyRecapPush,             60 * 60_000))
+  // R417 — zero-sale listing refresh, hourly tick gated to 15:00 UTC.
+  handles.push(scheduleJittered(runZeroSaleRelisting,           60 * 60_000))
   // R402 — failed-upload auto-requeue, hourly tick.
   handles.push(scheduleJittered(runFailedUploadRequeue,         60 * 60_000))
   // R403 — per-platform first-sale detector, hourly tick.
