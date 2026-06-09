@@ -141,6 +141,25 @@ export async function markUploaded(opts: {
           SELECT design_id FROM design_upload_queue WHERE id = ${opts.queueItemId}
         )
     `)
+    // R393 — auto-enqueue Pinterest pins for newly-live listings.
+    // Only fires for gumroad (the only platform whose URL maps cleanly to a pin link target).
+    if (opts.externalUrl) {
+      try {
+        const rows = await db.execute(sql`
+          SELECT platform, design_id, title FROM design_upload_queue WHERE id = ${opts.queueItemId} LIMIT 1
+        `)
+        const r = (rows as Array<{ platform: string; design_id: string; title: string }>)[0]
+        if (r && r.platform === 'gumroad') {
+          const { autoPinFromListing } = await import('./r393-auto-pin-from-upload.js')
+          void autoPinFromListing({
+            workspaceId: opts.workspaceId,
+            designId:    r.design_id,
+            title:       r.title,
+            externalUrl: opts.externalUrl,
+          })
+        }
+      } catch { /* tolerated */ }
+    }
     return { ok: true }
   } catch (e) {
     return { ok: false, reason: (e as Error).message.slice(0, 200) }
