@@ -49,6 +49,7 @@ import { schedulerRoutes }       from './routes/scheduler.js'
 import { searchRoutes }          from './routes/search.js'
 import { webhooksRoutes }        from './routes/webhooks.js'
 import { registerGumroadWebhook } from './routes/gumroad-webhook.js'  // R389
+import { registerTikTokWebhook }  from './routes/tiktok-webhook.js'   // R536
 import { workersRoutes }        from './routes/workers.js'
 import { authPlugin }           from './plugins/auth.js'
 import { requestContextPlugin } from './plugins/requestContext.js'
@@ -348,6 +349,7 @@ const isPublic = (url: string): boolean => {
   if (url === '/api/v1/auth/bootstrap')                                return true
   if (/^\/api\/v1\/webhooks\/[a-z0-9-]+\/trigger$/i.test(url))         return true
   if (url === '/api/v1/webhooks/gumroad/sale')                         return true  // R389 — token in query param
+  if (url === '/api/v1/webhooks/tiktok/order')                         return true  // R536 — token in query + optional HMAC
   if (url === '/api/v1/designs/upload')                                return true  // R464 — R438 upload, X-Novan-Token in header
   if (/^\/api\/v1\/designs\/[A-Za-z0-9._-]+\/file$/.test(url))         return true  // R464 — R438 GET (workspace-scoped reads, considered low-risk)
   // R146.188 — admin brain bridge has its own loopback+token auth.
@@ -1038,6 +1040,7 @@ await app.register(schedulerRoutes,     { prefix: '/api/v1/scheduler' })
 await app.register(searchRoutes,        { prefix: '/api/v1/search' })
 await app.register(webhooksRoutes,      { prefix: '/api/v1/webhooks' })
 await registerGumroadWebhook(app)        // R389 — public, token-gated POST /api/v1/webhooks/gumroad/sale
+await registerTikTokWebhook(app)         // R536 — public, token-gated POST /api/v1/webhooks/tiktok/order
 
 // R503 — CSV export of business_revenue for accountant / Schedule C
 app.get<{ Querystring: { token?: string; workspace?: string; since?: string; until?: string } }>('/ops/export/revenue.csv', async (req, reply) => {
@@ -1069,7 +1072,10 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/buyers/ex
 })
 
 // R515 — GDPR / CCPA buyer-email deletion endpoint.
-app.post<{ Querystring: { token?: string; workspace?: string }; Body: { email?: string } }>('/ops/gdpr/delete', async (req, reply) => {
+// R535 — strict rate limit: this rewrites user data; deserves stricter cap than global 200/min.
+app.post<{ Querystring: { token?: string; workspace?: string }; Body: { email?: string } }>('/ops/gdpr/delete', {
+  config: { rateLimit: { max: 20, timeWindow: '1 hour' } },
+}, async (req, reply) => {
   const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
   if (!req.query.token || (ops && req.query.token !== ops)) return reply.code(401).send({ error: 'unauthorized' })
   const ws = req.query.workspace ?? 'default'
@@ -1080,7 +1086,10 @@ app.post<{ Querystring: { token?: string; workspace?: string }; Body: { email?: 
 })
 
 // R516 — DMCA takedown drafter.
-app.post<{ Querystring: { token?: string; workspace?: string }; Body: { offendingUrl?: string; platform?: string; originalDesignId?: string } }>('/ops/dmca/file', async (req, reply) => {
+// R535 — strict rate-limit since each call writes a claim row.
+app.post<{ Querystring: { token?: string; workspace?: string }; Body: { offendingUrl?: string; platform?: string; originalDesignId?: string } }>('/ops/dmca/file', {
+  config: { rateLimit: { max: 30, timeWindow: '1 hour' } },
+}, async (req, reply) => {
   const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
   if (!req.query.token || (ops && req.query.token !== ops)) return reply.code(401).send({ error: 'unauthorized' })
   const ws = req.query.workspace ?? 'default'
