@@ -45,9 +45,10 @@ export interface BackupResult {
   sizeBytes?:       number
   durationMs:       number
   prunedFiles:      string[]
-  designTarPath?:   string
-  designTarBytes?:  number
-  error?:           string
+  designTarPath?:    string
+  designTarBytes?:   number
+  offsiteUploaded?:  number
+  error?:            string
 }
 
 export async function runNightlyBackup(): Promise<BackupResult> {
@@ -107,5 +108,13 @@ export async function runNightlyBackup(): Promise<BackupResult> {
     }
   } catch { /* tolerated */ }
 
-  return { ok: true, path: file, sizeBytes, durationMs: Date.now() - start, prunedFiles: pruned, designTarPath, designTarBytes }
+  // R508 — push to off-site bucket if configured
+  let offsiteUploaded = 0
+  try {
+    const { syncBackupsOffsite } = await import('./r508-offsite-backup.js')
+    const r = await syncBackupsOffsite(BACKUP_DIR)
+    offsiteUploaded = r.uploaded.length
+  } catch (e) { console.error('[r429] offsite sync:', (e as Error).message) }
+
+  return { ok: true, path: file, sizeBytes, durationMs: Date.now() - start, prunedFiles: pruned, designTarPath, designTarBytes, offsiteUploaded }
 }

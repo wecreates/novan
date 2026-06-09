@@ -336,6 +336,8 @@ const isPublic = (url: string): boolean => {
   if (url === '/healthz'        || url.startsWith('/healthz/'))        return true  // R146.263 — k8s/probes expect /healthz
   if (url === '/ops/dashboard'   || url.startsWith('/ops/dashboard'))   return true  // R370 — dashboard + R418 actions have their own query-param token check
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
+  if (url.startsWith('/ops/gdpr/'))                                     return true  // R515 — token in query
+  if (url.startsWith('/ops/dmca/'))                                     return true  // R516 — token in query
   if (url === '/console.html' || url === '/console')                    return true
   if (url === '/brain.html'   || url === '/brain')                      return true
   if (url === '/api/v1/health'  || url.startsWith('/api/v1/health/'))  return true
@@ -1047,6 +1049,32 @@ app.get<{ Querystring: { token?: string; workspace?: string; since?: string; unt
     .type('text/csv')
     .header('Content-Disposition', `attachment; filename="novan-revenue-${ws}-${new Date().toISOString().slice(0, 10)}.csv"`)
     .send(csv)
+})
+
+// R515 — GDPR / CCPA buyer-email deletion endpoint.
+app.post<{ Querystring: { token?: string; workspace?: string }; Body: { email?: string } }>('/ops/gdpr/delete', async (req, reply) => {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  if (!req.query.token || (ops && req.query.token !== ops)) return reply.code(401).send({ error: 'unauthorized' })
+  const ws = req.query.workspace ?? 'default'
+  const email = String(req.body?.email ?? '').trim()
+  if (!email) return reply.code(400).send({ error: 'email required in body' })
+  const { gdprDeleteEmail } = await import('./services/r515-gdpr-delete.js')
+  return reply.send(await gdprDeleteEmail(ws, email))
+})
+
+// R516 — DMCA takedown drafter.
+app.post<{ Querystring: { token?: string; workspace?: string }; Body: { offendingUrl?: string; platform?: string; originalDesignId?: string } }>('/ops/dmca/file', async (req, reply) => {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  if (!req.query.token || (ops && req.query.token !== ops)) return reply.code(401).send({ error: 'unauthorized' })
+  const ws = req.query.workspace ?? 'default'
+  const url = String(req.body?.offendingUrl ?? '').trim()
+  if (!url) return reply.code(400).send({ error: 'offendingUrl required in body' })
+  const { fileDmcaClaim } = await import('./services/r516-dmca.js')
+  const r = await fileDmcaClaim({
+    workspaceId: ws, offendingUrl: url,
+    platform: req.body?.platform, originalDesignId: req.body?.originalDesignId,
+  })
+  return reply.send(r)
 })
 
 // R438 — design file store. POST uploads a file body for a design id; GET serves it.

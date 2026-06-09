@@ -883,6 +883,84 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return selfTestGumroadWebhook()
     },
   },
+  'platforms.earnings': {
+    description: 'R511/R512: Per-source revenue + estimated net-after-fees. Params: sinceDays?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { sinceDays?: number }
+      const since = p.sinceDays ? Date.now() - p.sinceDays * 86_400_000 : 0
+      const { platformEarningsBreakdown } = await import('./r511-platform-earnings-margin.js')
+      return platformEarningsBreakdown(ws, since)
+    },
+  },
+  'metrics.period_comparison': {
+    description: 'R513: WoW + MoM uploads / sales / gross with delta percentages.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { periodComparison } = await import('./r513-wow-mom-comparison.js')
+      return periodComparison(ws)
+    },
+  },
+  'tax.thresholds': {
+    description: 'R510: YTD gross by source vs 1099-K thresholds; fires push at 80% and 100%.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { watchTaxThresholds } = await import('./r510-tax-threshold-watch.js')
+      return watchTaxThresholds()
+    },
+  },
+  'imagegen.provider_health': {
+    description: 'R509: Last seen health per image-gen provider (fal/replicate/stability/openai).',
+    risk: 'low',
+    handler: async () => {
+      const { healthyProviderOrder } = await import('./r509-imagegen-failover.js')
+      return { order: await healthyProviderOrder() }
+    },
+  },
+  'backup.offsite_sync': {
+    description: 'R508: Force an offsite S3 sync of the latest local backup files. Requires NOVAN_OFFSITE_S3_* env.',
+    risk: 'low',
+    handler: async () => {
+      const { syncBackupsOffsite } = await import('./r508-offsite-backup.js')
+      return syncBackupsOffsite()
+    },
+  },
+  'gdpr.delete_email': {
+    description: 'R515: GDPR/CCPA — redact a buyer email from all stored rows. Params: email',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { email?: string }
+      if (!p.email) throw new Error('gdpr.delete_email: email required')
+      const { gdprDeleteEmail } = await import('./r515-gdpr-delete.js')
+      return gdprDeleteEmail(ws, p.email)
+    },
+  },
+  'dmca.file': {
+    description: 'R516: Record a DMCA claim + return draft notice text. Params: offendingUrl, platform?, originalDesignId?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { offendingUrl?: string; platform?: string; originalDesignId?: string }
+      if (!p.offendingUrl) throw new Error('dmca.file: offendingUrl required')
+      const { fileDmcaClaim } = await import('./r516-dmca.js')
+      return fileDmcaClaim({ workspaceId: ws, offendingUrl: p.offendingUrl, platform: p.platform, originalDesignId: p.originalDesignId })
+    },
+  },
+  'dmca.list': {
+    description: 'R516: Recent DMCA claims for this workspace.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { listDmcaClaims } = await import('./r516-dmca.js')
+      return { claims: await listDmcaClaims(ws) }
+    },
+  },
+  'buyers.optin_count': {
+    description: 'R517: How many opted-in buyer emails we hold for this workspace.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { countOptIns } = await import('./r517-buyer-email-optin.js')
+      return { count: await countOptIns(ws) }
+    },
+  },
   'failures.cluster': {
     description: 'R388: Top recurring agent failures in last 7d, with normalized signature + suggested fix per cluster.',
     risk: 'low',
@@ -8657,6 +8735,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
   'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
   'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights', 'platforms.list_disabled', 'mrr.project', 'sales.bulk_import', 'session.touch', 'session.ages', 'webhook.self_test',
+  'platforms.earnings', 'metrics.period_comparison', 'tax.thresholds', 'imagegen.provider_health', 'backup.offsite_sync', 'dmca.list', 'buyers.optin_count',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -9001,6 +9080,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'sales.record', 'sales.cross_platform_mrr', 'capability.self_test',
         'listing.record_upload', 'listing.record_sale', 'listing.best_template', 'listing.rankings',
         'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights', 'platforms.list_disabled', 'mrr.project', 'sales.bulk_import', 'session.touch', 'session.ages', 'webhook.self_test',
+  'platforms.earnings', 'metrics.period_comparison', 'tax.thresholds', 'imagegen.provider_health', 'backup.offsite_sync', 'dmca.list', 'buyers.optin_count',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
