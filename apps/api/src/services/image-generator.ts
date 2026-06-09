@@ -462,6 +462,21 @@ export async function generateImage(input: GenerateInput): Promise<GenerateResul
     }
   }
 
+  // 3a. R524 — workspace-level daily-budget gate (R428). Was previously
+  // only enforced by r382 daily cron, so ad-hoc image-gen from chat / MCP /
+  // direct API bypassed the cap. Now every call checks first.
+  try {
+    const { isBudgetExhausted } = await import('./r428-ai-spend-tracker.js')
+    if (await isBudgetExhausted(input.workspaceId)) {
+      await db.update(imageGenerations).set({
+        status: 'blocked', blockedReason: 'daily AI budget exhausted (R428)',
+        completedAt: Date.now(),
+      }).where(eq(imageGenerations.id, id))
+      await emit(input.workspaceId, 'image.blocked', { id, reason: 'daily_budget_exhausted' })
+      return { id, status: 'blocked' as const, costEstimateUsd: 0, blockedReason: 'daily AI budget exhausted', provider: input.provider }
+    }
+  } catch { /* tolerated — fail open if tracker can't read */ }
+
   // 3. Budget guard
   const estimate = estimateCostUsd(input.provider, input)
   if (input.budgetCapUsd !== undefined && estimate > input.budgetCapUsd) {
@@ -493,6 +508,12 @@ export async function generateImage(input: GenerateInput): Promise<GenerateResul
     // shows image-gen alongside chat / voice / vision spend. Without
     // this row, the operator's budget report shows $0 for image-gen
     // even though image_generations.actualCostUsd was set.
+    // R524 — also feed the R428 daily-spend bucket so the budget gate above
+    // sees this call on subsequent invocations.
+    try {
+      const { recordSpend } = await import('./r428-ai-spend-tracker.js')
+      await recordSpend(input.workspaceId, 'image_gen', Math.round(estimate * 100))
+    } catch { /* tolerated */ }
     const { recordAiUsage } = await import('./ai-cost-tracker.js')
     recordAiUsage({
       workspaceId:  input.workspaceId,
