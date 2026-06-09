@@ -46,6 +46,11 @@ interface DashboardState {
   activity: Array<{ ts: number; type: string; summary: string }>     // R379 — live activity feed
   nextActions: Array<{ id: string; title: string; detail: string; score: number; category: string }>  // R385
   failureClusters: Array<{ platform: string; signature: string; count: number; isLivePattern: boolean; suggestedFix: string; lastSeen: number }>  // R388
+  sparklines: {                                                                          // R394
+    uploadsPerDay: number[]   // 14 days, oldest→newest
+    salesPerDay:   number[]
+    mrrPerDay:     number[]   // cumulative USD per day
+  }
 }
 
 async function loadState(workspaceId: string): Promise<DashboardState> {
@@ -198,6 +203,40 @@ async function loadState(workspaceId: string): Promise<DashboardState> {
         }))
       } catch { return [] }
     })(),
+    sparklines: await (async () => {
+      const empty = Array(14).fill(0)
+      const days = 14
+      const dayMs2 = 24 * 60 * 60 * 1000
+      const start = Date.now() - days * dayMs2
+      try {
+        const ur = await db.execute(sql`
+          SELECT FLOOR((uploaded_at - ${start}) / ${dayMs2})::int AS bucket, COUNT(*)::int AS n
+          FROM design_upload_queue
+          WHERE workspace_id = ${workspaceId} AND status = 'uploaded' AND uploaded_at >= ${start}
+          GROUP BY bucket
+        `).catch(() => [] as unknown[])
+        const u: number[] = [...empty]
+        for (const r of (ur as Array<{ bucket: number; n: number }>)) {
+          const b = Number(r.bucket); if (b >= 0 && b < days) u[b] = Number(r.n)
+        }
+        const sr = await db.execute(sql`
+          SELECT FLOOR((recorded_at - ${start}) / ${dayMs2})::int AS bucket,
+                 COUNT(*)::int AS n,
+                 COALESCE(SUM(net_usd), 0)::float AS usd
+          FROM business_revenue
+          WHERE workspace_id = ${workspaceId} AND recorded_at >= ${start}
+          GROUP BY bucket
+        `).catch(() => [] as unknown[])
+        const sd: number[] = [...empty]
+        const m:  number[] = [...empty]
+        for (const r of (sr as Array<{ bucket: number; n: number; usd: number }>)) {
+          const b = Number(r.bucket); if (b >= 0 && b < days) { sd[b] = Number(r.n); m[b] = Number(r.usd) }
+        }
+        return { uploadsPerDay: u, salesPerDay: sd, mrrPerDay: m }
+      } catch {
+        return { uploadsPerDay: empty, salesPerDay: empty, mrrPerDay: empty }
+      }
+    })(),
   }
 }
 
@@ -260,6 +299,26 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
 </div>` : ''}
 
 <div class="grid">
+
+  <div class="card" style="grid-column: 1 / -1">
+    <h2>Trends — last 14 days (R394)</h2>
+    ${(() => {
+      const spark = (data: number[], color: string): string => {
+        const w = 280, h = 36, n = data.length
+        const max = Math.max(...data, 1)
+        const pts = data.map((v, i) => `${(i / (n - 1)) * w},${h - (v / max) * (h - 2) - 1}`).join(' ')
+        return `<svg width="${w}" height="${h}" style="vertical-align:middle"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2"/></svg>`
+      }
+      const sumU = s.sparklines.uploadsPerDay.reduce((a, b) => a + b, 0)
+      const sumS = s.sparklines.salesPerDay.reduce((a, b) => a + b, 0)
+      const sumM = s.sparklines.mrrPerDay.reduce((a, b) => a + b, 0)
+      return `<table style="width:100%">
+        <tr><td style="width:120px"><div class="stat-lbl">Uploads</div><div class="stat-val" style="font-size:18px">${sumU}</div></td><td>${spark(s.sparklines.uploadsPerDay, '#3b82f6')}</td></tr>
+        <tr><td><div class="stat-lbl">Sales</div><div class="stat-val" style="font-size:18px">${sumS}</div></td><td>${spark(s.sparklines.salesPerDay, '#86efac')}</td></tr>
+        <tr><td><div class="stat-lbl">Revenue</div><div class="stat-val" style="font-size:18px">$${sumM.toFixed(2)}</div></td><td>${spark(s.sparklines.mrrPerDay, '#fbbf24')}</td></tr>
+      </table>`
+    })()}
+  </div>
 
   <div class="card">
     <h2>Goal-Ladder Tier</h2>
