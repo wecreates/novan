@@ -56,6 +56,8 @@ interface DashboardState {
     rateChangePct:   number
     projections:     Array<{ tier: string; daysToReach: number | null; reachableDate: string | null }>
   }
+  cronHealth: Array<{ name: string; lastRanAt: number; lastStatus: string; lastDurationMs: number; lastError: string | null; staleHours: number }>  // R423
+  disabledPlatforms: Array<{ platform: string; disabledAt: number; reason: string }>      // R424
   sparklines: {                                                                          // R394
     uploadsPerDay: number[]   // 14 days, oldest→newest
     salesPerDay:   number[]
@@ -212,6 +214,22 @@ export async function loadState(workspaceId: string): Promise<DashboardState> {
           count: c.count, isLivePattern: c.isLivePattern,
           suggestedFix: c.suggestedFix, lastSeen: c.lastSeen,
         }))
+      } catch { return [] }
+    })(),
+    cronHealth: await (async () => {
+      try {
+        const { cronHealthSnapshot } = await import('./r423-cron-health.js')
+        const r = await cronHealthSnapshot()
+        return r.rows.map(x => ({
+          name: x.name, lastRanAt: x.lastRanAt, lastStatus: x.lastStatus,
+          lastDurationMs: x.lastDurationMs, lastError: x.lastError, staleHours: x.staleHours,
+        }))
+      } catch { return [] }
+    })(),
+    disabledPlatforms: await (async () => {
+      try {
+        const { listDisabledPlatforms } = await import('./r412-platform-auto-disable.js')
+        return listDisabledPlatforms(workspaceId)
       } catch { return [] }
     })(),
     mrrProjection: await (async () => {
@@ -477,6 +495,28 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
       <tbody>
         ${s.stuck.map(i => `<tr><td>${escapeHtml(i.platform)}</td><td class="mini">${i.ageHours}h</td><td>${escapeHtml(i.title)}</td></tr>`).join('')}
       </tbody>
+    </table>
+  </div>` : ''}
+
+  ${s.disabledPlatforms.length > 0 ? `<div class="card" style="grid-column: 1 / -1">
+    <h2>Disabled platforms (R424)</h2>
+    <table>
+      <thead><tr><th>Platform</th><th>Disabled</th><th>Reason</th></tr></thead>
+      <tbody>${s.disabledPlatforms.map(p => `<tr><td>${escapeHtml(p.platform)}</td><td class="mini">${ago(p.disabledAt)}</td><td class="mini">${escapeHtml(p.reason)}</td></tr>`).join('')}</tbody>
+    </table>
+  </div>` : ''}
+
+  ${s.cronHealth.length > 0 ? `<div class="card" style="grid-column: 1 / -1">
+    <h2>Autonomous cron health (R423)</h2>
+    <table>
+      <thead><tr><th>Cron</th><th>Last run</th><th>Status</th><th>Duration</th><th>Note</th></tr></thead>
+      <tbody>${s.cronHealth.map(c => `<tr>
+        <td>${escapeHtml(c.name)}</td>
+        <td class="mini">${ago(c.lastRanAt)}</td>
+        <td>${c.lastStatus === 'ok' ? '<span class="pill pill-up">ok</span>' : '<span class="pill pill-fail">err</span>'}</td>
+        <td class="mini">${c.lastDurationMs}ms</td>
+        <td class="mini">${escapeHtml(c.lastError ?? (c.staleHours > 25 ? `stale ${c.staleHours}h` : ''))}</td>
+      </tr>`).join('')}</tbody>
     </table>
   </div>` : ''}
 

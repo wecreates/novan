@@ -50,7 +50,7 @@ export async function relistZeroSaleListings(): Promise<RelistResult> {
          )
        LIMIT 100
     `)
-    candidates = r as typeof candidates
+    candidates = r as unknown as typeof candidates
   } catch { /* tolerated */ }
   out.scanned = candidates.length
 

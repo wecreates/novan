@@ -1791,6 +1791,15 @@ async function runWeeklyRecapPush(): Promise<void> {
   } catch (e) { await emit('cron.error', { task: 'weekly_recap_push', error: (e as Error).message }) }
 }
 
+// R422 — every 6h, re-enable platforms disabled >72h ago for a probe attempt.
+async function runPlatformAutoReenable(): Promise<void> {
+  try {
+    const { autoReenableProbe } = await import('./r412-platform-auto-disable.js')
+    const r = await autoReenableProbe()
+    if (r.probed.length > 0) await emit('cron.platforms_reenabled', { count: r.probed.length, platforms: r.probed })
+  } catch (e) { await emit('cron.error', { task: 'platform_auto_reenable', error: (e as Error).message }) }
+}
+
 // R412 — hourly platform auto-disable. Catches broken drivers before they
 // burn pipeline budget on failures-only paths.
 async function runPlatformAutoDisable(): Promise<void> {
@@ -2383,30 +2392,41 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runWmDecaySweep,                INTERVALS.wmDecay))
   handles.push(scheduleJittered(runBrainAlertTick,              INTERVALS.brainAlert))
   handles.push(scheduleJittered(runRetentionSweepsTick,         INTERVALS.retentionSweeps))
+  // R423 — wrap recent ticks with cron-health monitoring so dashboard can
+  // surface stale or failing crons. Existing crons keep their bare wiring;
+  // only the post-R381 batch is instrumented (Novan-specific autonomous loop).
+  const monitored = (name: string, fn: () => Promise<void>) => async () => {
+    try {
+      const { cronHealth } = await import('./r423-cron-health.js')
+      await cronHealth(name, fn)
+    } catch { /* errors already logged by cronHealth */ }
+  }
   // R382 — droplet-side daily routine (sales+pipeline+self-test), hourly tick gated to 13:00 UTC.
-  handles.push(scheduleJittered(runDropletDailyCron,            60 * 60_000))
+  handles.push(scheduleJittered(monitored('R382-droplet-daily', runDropletDailyCron), 60 * 60_000))
   // R386 — push notifier for next-action when top changes, 15-min tick.
-  handles.push(scheduleJittered(runNextActionPusher,            15 * 60_000))
+  handles.push(scheduleJittered(monitored('R386-next-action-push', runNextActionPusher), 15 * 60_000))
   // R387 — pacing auto-loosen, hourly tick gated to 14:00 UTC.
-  handles.push(scheduleJittered(runPacingAutoLoosen,            60 * 60_000))
+  handles.push(scheduleJittered(monitored('R387-pacing-loosen', runPacingAutoLoosen), 60 * 60_000))
   // R398 — daily morning summary push, hourly tick gated to 14:00 UTC.
-  handles.push(scheduleJittered(runDailySummaryPush,            60 * 60_000))
+  handles.push(scheduleJittered(monitored('R398-daily-summary', runDailySummaryPush), 60 * 60_000))
   // R400 — queue auto-replenish, hourly tick.
-  handles.push(scheduleJittered(runQueueAutoReplenish,          60 * 60_000))
+  handles.push(scheduleJittered(monitored('R400-queue-replenish', runQueueAutoReplenish), 60 * 60_000))
   // R401 — auto-variants for proven winners, hourly tick.
-  handles.push(scheduleJittered(runAutoVariantsForWinnersTick,  60 * 60_000))
+  handles.push(scheduleJittered(monitored('R401-auto-variants', runAutoVariantsForWinnersTick), 60 * 60_000))
   // R411 — auto-cross-list winners to missing platforms, hourly tick.
-  handles.push(scheduleJittered(runAutoCrossListWinners,        60 * 60_000))
+  handles.push(scheduleJittered(monitored('R411-cross-list', runAutoCrossListWinners), 60 * 60_000))
   // R412 — platform auto-disable on chronic failures, hourly tick.
-  handles.push(scheduleJittered(runPlatformAutoDisable,         60 * 60_000))
+  handles.push(scheduleJittered(monitored('R412-platform-disable', runPlatformAutoDisable), 60 * 60_000))
+  // R422 — platform auto-re-enable probe, 6h tick.
+  handles.push(scheduleJittered(monitored('R422-platform-reenable', runPlatformAutoReenable), 6 * 60 * 60_000))
   // R413 — weekly recap push, hourly tick gated to Sun 14:00 UTC.
-  handles.push(scheduleJittered(runWeeklyRecapPush,             60 * 60_000))
+  handles.push(scheduleJittered(monitored('R413-weekly-recap', runWeeklyRecapPush), 60 * 60_000))
   // R417 — zero-sale listing refresh, hourly tick gated to 15:00 UTC.
-  handles.push(scheduleJittered(runZeroSaleRelisting,           60 * 60_000))
+  handles.push(scheduleJittered(monitored('R417-relist-stale', runZeroSaleRelisting), 60 * 60_000))
   // R402 — failed-upload auto-requeue, hourly tick.
-  handles.push(scheduleJittered(runFailedUploadRequeue,         60 * 60_000))
+  handles.push(scheduleJittered(monitored('R402-failed-requeue', runFailedUploadRequeue), 60 * 60_000))
   // R403 — per-platform first-sale detector, hourly tick.
-  handles.push(scheduleJittered(runFirstSaleDetector,           60 * 60_000))
+  handles.push(scheduleJittered(monitored('R403-first-sale', runFirstSaleDetector), 60 * 60_000))
 
   // Don't keep the event loop alive just for cron
   for (const h of handles) h.unref?.()

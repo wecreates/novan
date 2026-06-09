@@ -49,7 +49,7 @@ export async function autoDisableBrokenPlatforms(): Promise<DisableSweepResult> 
 
   const { broadcastPush } = await import('./web-push.js')
 
-  for (const r of (rows as Array<{ workspace_id: string; platform: string; failures: number }>)) {
+  for (const r of (rows as unknown as Array<{ workspace_id: string; platform: string; failures: number }>)) {
     const ex = await db.execute(sql`
       SELECT 1 FROM disabled_platforms WHERE workspace_id = ${r.workspace_id} AND platform = ${r.platform} LIMIT 1
     `).catch(() => [] as unknown[])
@@ -91,13 +91,48 @@ export async function enablePlatform(workspaceId: string, platform: string): Pro
   return { ok: true }
 }
 
+/**
+ * R422 — Auto-re-enable platforms after a cooldown window. Platforms
+ * disabled >72h ago get a single probe attempt — flip them back to enabled
+ * and let the next pipeline tick enqueue one item. If THAT fails, R412's
+ * normal sweep will re-disable in 7d. Operator's `platforms.enable` still
+ * works for immediate override.
+ */
+const REENABLE_COOLDOWN_MS = 72 * 60 * 60_000
+
+export async function autoReenableProbe(): Promise<{ probed: Array<{ workspaceId: string; platform: string; cooldownH: number }> }> {
+  await ensureTable()
+  const cutoff = Date.now() - REENABLE_COOLDOWN_MS
+  const rows = await db.execute(sql`
+    SELECT workspace_id, platform, disabled_at FROM disabled_platforms WHERE disabled_at < ${cutoff}
+  `).catch(() => [] as unknown[])
+  const probed: Array<{ workspaceId: string; platform: string; cooldownH: number }> = []
+  const { broadcastPush } = await import('./web-push.js')
+  for (const r of (rows as unknown as unknown as Array<{ workspace_id: string; platform: string; disabled_at: number }>)) {
+    await db.execute(sql`
+      DELETE FROM disabled_platforms WHERE workspace_id = ${r.workspace_id} AND platform = ${r.platform}
+    `).catch(() => {/* best-effort */})
+    const cooldownH = Math.round((Date.now() - Number(r.disabled_at)) / 3_600_000)
+    probed.push({ workspaceId: r.workspace_id, platform: r.platform, cooldownH })
+    try {
+      void broadcastPush(r.workspace_id, {
+        title: `↻ ${r.platform} re-enabled (probe)`,
+        body:  `Disabled ${cooldownH}h ago. Next pipeline tick will try one upload. If it fails again, R412 re-disables in 7d.`,
+        url:   '/ops/dashboard',
+        tag:   `reenable-${r.platform}`,
+      } as Parameters<typeof broadcastPush>[1])
+    } catch { /* tolerated */ }
+  }
+  return { probed }
+}
+
 export async function listDisabledPlatforms(workspaceId: string): Promise<Array<{ platform: string; disabledAt: number; reason: string }>> {
   try {
     const r = await db.execute(sql`
       SELECT platform, disabled_at, reason FROM disabled_platforms WHERE workspace_id = ${workspaceId}
       ORDER BY disabled_at DESC
     `)
-    return (r as Array<{ platform: string; disabled_at: number; reason: string }>).map(x => ({
+    return (r as unknown as Array<{ platform: string; disabled_at: number; reason: string }>).map(x => ({
       platform: x.platform, disabledAt: Number(x.disabled_at), reason: x.reason,
     }))
   } catch { return [] }

@@ -27,7 +27,7 @@ export async function autoReplenishLowQueues(): Promise<ReplenishResult> {
   let workspaceIds: string[] = []
   try {
     const r = await db.execute(sql`SELECT DISTINCT workspace_id FROM design_upload_queue`)
-    workspaceIds = (r as Array<{ workspace_id: string }>).map(x => x.workspace_id).filter(Boolean)
+    workspaceIds = (r as unknown as Array<{ workspace_id: string }>).map(x => x.workspace_id).filter(Boolean)
   } catch { /* tolerated */ }
   if (workspaceIds.length === 0) return result
   result.workspaces = workspaceIds.length
@@ -38,7 +38,7 @@ export async function autoReplenishLowQueues(): Promise<ReplenishResult> {
         SELECT COUNT(*)::int AS n FROM design_upload_queue
         WHERE workspace_id = ${ws} AND status = 'queued'
       `)
-      const queued = Number((r as Array<{ n: number }>)[0]?.n ?? 0)
+      const queued = Number((r as unknown as Array<{ n: number }>)[0]?.n ?? 0)
       if (queued >= LOW_THRESHOLD) {
         result.skipped.push({ workspaceId: ws, queued, reason: `queued ${queued} >= ${LOW_THRESHOLD}` })
         continue

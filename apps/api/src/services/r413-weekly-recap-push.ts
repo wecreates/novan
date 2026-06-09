@@ -46,7 +46,7 @@ export async function pushWeeklyRecap(): Promise<WeeklyRecapResult> {
   let workspaceIds: string[] = []
   try {
     const r = await db.execute(sql`SELECT DISTINCT workspace_id FROM design_upload_queue`)
-    workspaceIds = (r as Array<{ workspace_id: string }>).map(x => x.workspace_id).filter(Boolean)
+    workspaceIds = (r as unknown as Array<{ workspace_id: string }>).map(x => x.workspace_id).filter(Boolean)
   } catch { workspaceIds = ['default'] }
   if (workspaceIds.length === 0) workspaceIds = ['default']
 
@@ -67,13 +67,13 @@ export async function pushWeeklyRecap(): Promise<WeeklyRecapResult> {
         SELECT COUNT(*)::int AS n FROM design_upload_queue
         WHERE workspace_id = ${ws} AND status = 'uploaded' AND uploaded_at >= ${weekCutoff}
       `)
-      const uploads = Number((u as Array<{ n: number }>)[0]?.n ?? 0)
+      const uploads = Number((u as unknown as Array<{ n: number }>)[0]?.n ?? 0)
       const s = await db.execute(sql`
         SELECT COUNT(*)::int AS n, COALESCE(SUM(net_usd),0)::float AS usd
         FROM business_revenue WHERE workspace_id = ${ws} AND recorded_at >= ${weekCutoff}
       `)
-      const sales = Number((s as Array<{ n: number }>)[0]?.n ?? 0)
-      const usd = Number((s as Array<{ usd: number }>)[0]?.usd ?? 0)
+      const sales = Number((s as unknown as Array<{ n: number }>)[0]?.n ?? 0)
+      const usd = Number((s as unknown as Array<{ usd: number }>)[0]?.usd ?? 0)
 
       let topPrompt = ''
       try {

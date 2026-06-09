@@ -42,7 +42,7 @@ export async function rankNichePerformance(workspaceId: string): Promise<{ niche
       GROUP BY d.niche
       ORDER BY total_usd DESC, sale_count DESC, design_count DESC
     `)
-    niches = (rows as Array<{ niche: string; design_count: number; winner_count: number; upload_count: number; sale_count: number; total_usd: number }>).map(r => {
+    niches = (rows as unknown as Array<{ niche: string; design_count: number; winner_count: number; upload_count: number; sale_count: number; total_usd: number }>).map(r => {
       const dc = Number(r.design_count) || 0
       const wc = Number(r.winner_count) || 0
       return {

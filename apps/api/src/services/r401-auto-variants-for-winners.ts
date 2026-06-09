@@ -26,7 +26,7 @@ export async function runAutoVariantsForWinners(): Promise<AutoVariantsResult> {
   let workspaceIds: string[] = []
   try {
     const r = await db.execute(sql`SELECT DISTINCT workspace_id FROM design_upload_queue`)
-    workspaceIds = (r as Array<{ workspace_id: string }>).map(x => x.workspace_id).filter(Boolean)
+    workspaceIds = (r as unknown as Array<{ workspace_id: string }>).map(x => x.workspace_id).filter(Boolean)
   } catch { /* tolerated */ }
   if (workspaceIds.length === 0) return result
   result.workspaces = workspaceIds.length

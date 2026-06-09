@@ -42,7 +42,7 @@ export async function detectAndPushFirstSales(): Promise<FirstSaleResult> {
       WHERE source IS NOT NULL
       ORDER BY workspace_id, source, recorded_at ASC
     `)
-    rows = r as typeof rows
+    rows = r as unknown as typeof rows
   } catch { /* tolerated */ }
   out.scanned = rows.length
 

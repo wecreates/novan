@@ -37,7 +37,7 @@ export async function designPlatformCoverage(workspaceId: string, designIds?: st
         SELECT id, prompt FROM design_catalog
         WHERE workspace_id = ${workspaceId} AND id = ANY(ARRAY[${sql.raw(designIds.map(d => `'${d.replace(/'/g, "''")}'`).join(','))}]::text[])
       `)
-      designs = rows as typeof designs
+      designs = rows as unknown as typeof designs
     } else {
       // Default: top 10 by revenue (via R395)
       const { rankDesignPerformance } = await import('./r395-design-performance.js')
@@ -54,7 +54,7 @@ export async function designPlatformCoverage(workspaceId: string, designIds?: st
         WHERE workspace_id = ${workspaceId} AND design_id = ${d.id}
       `)
       const live: string[] = [], queued: string[] = [], failed: string[] = []
-      for (const r of (rows as Array<{ platform: string; status: string }>)) {
+      for (const r of (rows as unknown as Array<{ platform: string; status: string }>)) {
         if (r.status === 'uploaded') live.push(r.platform)
         else if (r.status === 'queued') queued.push(r.platform)
         else if (r.status === 'failed') failed.push(r.platform)

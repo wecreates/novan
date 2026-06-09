@@ -925,8 +925,38 @@ export async function* chatTurn(i: ChatTurnInput): AsyncGenerator<{ event: strin
     void import('./r328-extras.js').then(m => m.recordPersonaTurn(i.workspaceId, detected)).catch(() => null)
   } catch { /* persona is non-fatal */ }
 
+  // R425 — Novan POD dashboard injection. When the operator's message touches
+  // status/MRR/queue/winners/pacing/dashboard topics, splice a compact JSON
+  // snapshot into the system prompt so the LLM can answer with real numbers
+  // instead of guessing. Capped at 4KB.
+  let novanDashboardBlock = ''
+  try {
+    const msg = i.userMessage.toLowerCase()
+    const triggers = ['status', 'mrr', 'revenue', 'queue', 'winner', 'pacing', 'dashboard', 'next action', 'how am i doing', 'summary', 'sales', 'novan']
+    if (triggers.some(t => msg.includes(t))) {
+      const { dashboardSnapshot } = await import('./r370-operator-dashboard.js')
+      const snap = await dashboardSnapshot(i.workspaceId)
+      // Strip noise; keep only operator-relevant fields
+      const compact = {
+        ts: snap.ts,
+        ladder: snap.ladder,
+        agent: snap.agent,
+        pinterest: snap.pinterest,
+        nextActions: snap.nextActions?.slice(0, 3),
+        mrrProjection: snap.mrrProjection,
+        topDesigns: snap.topDesigns?.slice(0, 3),
+        niches: snap.niches?.slice(0, 5),
+        failureClusters: snap.failureClusters?.slice(0, 3),
+        disabledPlatforms: snap.disabledPlatforms,
+        queueByPlatform: snap.uploads?.queueByPlatform,
+      }
+      const json = JSON.stringify(compact, null, 2).slice(0, 4000)
+      novanDashboardBlock = `\n\n## Live Novan POD dashboard (R425 — answer status questions from this, do not invent numbers)\n\n\`\`\`json\n${json}\n\`\`\`\n`
+    }
+  } catch { /* tolerated */ }
+
   const SYSTEM_PROMPT_MAX_CHARS = 24_000
-  const tail = riskAwarenessBlock + riskAlertBlk + recapBlk + dnaBlk + killSwitchBlk
+  const tail = riskAwarenessBlock + riskAlertBlk + recapBlk + dnaBlk + killSwitchBlk + novanDashboardBlock
   const midProtected = playbookBlock
   const headBudget = Math.max(0, SYSTEM_PROMPT_MAX_CHARS - tail.length - midProtected.length - personaBlock.length)
   const rawHead = personaBlock + ctx.systemPrompt + videoSystemBlock + musicSystemBlock + musicKnowledgePromptBlock + videoKnowledgePromptBlock

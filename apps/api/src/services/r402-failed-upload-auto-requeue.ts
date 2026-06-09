@@ -40,15 +40,15 @@ export async function requeueFailedUploads(): Promise<RequeueResult> {
     const countRows = await db.execute(sql`
       SELECT COUNT(*)::int AS n FROM design_upload_queue WHERE status = 'failed'
     `)
-    result.totalFailed = Number((countRows as Array<{ n: number }>)[0]?.n ?? 0)
+    result.totalFailed = Number((countRows as unknown as Array<{ n: number }>)[0]?.n ?? 0)
 
     const rows = await db.execute(sql`
-      SELECT id, platform, COALESCE(retry_count, 0) AS retry_count, COALESCE(failed_at, queued_at) AS failed_at
+      SELECT id, workspace_id, platform, COALESCE(retry_count, 0) AS retry_count, COALESCE(failed_at, queued_at) AS failed_at, notes
       FROM design_upload_queue
       WHERE status = 'failed' AND COALESCE(failed_at, queued_at) < ${cutoff}
       LIMIT 50
     `)
-    for (const r of (rows as Array<{ id: string; platform: string; retry_count: number; failed_at: number }>)) {
+    for (const r of (rows as unknown as Array<{ id: string; workspace_id: string; platform: string; retry_count: number; failed_at: number; notes: string | null }>)) {
       const rc = Number(r.retry_count) || 0
       if (rc >= MAX_RETRIES) {
         result.maxedOut++
@@ -62,6 +62,32 @@ export async function requeueFailedUploads(): Promise<RequeueResult> {
         WHERE id = ${r.id}
       `).catch(() => {/* skip on error */})
       result.requeued.push({ id: r.id, platform: r.platform, retryCount: rc + 1 })
+
+      // R421 — auto-trigger R366 selector improver from the most recent
+      // failure event for this platform. The next agent attempt will pull
+      // stored selectors via resilientLocate.
+      try {
+        const failureEvent = await db.execute(sql`
+          SELECT payload FROM events
+          WHERE workspace_id = ${r.workspace_id}
+            AND type IN ('agent.failure', 'agent.upload.failed')
+            AND payload->>'platform' = ${r.platform}
+          ORDER BY created_at DESC LIMIT 1
+        `).catch(() => [] as unknown[])
+        const ev = (failureEvent as unknown as Array<{ payload: Record<string, unknown> }>)[0]?.payload
+        if (ev && ev['pageHtml'] && ev['errorMessage']) {
+          const { improveSelectors } = await import('./r366-selector-improver.js')
+          void improveSelectors({
+            workspaceId:      r.workspace_id,
+            platform:         r.platform,
+            step:             String(ev['step'] ?? 'unknown'),
+            errorMessage:     String(ev['errorMessage']),
+            pageUrl:          String(ev['pageUrl'] ?? ''),
+            pageHtmlExcerpt:  String(ev['pageHtml']).slice(0, 8192),
+            ...(ev['previousSelectors'] ? { previousSelectors: ev['previousSelectors'] as string[] } : {}),
+          })
+        }
+      } catch { /* tolerated — best-effort enhancement */ }
     }
   } catch { /* tolerated */ }
 
