@@ -45,6 +45,7 @@ interface DashboardState {
   }
   activity: Array<{ ts: number; type: string; summary: string }>     // R379 — live activity feed
   nextActions: Array<{ id: string; title: string; detail: string; score: number; category: string }>  // R385
+  failureClusters: Array<{ platform: string; signature: string; count: number; isLivePattern: boolean; suggestedFix: string; lastSeen: number }>  // R388
 }
 
 async function loadState(workspaceId: string): Promise<DashboardState> {
@@ -186,6 +187,17 @@ async function loadState(workspaceId: string): Promise<DashboardState> {
         return r.actions.slice(0, 3).map(a => ({ id: a.id, title: a.title, detail: a.detail, score: a.score, category: a.category }))
       } catch { return [] }
     })(),
+    failureClusters: await (async () => {
+      try {
+        const { detectFailureClusters } = await import('./r388-failure-clusters.js')
+        const r = await detectFailureClusters(workspaceId)
+        return r.clusters.slice(0, 5).map(c => ({
+          platform: c.platform, signature: c.signature.slice(0, 100),
+          count: c.count, isLivePattern: c.isLivePattern,
+          suggestedFix: c.suggestedFix, lastSeen: c.lastSeen,
+        }))
+      } catch { return [] }
+    })(),
   }
 }
 
@@ -295,6 +307,22 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
     <h2>Recent failures (${s.uploads.recentFailures.length})</h2>
     ${s.uploads.recentFailures.length === 0 ? '<div class="mini">✓ no recent failures</div>' : `<table><thead><tr><th>When</th><th>Platform</th><th>Error</th></tr></thead><tbody>${s.uploads.recentFailures.map(f => `<tr><td>${ago(f.ts)}</td><td>${escapeHtml(f.platform)}</td><td class="mini">${escapeHtml(f.error)}</td></tr>`).join('')}</tbody></table>`}
   </div>
+
+  ${s.failureClusters.length > 0 ? `<div class="card" style="grid-column: 1 / -1">
+    <h2>Failure patterns (R388 · last 7d)</h2>
+    <table>
+      <thead><tr><th>Platform</th><th>×</th><th>Signature</th><th>Suggested fix</th><th>Last</th></tr></thead>
+      <tbody>
+        ${s.failureClusters.map(c => `<tr>
+          <td>${escapeHtml(c.platform)}</td>
+          <td>${c.isLivePattern ? `<span class="pill pill-fail">${c.count}</span>` : c.count}</td>
+          <td class="mini">${escapeHtml(c.signature)}</td>
+          <td class="mini">${escapeHtml(c.suggestedFix)}</td>
+          <td class="mini">${ago(c.lastSeen)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>` : ''}
 
   <div class="card" style="grid-column: 1 / -1">
     <h2>Activity stream — last 50 events</h2>
