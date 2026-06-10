@@ -102,7 +102,15 @@ export async function enqueue(input: EnqueueInput): Promise<{ ok: boolean; id?: 
     try {
       const { isPlatformDisabled } = await import('./r412-platform-auto-disable.js')
       if (await isPlatformDisabled(input.workspaceId, input.platform)) {
-        return { ok: false, reason: `platform ${input.platform} is auto-disabled (R412)` }
+        // R567 — surface an actionable honest-blocker reason instead of just
+        // "auto-disabled (R412)". Tells operator exactly what unblock looks like.
+        try {
+          const { blockedByHumanRequired } = await import('./r334-honest-blocker-reporter.js')
+          const blocker = blockedByHumanRequired('platform_enable', input.platform)
+          return { ok: false, reason: `${blocker.userMessage} — call platforms.enable ${input.platform} after fixing driver` }
+        } catch {
+          return { ok: false, reason: `platform ${input.platform} is auto-disabled (R412)` }
+        }
       }
     } catch { /* tolerated */ }
     const id = uuidv7()

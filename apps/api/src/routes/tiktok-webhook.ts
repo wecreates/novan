@@ -24,7 +24,8 @@ import { sql } from 'drizzle-orm'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { v7 as uuidv7 } from 'uuid'
 import { db } from '../db/client.js'
-import { createHmac, timingSafeEqual } from 'node:crypto'
+// R566 — createHmac/timingSafeEqual will be re-added when raw-body parser ships
+// import { createHmac, timingSafeEqual } from 'node:crypto'
 
 interface TikTokPing {
   order_id?:         string
@@ -50,16 +51,16 @@ export async function registerTikTokWebhook(app: FastifyInstance): Promise<void>
     if (!expected) return reply.code(503).send({ error: 'TIKTOK_WEBHOOK_TOKEN not configured' })
     if ((req.query.token ?? '') !== expected) return reply.code(401).send({ error: 'invalid token' })
 
-    // Optional HMAC verification via x-tiktok-signature header
-    const hmacSecret = process.env['TIKTOK_WEBHOOK_HMAC_SECRET']
-    if (hmacSecret) {
-      const sig = String(req.headers['x-tiktok-signature'] ?? '')
-      const raw = JSON.stringify(req.body ?? {})
-      const expectedSig = createHmac('sha256', hmacSecret).update(raw).digest('hex')
-      if (sig.length !== expectedSig.length ||
-          !timingSafeEqual(Buffer.from(sig, 'utf8'), Buffer.from(expectedSig, 'utf8'))) {
-        return reply.code(403).send({ error: 'hmac mismatch' })
-      }
+    // R566 — HMAC verification requires raw request bytes (TikTok signs the
+    // exact JSON they sent). Computing HMAC over JSON.stringify(parsed) is
+    // WRONG — key ordering + whitespace differ from the source bytes, so
+    // the signature will never match. Fastify's default JSON parser doesn't
+    // expose the raw buffer to the handler. Until we register a per-route
+    // raw-body parser at app boot (separate change), the HMAC path is a
+    // no-op rather than producing false-negative 403s. Token + optional
+    // IP allowlist below still authenticate.
+    if (process.env['TIKTOK_WEBHOOK_HMAC_SECRET']) {
+      req.log.warn('R566: HMAC verification stub-only — needs raw-body parser wiring before enabling')
     }
 
     const body = req.body ?? {}
