@@ -543,9 +543,9 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
     ${s.uploads.recentFailures.length === 0 ? '<div class="mini">✓ no recent failures</div>' : `<table><thead><tr><th>When</th><th>Platform</th><th>Error</th></tr></thead><tbody>${s.uploads.recentFailures.map(f => `<tr><td>${ago(f.ts)}</td><td>${escapeHtml(f.platform)}</td><td class="mini">${escapeHtml(f.error)}</td></tr>`).join('')}</tbody></table>`}
   </div>
 
-  ${s.aiSpend ? `<div class="card">
-    <h2>AI spend today (R428)</h2>
-    <div class="stat"><span class="stat-val">$${s.aiSpend.todayUsd.toFixed(2)}</span><span class="stat-lbl">${s.aiSpend.todayCallCount} calls${s.aiSpend.cap ? ` · ${s.aiSpend.cap.pctUsed}% of $${s.aiSpend.cap.dailyUsd} cap` : ''}</span></div>
+  ${s.aiSpend ? `<div class="card" id="aispend-card">
+    <h2>AI spend today (R428 · live)</h2>
+    <div class="stat"><span class="stat-val" id="aispend-usd">$${s.aiSpend.todayUsd.toFixed(2)}</span><span class="stat-lbl" id="aispend-lbl">${s.aiSpend.todayCallCount} calls${s.aiSpend.cap ? ` · ${s.aiSpend.cap.pctUsed}% of $${s.aiSpend.cap.dailyUsd} cap` : ''}</span></div>
     ${s.aiSpend.cap?.budgetExhausted ? '<div class="pill pill-fail" style="margin-top:8px">budget exhausted — autonomous gen paused</div>' : ''}
     ${s.aiSpend.cap ? `<div class="bar" style="margin-top:6px"><div class="bar-fill" style="width:${Math.min(100, s.aiSpend.cap.pctUsed)}%;background:${s.aiSpend.cap.pctUsed >= 100 ? '#7f1d1d' : s.aiSpend.cap.pctUsed >= 80 ? '#fbbf24' : '#3b82f6'}"></div></div>` : ''}
     ${s.aiSpend.bySource.length > 0 ? `<table style="margin-top:8px"><tbody>${s.aiSpend.bySource.map(b => `<tr><td class="mini">${escapeHtml(b.source)}</td><td>$${b.usd.toFixed(2)}</td><td class="mini">${b.calls}</td></tr>`).join('')}</tbody></table>` : ''}
@@ -721,6 +721,23 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
   </div>
 
 </div>
+${token ? `<script>
+  // R574 — poll /ops/spend.json every 5s and update the spend tile in place.
+  // No full page refresh, no SSE complexity, just JSON poll.
+  const TOK = ${JSON.stringify(token)};
+  const WS  = ${JSON.stringify(s.workspaceId ?? 'default')};
+  async function tickSpend() {
+    try {
+      const r = await fetch('/ops/spend.json?token=' + encodeURIComponent(TOK) + '&workspace=' + encodeURIComponent(WS), { cache: 'no-store' });
+      if (!r.ok) return;
+      const d = await r.json();
+      const u = document.getElementById('aispend-usd'); if (u) u.textContent = '$' + d.todayUsd.toFixed(2);
+      const l = document.getElementById('aispend-lbl');
+      if (l) l.textContent = d.todayCallCount + ' calls' + (d.cap ? (' · ' + d.cap.pctUsed + '% of $' + d.cap.dailyUsd + ' cap') : '');
+    } catch { /* swallow — next tick retries */ }
+  }
+  setInterval(tickSpend, 5000);
+</script>` : ''}
 </body>
 </html>`
 }

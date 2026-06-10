@@ -963,6 +963,15 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { claims: await listDmcaClaims(ws) }
     },
   },
+  // ─── R573 Public ops registry ────────────────────────────────────────
+  'registry.list': {
+    description: 'R573: All brain ops with name/description/risk/category. For plugin discovery / external docs.',
+    risk: 'low',
+    handler: async () => {
+      const { buildOpsCatalog } = await import('./r573-ops-registry.js')
+      return buildOpsCatalog()
+    },
+  },
   // ─── R570 Federated bandit ────────────────────────────────────────────
   'federation.opt_in': {
     description: 'R570: Opt this workspace in to the cross-operator bandit pool (anonymized SHA256 hashes only).',
@@ -8915,6 +8924,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'federation.opt_in', 'federation.opt_out', 'federation.stats', 'federation.trending',
   'brand.get', 'brand.set', 'brand.validate',
   'finance.reserve_recommendations', 'finance.factoring_propose', 'finance.insurance_enroll', 'finance.insurance_active',
+  'registry.list',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -9276,6 +9286,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
   'federation.opt_in', 'federation.opt_out', 'federation.stats', 'federation.trending',
   'brand.get', 'brand.set', 'brand.validate',
   'finance.reserve_recommendations', 'finance.factoring_propose', 'finance.insurance_enroll', 'finance.insurance_active',
+  'registry.list',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',

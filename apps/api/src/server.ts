@@ -340,6 +340,8 @@ const isPublic = (url: string): boolean => {
   if (url.startsWith('/ops/gdpr/'))                                     return true  // R515 — token in query
   if (url.startsWith('/ops/dmca/'))                                     return true  // R516 — token in query
   if (url.startsWith('/ops/buyers/'))                                   return true  // R520 — token in query
+  if (url.startsWith('/ops/registry'))                                  return true  // R573 — token in query
+  if (url.startsWith('/ops/spend.json'))                                return true  // R574 — token in query
   if (url === '/console.html' || url === '/console')                    return true
   if (url === '/brain.html'   || url === '/brain')                      return true
   if (url === '/api/v1/health'  || url.startsWith('/api/v1/health/'))  return true
@@ -1063,6 +1065,30 @@ app.get<{ Querystring: { token?: string; workspace?: string; since?: string; unt
     .type('text/csv')
     .header('Content-Disposition', `attachment; filename="novan-revenue-${ws}-${new Date().toISOString().slice(0, 10)}.csv"`)
     .send(csv)
+})
+
+// R574 — live spend JSON for dashboard polling ticker.
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/spend.json', async (req, reply) => {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  if (!req.query.token || (ops && req.query.token !== ops)) return reply.code(401).send({ error: 'unauthorized' })
+  const ws = req.query.workspace ?? 'default'
+  const { spendSnapshot } = await import('./services/r428-ai-spend-tracker.js')
+  reply.header('Cache-Control', 'no-store')
+  return reply.send(await spendSnapshot(ws))
+})
+
+// R573 — public ops registry. HTML for humans, JSON for plugins / external docs.
+app.get<{ Querystring: { token?: string } }>('/ops/registry.json', async (req, reply) => {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  if (!req.query.token || (ops && req.query.token !== ops)) return reply.code(401).send({ error: 'unauthorized' })
+  const { buildOpsCatalog } = await import('./services/r573-ops-registry.js')
+  return reply.send(await buildOpsCatalog())
+})
+app.get<{ Querystring: { token?: string } }>('/ops/registry', async (req, reply) => {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  if (!req.query.token || (ops && req.query.token !== ops)) return reply.code(401).type('text/plain').send('unauthorized')
+  const { buildOpsCatalog, renderRegistryHtml } = await import('./services/r573-ops-registry.js')
+  return reply.type('text/html').header('X-Robots-Tag', 'noindex, nofollow').send(renderRegistryHtml(await buildOpsCatalog()))
 })
 
 // R520 — buyer-email opt-in CSV export. Mail-merge-ready download.
