@@ -97,11 +97,18 @@ const SETUP_HINTS: Record<string, SetupHint> = {
 
   // Email
   postmark: {
-    connectorId: 'postmark', description: 'Postmark — transactional email (R578 backend)',
+    connectorId: 'postmark', description: 'Postmark — transactional email (R578 backend, R611 SMTP fallback also supported)',
     envVars: ['POSTMARK_SERVER_TOKEN', 'EMAIL_FROM'],
     signupUrl: 'https://account.postmarkapp.com/sign_up',
     docsUrl:   'https://postmarkapp.com/developer/api/email-api',
-    notes:     'Both vars required: server token + verified sender address.',
+    notes:     'Either path works: Postmark API or R611 SMTP (any provider: AWS SES, Gmail, Fastmail).',
+  },
+  smtp: {
+    connectorId: 'smtp', description: 'R611 — direct SMTP fallback (zero-dep, implicit TLS port 465)',
+    envVars: ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS'],
+    notes:    'Works with AWS SES, Gmail App Passwords, Postmark SMTP, any provider. Set SMTP_PORT if not 465. EMAIL_FROM still required (or SMTP_FROM override).',
+    probeOp:  'email.smtp.health',
+    mode:     'api',
   },
 
   // Storage

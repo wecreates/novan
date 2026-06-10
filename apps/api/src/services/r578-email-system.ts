@@ -141,7 +141,25 @@ async function logEmail(row: {
 async function transportSend(args: { to: string; subject: string; text: string; html?: string }): Promise<{ ok: boolean; response?: string; error?: string }> {
   const token = process.env['POSTMARK_SERVER_TOKEN']
   const from = process.env['EMAIL_FROM']
-  if (!token || !from) return { ok: false, error: 'EMAIL transport not configured (set POSTMARK_SERVER_TOKEN + EMAIL_FROM)' }
+  // R611 — fall back to direct SMTP if Postmark isn't configured but SMTP is.
+  // Same return shape so the caller (sendEmail) doesn't change.
+  if (!token) {
+    const { smtpConfigured, sendViaSMTP } = await import('./r611-smtp-email-fallback.js')
+    if (smtpConfigured() && from) {
+      const r = await sendViaSMTP({
+        from, to: args.to, subject: args.subject,
+        bodyText: args.text,
+        ...(args.html ? { bodyHtml: args.html } : {}),
+        ...(process.env['EMAIL_REPLY_TO'] ? { replyTo: process.env['EMAIL_REPLY_TO']! } : {}),
+        ...(process.env['EMAIL_LIST_UNSUB_URL'] ? { unsubscribeUrl: process.env['EMAIL_LIST_UNSUB_URL']!.replace('{EMAIL}', encodeURIComponent(args.to)) } : {}),
+      })
+      const result: { ok: boolean; response?: string; error?: string } = { ok: r.ok }
+      if (r.smtpResponse) result.response = `smtp-fallback: ${r.smtpResponse}`
+      if (r.error) result.error = r.error
+      return result
+    }
+  }
+  if (!token || !from) return { ok: false, error: 'EMAIL transport not configured (set POSTMARK_SERVER_TOKEN + EMAIL_FROM, or SMTP_HOST + SMTP_USER + SMTP_PASS + EMAIL_FROM)' }
   const replyTo = process.env['EMAIL_REPLY_TO'] ?? from
   const unsubUrl = process.env['EMAIL_LIST_UNSUB_URL']
   const body: Record<string, unknown> = {

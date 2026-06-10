@@ -2427,6 +2427,31 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { count: items.length, items }
     },
   },
+  // ─── R611 SMTP email fallback ───────────────────────────────────────
+  'email.smtp.health': {
+    description: 'R611: Probe SMTP — connects, EHLO, QUIT (no send). Returns ok + reason if SMTP_HOST/USER/PASS configured.',
+    risk: 'low',
+    handler: async () => {
+      const { smtpHealth } = await import('./r611-smtp-email-fallback.js')
+      return smtpHealth()
+    },
+  },
+  'email.smtp.test_send': {
+    description: 'R611: Send a test email via SMTP directly (bypasses R578 opt-in/cap gates — admin-only). Params: to, subject?, body?',
+    risk: 'high',
+    handler: async (_ws, params) => {
+      const p = params as { to?: string; subject?: string; body?: string }
+      if (!p.to?.includes('@')) throw new Error('valid to required')
+      const from = process.env['EMAIL_FROM'] ?? process.env['SMTP_FROM']
+      if (!from) throw new Error('EMAIL_FROM or SMTP_FROM required')
+      const { sendViaSMTP } = await import('./r611-smtp-email-fallback.js')
+      return sendViaSMTP({
+        from, to: p.to,
+        subject: p.subject ?? 'Novan R611 SMTP test',
+        bodyText: p.body ?? 'This is a test from Novan via direct SMTP fallback (R611).',
+      })
+    },
+  },
   // ─── R609 Free image-gen (HuggingFace + Pollinations) ─────────────
   'image.free.generate': {
     description: 'R609: Generate an image via free + open-source providers (HF FLUX-schnell → Pollinations fallback). Params: prompt, width?, height?, model? (flux_schnell|flux_dev|sdxl|sd3_medium), seed?, negativePrompt?, steps?. Returns base64 PNG.',
@@ -10367,6 +10392,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'saturation.config', 'saturation.check', 'saturation.reset_state',
         'connector.audit', 'connector.wire_check', 'autobrowser.reap_stuck',
         'image.free.generate', 'image.free.health',
+        'email.smtp.health', 'email.smtp.test_send',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',

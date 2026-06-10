@@ -87,6 +87,8 @@ const KNOWN_CONNECTORS: Array<{ id: string; kind: string; envChecks: string[] }>
   // R609 — Pollinations.ai zero-auth free image-gen. Always considered
   // "configured" since no env vars are required.
   { id: 'pollinations',     kind: 'image_gen',    envChecks: [] },
+  // R611 — direct SMTP fallback for email when Postmark isn't configured.
+  { id: 'smtp',             kind: 'email',        envChecks: ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS'] },
 ]
 
 function isConfiguredViaEnv(connectorId: string): boolean {
