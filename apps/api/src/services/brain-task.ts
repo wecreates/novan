@@ -2427,6 +2427,24 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { count: items.length, items }
     },
   },
+  // ─── R613 Daily digest ─────────────────────────────────────────────
+  'digest.compose': {
+    description: 'R613: Compose today\'s digest (revenue + inbox + pipelines + suggestions). Returns markdown + structured data. Does NOT send.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { compose } = await import('./r613-daily-digest.js')
+      return compose(ws)
+    },
+  },
+  'digest.send': {
+    description: 'R613: Compose + deliver via best-available channel (email → web-push → KG always). Records digest.sent event.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { force?: boolean }
+      const { send } = await import('./r613-daily-digest.js')
+      return send(ws, p)
+    },
+  },
   // ─── R612 Task inbox ───────────────────────────────────────────────
   'inbox.add': {
     description: 'R612: Drop a brief into Novan\'s autonomous task queue. Params: kind (image|music|video|chat_summary|kg_ingest|custom), brief, params?, priority?, businessId?, maxAttempts?, dueAt?, createdBy?',
@@ -10440,6 +10458,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'image.free.generate', 'image.free.health',
         'email.smtp.health', 'email.smtp.test_send',
         'inbox.add', 'inbox.list', 'inbox.stats', 'inbox.cancel', 'inbox.tick',
+        'digest.compose', 'digest.send',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',

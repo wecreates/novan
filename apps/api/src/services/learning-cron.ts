@@ -1330,6 +1330,7 @@ const INTERVALS = {
   autobrowserSweep:       5_000,              // R602 — 5s tick to dispatch queued autobrowser jobs to idle workers
   saturationAlerts:       60_000,             // R606 — 60s tick to check tasksInFlight against threshold + fire webhook
   inboxDispatch:          30_000,             // R612 — 30s tick to process autonomous task inbox
+  dailyDigest:            10 * 60_000,        // R613 — 10min tick; fires send() once per day after 09:00 UTC
 }
 
 /**
@@ -1628,6 +1629,16 @@ async function runReservesPerBusinessTick(): Promise<void> {
     }
     if (totalBiz > 0 || totalSources > 0) await emit('cron.reserves_per_business', { workspaces: ws.length, ran: totalBiz, sources: totalSources })
   } catch (e) { await emit('cron.error', { task: 'reserves_per_business', error: (e as Error).message }) }
+}
+
+// R613 — Daily digest. 10-min tick; the service-side guard inside r613.tickAll
+// ensures it fires at most once per UTC day after 09:00.
+async function runDailyDigestTick(): Promise<void> {
+  try {
+    const { tickAll } = await import('./r613-daily-digest.js')
+    const r = await tickAll()
+    if (r.fired > 0) await emit('cron.daily_digest', { fired: r.fired, workspaces: r.workspaces })
+  } catch (e) { await emit('cron.error', { task: 'daily_digest', error: (e as Error).message }) }
 }
 
 // R612 — Inbox dispatcher. 30s tick claims up to 5 pending briefs per
@@ -2538,6 +2549,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runAutobrowserSweep,            INTERVALS.autobrowserSweep))      // R602
   handles.push(scheduleJittered(runSaturationAlertsTick,        INTERVALS.saturationAlerts))     // R606
   handles.push(scheduleJittered(runInboxDispatchTick,           INTERVALS.inboxDispatch))        // R612
+  handles.push(scheduleJittered(runDailyDigestTick,             INTERVALS.dailyDigest))          // R613
   handles.push(scheduleJittered(runTrustAutoDerive,             INTERVALS.trustAutoDerive))
   handles.push(scheduleJittered(runFabricSweep,                 INTERVALS.fabricSweep))
   handles.push(scheduleJittered(runDataRetention,               INTERVALS.dataRetention))
