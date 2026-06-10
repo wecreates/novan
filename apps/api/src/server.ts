@@ -336,6 +336,7 @@ const isPublic = (url: string): boolean => {
   if (url === '/health'         || url.startsWith('/health/'))         return true
   if (url === '/healthz'        || url.startsWith('/healthz/'))        return true  // R146.263 — k8s/probes expect /healthz
   if (url === '/ops/dashboard'   || url.startsWith('/ops/dashboard'))   return true  // R370 — dashboard + R418 actions have their own query-param token check
+  if (url === '/ops/neural'      || url.startsWith('/ops/neural'))      return true  // R603 — neural-net view has its own query-param token check
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
   if (url.startsWith('/ops/gdpr/'))                                     return true  // R515 — token in query
   if (url.startsWith('/ops/dmca/'))                                     return true  // R516 — token in query
@@ -612,6 +613,18 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/dashboard
   }
   const { renderDashboard } = await import('./services/r370-operator-dashboard.js')
   const html = await renderDashboard(req.query.workspace ?? 'default', req.query.token)
+  reply.type('text/html').send(html)
+})
+
+// R603 — Neural network live view. Auto-refreshes every 5s. Same ops-token gate.
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/neural', async (req, reply) => {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  if (!req.query.token || (ops && req.query.token !== ops)) {
+    reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+    return
+  }
+  const { renderNeuralHtml } = await import('./services/r603-neural-net.js')
+  const html = await renderNeuralHtml(req.query.workspace ?? 'default')
   reply.type('text/html').send(html)
 })
 

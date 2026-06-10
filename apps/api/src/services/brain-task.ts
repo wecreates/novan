@@ -2427,6 +2427,46 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { count: items.length, items }
     },
   },
+  // ─── R603 Neural-net view ──────────────────────────────────────────
+  'neural.counters': {
+    description: 'R603: Live tasks-in-flight + revenue (today/MTD/YTD/lifetime) + throughput counters.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { liveCounters } = await import('./r603-neural-net.js')
+      return liveCounters(ws)
+    },
+  },
+  'neural.activations': {
+    description: 'R603: Event histogram over a window. Params: windowMs? (default 1h), limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { windowMs?: number; limit?: number }
+      const { recentActivations } = await import('./r603-neural-net.js')
+      return { items: await recentActivations(ws, p.windowMs ?? 60 * 60_000, p.limit ?? 30) }
+    },
+  },
+  'neural.layers': {
+    description: 'R603: 5-layer network view (Input/Decision/Processing/Output/Learning) with per-node weights.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { windowMs?: number; perLayer?: number }
+      const { neuralLayers } = await import('./r603-neural-net.js')
+      return { layers: await neuralLayers(ws, p.windowMs ?? 24 * 60 * 60_000, p.perLayer ?? 8) }
+    },
+  },
+  'neural.snapshot': {
+    description: 'R603: Composite snapshot — counters + activations + layers, single call.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { liveCounters, recentActivations, neuralLayers } = await import('./r603-neural-net.js')
+      const [counters, activations, layers] = await Promise.all([
+        liveCounters(ws),
+        recentActivations(ws, 60 * 60_000, 20),
+        neuralLayers(ws),
+      ])
+      return { counters, activations, layers }
+    },
+  },
   // ─── R601 Knowledge Graph ──────────────────────────────────────────
   'kg.ingest': {
     description: 'R601: Parse text for [[wiki-links]] + #tags, upsert node + edges. Params: name, body, type?, importance?, source?, businessId?',
@@ -10240,6 +10280,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'music.generate', 'music.replicate', 'music.mixcraft', 'music.status', 'music.master', 'music.knowledge',
         'music.vocalEnhance', 'music.scoreNaturalness', 'system.ffmpegAvailable',
         'video.ltx.health', 'video.ltx.text2video', 'video.ltx.image2video', 'video.ltx.keyframe', 'video.ltx.audio2video',
+        'neural.counters', 'neural.activations', 'neural.layers', 'neural.snapshot',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
