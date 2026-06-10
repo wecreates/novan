@@ -963,6 +963,100 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { claims: await listDmcaClaims(ws) }
     },
   },
+  // ─── R581 Connector health registry ──────────────────────────────────
+  'connector.registry': {
+    description: 'R581: All known connectors with config + health (last_ok_at, fails, errors).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { connectorRegistry } = await import('./r581-connector-health.js')
+      return { items: await connectorRegistry(ws) }
+    },
+  },
+  'connector.summary': {
+    description: 'R581: Connector health rollup — total, configured, healthy, unhealthy, by-kind breakdown.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { connectorSummary } = await import('./r581-connector-health.js')
+      return connectorSummary(ws)
+    },
+  },
+  // ─── R582 Semantic memory recall ─────────────────────────────────────
+  'memory.recall': {
+    description: 'R582: Semantic vector search over workspace_memory. Params: query, topK?, scope?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { query?: string; topK?: number; scope?: string }
+      if (!p.query) throw new Error('query required')
+      const { recall } = await import('./r582-memory-recall.js')
+      return { items: await recall(ws, p.query, p.topK ?? 5, p.scope) }
+    },
+  },
+  'memory.embed_backfill': {
+    description: 'R582: Embed entries that lack a vector. Params: max?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { max?: number }
+      const { backfillEmbeddings } = await import('./r582-memory-recall.js')
+      return backfillEmbeddings(ws, p.max ?? 25)
+    },
+  },
+  'memory.recall_stats': {
+    description: 'R582: How much of workspace_memory is embedded.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { recallStats } = await import('./r582-memory-recall.js')
+      return recallStats(ws)
+    },
+  },
+  // ─── R583 Plan mode ───────────────────────────────────────────────────
+  'plan.list': {
+    description: 'R583: List plan proposals. Params: status?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { status?: string }
+      const { listProposals } = await import('./r583-plan-mode.js')
+      return { items: await listProposals(ws, p.status) }
+    },
+  },
+  'plan.approve': {
+    description: 'R583: Approve a proposal + pick an alternative index. Params: planId, chosenIdx',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { planId?: string; chosenIdx?: number }
+      if (!p.planId || typeof p.chosenIdx !== 'number') throw new Error('planId + chosenIdx required')
+      const { approvePlan } = await import('./r583-plan-mode.js')
+      return approvePlan(ws, p.planId, p.chosenIdx)
+    },
+  },
+  'plan.reject': {
+    description: 'R583: Reject a proposal. Params: planId',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { planId?: string }
+      if (!p.planId) throw new Error('planId required')
+      const { rejectPlan } = await import('./r583-plan-mode.js')
+      return rejectPlan(ws, p.planId)
+    },
+  },
+  // ─── R584 Competitor parity scorer ───────────────────────────────────
+  'competitor.score_batch': {
+    description: 'R584: Score unscored competitor entries via Claude. Emits parity_gap events for score >= 70.',
+    risk: 'medium',
+    handler: async (_ws, params) => {
+      const p = params as { max?: number }
+      const { scoreBatch } = await import('./r584-parity-scorer.js')
+      return scoreBatch(p.max ?? 10)
+    },
+  },
+  'competitor.top_unshipped': {
+    description: 'R584: Top-scored competitor features Novan has not yet shipped. Params: limit?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { limit?: number }
+      const { topUnshipped } = await import('./r584-parity-scorer.js')
+      return { items: await topUnshipped(p.limit ?? 10) }
+    },
+  },
   // ─── R580 Multi-business context ─────────────────────────────────────
   'business.list_active': {
     description: 'R580: List businesses in this workspace with default-flag, stage, health, and last-active-at heartbeat ages.',
@@ -9109,6 +9203,10 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'competitor.seed_feeds', 'competitor.scan_all', 'competitor.recent_entries',
   'business.list_active', 'business.set_default', 'business.budget_set',
   'business.spend_today', 'business.kill_switch_set', 'business.autonomy_status',
+  'connector.registry', 'connector.summary',
+  'memory.recall', 'memory.embed_backfill', 'memory.recall_stats',
+  'plan.list', 'plan.approve', 'plan.reject',
+  'competitor.score_batch', 'competitor.top_unshipped',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -9498,6 +9596,10 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
   'competitor.seed_feeds', 'competitor.scan_all', 'competitor.recent_entries',
   'business.list_active', 'business.set_default', 'business.budget_set',
   'business.spend_today', 'business.kill_switch_set', 'business.autonomy_status',
+  'connector.registry', 'connector.summary',
+  'memory.recall', 'memory.embed_backfill', 'memory.recall_stats',
+  'plan.list', 'plan.approve', 'plan.reject',
+  'competitor.score_batch', 'competitor.top_unshipped',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
