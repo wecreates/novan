@@ -963,6 +963,32 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { claims: await listDmcaClaims(ws) }
     },
   },
+  // ─── R579 Competitor feed scanner ────────────────────────────────────
+  'competitor.seed_feeds': {
+    description: 'R579: Insert default competitor feed list (Anthropic, OpenAI, Cursor, etc) into competitor_feeds. Idempotent.',
+    risk: 'low',
+    handler: async () => {
+      const { seedDefaultFeeds } = await import('./r579-competitor-feed-scanner.js')
+      return seedDefaultFeeds()
+    },
+  },
+  'competitor.scan_all': {
+    description: 'R579: Fetch every enabled feed, scrape headings, dedupe entries, mark scanned_at.',
+    risk: 'medium',
+    handler: async () => {
+      const { scanAllFeeds } = await import('./r579-competitor-feed-scanner.js')
+      return scanAllFeeds()
+    },
+  },
+  'competitor.recent_entries': {
+    description: 'R579: Last-N competitor feed entries with parity scores. Params: limit?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { limit?: number }
+      const { recentEntries } = await import('./r579-competitor-feed-scanner.js')
+      return { items: await recentEntries(p.limit ?? 50) }
+    },
+  },
   // ─── R578 Email system ───────────────────────────────────────────────
   'email.send': {
     description: 'R578: Send email via configured transport (Postmark). Respects R517 opt-in unless bypassOptIn. Params: to, subject, bodyText, bodyHtml?, templateKey?, idempotencyKey?, bypassOptIn?',
@@ -9016,6 +9042,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'registry.list', 'memory.compact', 'memory.stats',
   'hooks.create', 'hooks.list', 'hooks.set_enabled', 'hooks.delete',
   'email.send', 'email.log_tail', 'email.stats',
+  'competitor.seed_feeds', 'competitor.scan_all', 'competitor.recent_entries',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -9402,6 +9429,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
   'registry.list', 'memory.compact', 'memory.stats',
   'hooks.create', 'hooks.list', 'hooks.set_enabled', 'hooks.delete',
   'email.send', 'email.log_tail', 'email.stats',
+  'competitor.seed_feeds', 'competitor.scan_all', 'competitor.recent_entries',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
