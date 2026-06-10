@@ -261,6 +261,15 @@ export async function* runBrainLoop(
   const md = await memoryDigest(workspaceId, 1000).catch(() => '')
   if (md) extraSys += `\n\n${md}`
 
+  // R588 — inject R571 brand-voice profile into the system prompt so every
+  // chat response respects the operator's tone, persona, banned/required
+  // phrases. Only added when a profile is set; empty string otherwise.
+  try {
+    const { buildBrandSystemPrompt } = await import('./r571-brand-voice.js')
+    const brand = await buildBrandSystemPrompt(workspaceId)
+    if (brand) extraSys += `\n\n${brand}`
+  } catch { /* tolerated — brand voice is optional */ }
+
   // 3. Compose loop messages with brain-loop system prompt
   const loopMessages: ChatMsg[] = [
     { role: 'system', content: SYS_BRAIN_LOOP + extraSys },
