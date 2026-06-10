@@ -283,12 +283,45 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
+// ─── R607: Self-state — pipelines + autobrowser pool + KG stats ─────────────
+
+export interface SelfState {
+  pipelines: Array<{ name: string; enabled: boolean; staleness: string; lastStatus: string | null; runs7d: number; successRate7d: number; lastRunAgeHours: number | null }>
+  autobrowser: { poolSize: number; idle: number; busy: number }
+  kg:          { nodes: number; edges: number; topTags: Array<{ tag: string; n: number }> }
+  saturation:  { threshold: number; webhookConfigured: boolean; recentlyFired: boolean; consecutive: number; lastTotal: number }
+}
+
+export async function selfState(workspaceId: string): Promise<SelfState> {
+  const [pipelinesH, ab, kgS, satCfg, satState] = await Promise.all([
+    import('./r598-pipelines.js').then(m => m.health(workspaceId)).catch(() => [] as Awaited<ReturnType<typeof import('./r598-pipelines.js').health>>),
+    import('./r602-autobrowser-pool.js').then(m => m.poolHealth()).catch(() => ({ poolSize: 0, idle: 0, busy: 0, supportedScripts: [] })),
+    import('./r601-knowledge-graph.js').then(m => m.stats(workspaceId)).catch(() => ({ nodes: 0, edges: 0, byType: {}, topTags: [] })),
+    import('./r606-saturation-alerts.js').then(m => m.loadConfig()).catch(() => ({ threshold: 20, dwellTicks: 2, cooldownMin: 10, webhookUrl: null as string | null })),
+    import('./r606-saturation-alerts.js').then(m => m.currentState()).catch(() => [] as Array<{ workspaceId: string; consecutive: number; lastTotal: number; lastFiredAt: number | null }>),
+  ])
+  const ws = satState.find(s => s.workspaceId === workspaceId)
+  return {
+    pipelines: pipelinesH.map(p => ({ name: p.name, enabled: p.enabled, staleness: p.staleness, lastStatus: p.lastStatus, runs7d: p.runs7d, successRate7d: p.successRate7d, lastRunAgeHours: p.lastRunAgeHours })),
+    autobrowser: { poolSize: ab.poolSize, idle: ab.idle, busy: ab.busy },
+    kg:          { nodes: kgS.nodes, edges: kgS.edges, topTags: kgS.topTags },
+    saturation:  {
+      threshold: satCfg.threshold,
+      webhookConfigured: !!satCfg.webhookUrl,
+      recentlyFired: !!(ws?.lastFiredAt && (Date.now() - ws.lastFiredAt) < 60 * 60_000),
+      consecutive: ws?.consecutive ?? 0,
+      lastTotal:   ws?.lastTotal ?? 0,
+    },
+  }
+}
+
 export async function renderNeuralHtml(workspaceId: string): Promise<string> {
-  const [counters, layers, activations, sparks] = await Promise.all([
+  const [counters, layers, activations, sparks, ss] = await Promise.all([
     liveCounters(workspaceId),
     neuralLayers(workspaceId),
     recentActivations(workspaceId, 60 * 60_000, 20),
     layerSparklines(workspaceId),
+    selfState(workspaceId),
   ])
   const sparkByLayer = new Map(sparks.map(s => [s.name, s]))
   const maxA = activations.reduce((m, a) => Math.max(m, a.n), 1)
@@ -419,6 +452,41 @@ export async function renderNeuralHtml(workspaceId: string): Promise<string> {
         <div>Pipelines · 24h <b>${counters.throughput.pipelinesLast24h}</b></div>
         <div>Autobrowser · 24h <b>${counters.throughput.autobrowserLast24h}</b></div>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:18px">
+  <h2>Self-state — pipelines · autobrowser · knowledge graph · saturation (R607)</h2>
+  <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:14px">
+    <div>
+      <div style="color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Pipelines · 7d health</div>
+      ${ss.pipelines.length === 0 ? '<div class="empty">No pipelines defined. POST {"op":"pipeline.seed"} to install canonical pipelines.</div>' : `
+        <table style="font-size:11px"><thead><tr><th>Name</th><th>State</th><th>Last</th><th>7d</th><th>OK%</th></tr></thead><tbody>
+          ${ss.pipelines.map(p => {
+            const dot = p.staleness === 'fresh' ? '🟢' : p.staleness === 'aging' ? '🟡' : '🔴'
+            const age = p.lastRunAgeHours == null ? '—' : (p.lastRunAgeHours < 1 ? `${Math.round(p.lastRunAgeHours * 60)}m` : `${p.lastRunAgeHours.toFixed(1)}h`)
+            return `<tr><td>${escapeHtml(p.name)}</td><td>${dot} ${p.enabled ? '' : '⏸ '}${escapeHtml(p.lastStatus ?? 'never')}</td><td>${age}</td><td>${p.runs7d}</td><td>${(p.successRate7d * 100).toFixed(0)}%</td></tr>`
+          }).join('')}
+        </tbody></table>
+      `}
+    </div>
+    <div>
+      <div style="color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Autobrowser pool · R602</div>
+      <div style="font-size:24px;font-weight:600;color:var(--accent)">${ss.autobrowser.busy}<span style="color:var(--mute);font-size:14px">/${ss.autobrowser.poolSize}</span></div>
+      <div style="color:var(--mute);font-size:11px;margin-top:4px">${ss.autobrowser.idle} idle · ${ss.autobrowser.busy} busy</div>
+    </div>
+    <div>
+      <div style="color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Knowledge graph · R601</div>
+      <div style="font-size:24px;font-weight:600;color:var(--blue)">${ss.kg.nodes}<span style="color:var(--mute);font-size:14px"> nodes</span></div>
+      <div style="color:var(--mute);font-size:11px;margin-top:4px">${ss.kg.edges} edges</div>
+      ${ss.kg.topTags.length > 0 ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:3px">${ss.kg.topTags.slice(0, 5).map(t => `<span style="background:#0f0f12;border:1px solid var(--border);padding:1px 6px;border-radius:9px;font-size:10px;color:var(--mute)">#${escapeHtml(t.tag)} ${t.n}</span>`).join('')}</div>` : ''}
+    </div>
+    <div>
+      <div style="color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Saturation · R606</div>
+      <div style="font-size:24px;font-weight:600;color:${ss.saturation.recentlyFired ? 'var(--warn)' : 'var(--accent)'}">${ss.saturation.lastTotal}<span style="color:var(--mute);font-size:14px">/${ss.saturation.threshold}</span></div>
+      <div style="color:var(--mute);font-size:11px;margin-top:4px">${ss.saturation.recentlyFired ? '🚨 fired within 60m' : 'OK'} · webhook ${ss.saturation.webhookConfigured ? 'on' : 'off'}</div>
+      ${ss.saturation.consecutive > 0 ? `<div style="color:var(--warn);font-size:11px;margin-top:2px">dwell ${ss.saturation.consecutive}/—</div>` : ''}
     </div>
   </div>
 </div>

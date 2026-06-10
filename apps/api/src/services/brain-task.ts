@@ -2485,6 +2485,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { layers: await neuralLayers(ws, p.windowMs ?? 24 * 60 * 60_000, p.perLayer ?? 8) }
     },
   },
+  'neural.self_state': {
+    description: 'R607: Self-state across pipelines + autobrowser + KG + saturation. Single composite call for status dashboards.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { selfState } = await import('./r603-neural-net.js')
+      return selfState(ws)
+    },
+  },
   'neural.snapshot': {
     description: 'R603: Composite snapshot — counters + activations + layers, single call.',
     risk: 'low',
@@ -10311,7 +10319,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'music.generate', 'music.replicate', 'music.mixcraft', 'music.status', 'music.master', 'music.knowledge',
         'music.vocalEnhance', 'music.scoreNaturalness', 'system.ffmpegAvailable',
         'video.ltx.health', 'video.ltx.text2video', 'video.ltx.image2video', 'video.ltx.keyframe', 'video.ltx.audio2video',
-        'neural.counters', 'neural.activations', 'neural.layers', 'neural.snapshot',
+        'neural.counters', 'neural.activations', 'neural.layers', 'neural.snapshot', 'neural.self_state',
         'saturation.config', 'saturation.check', 'saturation.reset_state',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
