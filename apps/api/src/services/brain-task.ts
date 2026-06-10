@@ -963,6 +963,84 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { claims: await listDmcaClaims(ws) }
     },
   },
+  // ─── R585 Team members + roles ────────────────────────────────────────
+  'team.list_members': {
+    description: 'R585: List active team members in workspace. Params: businessId? (filter to one)',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { businessId?: string }
+      const { listMembers } = await import('./r585-team-members.js')
+      return { items: await listMembers(ws, p.businessId ?? null) }
+    },
+  },
+  'team.invite': {
+    description: 'R585: Create email invite. Params: email, role (admin|manager|operator|va|accountant|viewer), businessId?, invitedBy',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { email?: string; role?: string; businessId?: string; invitedBy?: string }
+      if (!p.email || !p.role || !p.invitedBy) throw new Error('email + role + invitedBy required')
+      const { createInvite } = await import('./r585-team-members.js')
+      return createInvite(ws, p.email, p.role as Parameters<typeof createInvite>[2], p.businessId ?? null, p.invitedBy)
+    },
+  },
+  'team.list_invites': {
+    description: 'R585: Pending invites for this workspace.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { listInvites } = await import('./r585-team-members.js')
+      return { items: await listInvites(ws) }
+    },
+  },
+  'team.accept_invite': {
+    description: 'R585: Accept an invite via token. Params: token',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { token?: string }
+      if (!p.token) throw new Error('token required')
+      const { acceptInvite } = await import('./r585-team-members.js')
+      return acceptInvite(ws, p.token)
+    },
+  },
+  'team.cancel_invite': {
+    description: 'R585: Cancel a pending invite. Params: inviteId',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { inviteId?: string }
+      if (!p.inviteId) throw new Error('inviteId required')
+      const { cancelInvite } = await import('./r585-team-members.js')
+      return cancelInvite(ws, p.inviteId)
+    },
+  },
+  'team.set_role': {
+    description: 'R585: Change member role. Params: memberId, role',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { memberId?: string; role?: string }
+      if (!p.memberId || !p.role) throw new Error('memberId + role required')
+      const { setRole } = await import('./r585-team-members.js')
+      return setRole(ws, p.memberId, p.role as Parameters<typeof setRole>[2])
+    },
+  },
+  'team.revoke': {
+    description: 'R585: Revoke a member. Params: memberId',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { memberId?: string }
+      if (!p.memberId) throw new Error('memberId required')
+      const { revokeMember } = await import('./r585-team-members.js')
+      return revokeMember(ws, p.memberId)
+    },
+  },
+  'team.can_run_op': {
+    description: 'R585: Check if email can run a (op, risk) within business scope. Params: email, opName, opRisk, businessId?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { email?: string; opName?: string; opRisk?: string; businessId?: string }
+      if (!p.email || !p.opName || !p.opRisk) throw new Error('email + opName + opRisk required')
+      const { canMemberRunOp } = await import('./r585-team-members.js')
+      return canMemberRunOp(ws, p.email, p.opName, p.opRisk as 'low' | 'medium' | 'high', p.businessId ?? null)
+    },
+  },
   // ─── R581 Connector health registry ──────────────────────────────────
   'connector.registry': {
     description: 'R581: All known connectors with config + health (last_ok_at, fails, errors).',
@@ -9207,6 +9285,8 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'memory.recall', 'memory.embed_backfill', 'memory.recall_stats',
   'plan.list', 'plan.approve', 'plan.reject',
   'competitor.score_batch', 'competitor.top_unshipped',
+  'team.list_members', 'team.invite', 'team.list_invites', 'team.accept_invite',
+  'team.cancel_invite', 'team.set_role', 'team.revoke', 'team.can_run_op',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -9600,6 +9680,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
   'memory.recall', 'memory.embed_backfill', 'memory.recall_stats',
   'plan.list', 'plan.approve', 'plan.reject',
   'competitor.score_batch', 'competitor.top_unshipped',
+  'team.list_members', 'team.invite', 'team.list_invites', 'team.accept_invite',
+  'team.cancel_invite', 'team.set_role', 'team.revoke', 'team.can_run_op',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
