@@ -65,6 +65,23 @@ interface DashboardState {
   periodCompare?: { wowSalesDelta: number; wowGrossDelta: number; momSalesDelta: number; momGrossDelta: number; thisWeek: { sales: number; grossUsd: number }; thisMonth: { sales: number; grossUsd: number } }  // R519 — R513
   buyerOptInCount?: number                                                              // R531 — R517
   offsiteBackupConfigured?: boolean                                                     // R543 — R508 env health
+  businessRollup?: {                                                                    // R593 — R580 / R587
+    total: number;
+    activeLast24h: number;
+    byStage: Record<string, number>;
+    byHealth: Record<string, number>;
+  }
+  competitorIntel?: {                                                                   // R593 — R579 / R584 / R590
+    totalEntries: number;
+    highPriorityCount: number;
+    selfDevDraftCount: number;
+    topUnshipped: Array<{ title: string; score: number; url: string }>;
+  }
+  teamSummary?: {                                                                       // R593 — R585
+    totalMembers: number;
+    pendingInvites: number;
+    byRole: Record<string, number>;
+  }
   taxThresholdAlerts?: Array<{ source: string; bucket: string; ytdAtNotify: number }>   // R552 — R510 fired notifications
   aiSpend?: { todayUsd: number; todayCallCount: number; bySource: Array<{ source: string; usd: number; calls: number }>; cap?: { dailyUsd: number; pctUsed: number; budgetExhausted: boolean } }  // R428
   autonomyPaused?: boolean                                                                // R482
@@ -268,6 +285,40 @@ export async function loadState(workspaceId: string): Promise<DashboardState> {
         const { countOptIns } = await import('./r517-buyer-email-optin.js')
         return await countOptIns(workspaceId)
       } catch { return 0 }
+    })(),
+    businessRollup: await (async () => {                                     // R593
+      try {
+        const { businessRollup } = await import('./r587-cron-fanout.js')
+        return await businessRollup(workspaceId)
+      } catch { return undefined }
+    })(),
+    competitorIntel: await (async () => {                                    // R593
+      try {
+        const { db } = await import('../db/client.js')
+        const { sql } = await import('drizzle-orm')
+        const t = await db.execute(sql`SELECT COUNT(*)::int AS n FROM competitor_feed_entries`).catch(() => [{ n: 0 }] as unknown[])
+        const total = Number((t as Array<{ n: number }>)[0]?.n ?? 0)
+        const h = await db.execute(sql`SELECT COUNT(*)::int AS n FROM competitor_feed_entries WHERE parity_score >= 70`).catch(() => [{ n: 0 }] as unknown[])
+        const high = Number((h as Array<{ n: number }>)[0]?.n ?? 0)
+        const d = await db.execute(sql`SELECT COUNT(*)::int AS n FROM self_dev_proposal WHERE finding_id LIKE 'r584:%' AND status = 'draft'`).catch(() => [{ n: 0 }] as unknown[])
+        const drafts = Number((d as Array<{ n: number }>)[0]?.n ?? 0)
+        const top = await db.execute(sql`SELECT title, parity_score, url FROM competitor_feed_entries WHERE parity_score >= 70 ORDER BY parity_score DESC, published_at DESC LIMIT 5`).catch(() => [] as unknown[])
+        return {
+          totalEntries:       total,
+          highPriorityCount:  high,
+          selfDevDraftCount:  drafts,
+          topUnshipped:       (top as Array<{ title: string; parity_score: number; url: string }>).map(x => ({ title: x.title, score: Number(x.parity_score), url: x.url })),
+        }
+      } catch { return undefined }
+    })(),
+    teamSummary: await (async () => {                                        // R593
+      try {
+        const { listMembers, listInvites } = await import('./r585-team-members.js')
+        const [members, invites] = await Promise.all([listMembers(workspaceId), listInvites(workspaceId)])
+        const byRole: Record<string, number> = {}
+        for (const m of members) byRole[m.role] = (byRole[m.role] ?? 0) + 1
+        return { totalMembers: members.length, pendingInvites: invites.length, byRole }
+      } catch { return undefined }
     })(),
     taxThresholdAlerts: await (async () => {                                 // R552 — R510 active 1099-K warnings
       try {
@@ -625,6 +676,33 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
           </td></tr>
       </tbody>
     </table>
+  </div>` : ''}
+
+  ${s.businessRollup ? `<div class="card" style="grid-column: 1 / -1">
+    <h2>Businesses (R593 · R580 + R587)</h2>
+    <div class="stat"><span class="stat-val">${s.businessRollup.total}</span><span class="stat-lbl">${s.businessRollup.activeLast24h} active in 24h</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;font-size:12px;color:#a1a1aa">
+      ${Object.entries(s.businessRollup.byStage).map(([k, v]) => `<span style="background:#18181b;border:1px solid #27272a;padding:3px 8px;border-radius:10px">stage:${escapeHtml(k)} ${v}</span>`).join('')}
+      ${Object.entries(s.businessRollup.byHealth).map(([k, v]) => `<span style="background:#18181b;border:1px solid #27272a;padding:3px 8px;border-radius:10px;color:${k === 'green' ? '#22c55e' : k === 'yellow' ? '#facc15' : '#ef4444'}">health:${escapeHtml(k)} ${v}</span>`).join('')}
+    </div>
+  </div>` : ''}
+
+  ${s.teamSummary && s.teamSummary.totalMembers > 0 ? `<div class="card">
+    <h2>Team (R593 · R585)</h2>
+    <div class="stat"><span class="stat-val">${s.teamSummary.totalMembers}</span><span class="stat-lbl">${s.teamSummary.pendingInvites} pending invites</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;font-size:11px">
+      ${Object.entries(s.teamSummary.byRole).map(([k, v]) => `<span style="background:#1e3a8a;color:#dbeafe;padding:3px 8px;border-radius:10px">${escapeHtml(k)} ${v}</span>`).join('')}
+    </div>
+  </div>` : ''}
+
+  ${s.competitorIntel && s.competitorIntel.totalEntries > 0 ? `<div class="card" style="grid-column: 1 / -1">
+    <h2>Competitive intel (R593 · R579 + R584 + R590)</h2>
+    <div style="display:flex;gap:24px;font-size:14px">
+      <div><span style="font-size:22px;font-weight:600;color:#fafafa">${s.competitorIntel.totalEntries}</span><div class="mini">total entries</div></div>
+      <div><span style="font-size:22px;font-weight:600;color:#facc15">${s.competitorIntel.highPriorityCount}</span><div class="mini">score ≥ 70</div></div>
+      <div><span style="font-size:22px;font-weight:600;color:#22c55e">${s.competitorIntel.selfDevDraftCount}</span><div class="mini">self-dev drafts waiting approval</div></div>
+    </div>
+    ${s.competitorIntel.topUnshipped.length > 0 ? `<table style="margin-top:10px"><thead><tr><th>Top unshipped</th><th>Score</th></tr></thead><tbody>${s.competitorIntel.topUnshipped.map(t => `<tr><td><a href="${escapeHtml(t.url)}" target="_blank" rel="noopener" style="color:#60a5fa;text-decoration:none">${escapeHtml(t.title)}</a></td><td><strong>${t.score}</strong></td></tr>`).join('')}</tbody></table>` : ''}
   </div>` : ''}
 
   ${s.platformEarnings && s.platformEarnings.length > 0 ? `<div class="card" style="grid-column: 1 / -1">

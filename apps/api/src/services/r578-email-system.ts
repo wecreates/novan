@@ -207,6 +207,26 @@ export async function sendEmail(input: EmailSendInput): Promise<EmailSendResult>
     if (bp.brandName && !subject.includes(bp.brandName)) subject = `[${bp.brandName}] ${subject}`
   } catch { /* tolerated */ }
 
+  // R592 — brand-voice validation gate. Block the send if subject OR body
+  // contains banned phrases. Operator can override with bypassOptIn-style
+  // flag (kept separate so the policy is operator-aware: opt-in is about
+  // recipient consent; brand violations are about quality control).
+  // The validator scans subject + bodyText concatenated.
+  try {
+    const { validateAgainstBrand } = await import('./r571-brand-voice.js')
+    const combined = `${subject}\n\n${input.bodyText}`
+    const violations = await validateAgainstBrand(input.workspaceId, combined)
+    const blockingViolations = violations.filter(v => v.type === 'banned_phrase_used')
+    if (blockingViolations.length > 0) {
+      const reason = `brand violation: ${blockingViolations.map(v => v.detail).join('; ')}`
+      const id = await logEmail({
+        workspaceId: input.workspaceId, toEmail: to, toHash, subject, templateKey: input.templateKey,
+        status: 'failed', errorMessage: reason,
+      })
+      return { ok: false, id, status: 'failed', reason }
+    }
+  } catch { /* tolerated — brand validation is best-effort */ }
+
   const send = await transportSend({ to, subject, text: input.bodyText, ...(input.bodyHtml ? { html: input.bodyHtml } : {}) })
   if (!send.ok) {
     const id = await logEmail({
