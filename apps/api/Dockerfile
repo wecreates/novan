@@ -4,8 +4,15 @@
 FROM node:20-alpine
 
 RUN apk add --no-cache python3 make g++ postgresql-client ffmpeg \
+    chromium nss freetype harfbuzz ca-certificates ttf-freefont \
  && corepack enable \
  && corepack prepare pnpm@9.12.0 --activate
+
+# R602 — point Playwright at Alpine's system chromium instead of downloading
+# the Debian glibc-only headless shell (which won't run on musl).
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PLAYWRIGHT_BROWSERS_PATH=/usr/lib/chromium
 
 WORKDIR /app
 

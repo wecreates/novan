@@ -2427,6 +2427,177 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { count: items.length, items }
     },
   },
+  // ─── R601 Knowledge Graph ──────────────────────────────────────────
+  'kg.ingest': {
+    description: 'R601: Parse text for [[wiki-links]] + #tags, upsert node + edges. Params: name, body, type?, importance?, source?, businessId?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r601-knowledge-graph.js').ingestText>[1]
+      if (!p.name || !p.body) throw new Error('name + body required')
+      const { ingestText } = await import('./r601-knowledge-graph.js')
+      return ingestText(ws, p)
+    },
+  },
+  'kg.upsert_node': {
+    description: 'R601: Direct node upsert. Params: name, type?, body?, tags[]?, importance?, source?, businessId?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r601-knowledge-graph.js').upsertNode>[1]
+      if (!p.name) throw new Error('name required')
+      const { upsertNode } = await import('./r601-knowledge-graph.js')
+      return upsertNode(ws, p)
+    },
+  },
+  'kg.upsert_edge': {
+    description: 'R601: Direct edge upsert. Params: fromName, toName, kind? (links|refs|mentions|tagged|depends_on|derived_from|contradicts|parent_of|related), weight?, source?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { fromName?: string; toName?: string; kind?: string; weight?: number; source?: string }
+      if (!p.fromName || !p.toName) throw new Error('fromName + toName required')
+      const { upsertEdge } = await import('./r601-knowledge-graph.js')
+      return upsertEdge(ws, p.fromName, p.toName, p.kind ?? 'links', p.weight ?? 1.0, p.source)
+    },
+  },
+  'kg.get_node': {
+    description: 'R601: Fetch a node by name. Params: name',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { name?: string }
+      if (!p.name) throw new Error('name required')
+      const { getNode } = await import('./r601-knowledge-graph.js')
+      return getNode(ws, p.name)
+    },
+  },
+  'kg.list_nodes': {
+    description: 'R601: List nodes. Params: type?, tag?, limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { type?: string; tag?: string; limit?: number }
+      const { listNodes } = await import('./r601-knowledge-graph.js')
+      return { items: await listNodes(ws, p) }
+    },
+  },
+  'kg.backlinks': {
+    description: 'R601: All nodes linking TO the given node. Params: name, limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { name?: string; limit?: number }
+      if (!p.name) throw new Error('name required')
+      const { backlinks } = await import('./r601-knowledge-graph.js')
+      return { items: await backlinks(ws, p.name, p.limit ?? 50) }
+    },
+  },
+  'kg.neighborhood': {
+    description: 'R601: BFS k-hop neighborhood. Params: name, depth? (default 2), max? (default 50)',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { name?: string; depth?: number; max?: number }
+      if (!p.name) throw new Error('name required')
+      const { neighborhood } = await import('./r601-knowledge-graph.js')
+      return { items: await neighborhood(ws, p.name, p.depth ?? 2, p.max ?? 50) }
+    },
+  },
+  'kg.shortest_path': {
+    description: 'R601: Shortest weighted path between two nodes. Params: fromName, toName, maxHops?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { fromName?: string; toName?: string; maxHops?: number }
+      if (!p.fromName || !p.toName) throw new Error('fromName + toName required')
+      const { shortestPath } = await import('./r601-knowledge-graph.js')
+      return shortestPath(ws, p.fromName, p.toName, p.maxHops ?? 6)
+    },
+  },
+  'kg.centrality': {
+    description: 'R601: Top nodes by weighted in-degree + importance. Params: limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { centrality } = await import('./r601-knowledge-graph.js')
+      return { items: await centrality(ws, p.limit ?? 20) }
+    },
+  },
+  'kg.mermaid': {
+    description: 'R601: Mermaid graph export. Params: center? (node name), depth?, max?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { center?: string; depth?: number; max?: number }
+      const { mermaid } = await import('./r601-knowledge-graph.js')
+      return { mermaid: await mermaid(ws, p) }
+    },
+  },
+  'kg.daily_note': {
+    description: 'R601: Get-or-create today’s daily note; appends text if provided. Params: dateUtc?, append?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { dateUtc?: string; append?: string }
+      const { dailyNote } = await import('./r601-knowledge-graph.js')
+      return dailyNote(ws, p)
+    },
+  },
+  'kg.stats': {
+    description: 'R601: Node + edge counts, byType, top tags.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { stats } = await import('./r601-knowledge-graph.js')
+      return stats(ws)
+    },
+  },
+  // ─── R602 Autobrowser pool ─────────────────────────────────────────
+  'autobrowser.run': {
+    description: 'R602: Lease a pool worker and run a Playwright job synchronously. Params: agentId, script (navigate|screenshot|extract_text|fetch_html|click_chain), input{}, priority?, businessId?',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r602-autobrowser-pool.js').jobRun>[1]
+      if (!p.agentId || !p.script) throw new Error('agentId + script required')
+      const { jobRun } = await import('./r602-autobrowser-pool.js')
+      return jobRun(ws, p)
+    },
+  },
+  'autobrowser.submit': {
+    description: 'R602: Queue a Playwright job (returns immediately). Params: agentId, script, input{}, priority?, businessId?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r602-autobrowser-pool.js').submitJob>[1]
+      if (!p.agentId || !p.script) throw new Error('agentId + script required')
+      const { submitJob } = await import('./r602-autobrowser-pool.js')
+      return submitJob(ws, p)
+    },
+  },
+  'autobrowser.job': {
+    description: 'R602: Fetch a queued/running/done job by id. Params: id',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { getJob } = await import('./r602-autobrowser-pool.js')
+      return getJob(ws, p.id)
+    },
+  },
+  'autobrowser.recent': {
+    description: 'R602: Recent jobs for this workspace. Params: limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { recentJobs } = await import('./r602-autobrowser-pool.js')
+      return { items: await recentJobs(ws, p.limit ?? 20) }
+    },
+  },
+  'autobrowser.health': {
+    description: 'R602: Pool size, idle vs busy workers, supported scripts.',
+    risk: 'low',
+    handler: async () => {
+      const { poolHealth } = await import('./r602-autobrowser-pool.js')
+      return poolHealth()
+    },
+  },
+  'autobrowser.tick': {
+    description: 'R602: Manually trigger one queue sweep (cron also fires this every 5s).',
+    risk: 'medium',
+    handler: async () => {
+      const { tickPool } = await import('./r602-autobrowser-pool.js')
+      return tickPool()
+    },
+  },
   'music.mixcraft': {
     description: 'R600: Operator-vocabulary alias — end-to-end song replicate + vocal enhance + master into a single call. Params: url, instructions?, variationStrength? (0.15..0.8, default 0.4). Returns paths for original-cover + enhanced + mastered.',
     risk: 'medium',
@@ -10069,6 +10240,9 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'music.generate', 'music.replicate', 'music.mixcraft', 'music.status', 'music.master', 'music.knowledge',
         'music.vocalEnhance', 'music.scoreNaturalness', 'system.ffmpegAvailable',
         'video.ltx.health', 'video.ltx.text2video', 'video.ltx.image2video', 'video.ltx.keyframe', 'video.ltx.audio2video',
+        'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
+        'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
+        'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
         'music.fromImage', 'music.fromVideo', 'music.fromAudio',
         'mixcraft.status', 'mixcraft.compose',
         'capcut.status', 'video.scrapeAssets', 'video.editorAgent',

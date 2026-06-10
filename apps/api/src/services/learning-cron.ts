@@ -1327,6 +1327,7 @@ const INTERVALS = {
   memoryEmbedBackfill:    30 * 60_000,        // 30min embedding backfill (capped 25/tick)
   reservesPerBusiness:    6  * 60 * 60_000,   // R595 — 6h per-business reserve recompute via R587 fan-out
   pipelineSchedules:      60_000,             // R598 — minute tick to fire scheduled pipelines whose cron matches
+  autobrowserSweep:       5_000,              // R602 — 5s tick to dispatch queued autobrowser jobs to idle workers
 }
 
 /**
@@ -1654,6 +1655,18 @@ async function runPipelineSchedulesTick(): Promise<void> {
     }
     if (fired > 0) await emit('cron.pipeline_schedules', { fired })
   } catch (e) { await emit('cron.error', { task: 'pipeline_schedules', error: (e as Error).message }) }
+}
+
+// R602 — autobrowser pool sweep. Every 5s pulls up to POOL_SIZE queued jobs and
+// dispatches them to idle workers. Silent on empty queues; emits only when work
+// actually picked up to keep the events table from flooding.
+async function runAutobrowserSweep(): Promise<void> {
+  try {
+    if (process.env['DISABLE_AUTOBROWSER_POOL'] === '1') return
+    const { tickPool } = await import('./r602-autobrowser-pool.js')
+    const r = await tickPool()
+    if (r.picked > 0) await emit('cron.autobrowser_sweep', r)
+  } catch (e) { await emit('cron.error', { task: 'autobrowser_sweep', error: (e as Error).message }) }
 }
 
 async function runCompetitorScanTick(): Promise<void> {
@@ -2492,6 +2505,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runMemoryEmbedBackfillTick,     INTERVALS.memoryEmbedBackfill))
   handles.push(scheduleJittered(runReservesPerBusinessTick,     INTERVALS.reservesPerBusiness))   // R595
   handles.push(scheduleJittered(runPipelineSchedulesTick,       INTERVALS.pipelineSchedules))     // R598
+  handles.push(scheduleJittered(runAutobrowserSweep,            INTERVALS.autobrowserSweep))      // R602
   handles.push(scheduleJittered(runTrustAutoDerive,             INTERVALS.trustAutoDerive))
   handles.push(scheduleJittered(runFabricSweep,                 INTERVALS.fabricSweep))
   handles.push(scheduleJittered(runDataRetention,               INTERVALS.dataRetention))
