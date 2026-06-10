@@ -948,6 +948,37 @@ app.post<{ Body: { op?: string; workspaceId?: string; params?: Record<string, un
       }).catch(() => null)
     } catch { /* audit is best-effort */ }
 
+    // R586 — team-member ACL enforcement. If caller supplies x-novan-member-email,
+    // look the member up and check role against the op's declared risk before
+    // executing. Owner/admin-token path (no header) is unchanged so cron + system
+    // calls keep working.
+    const memberEmail = String(req.headers['x-novan-member-email'] ?? '').trim().toLowerCase()
+    if (memberEmail) {
+      try {
+        const { canMemberRunOp } = await import('./services/r585-team-members.js')
+        const opRisk = (spec.risk === 'high' || spec.risk === 'medium' ? spec.risk : 'low') as 'low' | 'medium' | 'high'
+        const businessId = typeof (body.params as Record<string, unknown>)?.['businessId'] === 'string' ? String((body.params as Record<string, unknown>)['businessId']) : null
+        const check = await canMemberRunOp(body.workspaceId, memberEmail, body.op, opRisk, businessId)
+        if (!check.allowed) {
+          // R586 — audit denied attempts so operator sees attempted unauthorized actions
+          try {
+            const { db } = await import('./db/client.js')
+            const { events } = await import('./db/schema.js')
+            const { v7: uuidv7 } = await import('uuid')
+            await db.insert(events).values({
+              id: uuidv7(),
+              workspaceId: body.workspaceId,
+              type: 'team.acl_denied',
+              payload: { op: body.op, risk: opRisk, memberEmail, reason: check.reason, businessId },
+              traceId: req.id ?? 'admin', correlationId: req.id ?? 'admin', source: 'r586-acl',
+              createdAt: Date.now(),
+            }).catch(() => null)
+          } catch { /* audit best-effort */ }
+          return reply.code(403).send({ ok: false, error: `acl_denied: ${check.reason}` })
+        }
+      } catch { /* ACL module failed to load — fail open for admin-token path */ }
+    }
+
     // R576 — also fire hooks on the direct /admin/brain dispatch path so
     // operator-defined interceptors apply uniformly (this path bypassed the
     // brain-task loop where the other hook check lives).
