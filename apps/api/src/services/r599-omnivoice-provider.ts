@@ -28,6 +28,29 @@ import { Buffer } from 'node:buffer'
 const BASE_URL_DEFAULT = 'http://localhost:8000'
 const TIMEOUT_DEFAULT_MS = 60_000
 
+// R610 — health cache + fallback gate. Voice ops check this before calling
+// OmniVoice; on failure or when OmniVoice isn't configured/reachable, we
+// transparently delegate to OpenAI via r610-openai-voice-fallback.
+let _omniHealthCache: { ok: boolean; checkedAt: number } | null = null
+const HEALTH_CACHE_MS = 60_000
+
+async function shouldFallbackToOpenAi(): Promise<boolean> {
+  if (!process.env['OPENAI_API_KEY']) return false   // no fallback target
+  if (!process.env['OMNIVOICE_BASE_URL']) return true // OmniVoice not configured → use fallback
+  // Cached health probe
+  if (_omniHealthCache && (Date.now() - _omniHealthCache.checkedAt) < HEALTH_CACHE_MS) {
+    return !_omniHealthCache.ok
+  }
+  try {
+    const r = await fetch(`${baseUrl()}/model/status`, { method: 'GET', signal: AbortSignal.timeout(3_000) })
+    _omniHealthCache = { ok: r.ok, checkedAt: Date.now() }
+    return !r.ok
+  } catch {
+    _omniHealthCache = { ok: false, checkedAt: Date.now() }
+    return true
+  }
+}
+
 function baseUrl(): string {
   return (process.env['OMNIVOICE_BASE_URL'] ?? BASE_URL_DEFAULT).replace(/\/+$/, '')
 }
@@ -66,6 +89,14 @@ export interface OmniHealth {
 }
 
 export async function omniHealth(workspaceId?: string): Promise<OmniHealth> {
+  // R610 — if OmniVoice not configured, surface the fallback state honestly
+  if (!process.env['OMNIVOICE_BASE_URL'] && process.env['OPENAI_API_KEY']) {
+    const { openaiVoiceHealth } = await import('./r610-openai-voice-fallback.js')
+    const oa = await openaiVoiceHealth(workspaceId)
+    const result: OmniHealth = { ok: oa.ok, baseUrl: 'openai-fallback', activeModel: 'tts-1', voicesCount: 6 }
+    if (!oa.ok && oa.reason) result.error = `openai fallback: ${oa.reason}`
+    return result
+  }
   const result: OmniHealth = { ok: false, baseUrl: baseUrl() }
   try {
     const r = await omniFetch('/model/status', { method: 'GET', timeoutMs: 5_000 })
@@ -95,6 +126,10 @@ export async function omniHealth(workspaceId?: string): Promise<OmniHealth> {
 export interface OmniVoice { id: string; name?: string; language?: string; preview_url?: string }
 
 export async function omniListVoices(workspaceId?: string): Promise<OmniVoice[]> {
+  if (await shouldFallbackToOpenAi()) {
+    const { openaiListVoices } = await import('./r610-openai-voice-fallback.js')
+    return openaiListVoices() as OmniVoice[]
+  }
   try {
     const r = await omniFetch('/v1/voices', { method: 'GET', timeoutMs: 10_000 })
     if (!r.ok) throw new Error(`/v1/voices ${r.status}`)
@@ -131,6 +166,19 @@ export interface OmniTtsResult {
 
 export async function omniTts(input: OmniTtsInput, workspaceId?: string): Promise<OmniTtsResult> {
   if (!input.text || !input.text.trim()) throw new Error('text required')
+  // R610 — fall back to OpenAI TTS when OmniVoice isn't available
+  if (await shouldFallbackToOpenAi()) {
+    const { openaiTts } = await import('./r610-openai-voice-fallback.js')
+    const ttsInput: Parameters<typeof openaiTts>[0] = { text: input.text }
+    if (input.voice)  ttsInput.voice  = input.voice
+    if (input.format) ttsInput.format = input.format as 'mp3' | 'wav' | 'flac' | 'opus'
+    if (typeof input.speed === 'number') ttsInput.speed = input.speed
+    const r = await openaiTts(ttsInput, workspaceId)
+    return {
+      audio: r.audio, mime: r.mime, bytes: r.bytes, format: r.format,
+      voice: r.voice, durationMs: r.durationMs,
+    }
+  }
   const fmt = input.format ?? 'mp3'
   const model = input.model ?? process.env['OMNIVOICE_TTS_BACKEND'] ?? 'omnivoice'
   const body = {
@@ -188,6 +236,18 @@ export interface OmniAsrResult {
 
 export async function omniAsr(input: OmniAsrInput, workspaceId?: string): Promise<OmniAsrResult> {
   if (!input.audio || input.audio.length === 0) throw new Error('audio buffer required')
+  // R610 — fall back to OpenAI Whisper when OmniVoice isn't available
+  if (await shouldFallbackToOpenAi()) {
+    const { openaiAsr } = await import('./r610-openai-voice-fallback.js')
+    const asrInput: Parameters<typeof openaiAsr>[0] = { audio: input.audio }
+    if (input.filename) asrInput.filename = input.filename
+    if (input.language) asrInput.language = input.language
+    if (input.prompt)   asrInput.prompt   = input.prompt
+    const r = await openaiAsr(asrInput, workspaceId)
+    const result: OmniAsrResult = { text: r.text, durationMs: r.durationMs, raw: { provider: r.provider } }
+    if (r.language) result.language = r.language
+    return result
+  }
   const t0 = Date.now()
   const fd = new FormData()
   const blob = new Blob([input.audio as unknown as ArrayBuffer], { type: 'audio/wav' })
@@ -229,6 +289,10 @@ export interface OmniCloneResult {
 export async function omniCloneVoice(input: OmniCloneInput, workspaceId?: string): Promise<OmniCloneResult> {
   if (!input.name) throw new Error('name required')
   if (!input.audio || input.audio.length === 0) throw new Error('audio buffer required')
+  // R610 — clone has no OpenAI equivalent
+  if (await shouldFallbackToOpenAi()) {
+    throw new Error('voice clone requires a running OmniVoice Studio server (3-sec sample → custom voice). OpenAI does not offer voice cloning. Use the 6 OpenAI presets via voice.omni.tts in the meantime, or run OmniVoice locally and set OMNIVOICE_BASE_URL.')
+  }
   const t0 = Date.now()
   const fd = new FormData()
   fd.append('name', input.name)
@@ -270,6 +334,9 @@ export interface OmniDubJob {
 
 export async function omniDubStart(input: OmniDubStartInput, workspaceId?: string): Promise<OmniDubJob> {
   if (!input.url) throw new Error('url required')
+  if (await shouldFallbackToOpenAi()) {
+    throw new Error('video dubbing requires OmniVoice Studio (transcribe → translate → re-voice → mux MP4). No OpenAI equivalent. Run OmniVoice locally and set OMNIVOICE_BASE_URL.')
+  }
   try {
     const r = await omniFetch('/dub/ingest-url', {
       method: 'POST',
