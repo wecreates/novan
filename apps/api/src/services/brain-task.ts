@@ -963,6 +963,107 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { claims: await listDmcaClaims(ws) }
     },
   },
+  // ─── R570 Federated bandit ────────────────────────────────────────────
+  'federation.opt_in': {
+    description: 'R570: Opt this workspace in to the cross-operator bandit pool (anonymized SHA256 hashes only).',
+    risk: 'medium',
+    handler: async (ws) => {
+      const { setSetting } = await import('./r437-operator-timezone.js')
+      await setSetting(ws, 'federation_opted_in', '1')
+      return { ok: true, optedIn: true }
+    },
+  },
+  'federation.opt_out': {
+    description: 'R570: Stop contributing to / reading from the cross-operator bandit pool.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { setSetting } = await import('./r437-operator-timezone.js')
+      await setSetting(ws, 'federation_opted_in', '0')
+      return { ok: true, optedIn: false }
+    },
+  },
+  'federation.stats': {
+    description: 'R570: Federation pool size + freshness (entries, total sales, oldest/newest signal).',
+    risk: 'low',
+    handler: async () => {
+      const { federationStats } = await import('./r570-federated-bandit.js')
+      return federationStats()
+    },
+  },
+  'federation.trending': {
+    description: 'R570: Top-N rising products by sales velocity over a lookback window. Params: lookbackDays?, topN?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { lookbackDays?: number; topN?: number }
+      const { trendingFederated } = await import('./r570-federated-bandit.js')
+      return { items: await trendingFederated(p.lookbackDays ?? 14, Math.min(50, p.topN ?? 25)) }
+    },
+  },
+  // ─── R571 Brand voice ────────────────────────────────────────────────
+  'brand.get': {
+    description: 'R571: Get this workspace’s brand profile (tone, persona, banned/required phrases, examples).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { getBrandProfile } = await import('./r571-brand-voice.js')
+      return getBrandProfile(ws)
+    },
+  },
+  'brand.set': {
+    description: 'R571: Update brand profile. Params: any of {brandName, tone, persona, audience, styleGuide, bannedPhrases[], requiredPhrases[], exampleOutputs[]}',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const { setBrandProfile } = await import('./r571-brand-voice.js')
+      return setBrandProfile(ws, params as Parameters<typeof setBrandProfile>[1])
+    },
+  },
+  'brand.validate': {
+    description: 'R571: Scan an output for brand violations. Params: output',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { output?: string }
+      if (!p.output) throw new Error('brand.validate: output required')
+      const { validateAgainstBrand } = await import('./r571-brand-voice.js')
+      return { violations: await validateAgainstBrand(ws, p.output) }
+    },
+  },
+  // ─── R572 Finance layer ──────────────────────────────────────────────
+  'finance.reserve_recommendations': {
+    description: 'R572: Recompute recommended reserves per source from refund-rate observations.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { windowDays?: number }
+      const { computeReserves } = await import('./r572-finance-layer.js')
+      return { items: await computeReserves(ws, p.windowDays ?? 90) }
+    },
+  },
+  'finance.factoring_propose': {
+    description: 'R572: Capture intent to factor receivables. Params: source, amountUsd, discountPct?, notes?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { source?: string; amountUsd?: number; discountPct?: number; notes?: string }
+      if (!p.source || typeof p.amountUsd !== 'number') throw new Error('source + amountUsd required')
+      const { proposeFactoring } = await import('./r572-finance-layer.js')
+      return proposeFactoring(ws, p.source, p.amountUsd, p.discountPct, p.notes)
+    },
+  },
+  'finance.insurance_enroll': {
+    description: 'R572: Enroll in an insurance tier. Params: tier (basic|standard|premium)',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { tier?: string }
+      if (!p.tier) throw new Error('tier required')
+      const { enrollInsurance } = await import('./r572-finance-layer.js')
+      return enrollInsurance(ws, p.tier)
+    },
+  },
+  'finance.insurance_active': {
+    description: 'R572: Current insurance enrollment for this workspace, if any.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { activeInsurance } = await import('./r572-finance-layer.js')
+      return activeInsurance(ws)
+    },
+  },
   'tax.notifications_list': {
     description: 'R555: List 1099-K threshold notifications that have fired this tax year. Params: year? (default current)',
     risk: 'low',
@@ -8811,6 +8912,9 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights', 'platforms.list_disabled', 'mrr.project', 'sales.bulk_import', 'session.touch', 'session.ages', 'webhook.self_test',
   'platforms.earnings', 'metrics.period_comparison', 'tax.thresholds', 'imagegen.provider_health', 'backup.offsite_sync', 'dmca.list', 'buyers.optin_count',
   'price.sample', 'price.mark_view', 'price.snapshot', 'buyers.list_optins', 'dmca.update_status', 'tax.notifications_list',
+  'federation.opt_in', 'federation.opt_out', 'federation.stats', 'federation.trending',
+  'brand.get', 'brand.set', 'brand.validate',
+  'finance.reserve_recommendations', 'finance.factoring_propose', 'finance.insurance_enroll', 'finance.insurance_active',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -9119,6 +9223,11 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'metrics.period_comparison', 'mrr.project', 'price.snapshot',
         'price.sample', 'buyers.optin_count', 'buyers.list_optins',
         'dmca.list', 'dmca.update_status',
+        // R570-R572 — federation pool + brand profile + finance reserves all
+        // surface money figures the operator explicitly asked for.
+        'federation.stats', 'federation.trending',
+        'finance.reserve_recommendations', 'finance.factoring_propose',
+        'finance.insurance_enroll', 'finance.insurance_active',
         'revenue.list', 'revenue.rollup', 'revenue.byBusiness',
         'budget.list', 'budget.detail', 'budget.alerts',
         'cost.summary', 'cost.byBusiness', 'cost.byProvider',
@@ -9164,6 +9273,9 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'pacing.check_or_acquire', 'pacing.snapshot', 'pacing.auto_loosen', 'daily_cron.run', 'next_actions.list', 'next_actions.push', 'failures.cluster', 'variants.generate_for_design', 'queue.stuck', 'designs.performance', 'designs.coverage', 'dashboard.snapshot', 'niches.performance', 'niches.recommend_weights', 'platforms.list_disabled', 'mrr.project', 'sales.bulk_import', 'session.touch', 'session.ages', 'webhook.self_test',
   'platforms.earnings', 'metrics.period_comparison', 'tax.thresholds', 'imagegen.provider_health', 'backup.offsite_sync', 'dmca.list', 'buyers.optin_count',
   'price.sample', 'price.mark_view', 'price.snapshot', 'buyers.list_optins', 'dmca.update_status', 'tax.notifications_list',
+  'federation.opt_in', 'federation.opt_out', 'federation.stats', 'federation.trending',
+  'brand.get', 'brand.set', 'brand.validate',
+  'finance.reserve_recommendations', 'finance.factoring_propose', 'finance.insurance_enroll', 'finance.insurance_active',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',

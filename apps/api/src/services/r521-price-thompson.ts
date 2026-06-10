@@ -50,6 +50,11 @@ export async function markSale(workspaceId: string, productKey: string, priceCen
     ON CONFLICT (workspace_id, product_key, price_cents)
       DO UPDATE SET sales = price_experiments.sales + 1
   `).catch(() => {/* tolerated */})
+  // R570 — contribute the delta to the federation pool (opt-in gated inside).
+  try {
+    const { contributeBanditDelta } = await import('./r570-federated-bandit.js')
+    await contributeBanditDelta(workspaceId, productKey, priceCents, 0, 1)
+  } catch { /* tolerated */ }
 }
 
 // R523 — undo a counted sale (called by refund handler). Clamped at 0.
@@ -108,14 +113,25 @@ export async function sampleNextPriceCents(
     stats = r as unknown as typeof stats
   } catch { /* tolerated */ }
   const lookup = new Map(stats.map(s => [Number(s.price_cents), { v: Number(s.views), s: Number(s.sales) }]))
-  let bestScore = -1, bestPrice = candidates[0]!
+  // R570 — blend federated prior (down-weighted to 1/4 so local data
+  // dominates once observed). With zero local data this still pulls the
+  // sampler toward the federated winner.
+  const { isFederationOptedIn, pullBanditPrior } = await import('./r570-federated-bandit.js')
+  const useFederation = await isFederationOptedIn(workspaceId)
+  let bestScore = -1, bestPrice = candidates[0]!, reasonOut: 'thompson' | 'thompson_federated' = 'thompson'
   for (const p of candidates) {
-    const { v, s } = lookup.get(p) ?? { v: 0, s: 0 }
-    // Beta(s+1, v-s+1) prior — conversion rate
+    const local = lookup.get(p) ?? { v: 0, s: 0 }
+    let v = local.v, s = local.s
+    if (useFederation) {
+      const fed = await pullBanditPrior(productKey, p)
+      v += Math.round(fed.samples * 0.25)
+      s += Math.round(fed.sales * 0.25)
+      if (fed.samples + fed.sales > 0) reasonOut = 'thompson_federated'
+    }
     const score = sampleBeta(s + 1, Math.max(0, v - s) + 1)
     if (score > bestScore) { bestScore = score; bestPrice = p }
   }
-  return { priceCents: bestPrice, reason: 'thompson' }
+  return { priceCents: bestPrice, reason: reasonOut as 'thompson' }
 }
 
 export async function snapshotPriceExperiments(
