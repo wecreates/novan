@@ -1001,6 +1001,25 @@ export const OPERATIONS: Record<string, OpSpec> = {
       })
     },
   },
+  // ─── R590 Parity → self-dev ──────────────────────────────────────────
+  'parity.file_self_dev': {
+    description: 'R590: File high-confidence (>=90 by default) R584 parity entries as R195 self_dev_proposal draft. Operator must approve before applier ships. Params: minScore?, max?, workspaceId?',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { minScore?: number; max?: number; workspaceId?: string }
+      const { fileHighConfidenceAsSelfDev } = await import('./r590-parity-to-selfdev.js')
+      return fileHighConfidenceAsSelfDev(p.workspaceId ?? ws, p.minScore ?? 90, p.max ?? 10)
+    },
+  },
+  'parity.preview_self_dev': {
+    description: 'R590: Preview what file_self_dev would queue without writing. Params: minScore?, max?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { minScore?: number; max?: number }
+      const { previewHighConfidence } = await import('./r590-parity-to-selfdev.js')
+      return { items: await previewHighConfidence(p.minScore ?? 90, p.max ?? 10) }
+    },
+  },
   // ─── R585 Team members + roles ────────────────────────────────────────
   'team.list_members': {
     description: 'R585: List active team members in workspace. Params: businessId? (filter to one)',
@@ -9327,6 +9346,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'team.cancel_invite', 'team.set_role', 'team.revoke', 'team.can_run_op',
   'business.rollup', 'business.cron_fanout_test',
   'business.roster', 'business.all_rosters',
+  'parity.file_self_dev', 'parity.preview_self_dev',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -9724,6 +9744,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
   'team.cancel_invite', 'team.set_role', 'team.revoke', 'team.can_run_op',
   'business.rollup', 'business.cron_fanout_test',
   'business.roster', 'business.all_rosters',
+  'parity.file_self_dev', 'parity.preview_self_dev',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',

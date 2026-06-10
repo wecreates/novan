@@ -44,13 +44,23 @@ interface ScoreResult { score: number; delta: string }
 async function scoreOne(entry: UnscoredEntry): Promise<ScoreResult | null> {
   const key = process.env['ANTHROPIC_API_KEY']
   if (!key) {
-    // Fallback heuristic: any title containing 'agent'/'tool'/'workflow' scores 60
+    // Fallback heuristic — tuned to surface real catch-up candidates without an LLM.
     const t = entry.title.toLowerCase()
-    let s = 30
-    if (t.includes('agent') || t.includes('workflow') || t.includes('tool')) s = 60
-    if (t.includes('memory') || t.includes('context')) s = 70
-    if (t.includes('mcp') || t.includes('plugin')) s = 75
-    return { score: s, delta: `heuristic-scored: ${entry.title}` }
+    let s = 35
+    // Workflow primitives Novan must keep parity on
+    if (/(agent|workflow|tool|api|sdk)/.test(t))          s = Math.max(s, 65)
+    if (/(memory|context|recall|rag)/.test(t))            s = Math.max(s, 72)
+    if (/(mcp|plugin|connector|integration)/.test(t))     s = Math.max(s, 78)
+    if (/(realtime|streaming|webhook)/.test(t))           s = Math.max(s, 70)
+    if (/(billing|cost|spend|budget|usage)/.test(t))      s = Math.max(s, 68)
+    if (/(team|role|permission|acl|auth)/.test(t))        s = Math.max(s, 68)
+    // Anthropic / OpenAI capability mentions — high relevance to our base brain
+    if (/(claude|gpt|anthropic|openai)/.test(t))          s = Math.max(s, 80)
+    // Plan mode / approval workflows
+    if (/(plan|approve|review|preview|dry-run)/.test(t))  s = Math.max(s, 75)
+    // Specific high-value features
+    if (/(extended thinking|reasoning|computer use)/.test(t)) s = Math.max(s, 90)
+    return { score: s, delta: `heuristic: ${entry.title.slice(0, 200)}` }
   }
   const prompt = `You evaluate competitor feature launches for a print-on-demand automation platform called Novan.
 
