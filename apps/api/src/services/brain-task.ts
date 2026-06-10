@@ -1453,6 +1453,58 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { items: await computeReserves(ws, p.windowDays ?? 90) }
     },
   },
+  'standards.seed': {
+    description: 'R596: Seed 6 starter coding standards (Agent-OS-inspired). Idempotent.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { seedStarterStandards } = await import('./r596-coding-standards.js')
+      return seedStarterStandards(ws)
+    },
+  },
+  'standards.list': {
+    description: 'R596: List coding standards. Params: category?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { category?: string }
+      const { listStandards } = await import('./r596-coding-standards.js')
+      return { items: await listStandards(ws, p.category) }
+    },
+  },
+  'standards.upsert': {
+    description: 'R596: Create/update a coding standard. Params: slug, category, title, body, detectionGlobs[], detectionKeywords[], importance?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { slug?: string; category?: string; title?: string; body?: string; detectionGlobs?: string[]; detectionKeywords?: string[]; importance?: number }
+      if (!p.slug || !p.title || !p.body) throw new Error('slug + title + body required')
+      const { upsertStandard } = await import('./r596-coding-standards.js')
+      await upsertStandard(ws, {
+        slug: p.slug, category: p.category ?? 'global', title: p.title, body: p.body,
+        detectionGlobs: p.detectionGlobs ?? [], detectionKeywords: p.detectionKeywords ?? [],
+        importance: typeof p.importance === 'number' ? p.importance : 50,
+      })
+      return { ok: true, slug: p.slug }
+    },
+  },
+  'standards.applicable': {
+    description: 'R596: Return standards that match a file path / op name / description. Params: filePath?, opName?, description?, keywords[], max?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { filePath?: string; opName?: string; description?: string; keywords?: string[]; max?: number }
+      const { applicableStandards } = await import('./r596-coding-standards.js')
+      const hits = await applicableStandards(ws, p, p.max ?? 5)
+      return { items: hits.map(h => ({ slug: h.standard.slug, title: h.standard.title, category: h.standard.category, score: Math.round(h.score * 100) / 100, reason: h.reason })) }
+    },
+  },
+  'standards.inject': {
+    description: 'R596: Return concatenated MD block of applicable standards, ready to inject into LLM system prompt. Params same as standards.applicable + max?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { filePath?: string; opName?: string; description?: string; keywords?: string[]; max?: number }
+      const { applicableStandards, buildStandardsBlock } = await import('./r596-coding-standards.js')
+      const hits = await applicableStandards(ws, p, p.max ?? 5)
+      return { block: buildStandardsBlock(hits), count: hits.length }
+    },
+  },
   'finance.reserve_for_business': {
     description: 'R595: Recompute reserves for ONE business. Params: businessId, windowDays?',
     risk: 'low',
@@ -9708,6 +9760,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'federation.stats', 'federation.trending',
         'finance.reserve_recommendations', 'finance.reserve_for_business', 'finance.reserve_for_business_all',
         'finance.factoring_propose', 'finance.insurance_enroll', 'finance.insurance_active',
+        'standards.seed', 'standards.list', 'standards.upsert', 'standards.applicable', 'standards.inject',
         'revenue.list', 'revenue.rollup', 'revenue.byBusiness',
         'budget.list', 'budget.detail', 'budget.alerts',
         'cost.summary', 'cost.byBusiness', 'cost.byProvider',

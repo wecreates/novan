@@ -290,6 +290,21 @@ export async function* runBrainLoop(
     }
   } catch { /* tolerated — recall is best-effort */ }
 
+  // R596 — surface applicable coding standards (Agent-OS-inspired). The brain
+  // gets a concise standards block matched against the user's task description
+  // so generated code respects project conventions without bloating the prompt.
+  try {
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content
+    if (typeof lastUserMsg === 'string' && lastUserMsg.length >= 8) {
+      const { applicableStandards, buildStandardsBlock } = await import('./r596-coding-standards.js')
+      const hits = await applicableStandards(workspaceId, { description: lastUserMsg.slice(0, 1000) }, 3)
+      if (hits.length > 0) {
+        const block = buildStandardsBlock(hits)
+        if (block) extraSys += `\n\n${block}`
+      }
+    }
+  } catch { /* tolerated — standards injection is best-effort */ }
+
   // 3. Compose loop messages with brain-loop system prompt
   const loopMessages: ChatMsg[] = [
     { role: 'system', content: SYS_BRAIN_LOOP + extraSys },
