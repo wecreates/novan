@@ -2427,6 +2427,31 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { count: items.length, items }
     },
   },
+  // ─── R608 Connector audit / wire-check / reaper ────────────────────
+  'connector.audit': {
+    description: 'R608: Per-connector status (configured / missing env / signup url / probe op). Includes setup hints.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { auditConnectors } = await import('./r608-connector-audit.js')
+      return { items: await auditConnectors(ws) }
+    },
+  },
+  'connector.wire_check': {
+    description: 'R608: Probe every connector that has a probe op in parallel. Returns ok/fail per connector + summary.',
+    risk: 'medium',
+    handler: async (ws) => {
+      const { wireCheck } = await import('./r608-connector-audit.js')
+      return wireCheck(ws)
+    },
+  },
+  'autobrowser.reap_stuck': {
+    description: 'R608: Mark autobrowser jobs running >2 minutes as failed (stuck/leaked).',
+    risk: 'low',
+    handler: async () => {
+      const { reapStuckAutobrowserJobs } = await import('./r608-connector-audit.js')
+      return reapStuckAutobrowserJobs()
+    },
+  },
   // ─── R606 Saturation alerts ────────────────────────────────────────
   'saturation.config': {
     description: 'R606: Current saturation-alert configuration (threshold, dwell, cooldown, webhook).',
@@ -10321,6 +10346,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'video.ltx.health', 'video.ltx.text2video', 'video.ltx.image2video', 'video.ltx.keyframe', 'video.ltx.audio2video',
         'neural.counters', 'neural.activations', 'neural.layers', 'neural.snapshot', 'neural.self_state',
         'saturation.config', 'saturation.check', 'saturation.reset_state',
+        'connector.audit', 'connector.wire_check', 'autobrowser.reap_stuck',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',

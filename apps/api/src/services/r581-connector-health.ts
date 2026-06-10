@@ -82,6 +82,8 @@ const KNOWN_CONNECTORS: Array<{ id: string; kind: string; envChecks: string[] }>
   // R599 — local voice provider (OmniVoice Studio). Self-hosted; ENV only
   // needs the base URL (default http://localhost:8000).
   { id: 'omnivoice',        kind: 'voice',        envChecks: ['OMNIVOICE_BASE_URL'] },
+  // R608 — explicitly track ACE-Step music generator (R600 backbone).
+  { id: 'acestep',          kind: 'music',        envChecks: ['ACESTEP_BASE_URL'] },
 ]
 
 function isConfiguredViaEnv(connectorId: string): boolean {

@@ -1677,6 +1677,12 @@ async function runAutobrowserSweep(): Promise<void> {
     if (process.env['DISABLE_AUTOBROWSER_POOL'] === '1') return
     const { tickPool } = await import('./r602-autobrowser-pool.js')
     const r = await tickPool()
+    // R608 — reap any job stuck in 'running' >2m alongside the sweep.
+    try {
+      const { reapStuckAutobrowserJobs } = await import('./r608-connector-audit.js')
+      const reaped = await reapStuckAutobrowserJobs()
+      if (reaped.reaped > 0) await emit('cron.autobrowser_reap', reaped)
+    } catch { /* tolerated */ }
     if (r.picked > 0) await emit('cron.autobrowser_sweep', r)
   } catch (e) { await emit('cron.error', { task: 'autobrowser_sweep', error: (e as Error).message }) }
 }
