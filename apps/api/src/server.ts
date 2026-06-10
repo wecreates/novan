@@ -342,6 +342,7 @@ const isPublic = (url: string): boolean => {
   if (url.startsWith('/ops/buyers/'))                                   return true  // R520 — token in query
   if (url.startsWith('/ops/registry'))                                  return true  // R573 — token in query
   if (url.startsWith('/ops/spend.json'))                                return true  // R574 — token in query
+  if (url.startsWith('/ops/audit'))                                     return true  // R577 — token in query
   if (url === '/console.html' || url === '/console')                    return true
   if (url === '/brain.html'   || url === '/brain')                      return true
   if (url === '/api/v1/health'  || url.startsWith('/api/v1/health/'))  return true
@@ -947,7 +948,30 @@ app.post<{ Body: { op?: string; workspaceId?: string; params?: Record<string, un
       }).catch(() => null)
     } catch { /* audit is best-effort */ }
 
+    // R576 — also fire hooks on the direct /admin/brain dispatch path so
+    // operator-defined interceptors apply uniformly (this path bypassed the
+    // brain-task loop where the other hook check lives).
+    try {
+      const { runHooks, HookBlockedError } = await import('./services/r576-hooks-engine.js')
+      try {
+        await runHooks('pre', { workspaceId: body.workspaceId, opName: body.op, params: body.params })
+      } catch (he) {
+        if (he instanceof HookBlockedError) {
+          return reply.code(403).send({ ok: false, error: `hook_blocked: ${he.message}`, hookId: he.hookId })
+        }
+        throw he
+      }
+    } catch (he) {
+      const msg = (he as Error).message ?? ''
+      if (msg.startsWith('hook ')) return reply.code(403).send({ ok: false, error: msg })
+      // module load failure — fail open
+    }
+    const t0Hook = Date.now()
     const result = await spec.handler(body.workspaceId, body.params ?? {})
+    try {
+      const { runHooks } = await import('./services/r576-hooks-engine.js')
+      await runHooks('post', { workspaceId: body.workspaceId, opName: body.op, params: body.params, result, durationMs: Date.now() - t0Hook })
+    } catch { /* tolerated */ }
     return reply.send({ ok: true, op: body.op, result })
   } catch (e) {
     return reply.code(500).send({ ok: false, error: (e as Error).message.slice(0, 500) })
@@ -1065,6 +1089,40 @@ app.get<{ Querystring: { token?: string; workspace?: string; since?: string; unt
     .type('text/csv')
     .header('Content-Disposition', `attachment; filename="novan-revenue-${ws}-${new Date().toISOString().slice(0, 10)}.csv"`)
     .send(csv)
+})
+
+// R577 — audit log endpoint. Filters: since (ISO or epoch), op (substring),
+// status (ok|err|both), limit (max 500). Returns brain_task.* + hook.fired +
+// gdpr/dmca/refund events — anything operator-visible action audit.
+app.get<{ Querystring: { token?: string; workspace?: string; since?: string; op?: string; status?: string; limit?: string } }>('/ops/audit.json', async (req, reply) => {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  if (!req.query.token || (ops && req.query.token !== ops)) return reply.code(401).send({ error: 'unauthorized' })
+  const ws = req.query.workspace ?? 'default'
+  let since = 0
+  if (req.query.since) {
+    const n = Number(req.query.since)
+    since = Number.isFinite(n) && n > 1_000_000_000 ? n : (Date.parse(req.query.since) || 0)
+  } else {
+    since = Date.now() - 24 * 60 * 60_000   // last 24h default
+  }
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit ?? 100)))
+  const opSubstr = req.query.op ?? ''
+  const { db } = await import('./db/client.js')
+  const { sql } = await import('drizzle-orm')
+  const r = await db.execute(sql`
+    SELECT id, type, payload, created_at FROM events
+    WHERE workspace_id = ${ws} AND created_at >= ${since}
+      AND type IN (
+        'brain_task.started', 'brain_task.completed', 'brain_task.op_completed', 'brain_task.op_failed',
+        'hook.fired', 'gdpr.deletion_completed', 'gumroad.sale_refunded',
+        'memory.compacted', 'backup.offsite_failed', 'kill_switch.engaged', 'kill_switch.disengaged'
+      )
+      ${opSubstr ? sql`AND (payload->>'op' LIKE ${'%' + opSubstr + '%'} OR type LIKE ${'%' + opSubstr + '%'})` : sql``}
+    ORDER BY created_at DESC
+    LIMIT ${limit}
+  `).catch(() => [] as unknown[])
+  reply.header('Cache-Control', 'no-store')
+  return reply.send({ count: (r as unknown[]).length, sinceMs: since, items: r })
 })
 
 // R574 — live spend JSON for dashboard polling ticker.

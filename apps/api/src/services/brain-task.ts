@@ -963,6 +963,63 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { claims: await listDmcaClaims(ws) }
     },
   },
+  // ─── R575 Memory compaction ──────────────────────────────────────────
+  'memory.compact': {
+    description: 'R575: Compact low+mid importance workspace_memory entries older than 90d/180d into per-scope summaries. Params: dryRun?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { dryRun?: boolean }
+      const { compactMemory } = await import('./r575-memory-compaction.js')
+      return compactMemory(ws, { dryRun: p.dryRun === true })
+    },
+  },
+  'memory.stats': {
+    description: 'R575: workspace_memory size + average importance + oldest entry per scope.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { memoryStats } = await import('./r575-memory-compaction.js')
+      return memoryStats(ws)
+    },
+  },
+  // ─── R576 Hooks engine ───────────────────────────────────────────────
+  'hooks.create': {
+    description: 'R576: Register a pre/post hook on op-name pattern. Params: opPattern (glob), whenKind (pre|post), action (block|log|alert|require_approval), matchCondition?, config?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { opPattern?: string; whenKind?: 'pre' | 'post'; action?: 'block' | 'log' | 'alert' | 'require_approval'; matchCondition?: Record<string, unknown>; config?: Record<string, unknown> }
+      if (!p.opPattern || !p.whenKind || !p.action) throw new Error('opPattern + whenKind + action required')
+      const { createHook } = await import('./r576-hooks-engine.js')
+      return createHook(ws, p as Parameters<typeof createHook>[1])
+    },
+  },
+  'hooks.list': {
+    description: 'R576: All hooks for this workspace.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { listHooks } = await import('./r576-hooks-engine.js')
+      return { items: await listHooks(ws) }
+    },
+  },
+  'hooks.set_enabled': {
+    description: 'R576: Enable/disable a hook. Params: hookId, enabled',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { hookId?: string; enabled?: boolean }
+      if (!p.hookId || typeof p.enabled !== 'boolean') throw new Error('hookId + enabled required')
+      const { setHookEnabled } = await import('./r576-hooks-engine.js')
+      return setHookEnabled(ws, p.hookId, p.enabled)
+    },
+  },
+  'hooks.delete': {
+    description: 'R576: Delete a hook.',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { hookId?: string }
+      if (!p.hookId) throw new Error('hookId required')
+      const { deleteHook } = await import('./r576-hooks-engine.js')
+      return deleteHook(ws, p.hookId)
+    },
+  },
   // ─── R573 Public ops registry ────────────────────────────────────────
   'registry.list': {
     description: 'R573: All brain ops with name/description/risk/category. For plugin discovery / external docs.',
@@ -8924,7 +8981,8 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'federation.opt_in', 'federation.opt_out', 'federation.stats', 'federation.trending',
   'brand.get', 'brand.set', 'brand.validate',
   'finance.reserve_recommendations', 'finance.factoring_propose', 'finance.insurance_enroll', 'finance.insurance_active',
-  'registry.list',
+  'registry.list', 'memory.compact', 'memory.stats',
+  'hooks.create', 'hooks.list', 'hooks.set_enabled', 'hooks.delete',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -9209,9 +9267,31 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
     // activity even if the op takes a while. Fire-and-forget.
     recordAgentActivityAsync(workspaceId, step.op, { status: 'running' })
 
+    // R576 — pre-hook: operator-defined interceptors that can BLOCK, log,
+    // alert, or demand explicit approval before this op runs.
+    try {
+      const { runHooks, HookBlockedError } = await import('./r576-hooks-engine.js')
+      try {
+        await runHooks('pre', { workspaceId, opName: step.op, params: step.params, approvalToken })
+      } catch (he) {
+        if (he instanceof HookBlockedError) {
+          results.push({ op: step.op, ok: false, error: `hook_blocked: ${he.message}`, durationMs: 0 })
+          await emit(workspaceId, 'brain_task.op_failed', { taskId, op: step.op, error: he.message })
+          continue
+        }
+        throw he
+      }
+    } catch { /* hooks module failed to load — fail-open */ }
+
     const t0 = Date.now()
     try {
       const data = await spec.handler(workspaceId, step.params ?? {})
+
+      // R576 — post-hook: fire log/alert after successful op.
+      try {
+        const { runHooks } = await import('./r576-hooks-engine.js')
+        await runHooks('post', { workspaceId, opName: step.op, params: step.params, result: data, durationMs: Date.now() - t0 })
+      } catch { /* tolerated */ }
 
       // Output guard — if the operation result itself contains financial
       // content (e.g. browser.text scraped a banking page), redact + flag.
@@ -9286,7 +9366,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
   'federation.opt_in', 'federation.opt_out', 'federation.stats', 'federation.trending',
   'brand.get', 'brand.set', 'brand.validate',
   'finance.reserve_recommendations', 'finance.factoring_propose', 'finance.insurance_enroll', 'finance.insurance_active',
-  'registry.list',
+  'registry.list', 'memory.compact', 'memory.stats',
+  'hooks.create', 'hooks.list', 'hooks.set_enabled', 'hooks.delete',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
