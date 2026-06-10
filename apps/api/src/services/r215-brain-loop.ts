@@ -305,6 +305,15 @@ export async function* runBrainLoop(
     }
   } catch { /* tolerated — standards injection is best-effort */ }
 
+  // R597 — product context (mission / roadmap / techstack) injected so brain
+  // never forgets WHAT it's building or for whom. Capped at ~800 chars per kind
+  // inside buildProductContextBlock.
+  try {
+    const { buildProductContextBlock } = await import('./r597-agent-os-parity.js')
+    const block = await buildProductContextBlock(workspaceId)
+    if (block) extraSys += `\n\n${block}`
+  } catch { /* tolerated — product context is best-effort */ }
+
   // 3. Compose loop messages with brain-loop system prompt
   const loopMessages: ChatMsg[] = [
     { role: 'system', content: SYS_BRAIN_LOOP + extraSys },

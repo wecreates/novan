@@ -1453,6 +1453,96 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { items: await computeReserves(ws, p.windowDays ?? 90) }
     },
   },
+  'standards.discover': {
+    description: 'R597: Scan repo for recurring patterns, return candidate standards (does NOT auto-insert). Params: pathGlobs?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { pathGlobs?: string[] }
+      const { discoverStandards } = await import('./r597-agent-os-parity.js')
+      return { candidates: await discoverStandards(ws, p.pathGlobs) }
+    },
+  },
+  'standards.promote': {
+    description: 'R597: Promote a discovered candidate to a real standard. Params: slug (must match a recent discover result)',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { slug?: string }
+      if (!p.slug) throw new Error('slug required')
+      const { discoverStandards, promoteDiscovered } = await import('./r597-agent-os-parity.js')
+      const candidates = await discoverStandards(ws)
+      const found = candidates.find(c => c.slug === p.slug)
+      if (!found) throw new Error(`no candidate for slug: ${p.slug}`)
+      return promoteDiscovered(ws, found)
+    },
+  },
+  'standards.injectExplicit': {
+    description: 'R597: Inject standards by explicit slugs or category (no detection). Params: slugs[]? OR category?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { slugs?: string[]; category?: string }
+      const { injectExplicit } = await import('./r597-agent-os-parity.js')
+      return injectExplicit(ws, p)
+    },
+  },
+  'spec.archive': {
+    description: 'R597: Persist a timestamped spec folder (plan + shape + standards snapshot + references). Params: slug, title, planMd, shapeMd?, references[]?, visuals[]?, businessId?, description?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r597-agent-os-parity.js').archiveSpec>[1]
+      if (!p.slug || !p.title || !p.planMd) throw new Error('slug + title + planMd required')
+      const { archiveSpec } = await import('./r597-agent-os-parity.js')
+      return archiveSpec(ws, p)
+    },
+  },
+  'spec.list': {
+    description: 'R597: List archived specs. Params: limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { listSpecs } = await import('./r597-agent-os-parity.js')
+      return { items: await listSpecs(ws, p.limit ?? 20) }
+    },
+  },
+  'spec.get': {
+    description: 'R597: Fetch a single spec artifact. Params: id',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { getSpec } = await import('./r597-agent-os-parity.js')
+      return getSpec(ws, p.id)
+    },
+  },
+  'product.set': {
+    description: 'R597: Set a product artifact. Params: kind (mission|roadmap|techstack), bodyMd, businessId?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { kind?: string; bodyMd?: string; businessId?: string }
+      if (!p.kind || !p.bodyMd) throw new Error('kind + bodyMd required')
+      const { setProduct } = await import('./r597-agent-os-parity.js')
+      await setProduct(ws, p.kind, p.bodyMd, p.businessId)
+      return { ok: true, kind: p.kind }
+    },
+  },
+  'product.get': {
+    description: 'R597: Get a product artifact. Params: kind (mission|roadmap|techstack), businessId?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { kind?: string; businessId?: string }
+      if (!p.kind) throw new Error('kind required')
+      const { getProduct } = await import('./r597-agent-os-parity.js')
+      return getProduct(ws, p.kind, p.businessId)
+    },
+  },
+  'product.list': {
+    description: 'R597: List all product artifacts. Params: businessId?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { businessId?: string }
+      const { listProduct } = await import('./r597-agent-os-parity.js')
+      return { items: await listProduct(ws, p.businessId) }
+    },
+  },
   'standards.seed': {
     description: 'R596: Seed 6 starter coding standards (Agent-OS-inspired). Idempotent.',
     risk: 'low',
@@ -9761,6 +9851,9 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'finance.reserve_recommendations', 'finance.reserve_for_business', 'finance.reserve_for_business_all',
         'finance.factoring_propose', 'finance.insurance_enroll', 'finance.insurance_active',
         'standards.seed', 'standards.list', 'standards.upsert', 'standards.applicable', 'standards.inject',
+        'standards.discover', 'standards.promote', 'standards.injectExplicit',
+        'spec.archive', 'spec.list', 'spec.get',
+        'product.set', 'product.get', 'product.list',
         'revenue.list', 'revenue.rollup', 'revenue.byBusiness',
         'budget.list', 'budget.detail', 'budget.alerts',
         'cost.summary', 'cost.byBusiness', 'cost.byProvider',
