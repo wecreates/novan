@@ -34,56 +34,66 @@ interface SetupHint {
   docsUrl?:     string
   probeOp?:     string     // brain op the operator can call to verify
   notes?:       string
+  /** R609 — connectors marked 'agent_managed' are driven via R357 novan-local-agent
+   *  + R602 autobrowser pool. They are NEVER wired by API token. Audit shows them
+   *  as 'manual' status, NOT as orange/needing-setup. */
+  mode?:        'api' | 'agent_managed' | 'deprecated'
+  replacedBy?:  string     // for deprecated connectors, what to use instead
 }
 
 const SETUP_HINTS: Record<string, SetupHint> = {
-  // POD platforms
+  // POD platforms — R609 operator decision: ALL POD stores are agent_managed via
+  // R357 novan-local-agent + R602 autobrowser pool. No API tokens. The single
+  // exception is gumroad which uses a webhook (not an API), and TikTok Shop
+  // which uses a webhook once the operator is approved.
   gumroad: {
     connectorId: 'gumroad',
     description: 'Gumroad — digital + POD revenue webhook receiver',
     envVars: ['GUMROAD_WEBHOOK_TOKEN'],
     signupUrl: 'https://app.gumroad.com/dashboard',
     docsUrl: 'https://help.gumroad.com/article/144-pings',
-    notes: 'Generate a webhook ping URL token on Gumroad, paste into env.',
+    notes: 'Webhook-only (not API). Generate webhook ping URL token on Gumroad, paste into env.',
+    mode: 'api',
   },
   tiktok_shop: {
     connectorId: 'tiktok_shop',
-    description: 'TikTok Shop — order webhooks',
+    description: 'TikTok Shop — webhook + R357 agent for catalog mgmt',
     envVars: ['TIKTOK_WEBHOOK_TOKEN'],
     signupUrl: 'https://partner.tiktokshop.com/',
-    notes: 'Approved seller required. Configure webhook endpoint after approval.',
+    notes: 'Webhook only for order events. Listing/catalog mgmt is agent-managed.',
+    mode: 'api',
   },
-  inprnt: { connectorId: 'inprnt', description: 'INPRNT — fine-art print marketplace', envVars: [], signupUrl: 'https://www.inprnt.com/', notes: 'Manual seller application; no public API.' },
-  fine_art_america: { connectorId: 'fine_art_america', description: 'Fine Art America — POD + Pixels.com sync', envVars: [], signupUrl: 'https://fineartamerica.com/joinpremium.html', notes: 'Premium seller required for storefront.' },
-  redbubble: { connectorId: 'redbubble', description: 'Redbubble — apparel + accessories POD', envVars: [], signupUrl: 'https://www.redbubble.com/portfolio/signup', notes: 'Account-only; no public API yet.' },
+  inprnt:           { connectorId: 'inprnt',           description: 'INPRNT — fine-art prints (agent-managed via R357)',            envVars: [], signupUrl: 'https://www.inprnt.com/',                   mode: 'agent_managed', notes: 'No public API; R357 novan-local-agent drives the storefront.' },
+  fine_art_america: { connectorId: 'fine_art_america', description: 'Fine Art America — POD + Pixels.com (agent-managed)',          envVars: [], signupUrl: 'https://fineartamerica.com/joinpremium.html', mode: 'agent_managed', notes: 'Premium seller. R357 drives storefront + listings.' },
+  redbubble:        { connectorId: 'redbubble',        description: 'Redbubble — apparel POD (agent-managed via R357)',              envVars: [], signupUrl: 'https://www.redbubble.com/portfolio/signup', mode: 'agent_managed', notes: 'Account-only; agent drives storefront.' },
   etsy: {
-    connectorId: 'etsy', description: 'Etsy — handmade + digital marketplace OAuth',
-    envVars: ['ETSY_API_KEY'],
-    signupUrl: 'https://www.etsy.com/developers/your-apps',
-    docsUrl:   'https://developers.etsy.com/documentation/',
-    notes: 'Create app, complete OAuth onboarding to receive API key.',
+    connectorId: 'etsy', description: 'Etsy — handmade marketplace (agent-managed; API denied for POD sellers)',
+    envVars: [], signupUrl: 'https://www.etsy.com/sell',
+    mode: 'agent_managed',
+    notes: 'Etsy denies API access for POD sellers. R357 novan-local-agent drives listings + orders via the browser.',
   },
-  zazzle:      { connectorId: 'zazzle',      description: 'Zazzle — POD apparel + home goods', envVars: [], signupUrl: 'https://www.zazzle.com/sell',  notes: 'Designer account only; manual upload.' },
-  spreadshirt: { connectorId: 'spreadshirt', description: 'Spreadshirt — POD apparel',         envVars: [], signupUrl: 'https://www.spreadshirt.com/shop/open' },
-  teepublic:   { connectorId: 'teepublic',   description: 'TeePublic — apparel POD',           envVars: [], signupUrl: 'https://www.teepublic.com/get_started' },
-  displate:    { connectorId: 'displate',    description: 'Displate — metal-print POD',        envVars: [], signupUrl: 'https://displate.com/sell-on-displate' },
-  threadless:  { connectorId: 'threadless',  description: 'Threadless — community POD',        envVars: [], signupUrl: 'https://www.threadless.com/make/sell-art-online/' },
+  zazzle:      { connectorId: 'zazzle',      description: 'Zazzle — POD apparel + home (agent-managed)',  envVars: [], signupUrl: 'https://www.zazzle.com/sell',                            mode: 'agent_managed' },
+  spreadshirt: { connectorId: 'spreadshirt', description: 'Spreadshirt — POD apparel (agent-managed)',     envVars: [], signupUrl: 'https://www.spreadshirt.com/shop/open',                  mode: 'agent_managed' },
+  teepublic:   { connectorId: 'teepublic',   description: 'TeePublic — apparel POD (agent-managed)',       envVars: [], signupUrl: 'https://www.teepublic.com/get_started',                  mode: 'agent_managed' },
+  displate:    { connectorId: 'displate',    description: 'Displate — metal-print POD (agent-managed)',    envVars: [], signupUrl: 'https://displate.com/sell-on-displate',                  mode: 'agent_managed' },
+  threadless:  { connectorId: 'threadless',  description: 'Threadless — community POD (agent-managed)',    envVars: [], signupUrl: 'https://www.threadless.com/make/sell-art-online/',      mode: 'agent_managed' },
   printful: {
-    connectorId: 'printful',
-    description: 'Printful — POD fulfillment API for TikTok Shop sync',
-    envVars: ['PRINTFUL_API_KEY'],
-    signupUrl: 'https://www.printful.com/dashboard/store',
-    docsUrl:   'https://developers.printful.com/docs/',
-    notes:     'API key from Settings → API. Wires to TikTok Shop after approval.',
+    connectorId: 'printful', description: 'Printful — POD fulfillment (agent-managed; manual catalog sync)',
+    envVars: [], signupUrl: 'https://www.printful.com/dashboard/store',
+    mode: 'agent_managed',
+    notes: 'Operator decision: skip API. R357 drives Printful dashboard for catalog + TikTok Shop sync.',
   },
 
-  // Image gen
-  replicate:    { connectorId: 'replicate',   description: 'Replicate — hosted image/video models (LTX-2, SVD, Luma, etc.)', envVars: ['REPLICATE_API_TOKEN'], signupUrl: 'https://replicate.com/account/api-tokens', probeOp: 'video.ltx.health' },
-  fal:          { connectorId: 'fal',          description: 'fal.ai — fast image inference',   envVars: ['FAL_KEY', 'FAL_API_KEY'], signupUrl: 'https://fal.ai/dashboard/keys' },
-  openai:       { connectorId: 'openai',       description: 'OpenAI — image-gen (DALL·E) + embeddings + chat',  envVars: ['OPENAI_API_KEY'], signupUrl: 'https://platform.openai.com/api-keys' },
-  stability:    { connectorId: 'stability',    description: 'Stability AI — SDXL / SD3 image-gen',  envVars: ['STABILITY_API_KEY'], signupUrl: 'https://platform.stability.ai/account/keys' },
-  huggingface:  { connectorId: 'huggingface',  description: 'HuggingFace Inference — image-gen + video', envVars: ['HF_TOKEN'], signupUrl: 'https://huggingface.co/settings/tokens' },
-  cloudflare_ai:{ connectorId: 'cloudflare_ai',description: 'Cloudflare Workers AI — image gen',envVars: ['CF_API_TOKEN'], signupUrl: 'https://dash.cloudflare.com/profile/api-tokens' },
+  // Image gen — R609: free + open-source ONLY. Paid providers (Stability, fal,
+  // Cloudflare, OpenAI DALL-E) are deprecated for image-gen but OpenAI remains
+  // for embeddings + chat.
+  replicate:    { connectorId: 'replicate',   description: 'Replicate — hosted models (LTX-2 video, NOT image-gen)', envVars: ['REPLICATE_API_TOKEN'], signupUrl: 'https://replicate.com/account/api-tokens', probeOp: 'video.ltx.health', mode: 'api', notes: 'Video only — image-gen routed to free providers (huggingface + pollinations).' },
+  fal:          { connectorId: 'fal',          description: 'fal.ai (DEPRECATED for image-gen — use R609 free providers)',  envVars: ['FAL_KEY', 'FAL_API_KEY'], signupUrl: 'https://fal.ai/dashboard/keys',                  mode: 'deprecated', replacedBy: 'huggingface + pollinations (R609)' },
+  openai:       { connectorId: 'openai',       description: 'OpenAI — embeddings (R582) + chat fallback (NOT image-gen)',     envVars: ['OPENAI_API_KEY'], signupUrl: 'https://platform.openai.com/api-keys', mode: 'api', notes: 'Image-gen disabled per operator. Used for text-embedding-3-small + GPT chat fallback only.' },
+  stability:    { connectorId: 'stability',    description: 'Stability AI (DEPRECATED — use R609 free providers)',           envVars: ['STABILITY_API_KEY'], signupUrl: 'https://platform.stability.ai/account/keys', mode: 'deprecated', replacedBy: 'huggingface + pollinations (R609)' },
+  huggingface:  { connectorId: 'huggingface',  description: 'HuggingFace — primary FREE image-gen (FLUX.1-schnell, SDXL, SD3)', envVars: ['HF_TOKEN'], signupUrl: 'https://huggingface.co/settings/tokens', probeOp: 'image.free.health', mode: 'api', notes: 'R609 tier-1 free provider. Apache-2.0 FLUX-schnell outputs are commercially unencumbered.' },
+  cloudflare_ai:{ connectorId: 'cloudflare_ai',description: 'Cloudflare Workers AI (DEPRECATED — use R609 free providers)',  envVars: ['CF_API_TOKEN'], signupUrl: 'https://dash.cloudflare.com/profile/api-tokens', mode: 'deprecated', replacedBy: 'huggingface + pollinations (R609)' },
+  pollinations: { connectorId: 'pollinations', description: 'Pollinations.ai — zero-auth free FLUX-backed image-gen (R609 tier-2 fallback)', envVars: [], probeOp: 'image.free.health', mode: 'api', notes: 'No env vars, no signup. Always-on free public good — credit when used commercially.' },
 
   // Email
   postmark: {
@@ -130,7 +140,7 @@ const SETUP_HINTS: Record<string, SetupHint> = {
 
 // ─── Public surface ──────────────────────────────────────────────────────────
 
-export type Status = 'green' | 'yellow' | 'orange' | 'red'
+export type Status = 'green' | 'yellow' | 'orange' | 'red' | 'manual' | 'deprecated'
 
 export interface AuditedConnector {
   connectorId:       string
@@ -147,6 +157,8 @@ export interface AuditedConnector {
   docsUrl?:          string
   probeOp?:          string
   notes?:            string
+  mode?:             'api' | 'agent_managed' | 'deprecated'
+  replacedBy?:       string
 }
 
 export async function auditConnectors(workspaceId: string): Promise<AuditedConnector[]> {
@@ -163,7 +175,12 @@ export async function auditConnectors(workspaceId: string): Promise<AuditedConne
     const envVarsMissing = envVarsExpected.filter(v => !process.env[v])
     const configured = row.configured
     let status: Status = 'green'
-    if (!configured && envVarsExpected.length === 0 && !hint?.signupUrl) status = 'red'
+    // R609 — mode trumps env checks for status. agent_managed connectors are
+    // INTENTIONALLY without an API key; deprecated connectors should NOT show
+    // as orange-needs-setup, they should show as superseded.
+    if (hint?.mode === 'agent_managed') status = 'manual'
+    else if (hint?.mode === 'deprecated') status = 'deprecated'
+    else if (!configured && envVarsExpected.length === 0 && !hint?.signupUrl) status = 'red'
     else if (!configured && hint?.probeOp) status = 'orange'
     else if (!configured) status = 'orange'
     else if (configured && !row.lastOkAt && !row.lastFailAt) status = 'yellow'
@@ -182,10 +199,12 @@ export async function auditConnectors(workspaceId: string): Promise<AuditedConne
     if (hint?.docsUrl)     audited.docsUrl     = hint.docsUrl
     if (hint?.probeOp)     audited.probeOp     = hint.probeOp
     if (hint?.notes)       audited.notes       = hint.notes
+    if (hint?.mode)        audited.mode        = hint.mode
+    if (hint?.replacedBy)  audited.replacedBy  = hint.replacedBy
     out.push(audited)
   }
-  // Stable sort: red → orange → yellow → green, then by kind, then id.
-  const rank: Record<Status, number> = { red: 0, orange: 1, yellow: 2, green: 3 }
+  // Stable sort: red → orange → yellow → green → manual → deprecated
+  const rank: Record<Status, number> = { red: 0, orange: 1, yellow: 2, green: 3, manual: 4, deprecated: 5 }
   out.sort((a, b) => rank[a.status] - rank[b.status] || a.kind.localeCompare(b.kind) || a.connectorId.localeCompare(b.connectorId))
   return out
 }
@@ -252,9 +271,9 @@ function escapeHtml(s: string): string {
 
 export async function renderAuditWidget(workspaceId: string): Promise<string> {
   const audited = await auditConnectors(workspaceId)
-  const counts = { green: 0, yellow: 0, orange: 0, red: 0 }
+  const counts: Record<Status, number> = { green: 0, yellow: 0, orange: 0, red: 0, manual: 0, deprecated: 0 }
   for (const c of audited) counts[c.status]++
-  const dotColor: Record<Status, string> = { green: '#22c55e', yellow: '#facc15', orange: '#fb923c', red: '#ef4444' }
+  const dotColor: Record<Status, string> = { green: '#22c55e', yellow: '#facc15', orange: '#fb923c', red: '#ef4444', manual: '#60a5fa', deprecated: '#71717a' }
   const rows = audited.map(c => `
     <tr>
       <td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${dotColor[c.status]};margin-right:6px"></span>${escapeHtml(c.connectorId)}</td>
@@ -265,7 +284,7 @@ export async function renderAuditWidget(workspaceId: string): Promise<string> {
     </tr>
   `).join('')
   return `<div class="card" style="margin-top:18px">
-    <h2>Connectors (R608) — ${counts.green} live · ${counts.yellow} config-only · ${counts.orange} needs setup · ${counts.red} no path</h2>
+    <h2>Connectors (R608) — ${counts.green} live · ${counts.yellow} config-only · ${counts.orange} needs setup · ${counts.manual} 🤖 agent-managed · ${counts.deprecated} ↪ replaced</h2>
     <table style="font-size:12px"><thead><tr><th>Connector</th><th>Kind</th><th>Status</th><th>Env vars</th><th></th></tr></thead><tbody>
       ${rows}
     </tbody></table>

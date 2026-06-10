@@ -84,11 +84,17 @@ const KNOWN_CONNECTORS: Array<{ id: string; kind: string; envChecks: string[] }>
   { id: 'omnivoice',        kind: 'voice',        envChecks: ['OMNIVOICE_BASE_URL'] },
   // R608 — explicitly track ACE-Step music generator (R600 backbone).
   { id: 'acestep',          kind: 'music',        envChecks: ['ACESTEP_BASE_URL'] },
+  // R609 — Pollinations.ai zero-auth free image-gen. Always considered
+  // "configured" since no env vars are required.
+  { id: 'pollinations',     kind: 'image_gen',    envChecks: [] },
 ]
 
 function isConfiguredViaEnv(connectorId: string): boolean {
   const k = KNOWN_CONNECTORS.find(c => c.id === connectorId)
-  if (!k || k.envChecks.length === 0) return false
+  if (!k) return false
+  // R609 — zero-env connectors (pollinations is the canonical case) are
+  // ALWAYS considered configured; they need no setup.
+  if (k.envChecks.length === 0) return true
   // ALL listed env vars must be present (use OR list by allowing alt names — fal has two)
   for (const envKey of k.envChecks) {
     if (process.env[envKey]) return true

@@ -2427,6 +2427,25 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { count: items.length, items }
     },
   },
+  // ─── R609 Free image-gen (HuggingFace + Pollinations) ─────────────
+  'image.free.generate': {
+    description: 'R609: Generate an image via free + open-source providers (HF FLUX-schnell → Pollinations fallback). Params: prompt, width?, height?, model? (flux_schnell|flux_dev|sdxl|sd3_medium), seed?, negativePrompt?, steps?. Returns base64 PNG.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r609-free-image-gen.js').generateFreeImage>[0]
+      if (!p.prompt) throw new Error('prompt required')
+      const { generateFreeImage } = await import('./r609-free-image-gen.js')
+      return generateFreeImage(p, ws)
+    },
+  },
+  'image.free.health': {
+    description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { freeImageHealth } = await import('./r609-free-image-gen.js')
+      return freeImageHealth(ws)
+    },
+  },
   // ─── R608 Connector audit / wire-check / reaper ────────────────────
   'connector.audit': {
     description: 'R608: Per-connector status (configured / missing env / signup url / probe op). Includes setup hints.',
@@ -10347,6 +10366,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'neural.counters', 'neural.activations', 'neural.layers', 'neural.snapshot', 'neural.self_state',
         'saturation.config', 'saturation.check', 'saturation.reset_state',
         'connector.audit', 'connector.wire_check', 'autobrowser.reap_stuck',
+        'image.free.generate', 'image.free.health',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
