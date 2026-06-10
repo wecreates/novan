@@ -1326,6 +1326,7 @@ const INTERVALS = {
   competitorScore:        60 * 60_000,        // hourly LLM/heuristic parity scoring
   memoryEmbedBackfill:    30 * 60_000,        // 30min embedding backfill (capped 25/tick)
   reservesPerBusiness:    6  * 60 * 60_000,   // R595 — 6h per-business reserve recompute via R587 fan-out
+  pipelineSchedules:      60_000,             // R598 — minute tick to fire scheduled pipelines whose cron matches
 }
 
 /**
@@ -1624,6 +1625,35 @@ async function runReservesPerBusinessTick(): Promise<void> {
     }
     if (totalBiz > 0 || totalSources > 0) await emit('cron.reserves_per_business', { workspaces: ws.length, ran: totalBiz, sources: totalSources })
   } catch (e) { await emit('cron.error', { task: 'reserves_per_business', error: (e as Error).message }) }
+}
+
+// R598 — Pipeline scheduler. Minute tick fires any enabled pipelines whose
+// cron expression matches the current UTC minute. Last-minute dedup via
+// last_run_at column on pipelines (we don't fire twice in the same minute).
+async function runPipelineSchedulesTick(): Promise<void> {
+  try {
+    if (process.env['DISABLE_PIPELINE_SCHEDULES'] === '1') return
+    const { db } = await import('../db/client.js')
+    const { sql } = await import('drizzle-orm')
+    const wsRows = await db.execute(sql`SELECT id FROM workspaces`).catch(() => [] as unknown[])
+    const wsIds = (wsRows as Array<{ id: string }>).map(x => x.id)
+    const { pipelinesDueNow, runPipeline } = await import('./r598-pipelines.js')
+    const now = Date.now()
+    const minuteFloor = Math.floor(now / 60_000) * 60_000
+    let fired = 0
+    for (const wsId of wsIds) {
+      const due = await pipelinesDueNow(wsId, now)
+      for (const p of due) {
+        // Skip if already fired in this minute.
+        if (p.lastRunAt && p.lastRunAt >= minuteFloor) continue
+        try {
+          await runPipeline(wsId, p.name, { trigger: 'cron' })
+          fired++
+        } catch (e) { await emit('cron.error', { task: 'pipeline_run', pipeline: p.name, error: (e as Error).message.slice(0, 200) }) }
+      }
+    }
+    if (fired > 0) await emit('cron.pipeline_schedules', { fired })
+  } catch (e) { await emit('cron.error', { task: 'pipeline_schedules', error: (e as Error).message }) }
 }
 
 async function runCompetitorScanTick(): Promise<void> {
@@ -2461,6 +2491,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runCompetitorScoreTick,         INTERVALS.competitorScore))
   handles.push(scheduleJittered(runMemoryEmbedBackfillTick,     INTERVALS.memoryEmbedBackfill))
   handles.push(scheduleJittered(runReservesPerBusinessTick,     INTERVALS.reservesPerBusiness))   // R595
+  handles.push(scheduleJittered(runPipelineSchedulesTick,       INTERVALS.pipelineSchedules))     // R598
   handles.push(scheduleJittered(runTrustAutoDerive,             INTERVALS.trustAutoDerive))
   handles.push(scheduleJittered(runFabricSweep,                 INTERVALS.fabricSweep))
   handles.push(scheduleJittered(runDataRetention,               INTERVALS.dataRetention))

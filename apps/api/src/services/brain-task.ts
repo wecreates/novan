@@ -1453,6 +1453,68 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { items: await computeReserves(ws, p.windowDays ?? 90) }
     },
   },
+  'pipeline.seed': {
+    description: 'R598: Install 4 canonical end-to-end pipelines (idempotent).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { seedPipelines } = await import('./r598-pipelines.js')
+      return seedPipelines(ws)
+    },
+  },
+  'pipeline.define': {
+    description: 'R598: Create/update a pipeline. Params: name, stages[], description?, scheduleCron?, businessId?, enabled?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r598-pipelines.js').definePipeline>[1]
+      const { definePipeline } = await import('./r598-pipelines.js')
+      return definePipeline(ws, p)
+    },
+  },
+  'pipeline.list': {
+    description: 'R598: List all pipelines for this workspace.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { listPipelines } = await import('./r598-pipelines.js')
+      return { items: await listPipelines(ws) }
+    },
+  },
+  'pipeline.run': {
+    description: 'R598: Execute a pipeline by name. Params: name, trigger?, params?',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { name?: string; trigger?: string; params?: Record<string, unknown> }
+      if (!p.name) throw new Error('name required')
+      const { runPipeline } = await import('./r598-pipelines.js')
+      return runPipeline(ws, p.name, { trigger: p.trigger, params: p.params })
+    },
+  },
+  'pipeline.runs': {
+    description: 'R598: Recent runs. Params: name?, limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { name?: string; limit?: number }
+      const { listRuns } = await import('./r598-pipelines.js')
+      return { items: await listRuns(ws, p.name, p.limit ?? 20) }
+    },
+  },
+  'pipeline.health': {
+    description: 'R598: Per-pipeline health snapshot (last-run age, 7d success rate, staleness).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { health } = await import('./r598-pipelines.js')
+      return { items: await health(ws) }
+    },
+  },
+  'pipeline.set_enabled': {
+    description: 'R598: Enable or disable a pipeline. Params: name, enabled',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { name?: string; enabled?: boolean }
+      if (!p.name || typeof p.enabled !== 'boolean') throw new Error('name + enabled required')
+      const { setEnabled } = await import('./r598-pipelines.js')
+      return setEnabled(ws, p.name, p.enabled)
+    },
+  },
   'standards.discover': {
     description: 'R597: Scan repo for recurring patterns, return candidate standards (does NOT auto-insert). Params: pathGlobs?',
     risk: 'low',
@@ -9854,6 +9916,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'standards.discover', 'standards.promote', 'standards.injectExplicit',
         'spec.archive', 'spec.list', 'spec.get',
         'product.set', 'product.get', 'product.list',
+        'pipeline.seed', 'pipeline.define', 'pipeline.list', 'pipeline.run',
+        'pipeline.runs', 'pipeline.health', 'pipeline.set_enabled',
         'revenue.list', 'revenue.rollup', 'revenue.byBusiness',
         'budget.list', 'budget.detail', 'budget.alerts',
         'cost.summary', 'cost.byBusiness', 'cost.byProvider',
