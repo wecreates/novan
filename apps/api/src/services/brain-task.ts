@@ -963,6 +963,70 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { claims: await listDmcaClaims(ws) }
     },
   },
+  // ─── R580 Multi-business context ─────────────────────────────────────
+  'business.list_active': {
+    description: 'R580: List businesses in this workspace with default-flag, stage, health, and last-active-at heartbeat ages.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { listBusinesses, businessHeartbeatAges } = await import('./r580-business-context.js')
+      const [list, heartbeats] = await Promise.all([listBusinesses(ws), businessHeartbeatAges(ws)])
+      const hbMap = new Map(heartbeats.map(h => [h.businessId, h]))
+      return { items: list.map(b => ({ ...b, heartbeat: hbMap.get(b.id) ?? null })) }
+    },
+  },
+  'business.set_default': {
+    description: 'R580: Set the workspace default business_id. Used when callers omit business_id. Params: businessId',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { businessId?: string }
+      if (!p.businessId) throw new Error('businessId required')
+      const { setDefaultBusinessId } = await import('./r580-business-context.js')
+      return setDefaultBusinessId(ws, p.businessId)
+    },
+  },
+  'business.budget_set': {
+    description: 'R580: Set per-business daily AI budget cap in USD. Params: businessId, dailyUsd',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { businessId?: string; dailyUsd?: number }
+      if (!p.businessId || typeof p.dailyUsd !== 'number') throw new Error('businessId + dailyUsd required')
+      const { setBusinessBudget } = await import('./r580-business-context.js')
+      return setBusinessBudget(ws, p.businessId, p.dailyUsd)
+    },
+  },
+  'business.spend_today': {
+    description: 'R580: Per-business AI spend today + by-source breakdown. Params: businessId',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { businessId?: string }
+      if (!p.businessId) throw new Error('businessId required')
+      const { businessSpendToday, perBusinessBudget } = await import('./r580-business-context.js')
+      const [snap, cap] = await Promise.all([businessSpendToday(ws, p.businessId), perBusinessBudget(ws, p.businessId)])
+      return { ...snap, cap, pctUsed: cap > 0 ? Math.round((snap.todayUsd / cap) * 100) : 0 }
+    },
+  },
+  'business.kill_switch_set': {
+    description: 'R580: Engage/disengage per-business kill switch (separate from workspace-wide R443). Params: businessId, engaged',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { businessId?: string; engaged?: boolean }
+      if (!p.businessId || typeof p.engaged !== 'boolean') throw new Error('businessId + engaged required')
+      const { setBusinessKillSwitch } = await import('./r580-business-context.js')
+      return setBusinessKillSwitch(ws, p.businessId, p.engaged)
+    },
+  },
+  'business.autonomy_status': {
+    description: 'R580: Whether autonomous writes are allowed for this (workspace, business). Params: businessId',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { businessId?: string }
+      const { isBusinessAutonomyAllowed, isBusinessBudgetExhausted } = await import('./r580-business-context.js')
+      const bizId = p.businessId ?? null
+      const allowed = await isBusinessAutonomyAllowed(ws, bizId)
+      const budgetExhausted = bizId ? await isBusinessBudgetExhausted(ws, bizId) : false
+      return { allowed, budgetExhausted, businessId: bizId }
+    },
+  },
   // ─── R579 Competitor feed scanner ────────────────────────────────────
   'competitor.seed_feeds': {
     description: 'R579: Insert default competitor feed list (Anthropic, OpenAI, Cursor, etc) into competitor_feeds. Idempotent.',
@@ -9043,6 +9107,8 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'hooks.create', 'hooks.list', 'hooks.set_enabled', 'hooks.delete',
   'email.send', 'email.log_tail', 'email.stats',
   'competitor.seed_feeds', 'competitor.scan_all', 'competitor.recent_entries',
+  'business.list_active', 'business.set_default', 'business.budget_set',
+  'business.spend_today', 'business.kill_switch_set', 'business.autonomy_status',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -9430,6 +9496,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
   'hooks.create', 'hooks.list', 'hooks.set_enabled', 'hooks.delete',
   'email.send', 'email.log_tail', 'email.stats',
   'competitor.seed_feeds', 'competitor.scan_all', 'competitor.recent_entries',
+  'business.list_active', 'business.set_default', 'business.budget_set',
+  'business.spend_today', 'business.kill_switch_set', 'business.autonomy_status',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
