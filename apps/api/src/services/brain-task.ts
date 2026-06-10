@@ -1453,6 +1453,77 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { items: await computeReserves(ws, p.windowDays ?? 90) }
     },
   },
+  'voice.omni.health': {
+    description: 'R599: Probe OmniVoice Studio local server. Records connector health.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { omniHealth } = await import('./r599-omnivoice-provider.js')
+      return omniHealth(ws)
+    },
+  },
+  'voice.omni.list_voices': {
+    description: 'R599: List voices from OmniVoice /v1/voices.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { omniListVoices } = await import('./r599-omnivoice-provider.js')
+      return { items: await omniListVoices(ws) }
+    },
+  },
+  'voice.omni.tts': {
+    description: 'R599: Generate speech via OmniVoice. Params: text, voice?, language?, speed?, format? (mp3|wav|flac|opus), model?, instruct?. Returns base64 audio.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { text?: string; voice?: string; language?: string; speed?: number; format?: 'mp3'|'wav'|'flac'|'opus'; model?: string; instruct?: string }
+      if (!p.text) throw new Error('text required')
+      const { omniTts } = await import('./r599-omnivoice-provider.js')
+      const r = await omniTts({ text: p.text, voice: p.voice, language: p.language, speed: p.speed, format: p.format, model: p.model, instruct: p.instruct }, ws)
+      return { audioBase64: r.audio.toString('base64'), mime: r.mime, bytes: r.bytes, format: r.format, voice: r.voice, durationMs: r.durationMs }
+    },
+  },
+  'voice.omni.asr': {
+    description: 'R599: Transcribe audio via OmniVoice. Params: audioBase64, filename?, language?, model?, prompt?. Returns text.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { audioBase64?: string; filename?: string; language?: string; model?: string; prompt?: string }
+      if (!p.audioBase64) throw new Error('audioBase64 required')
+      const { Buffer } = await import('node:buffer')
+      const audio = Buffer.from(p.audioBase64, 'base64')
+      const { omniAsr } = await import('./r599-omnivoice-provider.js')
+      return omniAsr({ audio, filename: p.filename, language: p.language, model: p.model, prompt: p.prompt }, ws)
+    },
+  },
+  'voice.omni.clone': {
+    description: 'R599: Create a voice profile from a 3-sec sample. Params: name, audioBase64, filename?, refText?, language?. Returns profileId.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { name?: string; audioBase64?: string; filename?: string; refText?: string; language?: string }
+      if (!p.name || !p.audioBase64) throw new Error('name + audioBase64 required')
+      const { Buffer } = await import('node:buffer')
+      const audio = Buffer.from(p.audioBase64, 'base64')
+      const { omniCloneVoice } = await import('./r599-omnivoice-provider.js')
+      return omniCloneVoice({ name: p.name, audio, filename: p.filename, refText: p.refText, language: p.language }, ws)
+    },
+  },
+  'voice.omni.dub_start': {
+    description: 'R599: Start a video dub job (YouTube URL or any media URL). Params: url, targetLanguages[]?, voice?, preserveBackground?. Returns jobId.',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { url?: string; targetLanguages?: string[]; voice?: string; preserveBackground?: boolean }
+      if (!p.url) throw new Error('url required')
+      const { omniDubStart } = await import('./r599-omnivoice-provider.js')
+      return omniDubStart({ url: p.url, targetLanguages: p.targetLanguages, voice: p.voice, preserveBackground: p.preserveBackground }, ws)
+    },
+  },
+  'voice.omni.dub_status': {
+    description: 'R599: Poll dub job status. Params: jobId.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { jobId?: string }
+      if (!p.jobId) throw new Error('jobId required')
+      const { omniDubStatus } = await import('./r599-omnivoice-provider.js')
+      return omniDubStatus(p.jobId, ws)
+    },
+  },
   'pipeline.seed': {
     description: 'R598: Install 4 canonical end-to-end pipelines (idempotent).',
     risk: 'low',
@@ -9918,6 +9989,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'product.set', 'product.get', 'product.list',
         'pipeline.seed', 'pipeline.define', 'pipeline.list', 'pipeline.run',
         'pipeline.runs', 'pipeline.health', 'pipeline.set_enabled',
+        'voice.omni.health', 'voice.omni.list_voices', 'voice.omni.tts', 'voice.omni.asr',
+        'voice.omni.clone', 'voice.omni.dub_start', 'voice.omni.dub_status',
         'revenue.list', 'revenue.rollup', 'revenue.byBusiness',
         'budget.list', 'budget.detail', 'budget.alerts',
         'cost.summary', 'cost.byBusiness', 'cost.byProvider',

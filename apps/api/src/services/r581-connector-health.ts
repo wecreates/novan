@@ -79,6 +79,9 @@ const KNOWN_CONNECTORS: Array<{ id: string; kind: string; envChecks: string[] }>
   { id: 'offsite_s3',       kind: 'storage',      envChecks: ['NOVAN_OFFSITE_S3_ENDPOINT', 'NOVAN_OFFSITE_S3_ACCESS_KEY'] },
   // Push
   { id: 'web_push_vapid',   kind: 'analytics',    envChecks: ['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY'] },
+  // R599 — local voice provider (OmniVoice Studio). Self-hosted; ENV only
+  // needs the base URL (default http://localhost:8000).
+  { id: 'omnivoice',        kind: 'voice',        envChecks: ['OMNIVOICE_BASE_URL'] },
 ]
 
 function isConfiguredViaEnv(connectorId: string): boolean {
