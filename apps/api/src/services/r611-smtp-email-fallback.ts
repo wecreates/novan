@@ -24,6 +24,7 @@
  *   SMTP_TIMEOUT_MS    optional, default 15000
  */
 import { connect as tlsConnect, type TLSSocket } from 'node:tls'
+import { createConnection as netConnect, type Socket as NetSocket } from 'node:net'
 
 export interface SmtpSendInput {
   from:     string
@@ -98,39 +99,118 @@ function dotStuff(message: string): string {
 }
 
 interface SmtpConn {
-  socket:  TLSSocket
+  socket:  TLSSocket | NetSocket
   buffer:  string
   closed:  boolean
+  /** Drains pending expecters when new data arrives or after a manual nudge. */
+  pump?:   () => void
+}
+
+/** Install a persistent data handler that just accumulates into conn.buffer and
+ *  calls conn.pump() whenever data arrives. expect() registers a temporary
+ *  resolver — no per-call socket.on('data') leak. */
+function attachDataPump(conn: SmtpConn): void {
+  const onData = (d: Buffer): void => {
+    conn.buffer += d.toString('utf8')
+    if (conn.pump) conn.pump()
+  }
+  conn.socket.on('data', onData)
+}
+
+/** Decide whether to use implicit TLS (port 465 / SMTP_SECURE=1) or STARTTLS
+ *  upgrade (everything else, including Brevo's port 587). */
+function shouldUseImplicitTls(port: number): boolean {
+  if (process.env['SMTP_SECURE'] === '1' || process.env['SMTP_SECURE'] === 'true') return true
+  return port === 465
+}
+
+/** Open a connected, EHLO'd, TLS-secured socket ready for AUTH.
+ *  Handles both implicit-TLS (465) and STARTTLS-upgrade (587) paths. */
+async function openSecureSmtp(host: string, port: number, timeoutMs: number): Promise<SmtpConn> {
+  if (shouldUseImplicitTls(port)) {
+    // Implicit TLS — direct TLS connect, then EHLO
+    const socket = tlsConnect({ host, port, servername: host })
+    const conn: SmtpConn = { socket, buffer: '', closed: false }
+    socket.on('close', () => { conn.closed = true })
+    socket.on('error', () => { /* surface via expect() timeout */ })
+    await new Promise<void>((res, rej) => {
+      const t = setTimeout(() => rej(new Error(`SMTP TLS connect timeout to ${host}:${port}`)), timeoutMs)
+      socket.once('secureConnect', () => { clearTimeout(t); res() })
+      socket.once('error', e => { clearTimeout(t); rej(e) })
+    })
+    attachDataPump(conn)
+    await expect(conn, '220', timeoutMs)
+    send(conn, `EHLO novan.local`)
+    await expect(conn, '250', timeoutMs)
+    return conn
+  }
+
+  // STARTTLS path: plain TCP → 220 → EHLO → STARTTLS → 220 → upgrade → re-EHLO
+  const plainSocket = netConnect({ host, port })
+  const plainConn: SmtpConn = { socket: plainSocket, buffer: '', closed: false }
+  plainSocket.on('close', () => { plainConn.closed = true })
+  plainSocket.on('error', () => { /* surface via expect() timeout */ })
+  await new Promise<void>((res, rej) => {
+    const t = setTimeout(() => rej(new Error(`SMTP plain connect timeout to ${host}:${port}`)), timeoutMs)
+    plainSocket.once('connect', () => { clearTimeout(t); res() })
+    plainSocket.once('error', e => { clearTimeout(t); rej(e) })
+  })
+  attachDataPump(plainConn)
+  await expect(plainConn, '220', timeoutMs)
+  send(plainConn, `EHLO novan.local`)
+  await expect(plainConn, '250', timeoutMs)
+  send(plainConn, `STARTTLS`)
+  await expect(plainConn, '220', timeoutMs)
+  // Strip plain-socket data listeners before TLS upgrade; the upgraded TLS
+  // socket needs to receive the post-handshake data itself.
+  plainSocket.removeAllListeners('data')
+  // Upgrade to TLS over the same TCP socket
+  const tlsSocket = tlsConnect({ socket: plainSocket, host, servername: host })
+  const conn: SmtpConn = { socket: tlsSocket, buffer: '', closed: false }
+  tlsSocket.on('close', () => { conn.closed = true })
+  tlsSocket.on('error', () => { /* surface via expect() timeout */ })
+  await new Promise<void>((res, rej) => {
+    const t = setTimeout(() => rej(new Error(`SMTP STARTTLS upgrade timeout for ${host}:${port}`)), timeoutMs)
+    tlsSocket.once('secureConnect', () => { clearTimeout(t); res() })
+    tlsSocket.once('error', e => { clearTimeout(t); rej(e) })
+  })
+  attachDataPump(conn)
+  // RFC 3207: must re-EHLO after STARTTLS
+  send(conn, `EHLO novan.local`)
+  await expect(conn, '250', timeoutMs)
+  return conn
 }
 
 function expect(conn: SmtpConn, code: string, timeoutMs: number): Promise<string> {
   return new Promise<string>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`SMTP timeout waiting for ${code}`)), timeoutMs)
+    let settled = false
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true; conn.pump = undefined
+      reject(new Error(`SMTP timeout waiting for ${code} (buffer head: ${conn.buffer.slice(0, 100).replace(/\r\n/g, ' | ')})`))
+    }, timeoutMs)
     const tryDrain = (): void => {
+      if (settled) return
       const lines = conn.buffer.split('\r\n')
-      // Multi-line replies: continue with '-' until final ' ' separator
+      // Multi-line replies: continue with '-' until final ' ' separator on a line that starts with code.
       for (let i = 0; i < lines.length - 1; i++) {
         const line = lines[i]!
+        if (line.length < 4) continue
         const sep = line.charAt(3)
         if (sep === ' ') {
-          if (line.startsWith(code)) {
-            const consumed = lines.slice(0, i + 1).join('\r\n') + '\r\n'
-            conn.buffer = conn.buffer.slice(consumed.length)
-            clearTimeout(timer)
-            resolve(line)
-            return
-          }
+          settled = true
           clearTimeout(timer)
-          reject(new Error(`SMTP expected ${code}, got: ${line.slice(0, 200)}`))
+          conn.pump = undefined
+          const consumed = lines.slice(0, i + 1).join('\r\n') + '\r\n'
+          conn.buffer = conn.buffer.slice(consumed.length)
+          if (line.startsWith(code)) resolve(line)
+          else reject(new Error(`SMTP expected ${code}, got: ${line.slice(0, 200)}`))
           return
         }
       }
     }
-    const onData = (d: Buffer): void => { conn.buffer += d.toString('utf8'); tryDrain() }
-    const onErr = (e: Error): void => { clearTimeout(timer); reject(e) }
-    const onClose = (): void => { clearTimeout(timer); reject(new Error('SMTP connection closed')) }
-    conn.socket.on('data', onData); conn.socket.on('error', onErr); conn.socket.on('close', onClose)
-    tryDrain()
+    conn.pump = tryDrain
+    tryDrain()   // in case data already buffered
   })
 }
 
@@ -152,20 +232,9 @@ export async function sendViaSMTP(input: SmtpSendInput): Promise<SmtpSendResult>
   const fromAddr = from.match(/<([^>]+)>/)?.[1] ?? from.trim()
   const toAddr   = input.to.match(/<([^>]+)>/)?.[1] ?? input.to.trim()
 
-  const socket = tlsConnect({ host, port, servername: host })
-  const conn: SmtpConn = { socket, buffer: '', closed: false }
-  socket.on('close', () => { conn.closed = true })
-
+  let conn: SmtpConn | null = null
   try {
-    await new Promise<void>((res, rej) => {
-      const t = setTimeout(() => rej(new Error(`SMTP connect timeout to ${host}:${port}`)), timeoutMs)
-      socket.once('secureConnect', () => { clearTimeout(t); res() })
-      socket.once('error', e => { clearTimeout(t); rej(e) })
-    })
-
-    await expect(conn, '220', timeoutMs)
-    send(conn, `EHLO novan.local`)
-    await expect(conn, '250', timeoutMs)
+    conn = await openSecureSmtp(host, port, timeoutMs)
     send(conn, `AUTH LOGIN`)
     await expect(conn, '334', timeoutMs)
     send(conn, Buffer.from(user, 'utf8').toString('base64'))
@@ -185,37 +254,28 @@ export async function sendViaSMTP(input: SmtpSendInput): Promise<SmtpSendResult>
     const final = await expect(conn, '250', timeoutMs)
 
     send(conn, 'QUIT')
-    // Don't wait for QUIT response — some servers close immediately
-    try { socket.end() } catch { /* ignore */ }
+    try { conn.socket.end() } catch { /* ignore */ }
     return { ok: true, smtpResponse: final.slice(0, 200), durationMs: Date.now() - t0 }
   } catch (e) {
-    try { socket.destroy() } catch { /* ignore */ }
+    try { conn?.socket.destroy() } catch { /* ignore */ }
     return { ok: false, error: (e as Error).message.slice(0, 300), durationMs: Date.now() - t0 }
   }
 }
 
-/** Health probe — connects, EHLO, QUIT. Doesn't send mail. */
-export async function smtpHealth(): Promise<{ ok: boolean; configured: boolean; reason?: string; durationMs: number }> {
+/** Health probe — connects, completes TLS (incl. STARTTLS if 587), EHLO, QUIT. */
+export async function smtpHealth(): Promise<{ ok: boolean; configured: boolean; reason?: string; mode?: 'implicit-tls' | 'starttls'; durationMs: number }> {
   const t0 = Date.now()
   if (!smtpConfigured()) return { ok: false, configured: false, reason: 'SMTP_HOST/USER/PASS not set', durationMs: 0 }
   const host = process.env['SMTP_HOST']!
   const port = envNum('SMTP_PORT', 465)
   const timeoutMs = envNum('SMTP_TIMEOUT_MS', 8_000)
+  const mode: 'implicit-tls' | 'starttls' = shouldUseImplicitTls(port) ? 'implicit-tls' : 'starttls'
   try {
-    const socket = tlsConnect({ host, port, servername: host })
-    const conn: SmtpConn = { socket, buffer: '', closed: false }
-    await new Promise<void>((res, rej) => {
-      const t = setTimeout(() => rej(new Error('connect timeout')), timeoutMs)
-      socket.once('secureConnect', () => { clearTimeout(t); res() })
-      socket.once('error', e => { clearTimeout(t); rej(e) })
-    })
-    await expect(conn, '220', timeoutMs)
-    send(conn, 'EHLO novan.local')
-    await expect(conn, '250', timeoutMs)
+    const conn = await openSecureSmtp(host, port, timeoutMs)
     send(conn, 'QUIT')
-    try { socket.end() } catch { /* ignore */ }
-    return { ok: true, configured: true, durationMs: Date.now() - t0 }
+    try { conn.socket.end() } catch { /* ignore */ }
+    return { ok: true, configured: true, mode, durationMs: Date.now() - t0 }
   } catch (e) {
-    return { ok: false, configured: true, reason: (e as Error).message.slice(0, 200), durationMs: Date.now() - t0 }
+    return { ok: false, configured: true, mode, reason: (e as Error).message.slice(0, 200), durationMs: Date.now() - t0 }
   }
 }
