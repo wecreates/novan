@@ -963,6 +963,25 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { claims: await listDmcaClaims(ws) }
     },
   },
+  // ─── R587 Per-business cron fan-out + rollup ─────────────────────────
+  'business.rollup': {
+    description: 'R587: Workspace-wide rollup — total businesses, active in 24h, by stage, by health.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { businessRollup } = await import('./r587-cron-fanout.js')
+      return businessRollup(ws)
+    },
+  },
+  'business.cron_fanout_test': {
+    description: 'R587: Run a no-op fan-out across all businesses (verifies the iteration + skip logic without side effects).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { runForEachBusiness } = await import('./r587-cron-fanout.js')
+      return runForEachBusiness(ws, 'fanout_smoke_test', async () => {
+        // intentional no-op — exercises lock + heartbeat + iteration
+      })
+    },
+  },
   // ─── R585 Team members + roles ────────────────────────────────────────
   'team.list_members': {
     description: 'R585: List active team members in workspace. Params: businessId? (filter to one)',
@@ -9287,6 +9306,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'competitor.score_batch', 'competitor.top_unshipped',
   'team.list_members', 'team.invite', 'team.list_invites', 'team.accept_invite',
   'team.cancel_invite', 'team.set_role', 'team.revoke', 'team.can_run_op',
+  'business.rollup', 'business.cron_fanout_test',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -9682,6 +9702,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
   'competitor.score_batch', 'competitor.top_unshipped',
   'team.list_members', 'team.invite', 'team.list_invites', 'team.accept_invite',
   'team.cancel_invite', 'team.set_role', 'team.revoke', 'team.can_run_op',
+  'business.rollup', 'business.cron_fanout_test',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
