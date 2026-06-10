@@ -963,6 +963,38 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { claims: await listDmcaClaims(ws) }
     },
   },
+  // ─── R578 Email system ───────────────────────────────────────────────
+  'email.send': {
+    description: 'R578: Send email via configured transport (Postmark). Respects R517 opt-in unless bypassOptIn. Params: to, subject, bodyText, bodyHtml?, templateKey?, idempotencyKey?, bypassOptIn?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { to?: string; subject?: string; bodyText?: string; bodyHtml?: string; templateKey?: string; idempotencyKey?: string; bypassOptIn?: boolean }
+      if (!p.to || !p.subject || !p.bodyText) throw new Error('to + subject + bodyText required')
+      const { sendEmail } = await import('./r578-email-system.js')
+      return sendEmail({ workspaceId: ws, to: p.to, subject: p.subject, bodyText: p.bodyText,
+        ...(p.bodyHtml !== undefined ? { bodyHtml: p.bodyHtml } : {}),
+        ...(p.templateKey !== undefined ? { templateKey: p.templateKey } : {}),
+        ...(p.idempotencyKey !== undefined ? { idempotencyKey: p.idempotencyKey } : {}),
+        ...(p.bypassOptIn !== undefined ? { bypassOptIn: p.bypassOptIn } : {}) })
+    },
+  },
+  'email.log_tail': {
+    description: 'R578: Recent email-send log entries for this workspace. Params: limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { emailLogTail } = await import('./r578-email-system.js')
+      return { items: await emailLogTail(ws, p.limit ?? 100) }
+    },
+  },
+  'email.stats': {
+    description: 'R578: Today + 7d send counts, status breakdown.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { emailStats } = await import('./r578-email-system.js')
+      return emailStats(ws)
+    },
+  },
   // ─── R575 Memory compaction ──────────────────────────────────────────
   'memory.compact': {
     description: 'R575: Compact low+mid importance workspace_memory entries older than 90d/180d into per-scope summaries. Params: dryRun?',
@@ -8983,6 +9015,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'finance.reserve_recommendations', 'finance.factoring_propose', 'finance.insurance_enroll', 'finance.insurance_active',
   'registry.list', 'memory.compact', 'memory.stats',
   'hooks.create', 'hooks.list', 'hooks.set_enabled', 'hooks.delete',
+  'email.send', 'email.log_tail', 'email.stats',
   'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
   'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
 ])
@@ -9368,6 +9401,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
   'finance.reserve_recommendations', 'finance.factoring_propose', 'finance.insurance_enroll', 'finance.insurance_active',
   'registry.list', 'memory.compact', 'memory.stats',
   'hooks.create', 'hooks.list', 'hooks.set_enabled', 'hooks.delete',
+  'email.send', 'email.log_tail', 'email.stats',
         'pinterest.enqueue', 'pinterest.next', 'pinterest.mark_posted',
         'pinterest.mark_failed', 'pinterest.stats', 'pinterest.bulk_load',
         'briefing.daily_uploads', 'briefing.velocity_status',
