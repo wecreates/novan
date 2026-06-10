@@ -2427,6 +2427,52 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { count: items.length, items }
     },
   },
+  // ─── R612 Task inbox ───────────────────────────────────────────────
+  'inbox.add': {
+    description: 'R612: Drop a brief into Novan\'s autonomous task queue. Params: kind (image|music|video|chat_summary|kg_ingest|custom), brief, params?, priority?, businessId?, maxAttempts?, dueAt?, createdBy?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r612-task-inbox.js').add>[1]
+      const { add } = await import('./r612-task-inbox.js')
+      return add(ws, p)
+    },
+  },
+  'inbox.list': {
+    description: 'R612: List inbox items. Params: status?, kind?, limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { status?: string; kind?: string; limit?: number }
+      const { list } = await import('./r612-task-inbox.js')
+      return { items: await list(ws, p) }
+    },
+  },
+  'inbox.stats': {
+    description: 'R612: Pending/working/done/failed counts + oldest pending age.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { stats } = await import('./r612-task-inbox.js')
+      return stats(ws)
+    },
+  },
+  'inbox.cancel': {
+    description: 'R612: Cancel a still-pending item. Params: id',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { cancel } = await import('./r612-task-inbox.js')
+      return cancel(ws, p.id)
+    },
+  },
+  'inbox.tick': {
+    description: 'R612: Manually trigger a workspace tick (cron also runs this every 30s).',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { maxItems?: number }
+      const { tickWorkspace } = await import('./r612-task-inbox.js')
+      return tickWorkspace(ws, p.maxItems ?? 5)
+    },
+  },
   // ─── R611 SMTP email fallback ───────────────────────────────────────
   'email.smtp.health': {
     description: 'R611: Probe SMTP — connects, EHLO, QUIT (no send). Returns ok + reason if SMTP_HOST/USER/PASS configured.',
@@ -10393,6 +10439,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'connector.audit', 'connector.wire_check', 'autobrowser.reap_stuck',
         'image.free.generate', 'image.free.health',
         'email.smtp.health', 'email.smtp.test_send',
+        'inbox.add', 'inbox.list', 'inbox.stats', 'inbox.cancel', 'inbox.tick',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',

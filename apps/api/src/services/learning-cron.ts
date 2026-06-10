@@ -1329,6 +1329,7 @@ const INTERVALS = {
   pipelineSchedules:      60_000,             // R598 — minute tick to fire scheduled pipelines whose cron matches
   autobrowserSweep:       5_000,              // R602 — 5s tick to dispatch queued autobrowser jobs to idle workers
   saturationAlerts:       60_000,             // R606 — 60s tick to check tasksInFlight against threshold + fire webhook
+  inboxDispatch:          30_000,             // R612 — 30s tick to process autonomous task inbox
 }
 
 /**
@@ -1627,6 +1628,17 @@ async function runReservesPerBusinessTick(): Promise<void> {
     }
     if (totalBiz > 0 || totalSources > 0) await emit('cron.reserves_per_business', { workspaces: ws.length, ran: totalBiz, sources: totalSources })
   } catch (e) { await emit('cron.error', { task: 'reserves_per_business', error: (e as Error).message }) }
+}
+
+// R612 — Inbox dispatcher. 30s tick claims up to 5 pending briefs per
+// workspace and runs them. Handlers throw on failure; settle() retries
+// up to max_attempts before flipping to 'failed'. Silent on empty queues.
+async function runInboxDispatchTick(): Promise<void> {
+  try {
+    const { tickAll } = await import('./r612-task-inbox.js')
+    const r = await tickAll()
+    if (r.processed > 0) await emit('cron.inbox_dispatch', r)
+  } catch (e) { await emit('cron.error', { task: 'inbox_dispatch', error: (e as Error).message }) }
 }
 
 // R606 — Saturation alerts. Polls neural.counters per workspace; webhooks +
@@ -2525,6 +2537,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runPipelineSchedulesTick,       INTERVALS.pipelineSchedules))     // R598
   handles.push(scheduleJittered(runAutobrowserSweep,            INTERVALS.autobrowserSweep))      // R602
   handles.push(scheduleJittered(runSaturationAlertsTick,        INTERVALS.saturationAlerts))     // R606
+  handles.push(scheduleJittered(runInboxDispatchTick,           INTERVALS.inboxDispatch))        // R612
   handles.push(scheduleJittered(runTrustAutoDerive,             INTERVALS.trustAutoDerive))
   handles.push(scheduleJittered(runFabricSweep,                 INTERVALS.fabricSweep))
   handles.push(scheduleJittered(runDataRetention,               INTERVALS.dataRetention))
