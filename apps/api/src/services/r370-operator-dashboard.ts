@@ -82,6 +82,17 @@ interface DashboardState {
     pendingInvites: number;
     byRole: Record<string, number>;
   }
+  emailHealth?: {                                                                       // R594 — R578
+    today: number;
+    last7d: number;
+    byStatus: Array<{ status: string; n: number }>;
+    configured: boolean;
+  }
+  financeReserves?: {                                                                   // R594 — R572
+    totalRecommendedUsd: number;
+    bySource: Array<{ source: string; recommendedUsd: number; observedRefundRate: number; basedOnSales: number }>;
+    insuranceTier: string | null;
+  }
   taxThresholdAlerts?: Array<{ source: string; bucket: string; ytdAtNotify: number }>   // R552 — R510 fired notifications
   aiSpend?: { todayUsd: number; todayCallCount: number; bySource: Array<{ source: string; usd: number; calls: number }>; cap?: { dailyUsd: number; pctUsed: number; budgetExhausted: boolean } }  // R428
   autonomyPaused?: boolean                                                                // R482
@@ -318,6 +329,25 @@ export async function loadState(workspaceId: string): Promise<DashboardState> {
         const byRole: Record<string, number> = {}
         for (const m of members) byRole[m.role] = (byRole[m.role] ?? 0) + 1
         return { totalMembers: members.length, pendingInvites: invites.length, byRole }
+      } catch { return undefined }
+    })(),
+    emailHealth: await (async () => {                                        // R594 — R578
+      try {
+        const { emailStats } = await import('./r578-email-system.js')
+        const s = await emailStats(workspaceId)
+        return { ...s, configured: !!(process.env.POSTMARK_SERVER_TOKEN && process.env.EMAIL_FROM) }
+      } catch { return undefined }
+    })(),
+    financeReserves: await (async () => {                                    // R594 — R572
+      try {
+        const { listReserves, activeInsurance } = await import('./r572-finance-layer.js')
+        const [reserves, ins] = await Promise.all([listReserves(workspaceId), activeInsurance(workspaceId)])
+        const totalRecommendedUsd = reserves.reduce((a, r) => a + r.recommendedUsd, 0)
+        return {
+          totalRecommendedUsd,
+          bySource: reserves.slice(0, 6).map(r => ({ source: r.source, recommendedUsd: r.recommendedUsd, observedRefundRate: r.observedRefundRate, basedOnSales: r.basedOnSales })),
+          insuranceTier: ins?.tier ?? null,
+        }
       } catch { return undefined }
     })(),
     taxThresholdAlerts: await (async () => {                                 // R552 — R510 active 1099-K warnings
@@ -693,6 +723,20 @@ ${s.nextActions.length > 0 ? `<div style="background:#1e3a8a;border:1px solid #3
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;font-size:11px">
       ${Object.entries(s.teamSummary.byRole).map(([k, v]) => `<span style="background:#1e3a8a;color:#dbeafe;padding:3px 8px;border-radius:10px">${escapeHtml(k)} ${v}</span>`).join('')}
     </div>
+  </div>` : ''}
+
+  ${s.emailHealth ? `<div class="card">
+    <h2>Email health (R594 · R578)</h2>
+    <div class="stat"><span class="stat-val">${s.emailHealth.today}</span><span class="stat-lbl">${s.emailHealth.last7d} in 7d · ${s.emailHealth.configured ? 'configured' : 'NOT configured'}</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;font-size:11px">
+      ${s.emailHealth.byStatus.map(b => `<span style="background:#18181b;border:1px solid #27272a;padding:3px 8px;border-radius:10px;color:${b.status === 'sent' ? '#22c55e' : b.status.startsWith('blocked') ? '#facc15' : '#ef4444'}">${escapeHtml(b.status)} ${b.n}</span>`).join('')}
+    </div>
+  </div>` : ''}
+
+  ${s.financeReserves && (s.financeReserves.totalRecommendedUsd > 0 || s.financeReserves.insuranceTier) ? `<div class="card">
+    <h2>Finance reserves (R594 · R572)</h2>
+    <div class="stat"><span class="stat-val">$${s.financeReserves.totalRecommendedUsd.toFixed(0)}</span><span class="stat-lbl">recommended buffer · insurance: ${escapeHtml(s.financeReserves.insuranceTier ?? 'none')}</span></div>
+    ${s.financeReserves.bySource.length > 0 ? `<table style="margin-top:10px;font-size:12px"><thead><tr><th>Source</th><th>Reserve</th><th>Refund %</th><th>Sales</th></tr></thead><tbody>${s.financeReserves.bySource.map(r => `<tr><td>${escapeHtml(r.source)}</td><td>$${r.recommendedUsd.toFixed(0)}</td><td>${(r.observedRefundRate * 100).toFixed(1)}%</td><td>${r.basedOnSales}</td></tr>`).join('')}</tbody></table>` : ''}
   </div>` : ''}
 
   ${s.competitorIntel && s.competitorIntel.totalEntries > 0 ? `<div class="card" style="grid-column: 1 / -1">
