@@ -1321,6 +1321,10 @@ const INTERVALS = {
   wmDecay:               24 * 60 * 60_000,    // R146.252 — daily workspace_memory decay sweep
   brainAlert:            15 * 60_000,         // R146.255 — brain.health state-change alerts every 15min
   retentionSweeps:       24 * 60 * 60_000,    // R146.276 — daily prune of external_knowledge (30d) + platform_smoke_runs (14d)
+  // R591 — hourly competitor scan + score; 30min memory embedding backfill
+  competitorScan:         60 * 60_000,        // hourly competitor feed scan
+  competitorScore:        60 * 60_000,        // hourly LLM/heuristic parity scoring
+  memoryEmbedBackfill:    30 * 60_000,        // 30min embedding backfill (capped 25/tick)
 }
 
 /**
@@ -1568,6 +1572,40 @@ async function runSecretsRotationDrainTick(): Promise<void> {
     const out = await consumeSecretRotations()
     if (out.dropped.length > 0) await emit('cron.secrets_rotation_drained', out)
   } catch (e) { await emit('cron.error', { task: 'secrets_rotation_drain', error: (e as Error).message }) }
+}
+
+// R591 — incrementally embed workspace_memory entries so R582 recall builds
+// up coverage over time. Caps at 25 entries per tick so a busy workspace
+// converges without burning a token budget in one go.
+async function runMemoryEmbedBackfillTick(): Promise<void> {
+  try {
+    if (!process.env['OPENAI_API_KEY']) return    // no key, no embed
+    const { backfillEmbeddings } = await import('./r582-memory-recall.js')
+    // Cycle through known workspaces. For now: just 'default' + 'system'.
+    for (const ws of ['default', 'system']) {
+      const out = await backfillEmbeddings(ws, 25)
+      if (out.embedded > 0) await emit('cron.memory_embed_backfilled', { workspaceId: ws, ...out })
+    }
+  } catch (e) { await emit('cron.error', { task: 'memory_embed_backfill', error: (e as Error).message }) }
+}
+
+// R590 — score unscored R579 entries hourly so competitive intel stays fresh.
+async function runCompetitorScoreTick(): Promise<void> {
+  try {
+    const { scoreBatch } = await import('./r584-parity-scorer.js')
+    const out = await scoreBatch(20)
+    if (out.scored > 0) await emit('cron.competitor_scored', out)
+  } catch (e) { await emit('cron.error', { task: 'competitor_score', error: (e as Error).message }) }
+}
+
+// R579 — fetch competitor feeds hourly.
+async function runCompetitorScanTick(): Promise<void> {
+  try {
+    if (process.env['DISABLE_COMPETITOR_SCAN'] === '1') return
+    const { scanAllFeeds } = await import('./r579-competitor-feed-scanner.js')
+    const out = await scanAllFeeds()
+    if (out.newEntries > 0) await emit('cron.competitor_scan', { feeds: out.feeds, newEntries: out.newEntries })
+  } catch (e) { await emit('cron.error', { task: 'competitor_scan', error: (e as Error).message }) }
 }
 
 // R146.105 — Frontier Intelligence: scan top AI breakthrough sources 24/7,
@@ -2391,6 +2429,10 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runEmbeddingsBackfill,          INTERVALS.embeddingsBackfill))
   handles.push(scheduleJittered(runCommitLearning,              INTERVALS.commitLearning))
   handles.push(scheduleJittered(runCapabilityAutoRegister,      INTERVALS.capabilityAutoReg))
+  // R591 — automated continuous-improvement loop (competitive intel + semantic memory)
+  handles.push(scheduleJittered(runCompetitorScanTick,          INTERVALS.competitorScan))
+  handles.push(scheduleJittered(runCompetitorScoreTick,         INTERVALS.competitorScore))
+  handles.push(scheduleJittered(runMemoryEmbedBackfillTick,     INTERVALS.memoryEmbedBackfill))
   handles.push(scheduleJittered(runTrustAutoDerive,             INTERVALS.trustAutoDerive))
   handles.push(scheduleJittered(runFabricSweep,                 INTERVALS.fabricSweep))
   handles.push(scheduleJittered(runDataRetention,               INTERVALS.dataRetention))

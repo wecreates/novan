@@ -270,6 +270,26 @@ export async function* runBrainLoop(
     if (brand) extraSys += `\n\n${brand}`
   } catch { /* tolerated — brand voice is optional */ }
 
+  // R591 — semantic recall. Use the operator's most recent user message as
+  // the query and inject top-5 relevant memories. Skips silently when no
+  // embeddings exist (workspace hasn't been backfilled yet) or no
+  // OPENAI_API_KEY is configured. Compounds the value of every prior chat
+  // / lesson / decision the brain has captured.
+  try {
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content ?? ''
+    const queryText = String(lastUserMsg).slice(0, 1000).trim()
+    if (queryText.length >= 8) {
+      const { recall } = await import('./r582-memory-recall.js')
+      const hits = await recall(workspaceId, queryText, 5)
+      if (hits.length > 0) {
+        const recallBlock = `RELEVANT MEMORIES (R582 semantic recall — fold the high-importance ones into your response if useful):\n${
+          hits.map((h, i) => `  ${i + 1}. [imp ${h.importance}, dist ${h.distance.toFixed(3)}] ${h.key}: ${h.value.slice(0, 300).replace(/\s+/g, ' ')}`).join('\n')
+        }`
+        extraSys += `\n\n${recallBlock}`
+      }
+    }
+  } catch { /* tolerated — recall is best-effort */ }
+
   // 3. Compose loop messages with brain-loop system prompt
   const loopMessages: ChatMsg[] = [
     { role: 'system', content: SYS_BRAIN_LOOP + extraSys },
