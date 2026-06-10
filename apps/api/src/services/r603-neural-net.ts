@@ -174,6 +174,97 @@ export async function neuralLayers(workspaceId: string, windowMs = 24 * 60 * 60_
   return out
 }
 
+// ─── R605: Per-layer sparklines (last 60 minutes in 5-min buckets) ──────────
+
+export interface LayerSparkline {
+  name:    string
+  buckets: number[]   // 12 values (oldest → newest), 5-min buckets
+  total:   number
+}
+
+export async function layerSparklines(workspaceId: string, bucketCount = 12, bucketMs = 5 * 60_000): Promise<LayerSparkline[]> {
+  const windowMs = bucketCount * bucketMs
+  const now = Date.now()
+  const since = now - windowMs
+  const r = await db.execute(sql`
+    SELECT type, created_at FROM events
+    WHERE workspace_id = ${workspaceId} AND created_at >= ${since}
+  `).catch(() => [] as unknown[])
+  const rows = r as Array<{ type: string; created_at: number }>
+
+  const out: LayerSparkline[] = []
+  for (const L of LAYER_PATTERNS) {
+    const buckets = new Array(bucketCount).fill(0)
+    let total = 0
+    for (const row of rows) {
+      if (!L.types.some(rgx => rgx.test(row.type))) continue
+      const idx = Math.min(bucketCount - 1, Math.floor((Number(row.created_at) - since) / bucketMs))
+      if (idx < 0) continue
+      buckets[idx]++
+      total++
+    }
+    out.push({ name: L.name, buckets, total })
+  }
+  return out
+}
+
+/** Compact SVG sparkline render. Returns inline SVG string ready to embed. */
+export function renderSparklineSvg(buckets: number[], opts: { width?: number; height?: number; color?: string } = {}): string {
+  const w = opts.width ?? 120, h = opts.height ?? 22
+  const max = Math.max(1, ...buckets)
+  if (buckets.length < 2) return `<svg width="${w}" height="${h}"></svg>`
+  const dx = w / (buckets.length - 1)
+  const points = buckets.map((v, i) => `${(i * dx).toFixed(1)},${(h - (v / max) * (h - 2) - 1).toFixed(1)}`).join(' ')
+  const last = buckets[buckets.length - 1] ?? 0
+  const color = opts.color ?? '#60a5fa'
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="display:inline-block;vertical-align:middle">
+    <polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/>
+    <circle cx="${(w).toFixed(1)}" cy="${(h - (last / max) * (h - 2) - 1).toFixed(1)}" r="2" fill="${color}"/>
+  </svg>`
+}
+
+// ─── R604: Compact hero strip for embed on /ops/dashboard ───────────────────
+
+/** One-liner HTML strip with live counters + sparklines for header injection. */
+export async function renderHeroStrip(workspaceId: string): Promise<string> {
+  const [counters, sparks] = await Promise.all([
+    liveCounters(workspaceId),
+    layerSparklines(workspaceId),
+  ])
+  const layerColor: Record<string, string> = { Input: '#60a5fa', Decision: '#a78bfa', Processing: '#22c55e', Output: '#facc15', Learning: '#f472b6' }
+  const sparkCells = sparks.map(s => `
+    <div title="${s.name}: ${s.total} events in 60m">
+      <div style="font-size:10px;color:#a1a1aa;letter-spacing:.3px">${s.name.toUpperCase()}</div>
+      ${renderSparklineSvg(s.buckets, { width: 110, height: 22, color: layerColor[s.name] ?? '#60a5fa' })}
+      <span style="font-size:11px;color:#fafafa;font-variant-numeric:tabular-nums">${s.total}</span>
+    </div>
+  `).join('')
+  return `<div style="background:#0f0f12;border:1px solid #27272a;border-radius:10px;padding:12px 16px;margin-bottom:18px;display:flex;flex-wrap:wrap;gap:24px;align-items:center;font-family:-apple-system,system-ui,sans-serif">
+    <div style="display:flex;flex-direction:column;min-width:140px">
+      <span style="font-size:10px;color:#a1a1aa;letter-spacing:.5px;text-transform:uppercase">Tasks in flight</span>
+      <span style="font-size:24px;font-weight:600;color:#22c55e;line-height:1.1">${counters.tasksInFlight.total}</span>
+      <span style="font-size:10px;color:#71717a">${counters.tasksInFlight.pipelinesRunning} pipe · ${counters.tasksInFlight.autobrowserRunning} browse · ${counters.tasksInFlight.autobrowserQueued} q</span>
+    </div>
+    <div style="display:flex;flex-direction:column;min-width:120px">
+      <span style="font-size:10px;color:#a1a1aa;letter-spacing:.5px;text-transform:uppercase">Today</span>
+      <span style="font-size:24px;font-weight:600;color:#facc15;line-height:1.1">${fmtUsd(counters.revenue.today)}</span>
+      <span style="font-size:10px;color:#71717a">${counters.revenue.bySource24h.length} sources 24h</span>
+    </div>
+    <div style="display:flex;flex-direction:column;min-width:120px">
+      <span style="font-size:10px;color:#a1a1aa;letter-spacing:.5px;text-transform:uppercase">Month</span>
+      <span style="font-size:24px;font-weight:600;color:#facc15;line-height:1.1">${fmtUsd(counters.revenue.mtd)}</span>
+      <span style="font-size:10px;color:#71717a">YTD ${fmtUsd(counters.revenue.ytd)}</span>
+    </div>
+    <div style="display:flex;flex-direction:column;min-width:120px">
+      <span style="font-size:10px;color:#a1a1aa;letter-spacing:.5px;text-transform:uppercase">Lifetime</span>
+      <span style="font-size:24px;font-weight:600;color:#facc15;line-height:1.1">${fmtUsd(counters.revenue.lifetime)}</span>
+      <span style="font-size:10px;color:#71717a">${counters.throughput.eventsLast60m} events/60m</span>
+    </div>
+    <div style="flex:1;display:flex;gap:14px;flex-wrap:wrap;justify-content:flex-end">${sparkCells}</div>
+    <a href="/ops/neural?token=${encodeURIComponent('any')}&workspace=default" style="color:#60a5fa;text-decoration:none;font-size:11px;border:1px solid #27272a;padding:4px 8px;border-radius:6px;background:#18181b">R603 neural →</a>
+  </div>`
+}
+
 // ─── HTML render ─────────────────────────────────────────────────────────────
 
 function fmtUsd(n: number): string {
@@ -193,17 +284,24 @@ function escapeHtml(s: string): string {
 }
 
 export async function renderNeuralHtml(workspaceId: string): Promise<string> {
-  const [counters, layers, activations] = await Promise.all([
+  const [counters, layers, activations, sparks] = await Promise.all([
     liveCounters(workspaceId),
     neuralLayers(workspaceId),
     recentActivations(workspaceId, 60 * 60_000, 20),
+    layerSparklines(workspaceId),
   ])
+  const sparkByLayer = new Map(sparks.map(s => [s.name, s]))
   const maxA = activations.reduce((m, a) => Math.max(m, a.n), 1)
 
+  const layerColor: Record<string, string> = { Input: '#60a5fa', Decision: '#a78bfa', Processing: '#22c55e', Output: '#facc15', Learning: '#f472b6' }
   const layerColumns = layers.map(L => `
     <div class="layer">
       <h3>${escapeHtml(L.name)}</h3>
       <div class="layer-sub">${escapeHtml(L.description)}</div>
+      <div style="margin:4px 0 8px;display:flex;align-items:center;gap:6px">
+        ${sparkByLayer.has(L.name) ? renderSparklineSvg(sparkByLayer.get(L.name)!.buckets, { width: 140, height: 24, color: layerColor[L.name] ?? '#60a5fa' }) : ''}
+        <span style="font-size:10px;color:#a1a1aa">${sparkByLayer.get(L.name)?.total ?? 0} in 60m</span>
+      </div>
       ${L.nodes.length === 0 ? '<div class="empty">no activity in 24h</div>' :
         L.nodes.map(n => `
           <div class="node" style="--w:${Math.min(1, n.weight / 6)}" title="${escapeHtml(n.id)}${n.lastFired ? ' · last ' + fmtAgo(n.lastFired) + ' ago' : ''}">

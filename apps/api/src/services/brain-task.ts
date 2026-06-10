@@ -2427,6 +2427,37 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { count: items.length, items }
     },
   },
+  // ─── R606 Saturation alerts ────────────────────────────────────────
+  'saturation.config': {
+    description: 'R606: Current saturation-alert configuration (threshold, dwell, cooldown, webhook).',
+    risk: 'low',
+    handler: async () => {
+      const { loadConfig, currentState } = await import('./r606-saturation-alerts.js')
+      return { config: loadConfig(), state: currentState() }
+    },
+  },
+  'saturation.check': {
+    description: 'R606: Run one evaluation tick for this workspace. Returns fired/reason. Params: thresholdOverride?, webhookUrlOverride?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { thresholdOverride?: number; webhookUrlOverride?: string }
+      const { evaluateWorkspace } = await import('./r606-saturation-alerts.js')
+      const opts: Partial<Parameters<typeof evaluateWorkspace>[1]> = {}
+      if (typeof p.thresholdOverride === 'number') opts.threshold = p.thresholdOverride
+      if (p.webhookUrlOverride) opts.webhookUrl = p.webhookUrlOverride
+      return evaluateWorkspace(ws, opts)
+    },
+  },
+  'saturation.reset_state': {
+    description: 'R606: Reset dwell counter + cooldown for this workspace (or all).',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { all?: boolean }
+      const { resetState } = await import('./r606-saturation-alerts.js')
+      resetState(p.all ? undefined : ws)
+      return { ok: true, scope: p.all ? 'all' : ws }
+    },
+  },
   // ─── R603 Neural-net view ──────────────────────────────────────────
   'neural.counters': {
     description: 'R603: Live tasks-in-flight + revenue (today/MTD/YTD/lifetime) + throughput counters.',
@@ -10281,6 +10312,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'music.vocalEnhance', 'music.scoreNaturalness', 'system.ffmpegAvailable',
         'video.ltx.health', 'video.ltx.text2video', 'video.ltx.image2video', 'video.ltx.keyframe', 'video.ltx.audio2video',
         'neural.counters', 'neural.activations', 'neural.layers', 'neural.snapshot',
+        'saturation.config', 'saturation.check', 'saturation.reset_state',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',

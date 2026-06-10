@@ -1328,6 +1328,7 @@ const INTERVALS = {
   reservesPerBusiness:    6  * 60 * 60_000,   // R595 — 6h per-business reserve recompute via R587 fan-out
   pipelineSchedules:      60_000,             // R598 — minute tick to fire scheduled pipelines whose cron matches
   autobrowserSweep:       5_000,              // R602 — 5s tick to dispatch queued autobrowser jobs to idle workers
+  saturationAlerts:       60_000,             // R606 — 60s tick to check tasksInFlight against threshold + fire webhook
 }
 
 /**
@@ -1626,6 +1627,17 @@ async function runReservesPerBusinessTick(): Promise<void> {
     }
     if (totalBiz > 0 || totalSources > 0) await emit('cron.reserves_per_business', { workspaces: ws.length, ran: totalBiz, sources: totalSources })
   } catch (e) { await emit('cron.error', { task: 'reserves_per_business', error: (e as Error).message }) }
+}
+
+// R606 — Saturation alerts. Polls neural.counters per workspace; webhooks +
+// audits when tasksInFlight breaches threshold for dwellTicks consecutive
+// ticks (cooldown enforced inside).
+async function runSaturationAlertsTick(): Promise<void> {
+  try {
+    const { evaluateAllWorkspaces } = await import('./r606-saturation-alerts.js')
+    const r = await evaluateAllWorkspaces()
+    if (r.fired > 0) await emit('cron.saturation_alerts', { fired: r.fired, checks: r.checks.filter(c => c.fired).length })
+  } catch (e) { await emit('cron.error', { task: 'saturation_alerts', error: (e as Error).message }) }
 }
 
 // R598 — Pipeline scheduler. Minute tick fires any enabled pipelines whose
@@ -2506,6 +2518,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runReservesPerBusinessTick,     INTERVALS.reservesPerBusiness))   // R595
   handles.push(scheduleJittered(runPipelineSchedulesTick,       INTERVALS.pipelineSchedules))     // R598
   handles.push(scheduleJittered(runAutobrowserSweep,            INTERVALS.autobrowserSweep))      // R602
+  handles.push(scheduleJittered(runSaturationAlertsTick,        INTERVALS.saturationAlerts))     // R606
   handles.push(scheduleJittered(runTrustAutoDerive,             INTERVALS.trustAutoDerive))
   handles.push(scheduleJittered(runFabricSweep,                 INTERVALS.fabricSweep))
   handles.push(scheduleJittered(runDataRetention,               INTERVALS.dataRetention))

@@ -82,6 +82,7 @@ interface DashboardState {
     pendingInvites: number;
     byRole: Record<string, number>;
   }
+  heroStrip?: string                                                                    // R604 — neural counters + sparklines hero
   emailHealth?: {                                                                       // R594 — R578
     today: number;
     last7d: number;
@@ -331,6 +332,12 @@ export async function loadState(workspaceId: string): Promise<DashboardState> {
         return { totalMembers: members.length, pendingInvites: invites.length, byRole }
       } catch { return undefined }
     })(),
+    heroStrip: await (async () => {                                          // R604
+      try {
+        const { renderHeroStrip } = await import('./r603-neural-net.js')
+        return await renderHeroStrip(workspaceId)
+      } catch { return '' }
+    })(),
     emailHealth: await (async () => {                                        // R594 — R578
       try {
         const { emailStats } = await import('./r578-email-system.js')
@@ -519,6 +526,8 @@ function renderHtml(s: DashboardState, token?: string): string {
 <body>
 <h1>🎨 Novan — CYZOR CREATIONS</h1>
 <div class="subtitle">Operator dashboard · auto-refresh 60s · ${new Date(s.ts).toLocaleString()}${s.workspaceId && s.workspaceId !== 'default' ? ` · workspace=${escapeHtml(s.workspaceId)}` : ''}</div>
+
+${s.heroStrip ?? ''}
 
 ${token ? `<div style="margin-bottom:20px;padding:12px;background:#18181b;border:1px solid #27272a;border-radius:8px;display:flex;flex-wrap:wrap;gap:8px">
   ${[
