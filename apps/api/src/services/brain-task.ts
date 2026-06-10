@@ -1453,6 +1453,32 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { items: await computeReserves(ws, p.windowDays ?? 90) }
     },
   },
+  'finance.reserve_for_business': {
+    description: 'R595: Recompute reserves for ONE business. Params: businessId, windowDays?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { businessId?: string; windowDays?: number }
+      if (!p.businessId) throw new Error('businessId required')
+      const { computeReservesForBusiness, listReservesForBusiness } = await import('./r572-finance-layer.js')
+      const computed = await computeReservesForBusiness(ws, p.businessId, p.windowDays ?? 90)
+      return { computed, current: await listReservesForBusiness(ws, p.businessId) }
+    },
+  },
+  'finance.reserve_for_business_all': {
+    description: 'R595: Recompute reserves for ALL businesses via R587 fan-out. Per-business isolation + advisory lock.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { windowDays?: number }
+      const { runForEachBusiness } = await import('./r587-cron-fanout.js')
+      const summary: Array<{ businessId: string; sources: number; totalUsd: number }> = []
+      const result = await runForEachBusiness(ws, 'finance.reserves', async (businessId) => {
+        const { computeReservesForBusiness } = await import('./r572-finance-layer.js')
+        const out = await computeReservesForBusiness(ws, businessId, p.windowDays ?? 90)
+        summary.push({ businessId, sources: out.length, totalUsd: out.reduce((a, r) => a + r.recommendedUsd, 0) })
+      })
+      return { ...result, summary }
+    },
+  },
   'finance.factoring_propose': {
     description: 'R572: Capture intent to factor receivables. Params: source, amountUsd, discountPct?, notes?',
     risk: 'medium',
@@ -9331,7 +9357,7 @@ const PAGE_DERIVED_ALLOWLIST: ReadonlySet<string> = new Set([
   'price.sample', 'price.mark_view', 'price.snapshot', 'buyers.list_optins', 'dmca.update_status', 'tax.notifications_list',
   'federation.opt_in', 'federation.opt_out', 'federation.stats', 'federation.trending',
   'brand.get', 'brand.set', 'brand.validate',
-  'finance.reserve_recommendations', 'finance.factoring_propose', 'finance.insurance_enroll', 'finance.insurance_active',
+  'finance.reserve_recommendations', 'finance.reserve_for_business', 'finance.reserve_for_business_all', 'finance.factoring_propose', 'finance.insurance_enroll', 'finance.insurance_active',
   'registry.list', 'memory.compact', 'memory.stats',
   'hooks.create', 'hooks.list', 'hooks.set_enabled', 'hooks.delete',
   'email.send', 'email.log_tail', 'email.stats',
@@ -9680,8 +9706,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         // R570-R572 — federation pool + brand profile + finance reserves all
         // surface money figures the operator explicitly asked for.
         'federation.stats', 'federation.trending',
-        'finance.reserve_recommendations', 'finance.factoring_propose',
-        'finance.insurance_enroll', 'finance.insurance_active',
+        'finance.reserve_recommendations', 'finance.reserve_for_business', 'finance.reserve_for_business_all',
+        'finance.factoring_propose', 'finance.insurance_enroll', 'finance.insurance_active',
         'revenue.list', 'revenue.rollup', 'revenue.byBusiness',
         'budget.list', 'budget.detail', 'budget.alerts',
         'cost.summary', 'cost.byBusiness', 'cost.byProvider',
@@ -9729,7 +9755,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
   'price.sample', 'price.mark_view', 'price.snapshot', 'buyers.list_optins', 'dmca.update_status', 'tax.notifications_list',
   'federation.opt_in', 'federation.opt_out', 'federation.stats', 'federation.trending',
   'brand.get', 'brand.set', 'brand.validate',
-  'finance.reserve_recommendations', 'finance.factoring_propose', 'finance.insurance_enroll', 'finance.insurance_active',
+  'finance.reserve_recommendations', 'finance.reserve_for_business', 'finance.reserve_for_business_all', 'finance.factoring_propose', 'finance.insurance_enroll', 'finance.insurance_active',
   'registry.list', 'memory.compact', 'memory.stats',
   'hooks.create', 'hooks.list', 'hooks.set_enabled', 'hooks.delete',
   'email.send', 'email.log_tail', 'email.stats',

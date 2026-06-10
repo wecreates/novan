@@ -1325,6 +1325,7 @@ const INTERVALS = {
   competitorScan:         60 * 60_000,        // hourly competitor feed scan
   competitorScore:        60 * 60_000,        // hourly LLM/heuristic parity scoring
   memoryEmbedBackfill:    30 * 60_000,        // 30min embedding backfill (capped 25/tick)
+  reservesPerBusiness:    6  * 60 * 60_000,   // R595 — 6h per-business reserve recompute via R587 fan-out
 }
 
 /**
@@ -1599,6 +1600,32 @@ async function runCompetitorScoreTick(): Promise<void> {
 }
 
 // R579 — fetch competitor feeds hourly.
+// R595 — Per-business reserve recompute (every 6h). Fans out across all
+// businesses via R587; isolated error per business; advisory-locked per
+// (cronName, businessId) so concurrent ticks don't double-write.
+async function runReservesPerBusinessTick(): Promise<void> {
+  try {
+    if (process.env['DISABLE_RESERVES_FANOUT'] === '1') return
+    const { runForEachBusiness } = await import('./r587-cron-fanout.js')
+    const { computeReservesForBusiness } = await import('./r572-finance-layer.js')
+    // R587 already iterates per-workspace internally? Currently callers pass a
+    // workspaceId. Iterate known workspaces.
+    const { db } = await import('../db/client.js')
+    const { sql } = await import('drizzle-orm')
+    const wsRows = await db.execute(sql`SELECT id FROM workspaces`).catch(() => [] as unknown[])
+    const ws = (wsRows as Array<{ id: string }>).map(x => x.id)
+    let totalBiz = 0, totalSources = 0
+    for (const wsId of ws) {
+      const out = await runForEachBusiness(wsId, 'finance.reserves', async (bizId) => {
+        const recs = await computeReservesForBusiness(wsId, bizId, 90)
+        totalSources += recs.length
+      })
+      totalBiz += out.results.filter(r => r.ran).length
+    }
+    if (totalBiz > 0 || totalSources > 0) await emit('cron.reserves_per_business', { workspaces: ws.length, ran: totalBiz, sources: totalSources })
+  } catch (e) { await emit('cron.error', { task: 'reserves_per_business', error: (e as Error).message }) }
+}
+
 async function runCompetitorScanTick(): Promise<void> {
   try {
     if (process.env['DISABLE_COMPETITOR_SCAN'] === '1') return
@@ -2433,6 +2460,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runCompetitorScanTick,          INTERVALS.competitorScan))
   handles.push(scheduleJittered(runCompetitorScoreTick,         INTERVALS.competitorScore))
   handles.push(scheduleJittered(runMemoryEmbedBackfillTick,     INTERVALS.memoryEmbedBackfill))
+  handles.push(scheduleJittered(runReservesPerBusinessTick,     INTERVALS.reservesPerBusiness))   // R595
   handles.push(scheduleJittered(runTrustAutoDerive,             INTERVALS.trustAutoDerive))
   handles.push(scheduleJittered(runFabricSweep,                 INTERVALS.fabricSweep))
   handles.push(scheduleJittered(runDataRetention,               INTERVALS.dataRetention))

@@ -144,6 +144,63 @@ export async function computeReserves(workspaceId: string, windowDays = 90): Pro
   return out
 }
 
+/** R595 — Per-business reserves. Filters business_revenue by business_id and
+ *  writes (workspace_id, business_id, source) rows. Uses delete-then-insert
+ *  within the (ws, biz, source) scope so we don't need to retrofit the PK. */
+export async function computeReservesForBusiness(workspaceId: string, businessId: string, windowDays = 90): Promise<ReserveRecommendation[]> {
+  await ensureTables()
+  const since = Date.now() - windowDays * 24 * 60 * 60_000
+  let rows: Array<{ source: string; sales: number; refunds: number; gross: number }> = []
+  try {
+    const r = await db.execute(sql`
+      SELECT source,
+             COUNT(*) FILTER (WHERE net_usd > 0)::int AS sales,
+             COUNT(*) FILTER (WHERE net_usd < 0)::int AS refunds,
+             COALESCE(SUM(net_usd) FILTER (WHERE net_usd > 0), 0)::float AS gross
+      FROM business_revenue
+      WHERE workspace_id = ${workspaceId} AND business_id = ${businessId}
+            AND recorded_at >= ${since} AND source IS NOT NULL
+      GROUP BY source
+    `)
+    rows = r as unknown as typeof rows
+  } catch { return [] }
+  const out: ReserveRecommendation[] = []
+  for (const row of rows) {
+    const sales = Number(row.sales) || 0, refunds = Number(row.refunds) || 0, gross = Number(row.gross) || 0
+    if (sales === 0) continue
+    const avgSale = gross / sales
+    const refundRate = refunds / sales
+    const recommended = Math.round(avgSale * refundRate * 3 * 100) / 100
+    out.push({ source: row.source, recommendedUsd: recommended, observedRefundRate: Math.round(refundRate * 10000) / 10000, basedOnSales: sales, basedOnRefunds: refunds, windowDays, computedAt: Date.now() })
+    try {
+      await db.execute(sql`DELETE FROM finance_reserves WHERE workspace_id = ${workspaceId} AND business_id = ${businessId} AND source = ${row.source}`).catch(() => {})
+      await db.execute(sql`
+        INSERT INTO finance_reserves (workspace_id, business_id, source, recommended_usd, observed_refund_rate,
+                                       based_on_sales, based_on_refunds, window_days, computed_at)
+        VALUES (${workspaceId}, ${businessId}, ${row.source}, ${recommended}, ${refundRate}, ${sales}, ${refunds}, ${windowDays}, ${Date.now()})
+      `).catch(() => {})
+    } catch { /* tolerated */ }
+  }
+  return out
+}
+
+export async function listReservesForBusiness(workspaceId: string, businessId: string): Promise<ReserveRecommendation[]> {
+  await ensureTables()
+  try {
+    const r = await db.execute(sql`
+      SELECT source, recommended_usd, observed_refund_rate, based_on_sales,
+             based_on_refunds, window_days, computed_at
+      FROM finance_reserves
+      WHERE workspace_id = ${workspaceId} AND business_id = ${businessId}
+      ORDER BY recommended_usd DESC
+    `)
+    return (r as unknown as Array<{ source: string; recommended_usd: number; observed_refund_rate: number; based_on_sales: number; based_on_refunds: number; window_days: number; computed_at: number }>).map(x => ({
+      source: x.source, recommendedUsd: Number(x.recommended_usd), observedRefundRate: Number(x.observed_refund_rate),
+      basedOnSales: Number(x.based_on_sales), basedOnRefunds: Number(x.based_on_refunds), windowDays: Number(x.window_days), computedAt: Number(x.computed_at),
+    }))
+  } catch { return [] }
+}
+
 export async function listReserves(workspaceId: string): Promise<ReserveRecommendation[]> {
   await ensureTables()
   try {
