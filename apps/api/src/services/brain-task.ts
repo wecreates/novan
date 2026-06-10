@@ -2427,6 +2427,77 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { count: items.length, items }
     },
   },
+  'music.mixcraft': {
+    description: 'R600: Operator-vocabulary alias — end-to-end song replicate + vocal enhance + master into a single call. Params: url, instructions?, variationStrength? (0.15..0.8, default 0.4). Returns paths for original-cover + enhanced + mastered.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { url?: string; instructions?: string; variationStrength?: number }
+      if (!p.url) throw new Error('music.mixcraft: url required')
+      const { replicateSong, downloadJobAudio } = await import('./music-studio.js')
+      const { vocalEnhance, master } = await import('./music-mastering.js')
+      const { join } = await import('node:path')
+      const { tmpdir } = await import('node:os')
+      const job = await replicateSong({ url: p.url, instructions: p.instructions, workspaceId: ws, variationStrength: p.variationStrength })
+      if (!job.ok || job.status !== 'ok') return { ok: false, stage: 'replicate', error: job.error ?? 'replicate failed', job }
+      const raw = await downloadJobAudio(job)
+      if (!raw) return { ok: false, stage: 'download', error: 'could not download replicated audio', job }
+      const tag = Date.now().toString(36)
+      const enhancedPath = join(tmpdir(), `mixcraft-${tag}-enhanced.wav`)
+      const masteredPath = join(tmpdir(), `mixcraft-${tag}-mastered.wav`)
+      let enhanced: unknown = null, mastered: unknown = null
+      try { enhanced = await vocalEnhance(raw, enhancedPath) } catch (e) { enhanced = { ok: false, error: (e as Error).message } }
+      try { mastered = await master(enhancedPath, masteredPath, {}) } catch (e) { mastered = { ok: false, error: (e as Error).message } }
+      return { ok: true, raw, enhanced, mastered, enhancedPath, masteredPath, job }
+    },
+  },
+  'video.ltx.health': {
+    description: 'R600: Probe LTX-2 (Replicate) availability + token state.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { ltxHealth } = await import('./r600-ltx2-video.js')
+      return ltxHealth(ws)
+    },
+  },
+  'video.ltx.text2video': {
+    description: 'R600: LTX-2 text-to-video via Replicate. Params: prompt, durationSec? (4..10), width?, height?, fps?, seed?, negativePrompt?. Returns video URL.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r600-ltx2-video.js').ltxText2Video>[0]
+      if (!p.prompt) throw new Error('prompt required')
+      const { ltxText2Video } = await import('./r600-ltx2-video.js')
+      return ltxText2Video(p, ws)
+    },
+  },
+  'video.ltx.image2video': {
+    description: 'R600: LTX-2 image-to-video. Params: prompt, imageUrl, durationSec?, fps?, seed?.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r600-ltx2-video.js').ltxImage2Video>[0]
+      if (!p.prompt || !p.imageUrl) throw new Error('prompt + imageUrl required')
+      const { ltxImage2Video } = await import('./r600-ltx2-video.js')
+      return ltxImage2Video(p, ws)
+    },
+  },
+  'video.ltx.keyframe': {
+    description: 'R600: LTX-2 keyframe interpolation. Params: prompt, startImageUrl, endImageUrl, durationSec?, fps?, seed?.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r600-ltx2-video.js').ltxKeyframe>[0]
+      if (!p.prompt || !p.startImageUrl || !p.endImageUrl) throw new Error('prompt + startImageUrl + endImageUrl required')
+      const { ltxKeyframe } = await import('./r600-ltx2-video.js')
+      return ltxKeyframe(p, ws)
+    },
+  },
+  'video.ltx.audio2video': {
+    description: 'R600: LTX-2 audio-to-video (synchronized visuals). Params: prompt, audioUrl, durationSec?, fps?, seed?. End-to-end pairing with music.mixcraft for music-video pipelines.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r600-ltx2-video.js').ltxAudio2Video>[0]
+      if (!p.prompt || !p.audioUrl) throw new Error('prompt + audioUrl required')
+      const { ltxAudio2Video } = await import('./r600-ltx2-video.js')
+      return ltxAudio2Video(p, ws)
+    },
+  },
   'music.master': {
     description: 'Master an audio file to broadcast spec: two-pass EBU R128 loudness normalization (-14 LUFS), true-peak limit -1 dBTP, 48 kHz / 24-bit, gentle HP/LP. Params: inPath, outPath, targetLufs?, truePeakDb?',
     risk: 'low',
@@ -9995,8 +10066,9 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'budget.list', 'budget.detail', 'budget.alerts',
         'cost.summary', 'cost.byBusiness', 'cost.byProvider',
         'video.analyze', 'web.fetch', 'browser.text',
-        'music.generate', 'music.replicate', 'music.status', 'music.master', 'music.knowledge',
+        'music.generate', 'music.replicate', 'music.mixcraft', 'music.status', 'music.master', 'music.knowledge',
         'music.vocalEnhance', 'music.scoreNaturalness', 'system.ffmpegAvailable',
+        'video.ltx.health', 'video.ltx.text2video', 'video.ltx.image2video', 'video.ltx.keyframe', 'video.ltx.audio2video',
         'music.fromImage', 'music.fromVideo', 'music.fromAudio',
         'mixcraft.status', 'mixcraft.compose',
         'capcut.status', 'video.scrapeAssets', 'video.editorAgent',

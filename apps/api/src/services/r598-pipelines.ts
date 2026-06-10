@@ -445,6 +445,15 @@ export async function seedPipelines(workspaceId: string): Promise<{ defined: str
       enabled: true,
     },
     {
+      name: 'song-to-music-video',
+      description: 'R600 end-to-end: ACE-Step replicate + vocal enhance + master, then LTX-2 audio-to-video using the mastered track. Operator passes url + instructions + ltxPrompt via pipeline.run params.',
+      stages: [
+        { op: 'music.mixcraft',       label: 'replicate + master',  params: {}, params_from: { url: 'pipeline.url', instructions: 'pipeline.instructions' } },
+        { op: 'video.ltx.audio2video',label: 'generate music video',params: { durationSec: 8 }, params_from: { audioUrl: 'prev.masteredPath', prompt: 'pipeline.ltxPrompt' }, optional: true },
+      ],
+      enabled: true,
+    },
+    {
       name: 'standards-self-audit',
       description: 'Re-discover repo standards + re-seed brain memory recall keys.',
       stages: [
