@@ -112,6 +112,13 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
   // R651 — prefer native OpenAI tool calling; falls back internally to R647a if no key
   const { orchestrateToolsNative } = await import('./r651-native-tools.js')
 
+  // R653 — recall past similar runs so the agent compounds on prior knowledge
+  const priorRuns = await findSimilarRuns(workspaceId, input.goal, 3)
+  const priorBlock = priorRuns.length === 0 ? '' :
+    `\n\nPrior similar runs in this workspace (most recent first):\n` +
+    priorRuns.map(r => `  - goal="${String(r['goal']).slice(0, 100)}" status=${r['status']} answer="${String(r['answer'] ?? '').slice(0, 240)}"`).join('\n') +
+    `\n\nIf one of these already answers the current goal, you may complete in one loop by citing the prior answer (but verify with a tool call first if the value could have changed since).`
+
   let answer = ''
   let done = false
   let currentSubgoal = input.goal
@@ -122,7 +129,7 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
   for (loop = 1; loop <= maxLoops; loop++) {
     // 1. PLAN
     const plan = await withSchemaNative(workspaceId, {
-      prompt: `Goal: ${input.goal}\n\nCurrent step: ${currentSubgoal}\n\nAvailable tools: ${allowed.join(', ')}\n\nReturn a JSON plan with the immediate subgoal, reasoning, and which tools you'll need.`,
+      prompt: `Goal: ${input.goal}\n\nCurrent step: ${currentSubgoal}\n\nAvailable tools: ${allowed.join(', ')}${priorBlock}\n\nReturn a JSON plan with the immediate subgoal, reasoning, and which tools you'll need.`,
       schema: PLAN_SCHEMA,
       systemPrompt: 'You are Novan, an autonomous agent. Plan one concrete actionable step.',
       ...(input.preferProvider ? { preferProvider: input.preferProvider } : {}),
@@ -210,6 +217,30 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
     tokens: totalTokens, costUsd: Number(totalCost.toFixed(6)),
     latencyMs, trace,
   }
+}
+
+/** R653 — surface past runs whose goal shares ≥2 keyword tokens with this one. */
+export async function findSimilarRuns(workspaceId: string, goal: string, limit = 3): Promise<Array<Record<string, unknown>>> {
+  await ensureDdl()
+  const tokens = goal.toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length >= 4).slice(0, 8)
+  if (tokens.length === 0) return []
+  try {
+    // Pull recent done/capped runs, score by token overlap in JS — keeps SQL simple
+    const rows = await db.execute(sql`
+      SELECT id, goal, status, answer, loops, tool_calls, created_at
+      FROM r649_agent_runs
+      WHERE workspace_id = ${workspaceId} AND status IN ('done', 'capped')
+      ORDER BY created_at DESC LIMIT 100
+    `)
+    const all = (rows.rows ?? rows) as Array<Record<string, unknown>>
+    const scored = all.map(r => {
+      const g = String(r['goal'] ?? '').toLowerCase()
+      const matches = tokens.filter(t => g.includes(t)).length
+      return { row: r, score: matches }
+    }).filter(s => s.score >= 2)
+    scored.sort((a, b) => b.score - a.score)
+    return scored.slice(0, limit).map(s => s.row)
+  } catch { return [] }
 }
 
 export async function listAgentRuns(workspaceId: string, limit = 50): Promise<Array<Record<string, unknown>>> {
