@@ -109,7 +109,8 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
   `).catch(() => {})
 
   const { withSchemaNative } = await import('./r648-native-schema.js')
-  const { orchestrateTools } = await import('./r647-tool-orchestrator.js')
+  // R651 — prefer native OpenAI tool calling; falls back internally to R647a if no key
+  const { orchestrateToolsNative } = await import('./r651-native-tools.js')
 
   let answer = ''
   let done = false
@@ -141,12 +142,11 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
     if (toolsForRound.length === 0) {
       trace.push({ phase: 'act', round: loop, summary: 'no tools requested — skipping act' })
     } else {
-      const act = await orchestrateTools(workspaceId, {
+      const act = await orchestrateToolsNative(workspaceId, {
         userPrompt:   planSubgoal,
         systemPrompt: 'Use the provided tools to gather what you need. Be terse.',
         toolsAllowed: toolsForRound,
         maxRounds:    2,
-        ...(input.preferProvider && input.preferProvider !== 'auto' ? { preferProvider: input.preferProvider } : {}),
       })
       totalTokens    += act.tokens
       totalCost      += act.costUsd
