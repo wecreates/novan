@@ -4293,6 +4293,36 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return setDailyCap(ws, p.dailyUsdCap)
     },
   },
+  'github.repo': {
+    description: 'R662: Public GitHub repo metadata (stars, language, last push, topics, license). Params: repo ("owner/name").',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { repo?: string }
+      if (!p.repo) throw new Error('repo (owner/name) required')
+      const { repoInfo } = await import('./r662-github-intel.js')
+      return repoInfo(p.repo)
+    },
+  },
+  'github.release': {
+    description: 'R662: Latest published release for a repo (tag, name, body preview, prerelease flag). Params: repo.',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { repo?: string }
+      if (!p.repo) throw new Error('repo required')
+      const { latestRelease } = await import('./r662-github-intel.js')
+      return latestRelease(p.repo)
+    },
+  },
+  'github.readme': {
+    description: 'R662: Raw README of a repo (first 8KB). Params: repo.',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { repo?: string }
+      if (!p.repo) throw new Error('repo required')
+      const { readme } = await import('./r662-github-intel.js')
+      return readme(p.repo)
+    },
+  },
   'cache.should_cache': {
     description: 'R647c: Check if a system-prompt prefix should be cache-marked (and record observation). Params: systemPrompt, provider?',
     risk: 'low',
@@ -12423,6 +12453,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'vision.openai.describe',
         // R660 — per-workspace daily agent budget
         'novan.budget.status', 'novan.budget.set',
+        // R662 — GitHub public repo intel
+        'github.repo', 'github.release', 'github.readme',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
