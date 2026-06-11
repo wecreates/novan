@@ -1334,6 +1334,7 @@ const INTERVALS = {
   scrapeSchedule:         5 * 60_000,         // R642e — 5min tick; runs scrape jobs whose schedule_cron is due
   approvalSmsBridge:      60_000,             // R644d — 60s tick; SMS-notifies new pending approvals when Twilio configured
   capabilityCloser:       5 * 60_000,         // R646h — 5min tick; auto-attempt next-target capability closures from R334 parity registry
+  scheduledAgents:        60_000,             // R656 — 60s tick; fire novan.agent for any schedule whose next_run_at is past
 }
 
 /**
@@ -1680,6 +1681,15 @@ async function runCapabilityCloserTick(): Promise<void> {
     const r = await tickCapabilityCloser()
     if (r.attempted > 0) await emit('cron.capability_closer', r)
   } catch (e) { await emit('cron.error', { task: 'capability_closer', error: (e as Error).message }) }
+}
+
+// R656 — fire any scheduled novan.agent goals whose next_run_at has passed
+async function runScheduledAgentsTick(): Promise<void> {
+  try {
+    const { tickScheduledAgents } = await import('./r656-scheduled-agents.js')
+    const r = await tickScheduledAgents()
+    if (r.fired > 0 || r.errors > 0) await emit('cron.scheduled_agents', r)
+  } catch (e) { await emit('cron.error', { task: 'scheduled_agents', error: (e as Error).message }) }
 }
 
 // R606 — Saturation alerts. Polls neural.counters per workspace; webhooks +
@@ -2595,6 +2605,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runScrapeScheduleTick,          INTERVALS.scrapeSchedule))       // R642e
   handles.push(scheduleJittered(runApprovalSmsBridgeTick,       INTERVALS.approvalSmsBridge))    // R644d
   handles.push(scheduleJittered(runCapabilityCloserTick,        INTERVALS.capabilityCloser))     // R646h
+  handles.push(scheduleJittered(runScheduledAgentsTick,         INTERVALS.scheduledAgents))      // R656
   handles.push(scheduleJittered(runTrustAutoDerive,             INTERVALS.trustAutoDerive))
   handles.push(scheduleJittered(runFabricSweep,                 INTERVALS.fabricSweep))
   handles.push(scheduleJittered(runDataRetention,               INTERVALS.dataRetention))

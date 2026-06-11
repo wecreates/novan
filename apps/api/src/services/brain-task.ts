@@ -4209,6 +4209,53 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { session: await getSession(ws, p.id) }
     },
   },
+  'novan.schedule.create': {
+    description: 'R656: Register a scheduled novan.agent goal. Cron tick fires every minute. Params: title?, goal, intervalSec (min 60, max 86400), toolsAllowed?, startInSec?',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r656-scheduled-agents.js').createSchedule>[1]
+      const { createSchedule } = await import('./r656-scheduled-agents.js')
+      return createSchedule(ws, p)
+    },
+  },
+  'novan.schedule.list': {
+    description: 'R656: List scheduled agent goals in this workspace. Params: limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { listSchedules } = await import('./r656-scheduled-agents.js')
+      return { items: await listSchedules(ws, p.limit ?? 50) }
+    },
+  },
+  'novan.schedule.set_enabled': {
+    description: 'R656: Pause or resume a scheduled agent. Params: id, enabled (bool)',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { id?: string; enabled?: boolean }
+      if (!p.id) throw new Error('id required')
+      if (typeof p.enabled !== 'boolean') throw new Error('enabled (bool) required')
+      const { setScheduleEnabled } = await import('./r656-scheduled-agents.js')
+      return setScheduleEnabled(ws, p.id, p.enabled)
+    },
+  },
+  'novan.schedule.delete': {
+    description: 'R656: Delete a scheduled agent. Params: id',
+    risk: 'medium',
+    handler: async (_ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { deleteSchedule } = await import('./r656-scheduled-agents.js')
+      return deleteSchedule(_ws, p.id)
+    },
+  },
+  'novan.schedule.tick': {
+    description: 'R656: Manually fire the scheduled-agent cron tick (also runs on a 60s cron). Returns {fired, errors}.',
+    risk: 'high',
+    handler: async () => {
+      const { tickScheduledAgents } = await import('./r656-scheduled-agents.js')
+      return tickScheduledAgents()
+    },
+  },
   'cache.should_cache': {
     description: 'R647c: Check if a system-prompt prefix should be cache-marked (and record observation). Params: systemPrompt, provider?',
     risk: 'low',
@@ -12330,6 +12377,9 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'image.openai.generate',
         // R655 — multi-turn agent sessions
         'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
+        // R656 — scheduled agent goals
+        'novan.schedule.create', 'novan.schedule.list', 'novan.schedule.set_enabled',
+        'novan.schedule.delete', 'novan.schedule.tick',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
