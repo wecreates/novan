@@ -4275,6 +4275,24 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return describeImage(ws, p)
     },
   },
+  'novan.budget.status': {
+    description: 'R660: Get current daily agent budget status: cap, spent today (UTC), remaining, pctUsed, resetsAt.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { getBudgetStatus } = await import('./r660-agent-budget.js')
+      return getBudgetStatus(ws)
+    },
+  },
+  'novan.budget.set': {
+    description: 'R660: Set per-workspace daily USD cap for novan.agent. Params: dailyUsdCap (≥0). Set to 0 to block all agent runs.',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { dailyUsdCap?: number }
+      if (typeof p.dailyUsdCap !== 'number') throw new Error('dailyUsdCap (number) required')
+      const { setDailyCap } = await import('./r660-agent-budget.js')
+      return setDailyCap(ws, p.dailyUsdCap)
+    },
+  },
   'cache.should_cache': {
     description: 'R647c: Check if a system-prompt prefix should be cache-marked (and record observation). Params: systemPrompt, provider?',
     risk: 'low',
@@ -12403,6 +12421,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'web.search',
         // R659 — OpenAI vision (gpt-4o describe/ocr/extract)
         'vision.openai.describe',
+        // R660 — per-workspace daily agent budget
+        'novan.budget.status', 'novan.budget.set',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',

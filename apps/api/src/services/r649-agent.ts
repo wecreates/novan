@@ -96,6 +96,9 @@ const REFLECT_SCHEMA = {
 
 export async function runAgent(workspaceId: string, input: AgentInput): Promise<AgentResult> {
   await ensureDdl()
+  // R660 — enforce per-workspace daily budget before any LLM call
+  const { assertWithinBudget } = await import('./r660-agent-budget.js')
+  await assertWithinBudget(workspaceId)
   const t0 = Date.now()
   const runId = `agn_${crypto.randomBytes(8).toString('hex')}`
   const maxLoops = Math.max(1, Math.min(MAX_LOOPS, input.maxLoops ?? MAX_LOOPS))
