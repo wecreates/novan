@@ -98,7 +98,10 @@ async function gather(workspaceId: string): Promise<Digest> {
     safe(import('./r612-task-inbox.js').then(m => m.stats(workspaceId)), { pending: 0, working: 0, done24h: 0, failed24h: 0, byKind: {}, oldestPendingAgeMin: null }),
 
     safe(db.execute(sql`SELECT status, COUNT(*)::int AS n FROM pipeline_runs WHERE workspace_id = ${workspaceId} AND started_at >= ${since24} GROUP BY status`), [] as unknown[]),
-    safe(db.execute(sql`SELECT name FROM pipelines WHERE workspace_id = ${workspaceId} AND enabled = true AND (last_run_at IS NULL OR last_run_at < ${since7d} OR last_run_status <> 'success')`), [] as unknown[]),
+    // R614 — only flag pipelines that SHOULD have run (have a cron) but
+    // haven't succeeded recently. On-demand pipelines (no schedule_cron)
+    // are operator-triggered and not "stale" by absence of recent runs.
+    safe(db.execute(sql`SELECT name FROM pipelines WHERE workspace_id = ${workspaceId} AND enabled = true AND schedule_cron IS NOT NULL AND schedule_cron <> '' AND (last_run_at IS NULL OR last_run_at < ${since7d} OR last_run_status <> 'success')`), [] as unknown[]),
 
     safe(db.execute(sql`SELECT COUNT(*)::int AS n FROM events WHERE workspace_id = ${workspaceId} AND type = 'saturation.alert' AND created_at >= ${since24}`), [{ n: 0 }] as unknown[]),
     safe(db.execute(sql`SELECT COUNT(*)::int AS n FROM events WHERE workspace_id = ${workspaceId} AND type = 'cron.error' AND created_at >= ${since24}`), [{ n: 0 }] as unknown[]),

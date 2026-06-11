@@ -1673,22 +1673,34 @@ async function runPipelineSchedulesTick(): Promise<void> {
     const { sql } = await import('drizzle-orm')
     const wsRows = await db.execute(sql`SELECT id FROM workspaces`).catch(() => [] as unknown[])
     const wsIds = (wsRows as Array<{ id: string }>).map(x => x.id)
-    const { pipelinesDueNow, runPipeline } = await import('./r598-pipelines.js')
+    const { pipelinesDueNow, pipelinesOverdue, runPipeline } = await import('./r598-pipelines.js')
     const now = Date.now()
     const minuteFloor = Math.floor(now / 60_000) * 60_000
-    let fired = 0
+    let fired = 0, caughtUp = 0
     for (const wsId of wsIds) {
+      // Pass 1: exact-minute matches (the fast happy path).
       const due = await pipelinesDueNow(wsId, now)
+      const firedInThisTick = new Set<string>()
       for (const p of due) {
-        // Skip if already fired in this minute.
         if (p.lastRunAt && p.lastRunAt >= minuteFloor) continue
         try {
           await runPipeline(wsId, p.name, { trigger: 'cron' })
           fired++
+          firedInThisTick.add(p.name)
         } catch (e) { await emit('cron.error', { task: 'pipeline_run', pipeline: p.name, error: (e as Error).message.slice(0, 200) }) }
       }
+      // R614 Pass 2: catch-up — any pipeline that SHOULD have fired but didn't.
+      // Covers API restarts, tick race conditions, missed minutes from boot lag.
+      const overdue = await pipelinesOverdue(wsId, now)
+      for (const o of overdue) {
+        if (firedInThisTick.has(o.pipeline.name)) continue  // already ran this tick
+        try {
+          await runPipeline(wsId, o.pipeline.name, { trigger: 'cron-catchup' })
+          caughtUp++
+        } catch (e) { await emit('cron.error', { task: 'pipeline_catchup', pipeline: o.pipeline.name, overdueMin: o.overdueMinutes, error: (e as Error).message.slice(0, 200) }) }
+      }
     }
-    if (fired > 0) await emit('cron.pipeline_schedules', { fired })
+    if (fired > 0 || caughtUp > 0) await emit('cron.pipeline_schedules', { fired, caughtUp })
   } catch (e) { await emit('cron.error', { task: 'pipeline_schedules', error: (e as Error).message }) }
 }
 

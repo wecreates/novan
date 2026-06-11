@@ -1576,6 +1576,31 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { items: await health(ws) }
     },
   },
+  'pipeline.overdue': {
+    description: 'R614: List enabled pipelines whose last successful run is older than their most recent expected fire time. Lookback 8 days.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { pipelinesOverdue } = await import('./r598-pipelines.js')
+      const items = await pipelinesOverdue(ws)
+      return { items: items.map(o => ({ name: o.pipeline.name, scheduleCron: o.pipeline.scheduleCron, lastRunAt: o.pipeline.lastRunAt, lastRunStatus: o.pipeline.lastRunStatus, expectedFireAt: o.expectedFireAt, overdueMinutes: o.overdueMinutes })) }
+    },
+  },
+  'pipeline.fire_overdue': {
+    description: 'R614: Run every overdue pipeline once. Honors business autonomy/budget per stage. Returns per-pipeline result.',
+    risk: 'high',
+    handler: async (ws) => {
+      const { pipelinesOverdue, runPipeline } = await import('./r598-pipelines.js')
+      const overdue = await pipelinesOverdue(ws)
+      const results: Array<{ name: string; ok: boolean; status?: string; error?: string }> = []
+      for (const o of overdue) {
+        try {
+          const r = await runPipeline(ws, o.pipeline.name, { trigger: 'manual-catchup' })
+          results.push({ name: o.pipeline.name, ok: r.status === 'success' || r.status === 'partial', status: r.status })
+        } catch (e) { results.push({ name: o.pipeline.name, ok: false, error: (e as Error).message.slice(0, 200) }) }
+      }
+      return { fired: results.length, results }
+    },
+  },
   'pipeline.set_enabled': {
     description: 'R598: Enable or disable a pipeline. Params: name, enabled',
     risk: 'medium',
@@ -10443,6 +10468,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'product.set', 'product.get', 'product.list',
         'pipeline.seed', 'pipeline.define', 'pipeline.list', 'pipeline.run',
         'pipeline.runs', 'pipeline.health', 'pipeline.set_enabled',
+        'pipeline.overdue', 'pipeline.fire_overdue',
         'voice.omni.health', 'voice.omni.list_voices', 'voice.omni.tts', 'voice.omni.asr',
         'voice.omni.clone', 'voice.omni.dub_start', 'voice.omni.dub_status',
         'revenue.list', 'revenue.rollup', 'revenue.byBusiness',

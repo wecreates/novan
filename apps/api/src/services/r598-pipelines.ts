@@ -475,6 +475,60 @@ export async function seedPipelines(workspaceId: string): Promise<{ defined: str
   return { defined }
 }
 
+/** R614 — compute the most recent minute (at or before `now`) that the cron
+ *  expression matched. Walks backward up to maxLookbackMs. Returns null if
+ *  the cron is malformed or no match found in window.
+ *
+ *  Used by the catch-up logic so a missed fire (API restart, tick jitter)
+ *  still runs on the next opportunity instead of waiting another full cycle. */
+function previousFireTime(cron: string, now: number, maxLookbackMs: number): number | null {
+  const parts = cron.trim().split(/\s+/)
+  if (parts.length !== 5) return null
+  const [cm, ch, cdom, cmon, cdow] = parts as [string, string, string, string, string]
+  const matchField = (field: string, value: number): boolean => {
+    if (field === '*') return true
+    const stepMatch = field.match(/^\*\/(\d+)$/)
+    if (stepMatch) return value % Number(stepMatch[1]) === 0
+    if (field.includes(',')) return field.split(',').map(Number).includes(value)
+    return Number(field) === value
+  }
+  const limit = now - maxLookbackMs
+  // Snap to minute boundary; walk back 1 minute at a time.
+  let t = Math.floor(now / 60_000) * 60_000
+  while (t > limit) {
+    const d = new Date(t)
+    const min = d.getUTCMinutes(), hr = d.getUTCHours(), dom = d.getUTCDate(), mon = d.getUTCMonth() + 1, dow = d.getUTCDay()
+    if (matchField(cm, min) && matchField(ch, hr) && matchField(cdom, dom) && matchField(cmon, mon) && matchField(cdow, dow)) {
+      return t
+    }
+    t -= 60_000
+  }
+  return null
+}
+
+/** R614 — return pipelines that SHOULD HAVE FIRED but haven't. Catches up on
+ *  missed schedules (API restart, tick race, daylight time skew). Maximum
+ *  lookback is 8 days so a weekly cron isn't missed forever. */
+export async function pipelinesOverdue(workspaceId: string, now = Date.now()): Promise<Array<{ pipeline: Pipeline; expectedFireAt: number; overdueMinutes: number }>> {
+  const all = await listPipelines(workspaceId)
+  const out: Array<{ pipeline: Pipeline; expectedFireAt: number; overdueMinutes: number }> = []
+  const MAX_LOOKBACK_MS = 8 * 24 * 60 * 60_000   // 8 days covers weekly + slack
+  for (const p of all) {
+    if (!p.enabled || !p.scheduleCron) continue
+    const expected = previousFireTime(p.scheduleCron, now, MAX_LOOKBACK_MS)
+    if (expected == null) continue
+    // Skip if a successful or partial run completed AT/after the expected fire.
+    if (p.lastRunAt && p.lastRunAt >= expected) continue
+    // Also require expected to be at least 30s ago — avoid firing the exact
+    // current minute window (handled by the existing dueNow exact-match tick).
+    if (now - expected < 30_000) continue
+    out.push({ pipeline: p, expectedFireAt: expected, overdueMinutes: Math.round((now - expected) / 60_000) })
+  }
+  // Most overdue first so older work runs sooner.
+  out.sort((a, b) => b.overdueMinutes - a.overdueMinutes)
+  return out
+}
+
 /** For the cron tick: list enabled pipelines whose cron expression matches now. */
 export async function pipelinesDueNow(workspaceId: string, now = Date.now()): Promise<Pipeline[]> {
   const all = await listPipelines(workspaceId)
