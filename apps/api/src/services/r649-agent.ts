@@ -115,6 +115,8 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
   let done = false
   let currentSubgoal = input.goal
   let loop = 0
+  // R650 — accumulate real tool evidence the reflector + final answer can use
+  const evidence: Array<{ round: number; tool: string; preview: string }> = []
 
   for (loop = 1; loop <= maxLoops; loop++) {
     // 1. PLAN
@@ -149,14 +151,20 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
       totalTokens    += act.tokens
       totalCost      += act.costUsd
       totalToolCalls += act.toolCalls.length
+      // R650 — keep actual tool result previews so reflect + final answer aren't blind
+      for (const c of act.toolCalls) {
+        if (c.ok && c.resultPreview) evidence.push({ round: loop, tool: c.tool, preview: c.resultPreview.slice(0, 1200) })
+      }
       trace.push({ phase: 'act', round: loop, summary: `ran ${act.toolCalls.length} tool(s) over ${act.rounds} rounds: ${act.toolCalls.map(c => `${c.tool}${c.ok ? '✓' : '✗'}`).join(', ')}` })
     }
 
-    // 3. REFLECT
+    // 3. REFLECT — R650: include actual evidence so the answer contains real data
+    const evidenceBlock = evidence.length === 0 ? '(no tool evidence yet)' :
+      evidence.map(e => `  [${e.tool}#${e.round}] ${e.preview}`).join('\n')
     const reflect = await withSchemaNative(workspaceId, {
-      prompt: `Original goal: ${input.goal}\nJust completed subgoal: ${planSubgoal}\nTrace so far:\n${trace.map(t => `  [${t.phase}#${t.round}] ${t.summary}`).join('\n')}\n\nIs the goal complete? If yes, set done=true and provide the final answer. If no, set done=false and provide the next_subgoal.`,
+      prompt: `Original goal: ${input.goal}\nJust completed subgoal: ${planSubgoal}\n\nTool evidence (real data from the calls):\n${evidenceBlock}\n\nTrace:\n${trace.map(t => `  [${t.phase}#${t.round}] ${t.summary}`).join('\n')}\n\nIs the goal complete? If yes, set done=true and provide the final answer GROUNDED IN THE EVIDENCE ABOVE (no placeholders, no "X"). If no, set done=false and provide the next_subgoal.`,
       schema: REFLECT_SCHEMA,
-      systemPrompt: 'You are Novan reflecting on progress. Be decisive — finish quickly if possible.',
+      systemPrompt: 'You are Novan reflecting on progress. Cite concrete numbers/values from the evidence — never invent placeholders.',
       ...(input.preferProvider ? { preferProvider: input.preferProvider } : {}),
     })
     totalTokens += reflect.tokens
