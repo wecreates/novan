@@ -365,6 +365,7 @@ const isPublic = (url: string): boolean => {
   if (url.startsWith('/ws/voice/realtime'))                             return true  // R642c — OpenAI Realtime WS proxy; token in query
   if (url === '/ops/plans' || url.startsWith('/ops/plans'))             return true  // R646a — plans dashboard (own token gate)
   if (url === '/ops/cache' || url.startsWith('/ops/cache'))             return true  // R647c — prompt-cache dashboard (own token gate)
+  if (url === '/ops/agents' || url.startsWith('/ops/agents'))           return true  // R649 — agent runs dashboard (own token gate)
   // R647d /ops/desktop/act covered by the R623 whitelist above (startsWith '/ops/desktop')
   if (url.startsWith('/apps/'))                                         return true  // R642d — generated apps served under /apps/:slug
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
@@ -1055,6 +1056,15 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/desktop/a
   try {
     const { renderDesktopHtml } = await import('./services/r647-computer-use.js')
     reply.type('text/html').send(await renderDesktopHtml(g.ws(req.query)))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R649 — autonomous agent runs dashboard
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/agents', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>')
+  try {
+    const { renderAgentsHtml } = await import('./services/r649-agent.js')
+    reply.type('text/html').send(await renderAgentsHtml(g.ws(req.query)))
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
 })
 

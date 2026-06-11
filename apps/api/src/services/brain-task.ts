@@ -4128,6 +4128,35 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return withSchemaNative(ws, p)
     },
   },
+  'novan.agent': {
+    description: 'R649: Autonomous plan→act→reflect agent loop. Takes a goal, drives multi-step execution using R648 structured planning + R647a parallel tools until done or loop cap. Params: goal, toolsAllowed?, maxLoops? (≤8), preferProvider?',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r649-agent.js').runAgent>[1]
+      if (!p.goal) throw new Error('goal required')
+      const { runAgent } = await import('./r649-agent.js')
+      return runAgent(ws, p)
+    },
+  },
+  'novan.agent.list': {
+    description: 'R649: List recent novan.agent runs. Params: limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { listAgentRuns } = await import('./r649-agent.js')
+      return { items: await listAgentRuns(ws, p.limit ?? 50) }
+    },
+  },
+  'novan.agent.get': {
+    description: 'R649: Get a single novan.agent run by id (full trace included). Params: id',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { getAgentRun } = await import('./r649-agent.js')
+      return { run: await getAgentRun(ws, p.id) }
+    },
+  },
   'cache.should_cache': {
     description: 'R647c: Check if a system-prompt prefix should be cache-marked (and record observation). Params: systemPrompt, provider?',
     risk: 'low',
@@ -12231,6 +12260,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'desktop.act', 'desktop.act.list', 'desktop.act.next', 'desktop.act.complete',
         // R648 — provider-native structured output
         'chat.with_schema_native',
+        // R649 — autonomous agent loop
+        'novan.agent', 'novan.agent.list', 'novan.agent.get',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
