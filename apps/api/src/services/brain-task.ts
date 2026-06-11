@@ -4117,6 +4117,17 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return withSchema(ws, p)
     },
   },
+  'chat.with_schema_native': {
+    description: 'R648: Provider-native structured-output. Anthropic forced tool_choice or OpenAI response_format=json_schema for guaranteed-valid JSON, no retry needed. Falls back to R647b prompt-layer if no provider key. Params: prompt, schema, systemPrompt?, preferProvider? (anthropic|openai|auto), model?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r648-native-schema.js').withSchemaNative>[1]
+      if (!p.prompt) throw new Error('prompt required')
+      if (!p.schema || typeof p.schema !== 'object') throw new Error('schema (JSON Schema object) required')
+      const { withSchemaNative } = await import('./r648-native-schema.js')
+      return withSchemaNative(ws, p)
+    },
+  },
   'cache.should_cache': {
     description: 'R647c: Check if a system-prompt prefix should be cache-marked (and record observation). Params: systemPrompt, provider?',
     risk: 'low',
@@ -12218,6 +12229,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'chat.tools.run', 'chat.with_schema',
         'cache.should_cache', 'cache.list',
         'desktop.act', 'desktop.act.list', 'desktop.act.next', 'desktop.act.complete',
+        // R648 — provider-native structured output
+        'chat.with_schema_native',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
