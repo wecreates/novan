@@ -4256,6 +4256,16 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return tickScheduledAgents()
     },
   },
+  'web.search': {
+    description: 'R657: Free web search via DuckDuckGo HTML SERP — no API key. Returns title+url+snippet array. Params: query, limit? (1-10), region?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r657-web-search.js').webSearch>[0]
+      if (!p.query) throw new Error('query required')
+      const { webSearch } = await import('./r657-web-search.js')
+      return webSearch(p)
+    },
+  },
   'cache.should_cache': {
     description: 'R647c: Check if a system-prompt prefix should be cache-marked (and record observation). Params: systemPrompt, provider?',
     risk: 'low',
@@ -12380,6 +12390,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         // R656 — scheduled agent goals
         'novan.schedule.create', 'novan.schedule.list', 'novan.schedule.set_enabled',
         'novan.schedule.delete', 'novan.schedule.tick',
+        // R657 — free web search (DDG HTML)
+        'web.search',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
