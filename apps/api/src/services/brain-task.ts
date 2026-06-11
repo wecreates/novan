@@ -4323,6 +4323,34 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return readme(p.repo)
     },
   },
+  'novan.chat': {
+    description: 'R663: One-shot conversational entry point. Auto-uses R651 native tools + R655 sessions + R660 budget. Returns assistant reply + session id (auto-created if absent). Params: message, sessionId?, systemPrompt?, toolsAllowed?, maxRounds?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r663-novan-chat.js').chat>[1]
+      const { chat } = await import('./r663-novan-chat.js')
+      return chat(ws, p)
+    },
+  },
+  'novan.chat.sessions': {
+    description: 'R663: List chat sessions in this workspace (turns/cost rolled up). Params: limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { listChatSessions } = await import('./r663-novan-chat.js')
+      return { items: await listChatSessions(ws, p.limit ?? 50) }
+    },
+  },
+  'novan.chat.history': {
+    description: 'R663: Full turn-by-turn history for a chat session. Params: sessionId',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { sessionId?: string }
+      if (!p.sessionId) throw new Error('sessionId required')
+      const { getChatSession } = await import('./r663-novan-chat.js')
+      return { turns: await getChatSession(ws, p.sessionId) }
+    },
+  },
   'cache.should_cache': {
     description: 'R647c: Check if a system-prompt prefix should be cache-marked (and record observation). Params: systemPrompt, provider?',
     risk: 'low',
@@ -12455,6 +12483,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'novan.budget.status', 'novan.budget.set',
         // R662 — GitHub public repo intel
         'github.repo', 'github.release', 'github.readme',
+        // R663 — one-shot conversational chat
+        'novan.chat', 'novan.chat.sessions', 'novan.chat.history',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
