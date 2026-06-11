@@ -4128,6 +4128,19 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return withSchemaNative(ws, p)
     },
   },
+  'chat.tools.run_native': {
+    description: 'R651: Native OpenAI tool-calling — guaranteed-extractable parallel tool calls with typed params. Falls back to R647a prompt-layer if no OPENAI_API_KEY. Params: userPrompt, systemPrompt?, toolsAllowed?, maxRounds?, model?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r651-native-tools.js').orchestrateToolsNative>[1]
+      if (!p.userPrompt && typeof (p as Record<string, unknown>)['prompt'] === 'string') {
+        p.userPrompt = (p as Record<string, unknown>)['prompt'] as string
+      }
+      if (!p.userPrompt) throw new Error('userPrompt (or prompt) required')
+      const { orchestrateToolsNative } = await import('./r651-native-tools.js')
+      return orchestrateToolsNative(ws, p)
+    },
+  },
   'novan.agent': {
     description: 'R649: Autonomous plan→act→reflect agent loop. Takes a goal, drives multi-step execution using R648 structured planning + R647a parallel tools until done or loop cap. Params: goal, toolsAllowed?, maxLoops? (≤8), preferProvider?',
     risk: 'high',
@@ -12262,6 +12275,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'chat.with_schema_native',
         // R649 — autonomous agent loop
         'novan.agent', 'novan.agent.list', 'novan.agent.get',
+        // R651 — native OpenAI tool calling
+        'chat.tools.run_native',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
