@@ -98,6 +98,12 @@ export const KNOWN_PROVIDERS: ProviderDef[] = [
   // now pinned snapshots, no evergreen pointer). `claude-sonnet-4-6` is
   // the current GA Sonnet ($3 in / $15 out per MTok).
   { id: 'anthropic',    family: 'anthropic', baseUrl: 'https://api.anthropic.com/v1',                   defaultModel: 'claude-sonnet-4-6',        envVar: 'ANTHROPIC_API_KEY',   costPer1kTokens: 0.003,    outputCostPer1kTokens: 0.015 },
+  // R645a — frontier Claude models. Same ANTHROPIC_API_KEY, distinct provider
+  // ids so the operator can pick Opus 4.8 for hard reasoning or Fable 5 for
+  // creative/narrative work without hitting the Sonnet default.
+  { id: 'anthropic-opus',  family: 'anthropic', baseUrl: 'https://api.anthropic.com/v1',                defaultModel: 'claude-opus-4-8',          envVar: 'ANTHROPIC_API_KEY',   costPer1kTokens: 0.015,    outputCostPer1kTokens: 0.075 },
+  { id: 'anthropic-fable', family: 'anthropic', baseUrl: 'https://api.anthropic.com/v1',                defaultModel: 'claude-fable-5',           envVar: 'ANTHROPIC_API_KEY',   costPer1kTokens: 0.005,    outputCostPer1kTokens: 0.025 },
+  { id: 'anthropic-haiku', family: 'anthropic', baseUrl: 'https://api.anthropic.com/v1',                defaultModel: 'claude-haiku-4-5-20251001', envVar: 'ANTHROPIC_API_KEY',  costPer1kTokens: 0.001,    outputCostPer1kTokens: 0.005 },
   // R146 — gemini-2.0-flash listed in :listModels but returns 404 from
   // :streamGenerateContent for newer API keys; gemini-2.5-flash is the
   // current generally-available flash tier and works for both endpoints.

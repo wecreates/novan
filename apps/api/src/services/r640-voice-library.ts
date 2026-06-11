@@ -206,21 +206,52 @@ const STYLE = `body{font:14px/1.45 -apple-system,BlinkMacSystemFont,sans-serif;m
 
 function esc(s: unknown): string { return String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!)) }
 
-export async function renderVoicesHtml(workspaceId: string): Promise<string> {
+export async function renderVoicesHtml(workspaceId: string, token = ''): Promise<string> {
   const voices = await listVoices(workspaceId)
+  const t = encodeURIComponent(token)
+  const rowActions = (id: string): string => token ? `
+    <form method="POST" action="/ops/voices/preview?token=${t}&workspace=${esc(workspaceId)}" style="display:inline">
+      <input type="hidden" name="id" value="${esc(id)}">
+      <button style="background:none;border:1px solid #d1d5db;border-radius:3px;padding:1px 6px;font-size:11px;cursor:pointer">▶ preview</button>
+    </form>
+    <form method="POST" action="/ops/voices/set_default?token=${t}&workspace=${esc(workspaceId)}" style="display:inline">
+      <input type="hidden" name="id" value="${esc(id)}">
+      <button style="background:none;border:1px solid #d1d5db;border-radius:3px;padding:1px 6px;font-size:11px;cursor:pointer">★ default</button>
+    </form>
+    <form method="POST" action="/ops/voices/delete?token=${t}&workspace=${esc(workspaceId)}" style="display:inline" onsubmit="return confirm('Delete this voice?')">
+      <input type="hidden" name="id" value="${esc(id)}">
+      <button style="background:none;border:none;color:#b91c1c;cursor:pointer;font-size:13px">×</button>
+    </form>` : ''
   const rows = voices.map(v => `<tr>
     <td>${v.isDefault ? '<span class="star" title="default">★</span>' : ''}<strong>${esc(v.name)}</strong></td>
     <td><span class="tag">${esc(v.provider)}</span></td>
     <td><code>${esc(v.providerVoiceId)}</code></td>
     <td>${esc(v.language ?? '')}</td>
     <td>${v.previewUrl ? `<audio controls preload="none" src="${esc(v.previewUrl)}"></audio>` : '<span class="dim">no preview</span>'}</td>
+    <td>${rowActions(v.id)}</td>
   </tr>`).join('')
+
+  const registerForm = token ? `
+    <h2 style="font-size:14px;color:#374151;margin:14px 0 4px">Register a built-in voice</h2>
+    <form method="POST" action="/ops/voices/register?token=${t}&workspace=${esc(workspaceId)}" style="display:grid;grid-template-columns:1fr 1fr 1fr 60px auto;gap:6px;margin:6px 0 12px;max-width:760px">
+      <input name="name"             placeholder="display name (e.g. Onyx deep)" required style="padding:6px 8px;border:1px solid #d1d5db;border-radius:4px">
+      <select name="provider" required style="padding:6px 8px;border:1px solid #d1d5db;border-radius:4px">
+        <option value="openai">openai</option>
+        <option value="omnivoice">omnivoice</option>
+        <option value="elevenlabs">elevenlabs</option>
+      </select>
+      <input name="providerVoiceId"  placeholder="provider voice id (nova/onyx/…)" required style="padding:6px 8px;border:1px solid #d1d5db;border-radius:4px">
+      <input name="language"         placeholder="en" style="padding:6px 8px;border:1px solid #d1d5db;border-radius:4px">
+      <button style="padding:6px 12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer">Add</button>
+    </form>` : ''
+
   const body = `
     <h1>Voice library</h1>
-    <div class="meta">workspace=${esc(workspaceId)} · ${voices.length} voice(s) · refresh manually after preview gen · use <code>voice.lib.preview</code> brain op to generate samples</div>
+    <div class="meta">workspace=${esc(workspaceId)} · ${voices.length} voice(s) · use voice.lib.clone brain op to clone from an audio sample</div>
+    ${registerForm}
     <table>
-      <thead><tr><th>name</th><th>provider</th><th>provider id</th><th>lang</th><th>preview</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="5" class="dim">No voices yet. Use voice.lib.register for built-in voices or voice.lib.clone to clone from an audio sample.</td></tr>'}</tbody>
+      <thead><tr><th>name</th><th>provider</th><th>provider id</th><th>lang</th><th>preview</th><th></th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" class="dim">No voices yet.</td></tr>'}</tbody>
     </table>`
   return `<!doctype html><meta charset="utf-8"><title>Voice library · Novan</title><style>${STYLE}</style>${body}`
 }

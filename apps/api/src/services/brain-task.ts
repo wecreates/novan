@@ -3874,6 +3874,109 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return approvalSmsStatus()
     },
   },
+  // ─── R645b Narrative engine ────────────────────────────────────────
+  'narrative.story_outline': {
+    description: 'R645b: 3-act outline from a one-line premise. Params: premise, genre?, tone?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r645-narrative.js').storyOutline>[1]
+      const { storyOutline } = await import('./r645-narrative.js')
+      return storyOutline(ws, p)
+    },
+  },
+  'narrative.scene_write': {
+    description: 'R645b: Write one scene of a stored outline. Params: storyId, act, beat, pov?, targetWords?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r645-narrative.js').sceneWrite>[1]
+      const { sceneWrite } = await import('./r645-narrative.js')
+      return sceneWrite(ws, p)
+    },
+  },
+  'narrative.character_bible': {
+    description: 'R645b: Detailed character profile. Params: name, context, storyId? (auto-attaches if given).',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r645-narrative.js').characterBible>[1]
+      const { characterBible } = await import('./r645-narrative.js')
+      return characterBible(ws, p)
+    },
+  },
+  'narrative.style_transfer': {
+    description: 'R645b: Rewrite text in a target author/style. Params: text, target, preserve? (plot|all).',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r645-narrative.js').styleTransfer>[1]
+      const { styleTransfer } = await import('./r645-narrative.js')
+      return styleTransfer(ws, p)
+    },
+  },
+  'narrative.story_iterate': {
+    description: 'R645b: Diff-edit an existing story. Params: storyId, prompt.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r645-narrative.js').storyIterate>[1]
+      const { storyIterate } = await import('./r645-narrative.js')
+      return storyIterate(ws, p)
+    },
+  },
+  'narrative.list': {
+    description: 'R645b: List stored stories. Params: limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { listStories } = await import('./r645-narrative.js')
+      return { items: await listStories(ws, p.limit) }
+    },
+  },
+  'narrative.get': {
+    description: 'R645b: Get one story with full outline + scenes + characters. Params: id.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { getStory } = await import('./r645-narrative.js')
+      return await getStory(ws, p.id) ?? {}
+    },
+  },
+  'narrative.delete': {
+    description: 'R645b: Delete a stored story. Params: id.',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { deleteStory } = await import('./r645-narrative.js')
+      return deleteStory(ws, p.id)
+    },
+  },
+  // ─── R645c Code execution sandbox ──────────────────────────────────
+  'code.exec': {
+    description: 'R645c: Run code in a tempdir with timeout + output cap. Params: lang (python|node|bash), code, stdin?, timeoutMs?, env? (sanitized).',
+    risk: 'high',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r645-code-exec.js').execute>[0]
+      const { execute } = await import('./r645-code-exec.js')
+      return execute(p)
+    },
+  },
+  'code.exec_health': {
+    description: 'R645c: Probe python3/node/sh availability.',
+    risk: 'low',
+    handler: async () => {
+      const { execHealth } = await import('./r645-code-exec.js')
+      return execHealth()
+    },
+  },
+  // ─── R645d Multimodal chat turn ────────────────────────────────────
+  'chat.multimodal': {
+    description: 'R645d: Single chat turn that auto-extracts text from PDF/image/audio/video/html/text attachments and feeds them to the LLM. Params: userPrompt, systemPrompt?, attachments[]?, responseSchema?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r645-multimodal.js').chatMultimodal>[1]
+      const { chatMultimodal } = await import('./r645-multimodal.js')
+      return chatMultimodal(ws, p)
+    },
+  },
   // ─── R611 SMTP email fallback ───────────────────────────────────────
   'email.smtp.health': {
     description: 'R611: Probe SMTP — connects, EHLO, QUIT (no send). Returns ok + reason if SMTP_HOST/USER/PASS configured.',
@@ -11896,6 +11999,12 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'app.create_multi', 'app.put_files', 'app.list_multi', 'app.list_files', 'app.delete_multi',
         // R644 — app.iterate + SMS approval bridge
         'app.iterate', 'approvals.sms.tick', 'approvals.sms.status',
+        // R645 — narrative engine + code exec + multimodal turn
+        'narrative.story_outline', 'narrative.scene_write', 'narrative.character_bible',
+        'narrative.style_transfer', 'narrative.story_iterate',
+        'narrative.list', 'narrative.get', 'narrative.delete',
+        'code.exec', 'code.exec_health',
+        'chat.multimodal',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',

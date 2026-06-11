@@ -358,7 +358,7 @@ const isPublic = (url: string): boolean => {
   if (url === '/voice.webmanifest')                                     return true  // R638 — PWA manifest
   if (url === '/sw.js')                                                 return true  // R638 — service worker (existing or stub)
   if (url === '/ops/scrape' || url.startsWith('/ops/scrape'))           return true  // R639 — webscraping dashboard + run pages
-  if (url === '/ops/voices' || url.startsWith('/ops/voices'))           return true  // R640 — voice library UI
+  if (url === '/ops/voices' || url.startsWith('/ops/voices'))           return true  // R640 — voice library UI + R645 write-side POSTs
   if (url === '/ops/kg/graph' || url.startsWith('/ops/kg/graph'))       return true  // R640 — KG graph viz
   if (url === '/ops/console' || url.startsWith('/ops/console'))         return true  // R641 — unified ops console
   if (url.startsWith('/ops/memory/'))                                   return true  // R641 — memory write-side POST (upsert/delete)
@@ -770,13 +770,69 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/inbox', a
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
 })
 
-// R640 — Voice library UI
+// R640 — Voice library UI (+ R645 write-side POSTs)
 app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/voices', async (req, reply) => {
   const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
   try {
     const { renderVoicesHtml } = await import('./services/r640-voice-library.js')
-    reply.type('text/html').send(await renderVoicesHtml(g.ws(req.query)))
+    reply.type('text/html').send(await renderVoicesHtml(g.ws(req.query), req.query.token ?? ''))
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+function r645VoiceGuard(req: { headers: Record<string, string | string[] | undefined>; query: { token?: string } }, reply: { status: (n: number) => { type: (t: string) => { send: (b: string) => void } } }): { ok: true } | { ok: false } {
+  const g = r623Token(req); if (!g.ok) { reply.status(401).type('text/html').send('<h1>401</h1>'); return { ok: false } }
+  const sfs = req.headers['sec-fetch-site']
+  if (sfs && sfs !== 'same-origin' && sfs !== 'none') { reply.status(403).type('text/plain').send('cross-site posts blocked'); return { ok: false } }
+  return { ok: true }
+}
+
+app.post<{ Querystring: { token?: string; workspace?: string }; Body: Record<string, string> }>('/ops/voices/register', async (req, reply) => {
+  if (!r645VoiceGuard(req, reply).ok) return
+  const body = req.body ?? {}
+  const name = String(body['name'] ?? '').trim()
+  const provider = String(body['provider'] ?? '').trim()
+  const providerVoiceId = String(body['providerVoiceId'] ?? '').trim()
+  if (!name || !provider || !providerVoiceId) return void reply.status(400).type('text/html').send('<h1>400</h1>name + provider + providerVoiceId required')
+  try {
+    const { register } = await import('./services/r640-voice-library.js')
+    const input: Parameters<typeof register>[1] = { name, provider, providerVoiceId }
+    const lang = String(body['language'] ?? '').trim(); if (lang) input.language = lang
+    await register(req.query.workspace ?? 'default', input)
+    reply.redirect(`/ops/voices?token=${encodeURIComponent(req.query.token ?? '')}&workspace=${encodeURIComponent(req.query.workspace ?? 'default')}`, 303)
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message)}</pre>`) }
+})
+
+app.post<{ Querystring: { token?: string; workspace?: string }; Body: Record<string, string> }>('/ops/voices/preview', async (req, reply) => {
+  if (!r645VoiceGuard(req, reply).ok) return
+  const id = String(req.body?.['id'] ?? '').trim()
+  if (!id) return void reply.status(400).type('text/html').send('<h1>400</h1>id required')
+  try {
+    const { preview } = await import('./services/r640-voice-library.js')
+    await preview(req.query.workspace ?? 'default', { id })
+    reply.redirect(`/ops/voices?token=${encodeURIComponent(req.query.token ?? '')}&workspace=${encodeURIComponent(req.query.workspace ?? 'default')}`, 303)
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message)}</pre>`) }
+})
+
+app.post<{ Querystring: { token?: string; workspace?: string }; Body: Record<string, string> }>('/ops/voices/set_default', async (req, reply) => {
+  if (!r645VoiceGuard(req, reply).ok) return
+  const id = String(req.body?.['id'] ?? '').trim()
+  if (!id) return void reply.status(400).type('text/html').send('<h1>400</h1>id required')
+  try {
+    const { setDefault } = await import('./services/r640-voice-library.js')
+    await setDefault(req.query.workspace ?? 'default', id)
+    reply.redirect(`/ops/voices?token=${encodeURIComponent(req.query.token ?? '')}&workspace=${encodeURIComponent(req.query.workspace ?? 'default')}`, 303)
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message)}</pre>`) }
+})
+
+app.post<{ Querystring: { token?: string; workspace?: string }; Body: Record<string, string> }>('/ops/voices/delete', async (req, reply) => {
+  if (!r645VoiceGuard(req, reply).ok) return
+  const id = String(req.body?.['id'] ?? '').trim()
+  if (!id) return void reply.status(400).type('text/html').send('<h1>400</h1>id required')
+  try {
+    const { remove } = await import('./services/r640-voice-library.js')
+    await remove(req.query.workspace ?? 'default', id)
+    reply.redirect(`/ops/voices?token=${encodeURIComponent(req.query.token ?? '')}&workspace=${encodeURIComponent(req.query.workspace ?? 'default')}`, 303)
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message)}</pre>`) }
 })
 
 // R640 — KG graph viz

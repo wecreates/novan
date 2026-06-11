@@ -80,7 +80,7 @@ export async function renderMemoryHtml(workspaceId: string, token = ''): Promise
     <h2>Add / update memory</h2>
     <form method="POST" action="/ops/memory/upsert?token=${t}&workspace=${esc(workspaceId)}" style="display:grid;grid-template-columns:1fr 2fr;gap:6px;margin:6px 0 14px;max-width:640px">
       <input name="key" placeholder="key (e.g. operator.preference.timezone)" required style="padding:6px 8px;border:1px solid #d1d5db;border-radius:4px">
-      <input name="value" placeholder="value" required style="padding:6px 8px;border:1px solid #d1d5db;border-radius:4px">
+      <textarea name="value" placeholder="value (multi-line OK)" required rows="3" style="padding:6px 8px;border:1px solid #d1d5db;border-radius:4px;font-family:inherit;resize:vertical"></textarea>
       <input name="scope" placeholder="scope (default: global)" style="padding:6px 8px;border:1px solid #d1d5db;border-radius:4px">
       <input name="importance" type="number" min="0" max="100" placeholder="importance 0-100" style="padding:6px 8px;border:1px solid #d1d5db;border-radius:4px">
       <button style="grid-column:1 / -1;padding:8px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer">Upsert</button>
