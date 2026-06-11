@@ -337,6 +337,7 @@ const isPublic = (url: string): boolean => {
   if (url === '/healthz'        || url.startsWith('/healthz/'))        return true  // R146.263 — k8s/probes expect /healthz
   if (url === '/ops/dashboard'   || url.startsWith('/ops/dashboard'))   return true  // R370 — dashboard + R418 actions have their own query-param token check
   if (url === '/ops/neural'      || url.startsWith('/ops/neural'))      return true  // R603 — neural-net view has its own query-param token check
+  if (url === '/ops/gallery'     || url.startsWith('/ops/gallery'))     return true  // R616 — asset gallery has its own query-param token check
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
   if (url.startsWith('/ops/gdpr/'))                                     return true  // R515 — token in query
   if (url.startsWith('/ops/dmca/'))                                     return true  // R516 — token in query
@@ -613,6 +614,21 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/dashboard
   }
   const { renderDashboard } = await import('./services/r370-operator-dashboard.js')
   const html = await renderDashboard(req.query.workspace ?? 'default', req.query.token)
+  reply.type('text/html').send(html)
+})
+
+// R616 — Asset gallery. Auto-refreshes every 30s. Same ops-token gate.
+app.get<{ Querystring: { token?: string; workspace?: string; kind?: string; limit?: number } }>('/ops/gallery', async (req, reply) => {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  if (!req.query.token || (ops && req.query.token !== ops)) {
+    reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+    return
+  }
+  const { renderGallery } = await import('./services/r616-asset-persistence.js')
+  const opts: Parameters<typeof renderGallery>[1] = {}
+  if (req.query.kind) opts.kind = req.query.kind
+  if (req.query.limit) opts.limit = Number(req.query.limit)
+  const html = await renderGallery(req.query.workspace ?? 'default', opts)
   reply.type('text/html').send(html)
 })
 

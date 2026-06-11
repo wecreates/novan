@@ -230,8 +230,29 @@ const HANDLERS: Record<string, (workspaceId: string, item: InboxItem) => Promise
       ...(typeof p['seed'] === 'number' ? { seed: p['seed'] } : {}),
     }, ws)
     if (!out.ok) throw new Error(out.error ?? 'image gen failed')
-    // Don't store full base64 in result (too large) — store metadata + first 256 chars as preview hash
-    return { ok: true, provider: out.provider, model: out.model, bytes: out.bytes, mime: out.mime, durationMs: out.durationMs, b64Preview: (out.imageBase64 ?? '').slice(0, 64) + '...' }
+    // R616 — persist bytes to S3 + write generated_assets row; result keeps
+    // only metadata + public_url so the JSONB column doesn't bloat with base64.
+    let persisted: { id?: string; publicUrl?: string | null; storedInS3?: boolean; reason?: string } = {}
+    if (out.imageBase64) {
+      try {
+        const { Buffer } = await import('node:buffer')
+        const { persistAsset } = await import('./r616-asset-persistence.js')
+        const persistInput: Parameters<typeof persistAsset>[0] = {
+          workspaceId: ws,
+          kind: 'image',
+          bytes: Buffer.from(out.imageBase64, 'base64'),
+          mime: out.mime ?? 'image/png',
+          prompt: item.brief,
+          sourceBriefId: item.id,
+          sourceKind: 'inbox',
+          metadata: { provider: out.provider, model: out.model, durationMs: out.durationMs, briefParams: item.params },
+        }
+        if (item.businessId) persistInput.businessId = item.businessId
+        const r = await persistAsset(persistInput)
+        persisted = { id: r.id, publicUrl: r.publicUrl, storedInS3: r.storedInS3, ...(r.reason ? { reason: r.reason } : {}) }
+      } catch (e) { persisted = { reason: (e as Error).message.slice(0, 200) } }
+    }
+    return { ok: true, provider: out.provider, model: out.model, bytes: out.bytes, mime: out.mime, durationMs: out.durationMs, asset: persisted }
   },
   music: async (ws, item) => {
     const { replicateSong } = await import('./music-studio.js')

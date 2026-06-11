@@ -2471,6 +2471,33 @@ export const OPERATIONS: Record<string, OpSpec> = {
     },
   },
   // ─── R612 Task inbox ───────────────────────────────────────────────
+  'assets.list': {
+    description: 'R616: List generated assets. Params: kind? (image|audio|video), businessId?, limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { kind?: string; businessId?: string; limit?: number }
+      const { listAssets } = await import('./r616-asset-persistence.js')
+      return { items: await listAssets(ws, p) }
+    },
+  },
+  'assets.get': {
+    description: 'R616: Single asset by id. Params: id.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { getAsset } = await import('./r616-asset-persistence.js')
+      return getAsset(ws, p.id)
+    },
+  },
+  'assets.stats': {
+    description: 'R616: Asset counts byKind + total bytes + S3-stored count.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { stats } = await import('./r616-asset-persistence.js')
+      return stats(ws)
+    },
+  },
   'inbox.bulk_add': {
     description: 'R615: Drop N briefs in one call. Params: kind, briefs[], commonParams?, commonPriority?, businessId?, createdBy?, quotaOverride?. Returns queued count, rejected reason if cap hit, pendingAfter, cap.',
     risk: 'medium',
@@ -10521,6 +10548,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'email.smtp.health', 'email.smtp.test_send',
         'inbox.add', 'inbox.list', 'inbox.stats', 'inbox.cancel', 'inbox.tick',
         'inbox.bulk_add', 'inbox.bulk_image', 'inbox.recent_done', 'inbox.clear_old',
+        'assets.list', 'assets.get', 'assets.stats',
         'digest.compose', 'digest.send',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
