@@ -358,6 +358,8 @@ const isPublic = (url: string): boolean => {
   if (url === '/voice.webmanifest')                                     return true  // R638 — PWA manifest
   if (url === '/sw.js')                                                 return true  // R638 — service worker (existing or stub)
   if (url === '/ops/scrape' || url.startsWith('/ops/scrape'))           return true  // R639 — webscraping dashboard + run pages
+  if (url === '/ops/voices' || url.startsWith('/ops/voices'))           return true  // R640 — voice library UI
+  if (url === '/ops/kg/graph' || url.startsWith('/ops/kg/graph'))       return true  // R640 — KG graph viz
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
   if (url.startsWith('/ops/gdpr/'))                                     return true  // R515 — token in query
   if (url.startsWith('/ops/dmca/'))                                     return true  // R516 — token in query
@@ -711,6 +713,24 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/inbox', a
   try {
     const { renderInboxHtml } = await import('./services/r623-ops-views.js')
     reply.type('text/html').send(await renderInboxHtml(g.ws(req.query)))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R640 — Voice library UI
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/voices', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  try {
+    const { renderVoicesHtml } = await import('./services/r640-voice-library.js')
+    reply.type('text/html').send(await renderVoicesHtml(g.ws(req.query)))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R640 — KG graph viz
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/kg/graph', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  try {
+    const { renderKgGraphHtml } = await import('./services/r640-kg-graph.js')
+    reply.type('text/html').send(await renderKgGraphHtml(g.ws(req.query)))
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
 })
 

@@ -3528,6 +3528,92 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { status: r.status, ...extract(html, p.url, p.template ?? {}) }
     },
   },
+  // ─── R640 A2 Voice library ─────────────────────────────────────────
+  'voice.lib.list': {
+    description: 'R640: Workspace voice library — every saved/cloned/registered voice with provider id.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { listVoices } = await import('./r640-voice-library.js')
+      return { items: await listVoices(ws) }
+    },
+  },
+  'voice.lib.register': {
+    description: 'R640: Register a built-in voice (e.g. OpenAI nova). Params: name, provider, providerVoiceId, language?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r640-voice-library.js').register>[1]
+      const { register } = await import('./r640-voice-library.js')
+      return register(ws, p)
+    },
+  },
+  'voice.lib.clone': {
+    description: 'R640: Clone a voice from an audio sample via OmniVoice. Params: name, audioBase64, refText?, language?, filename?',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r640-voice-library.js').clone>[1]
+      const { clone } = await import('./r640-voice-library.js')
+      return clone(ws, p)
+    },
+  },
+  'voice.lib.preview': {
+    description: 'R640: Generate + persist a preview clip for a library entry. Params: id, text?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r640-voice-library.js').preview>[1]
+      const { preview } = await import('./r640-voice-library.js')
+      return preview(ws, p)
+    },
+  },
+  'voice.lib.rename': {
+    description: 'R640: Rename a library entry. Params: id, name.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { id?: string; name?: string }
+      if (!p.id || !p.name) throw new Error('id + name required')
+      const { rename } = await import('./r640-voice-library.js')
+      return rename(ws, p.id, p.name)
+    },
+  },
+  'voice.lib.set_default': {
+    description: 'R640: Mark a library entry as the workspace default voice. Params: id.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { setDefault } = await import('./r640-voice-library.js')
+      return setDefault(ws, p.id)
+    },
+  },
+  'voice.lib.delete': {
+    description: 'R640: Delete a voice library entry. Params: id.',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { remove } = await import('./r640-voice-library.js')
+      return remove(ws, p.id)
+    },
+  },
+  // ─── R640 E1 PDF for RAG ───────────────────────────────────────────
+  'rag.ingest_pdf': {
+    description: 'R640: Extract text from a PDF (pdfjs-dist) and feed to R621 ingest. Params: name, pdfBase64? OR pdfUrl?, maxPages? (cap 200).',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r640-pdf-rag.js').ingestPdf>[1]
+      const { ingestPdf } = await import('./r640-pdf-rag.js')
+      return ingestPdf(ws, p)
+    },
+  },
+  // ─── R640 E4 KG graph viz ──────────────────────────────────────────
+  'kg.graph.export': {
+    description: 'R640: Export KG as { nodes:[], edges:[] } JSON for headless viz. Params: maxNodes? (cap 1000), types?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r640-kg-graph.js').exportGraph>[1]
+      const { exportGraph } = await import('./r640-kg-graph.js')
+      return exportGraph(ws, p)
+    },
+  },
   // ─── R611 SMTP email fallback ───────────────────────────────────────
   'email.smtp.health': {
     description: 'R611: Probe SMTP — connects, EHLO, QUIT (no send). Returns ok + reason if SMTP_HOST/USER/PASS configured.',
@@ -11533,6 +11619,11 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'scrape.run', 'scrape.run.list', 'scrape.run.pages', 'scrape.page.get',
         'scrape.template.save', 'scrape.template.list',
         'scrape.sitemap', 'scrape.robots', 'scrape.tick', 'scrape.extract',
+        // R640 — voice library + PDF for RAG + KG graph viz
+        'voice.lib.list', 'voice.lib.register', 'voice.lib.clone', 'voice.lib.preview',
+        'voice.lib.rename', 'voice.lib.set_default', 'voice.lib.delete',
+        'rag.ingest_pdf',
+        'kg.graph.export',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
