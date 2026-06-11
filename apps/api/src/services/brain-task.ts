@@ -4170,6 +4170,45 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { run: await getAgentRun(ws, p.id) }
     },
   },
+  'novan.session.create': {
+    description: 'R655: Open a multi-turn agent session. Subsequent novan.session.turn calls share history. Params: title?, systemPrompt?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r655-agent-sessions.js').createSession>[1]
+      const { createSession } = await import('./r655-agent-sessions.js')
+      return createSession(ws, p)
+    },
+  },
+  'novan.session.turn': {
+    description: 'R655: Run novan.agent within a session context. Prior turns auto-injected into the goal. Params: sessionId, goal, toolsAllowed?, maxLoops?',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r655-agent-sessions.js').runSessionTurn>[1]
+      if (!p.sessionId) throw new Error('sessionId required')
+      if (!p.goal)      throw new Error('goal required')
+      const { runSessionTurn } = await import('./r655-agent-sessions.js')
+      return runSessionTurn(ws, p)
+    },
+  },
+  'novan.session.list': {
+    description: 'R655: List recent agent sessions. Params: limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { listSessions } = await import('./r655-agent-sessions.js')
+      return { items: await listSessions(ws, p.limit ?? 50) }
+    },
+  },
+  'novan.session.get': {
+    description: 'R655: Get a session by id with full turn history. Params: id',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { getSession } = await import('./r655-agent-sessions.js')
+      return { session: await getSession(ws, p.id) }
+    },
+  },
   'cache.should_cache': {
     description: 'R647c: Check if a system-prompt prefix should be cache-marked (and record observation). Params: systemPrompt, provider?',
     risk: 'low',
@@ -12289,6 +12328,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'chat.tools.run_native',
         // R654 — OpenAI gpt-image-1
         'image.openai.generate',
+        // R655 — multi-turn agent sessions
+        'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
