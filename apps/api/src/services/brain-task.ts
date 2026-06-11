@@ -4266,6 +4266,15 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return webSearch(p)
     },
   },
+  'vision.openai.describe': {
+    description: 'R659: Describe/OCR/extract-data from an image via OpenAI gpt-4o. Params: prompt?, mode? (describe|ocr|extract_data), imageUrl OR imageB64 OR assetId, model?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r659-openai-vision.js').describeImage>[1]
+      const { describeImage } = await import('./r659-openai-vision.js')
+      return describeImage(ws, p)
+    },
+  },
   'cache.should_cache': {
     description: 'R647c: Check if a system-prompt prefix should be cache-marked (and record observation). Params: systemPrompt, provider?',
     risk: 'low',
@@ -12392,6 +12401,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'novan.schedule.delete', 'novan.schedule.tick',
         // R657 — free web search (DDG HTML)
         'web.search',
+        // R659 — OpenAI vision (gpt-4o describe/ocr/extract)
+        'vision.openai.describe',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
