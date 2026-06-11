@@ -4270,6 +4270,16 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return generateFreeImage(p, ws)
     },
   },
+  'image.openai.generate': {
+    description: 'R654: Generate image via OpenAI gpt-image-1 (higher quality). Persists to S3 + auto-KG-links via R616. Params: prompt, size? (1024x1024|1024x1536|1536x1024|auto), quality? (low|medium|high|auto), n? (1-4), background? (transparent|opaque|auto).',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r654-openai-image.js').generateOpenAIImage>[1]
+      if (!p.prompt) throw new Error('prompt required')
+      const { generateOpenAIImage } = await import('./r654-openai-image.js')
+      return generateOpenAIImage(ws, p)
+    },
+  },
   'image.free.health': {
     description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
     risk: 'low',
@@ -12277,6 +12287,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'novan.agent', 'novan.agent.list', 'novan.agent.get',
         // R651 — native OpenAI tool calling
         'chat.tools.run_native',
+        // R654 — OpenAI gpt-image-1
+        'image.openai.generate',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
