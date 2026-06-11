@@ -60,7 +60,7 @@ function fmtAgo(ts: number): string {
 
 // ─── /ops/memory ─────────────────────────────────────────────────────────────
 
-export async function renderMemoryHtml(workspaceId: string): Promise<string> {
+export async function renderMemoryHtml(workspaceId: string, token = ''): Promise<string> {
   const r = await db.execute(sql`
     SELECT key, value, scope, importance, updated_at
     FROM workspace_memory
@@ -75,19 +75,32 @@ export async function renderMemoryHtml(workspaceId: string): Promise<string> {
     byScope[scope] = byScope[scope] || []
     byScope[scope]!.push(row)
   }
+  const t = encodeURIComponent(token)
+  const editorForm = `
+    <h2>Add / update memory</h2>
+    <form method="POST" action="/ops/memory/upsert?token=${t}&workspace=${esc(workspaceId)}" style="display:grid;grid-template-columns:1fr 2fr;gap:6px;margin:6px 0 14px;max-width:640px">
+      <input name="key" placeholder="key (e.g. operator.preference.timezone)" required style="padding:6px 8px;border:1px solid #d1d5db;border-radius:4px">
+      <input name="value" placeholder="value" required style="padding:6px 8px;border:1px solid #d1d5db;border-radius:4px">
+      <input name="scope" placeholder="scope (default: global)" style="padding:6px 8px;border:1px solid #d1d5db;border-radius:4px">
+      <input name="importance" type="number" min="0" max="100" placeholder="importance 0-100" style="padding:6px 8px;border:1px solid #d1d5db;border-radius:4px">
+      <button style="grid-column:1 / -1;padding:8px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer">Upsert</button>
+    </form>`
+  const deleteBtn = (key: string): string => `<form method="POST" action="/ops/memory/delete?token=${t}&workspace=${esc(workspaceId)}" style="display:inline" onsubmit="return confirm('Delete &quot;${esc(key)}&quot;?')"><input type="hidden" name="key" value="${esc(key)}"><button style="background:none;border:none;color:#b91c1c;cursor:pointer;font-size:12px">×</button></form>`
   const scopeBlocks = Object.entries(byScope).map(([scope, items]) => `
     <h2>${esc(scope)} <span class="dim">(${items.length})</span></h2>
-    <table><thead><tr><th>key</th><th>value</th><th>importance</th><th>updated</th></tr></thead><tbody>
+    <table><thead><tr><th>key</th><th>value</th><th>importance</th><th>updated</th><th></th></tr></thead><tbody>
       ${items.map(it => `<tr>
         <td><code>${esc(it['key'])}</code></td>
         <td>${esc(String(it['value'] ?? '').slice(0, 240))}</td>
         <td>${esc(it['importance'] ?? '')}</td>
         <td class="dim">${fmtAgo(Number(it['updated_at'] ?? 0))}</td>
+        <td>${token ? deleteBtn(String(it['key'])) : ''}</td>
       </tr>`).join('')}
     </tbody></table>
   `).join('')
   const body = `
     <div class="meta">workspace=${esc(workspaceId)} · ${rows.length} memories · auto-refresh 30s</div>
+    ${token ? editorForm : ''}
     ${rows.length === 0 ? '<p class="dim">No memories yet. Memory grows via the <code>memory.recall</code> brain op and chat interactions.</p>' : scopeBlocks}
   `
   return shell('Memory', body, 30)

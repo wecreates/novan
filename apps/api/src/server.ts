@@ -360,6 +360,8 @@ const isPublic = (url: string): boolean => {
   if (url === '/ops/scrape' || url.startsWith('/ops/scrape'))           return true  // R639 — webscraping dashboard + run pages
   if (url === '/ops/voices' || url.startsWith('/ops/voices'))           return true  // R640 — voice library UI
   if (url === '/ops/kg/graph' || url.startsWith('/ops/kg/graph'))       return true  // R640 — KG graph viz
+  if (url === '/ops/console' || url.startsWith('/ops/console'))         return true  // R641 — unified ops console
+  if (url.startsWith('/ops/memory/'))                                   return true  // R641 — memory write-side POST (upsert/delete)
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
   if (url.startsWith('/ops/gdpr/'))                                     return true  // R515 — token in query
   if (url.startsWith('/ops/dmca/'))                                     return true  // R516 — token in query
@@ -688,7 +690,57 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/memory', 
   const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
   try {
     const { renderMemoryHtml } = await import('./services/r623-ops-views.js')
-    reply.type('text/html').send(await renderMemoryHtml(g.ws(req.query)))
+    reply.type('text/html').send(await renderMemoryHtml(g.ws(req.query), req.query.token ?? ''))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R641b — Memory editor write-side POST handlers. Same-origin check + token gate.
+app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => {
+  const out: Record<string, string> = {}
+  for (const pair of String(body ?? '').split('&')) {
+    const [k, v = ''] = pair.split('=')
+    if (!k) continue
+    out[decodeURIComponent(k.replace(/\+/g, ' '))] = decodeURIComponent(v.replace(/\+/g, ' '))
+  }
+  done(null, out)
+})
+
+app.post<{ Querystring: { token?: string; workspace?: string }; Body: Record<string, string> }>('/ops/memory/upsert', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>')
+  const sfs = req.headers['sec-fetch-site']
+  if (sfs && sfs !== 'same-origin' && sfs !== 'none') return void reply.status(403).type('text/plain').send('cross-site posts blocked')
+  const body = req.body ?? {}
+  const key = String(body['key'] ?? '').trim()
+  const value = String(body['value'] ?? '')
+  if (!key) return void reply.status(400).type('text/html').send('<h1>400</h1>key required')
+  const scope = String(body['scope'] ?? '').trim() || 'global'
+  const imp = body['importance'] ? Math.max(0, Math.min(100, Number(body['importance']))) : 50
+  try {
+    const { memoryUpsert } = await import('./services/r634-knowledge-tools.js')
+    await memoryUpsert(g.ws(req.query), { key, value, scope, importance: imp })
+    reply.redirect(`/ops/memory?token=${encodeURIComponent(req.query.token ?? '')}&workspace=${encodeURIComponent(g.ws(req.query))}`, 303)
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message)}</pre>`) }
+})
+
+app.post<{ Querystring: { token?: string; workspace?: string }; Body: Record<string, string> }>('/ops/memory/delete', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>')
+  const sfs = req.headers['sec-fetch-site']
+  if (sfs && sfs !== 'same-origin' && sfs !== 'none') return void reply.status(403).type('text/plain').send('cross-site posts blocked')
+  const key = String(req.body?.['key'] ?? '').trim()
+  if (!key) return void reply.status(400).type('text/html').send('<h1>400</h1>key required')
+  try {
+    const { memoryDelete } = await import('./services/r634-knowledge-tools.js')
+    await memoryDelete(g.ws(req.query), key)
+    reply.redirect(`/ops/memory?token=${encodeURIComponent(req.query.token ?? '')}&workspace=${encodeURIComponent(g.ws(req.query))}`, 303)
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message)}</pre>`) }
+})
+
+// R641a — Unified operator console
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/console', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  try {
+    const { renderConsoleHtml } = await import('./services/r641-unified-console.js')
+    reply.type('text/html').send(await renderConsoleHtml(g.ws(req.query), req.query.token ?? ''))
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
 })
 

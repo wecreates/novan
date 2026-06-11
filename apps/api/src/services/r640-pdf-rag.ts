@@ -12,14 +12,16 @@
 import { Buffer } from 'node:buffer'
 
 export interface PdfIngestInput {
-  name:       string
-  pdfBase64?: string
-  pdfUrl?:    string
-  maxPages?:  number       // hard cap to avoid huge PDFs
+  name:        string
+  pdfBase64?:  string
+  pdfUrl?:     string
+  maxPages?:   number       // hard cap to avoid huge PDFs
+  perPageDoc?: boolean      // R641c: when true, ingest each page as its own RAG doc (preserves page boundaries for citations)
 }
 
 export interface PdfIngestResult {
   docId:        string
+  docIds?:      string[]     // populated when perPageDoc=true
   pages:        number
   pagesParsed:  number
   textChars:    number
@@ -66,7 +68,7 @@ export async function ingestPdf(workspaceId: string, input: PdfIngestInput): Pro
 
   const pages = doc.numPages
   const cap = Math.max(1, Math.min(pages, input.maxPages ?? 200))
-  const chunks: string[] = []
+  const pageTexts: string[] = []
   let pagesParsed = 0
 
   for (let i = 1; i <= cap; i++) {
@@ -78,17 +80,55 @@ export async function ingestPdf(workspaceId: string, input: PdfIngestInput): Pro
         .join(' ')
         .replace(/\s+/g, ' ')
         .trim()
-      if (text.length > 0) chunks.push(`[Page ${i}]\n${text}`)
-      pagesParsed++
+      pageTexts.push(text)
+      if (text.length > 0) pagesParsed++
       page.cleanup()
-    } catch { /* skip malformed page */ }
+    } catch {
+      pageTexts.push('')   // keep page index aligned even on failure
+    }
   }
   await doc.destroy()
 
-  const fullText = chunks.join('\n\n').trim()
+  const { ingest } = await import('./r621-document-rag.js')
+
+  if (input.perPageDoc) {
+    // R641c — one RAG doc per page so retrieval cites [Page N] cleanly
+    const docIds: string[] = []
+    let totalChars = 0
+    let totalChunks = 0
+    let totalEmbedded = 0
+    for (let i = 0; i < pageTexts.length; i++) {
+      const t = pageTexts[i] ?? ''
+      if (t.length < 50) continue
+      try {
+        const ing = await ingest(workspaceId, {
+          name: `${input.name.slice(0, 180)} — page ${i + 1}/${pages}`,
+          text: t,
+          mime: 'application/pdf',
+        })
+        docIds.push(ing.docId)
+        totalChars += t.length
+        totalChunks += ing.chunksCount
+        totalEmbedded += ing.embedded
+      } catch { /* skip page */ }
+    }
+    if (docIds.length === 0) throw new Error('pdf extracted no usable text on any page')
+    return {
+      docId:       docIds[0] ?? '',
+      docIds,
+      pages,
+      pagesParsed,
+      textChars:   totalChars,
+      chunksCount: totalChunks,
+      embedded:    totalEmbedded,
+    }
+  }
+
+  // Single-doc mode — preserve [Page N] markers between page bodies so
+  // R621.query results still reference page numbers.
+  const fullText = pageTexts.map((t, i) => t ? `[Page ${i + 1}]\n${t}` : '').filter(Boolean).join('\n\n').trim()
   if (fullText.length < 50) throw new Error('pdf extracted no usable text')
 
-  const { ingest } = await import('./r621-document-rag.js')
   const ing = await ingest(workspaceId, {
     name: input.name.slice(0, 200),
     text: fullText,

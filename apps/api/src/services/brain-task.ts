@@ -3614,6 +3614,43 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return exportGraph(ws, p)
     },
   },
+  // ─── R641 Avatar lipsync (Hedra) ───────────────────────────────────
+  'avatar.lipsync': {
+    description: 'R641: Start Hedra avatar lipsync. Params: imageBase64? OR imageUrl?, plus (audioBase64 OR audioUrl OR text + voice?). aspectRatio?, duration?. Needs HEDRA_API_KEY.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r641-hedra-lipsync.js').startLipsync>[0]
+      const { startLipsync } = await import('./r641-hedra-lipsync.js')
+      return startLipsync(p, ws)
+    },
+  },
+  'avatar.status': {
+    description: 'R641: Poll Hedra generation status. Params: generationId.',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { generationId?: string }
+      if (!p.generationId) throw new Error('generationId required')
+      const { statusLipsync } = await import('./r641-hedra-lipsync.js')
+      return statusLipsync({ generationId: p.generationId })
+    },
+  },
+  'avatar.health': {
+    description: 'R641: Probe Hedra config presence.',
+    risk: 'low',
+    handler: async () => {
+      const { lipsyncHealth } = await import('./r641-hedra-lipsync.js')
+      return lipsyncHealth()
+    },
+  },
+  // ─── R641 Unified console summary ──────────────────────────────────
+  'console.summary': {
+    description: 'R641: One-call snapshot of inbox + assets + spend + KG + voice + scrape + presence + kill switch.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { buildSnapshot } = await import('./r641-unified-console.js')
+      return buildSnapshot(ws)
+    },
+  },
   // ─── R611 SMTP email fallback ───────────────────────────────────────
   'email.smtp.health': {
     description: 'R611: Probe SMTP — connects, EHLO, QUIT (no send). Returns ok + reason if SMTP_HOST/USER/PASS configured.',
@@ -11624,6 +11661,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'voice.lib.rename', 'voice.lib.set_default', 'voice.lib.delete',
         'rag.ingest_pdf',
         'kg.graph.export',
+        // R641 — unified console + memory write-side + page PDF + Hedra lipsync
+        'console.summary', 'avatar.lipsync', 'avatar.status', 'avatar.health',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
