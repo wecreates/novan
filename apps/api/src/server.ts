@@ -857,13 +857,18 @@ function r637WsTokenOk(qs: URLSearchParams): boolean {
 // R638 — Voice PWA page. Token gate inside the page itself; the
 // underlying /ws/voice + /ws/presence both validate the token again
 // during their handshake.
-app.get<{ Querystring: { token?: string; workspace?: string; voice?: string } }>('/voice', async (req, reply) => {
+app.get<{ Querystring: { token?: string; workspace?: string; voice?: string; mode?: string } }>('/voice', async (req, reply) => {
   const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
   if (!req.query.token || (ops && req.query.token !== ops)) {
     reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt; in the URL.')
     return
   }
-  const { renderVoicePwaHtml } = await import('./services/r638-voice-pwa.js')
+  const { renderVoicePwaHtml, renderVoiceRealtimePwaHtml } = await import('./services/r638-voice-pwa.js')
+  // R643e — ?mode=realtime swaps to OpenAI Realtime API client
+  if (req.query.mode === 'realtime') {
+    reply.type('text/html').send(renderVoiceRealtimePwaHtml())
+    return
+  }
   reply.type('text/html').send(renderVoicePwaHtml({
     workspace: req.query.workspace ?? 'default',
     voice:     req.query.voice     ?? 'nova',
@@ -897,12 +902,33 @@ app.get('/ws/voice/realtime', { websocket: true }, async (sock, req) => {
 
 // R642d — Serve generated single-file apps under /apps/:slug
 app.get<{ Params: { slug: string }; Querystring: { workspace?: string } }>('/apps/:slug', async (req, reply) => {
+  const ws = req.query.workspace ?? 'default'
   try {
+    // R643d — multi-file takes precedence; falls back to R642d single-file
+    const { getFile } = await import('./services/r643-app-builder-multi.js')
+    const indexFile = await getFile(ws, req.params.slug, 'index.html')
+    if (indexFile) {
+      reply.type(indexFile.mime).send(indexFile.content)
+      return
+    }
     const { serveAppHtml } = await import('./services/r642-app-builder.js')
-    const html = await serveAppHtml(req.query.workspace ?? 'default', req.params.slug)
-    if (!html) return void reply.status(404).type('text/html').send('<h1>404</h1><p>No app at that slug. Use <code>app.create</code> brain op to generate one.</p>')
+    const html = await serveAppHtml(ws, req.params.slug)
+    if (!html) return void reply.status(404).type('text/html').send('<h1>404</h1><p>No app at that slug. Use <code>app.create</code> or <code>app.create_multi</code> brain op to generate one.</p>')
     reply.type('text/html').send(html)
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R643d — Serve multi-file app sub-paths under /apps/:slug/<path>
+app.get<{ Params: { '*': string; slug: string }; Querystring: { workspace?: string } }>('/apps/:slug/*', async (req, reply) => {
+  const ws = req.query.workspace ?? 'default'
+  const subPath = (req.params['*'] ?? '').replace(/^\/+/, '')
+  if (!subPath) return void reply.redirect(`/apps/${encodeURIComponent(req.params.slug)}`, 302)
+  try {
+    const { getFile } = await import('./services/r643-app-builder-multi.js')
+    const f = await getFile(ws, req.params.slug, subPath)
+    if (!f) return void reply.status(404).type('text/plain').send('not found')
+    reply.type(f.mime).send(f.content)
+  } catch (e) { reply.status(500).type('text/plain').send(String((e as Error).message)) }
 })
 
 app.get('/ws/voice', { websocket: true }, async (sock, req) => {

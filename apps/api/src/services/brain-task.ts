@@ -3735,6 +3735,118 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return deleteApp(ws, p.slug)
     },
   },
+  // ─── R643b Vision tools (Tesseract OCR + Anthropic chart extract) ─
+  'vision.health': {
+    description: 'R643b: Probe tesseract binary + ANTHROPIC_API_KEY presence + installed langs.',
+    risk: 'low',
+    handler: async () => {
+      const { visionHealth } = await import('./r643-vision-tools.js')
+      return visionHealth()
+    },
+  },
+  'vision.ocr': {
+    description: 'R643b: Extract text from an image via Tesseract. Params: imageBase64? OR imageUrl?, lang? (default eng), psm? (0-13).',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r643-vision-tools.js').ocr>[0]
+      const { ocr } = await import('./r643-vision-tools.js')
+      return ocr(p)
+    },
+  },
+  'vision.chart_extract': {
+    description: 'R643b: Extract chart data as structured JSON via Anthropic vision. Params: imageBase64? OR imageUrl?, hint?',
+    risk: 'medium',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r643-vision-tools.js').chartExtract>[0]
+      const { chartExtract } = await import('./r643-vision-tools.js')
+      return chartExtract(p)
+    },
+  },
+  'vision.describe': {
+    description: 'R643b: 2-3 sentence description of an image via Anthropic vision. Params: imageBase64? OR imageUrl?, prompt?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r643-vision-tools.js').describe>[0]
+      const { describe } = await import('./r643-vision-tools.js')
+      return describe(p)
+    },
+  },
+  // ─── R643c Twilio SMS (operator-gated) ─────────────────────────────
+  'sms.send': {
+    description: 'R643c: Send SMS via Twilio. Needs TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_FROM. Params: to (E.164), body, mediaUrl?, statusCallback?',
+    risk: 'high',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r643-twilio-sms.js').send>[0]
+      const { send } = await import('./r643-twilio-sms.js')
+      return send(p)
+    },
+  },
+  'sms.status': {
+    description: 'R643c: Fetch delivery status of a sent SMS. Params: sid (SM…).',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { sid?: string }
+      if (!p.sid) throw new Error('sid required')
+      const { status } = await import('./r643-twilio-sms.js')
+      return status({ sid: p.sid })
+    },
+  },
+  'sms.health': {
+    description: 'R643c: Probe Twilio env-config presence.',
+    risk: 'low',
+    handler: async () => {
+      const { smsHealth } = await import('./r643-twilio-sms.js')
+      return smsHealth()
+    },
+  },
+  // ─── R643d Multi-file app builder ──────────────────────────────────
+  'app.create_multi': {
+    description: 'R643d: Generate a multi-file static app from prompt; serves at /apps/:slug/<path>. Params: prompt, name?, slug?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r643-app-builder-multi.js').createMulti>[1]
+      const { createMulti } = await import('./r643-app-builder-multi.js')
+      return createMulti(ws, p)
+    },
+  },
+  'app.put_files': {
+    description: 'R643d: Bulk-upsert files (operator-authored). Params: slug, name?, files (map of path -> content).',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r643-app-builder-multi.js').putFiles>[1]
+      const { putFiles } = await import('./r643-app-builder-multi.js')
+      return putFiles(ws, p)
+    },
+  },
+  'app.list_multi': {
+    description: 'R643d: List multi-file apps in this workspace.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { listApps } = await import('./r643-app-builder-multi.js')
+      return { items: await listApps(ws, p.limit) }
+    },
+  },
+  'app.list_files': {
+    description: 'R643d: List files within a multi-file app. Params: slug.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { slug?: string }
+      if (!p.slug) throw new Error('slug required')
+      const { listFiles } = await import('./r643-app-builder-multi.js')
+      return { items: await listFiles(ws, p.slug) }
+    },
+  },
+  'app.delete_multi': {
+    description: 'R643d: Delete a multi-file app + all its files. Params: slug.',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { slug?: string }
+      if (!p.slug) throw new Error('slug required')
+      const { deleteApp } = await import('./r643-app-builder-multi.js')
+      return deleteApp(ws, p.slug)
+    },
+  },
   // ─── R611 SMTP email fallback ───────────────────────────────────────
   'email.smtp.health': {
     description: 'R611: Probe SMTP — connects, EHLO, QUIT (no send). Returns ok + reason if SMTP_HOST/USER/PASS configured.',
@@ -11751,6 +11863,10 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'media.health', 'video.burn_captions', 'audio.extract', 'pdf.text_native',
         'voice.realtime.stats_proxy',
         'app.create', 'app.list', 'app.get', 'app.delete',
+        // R643 — Tesseract OCR + chart extract + Twilio SMS + multi-file apps
+        'vision.health', 'vision.ocr', 'vision.chart_extract', 'vision.describe',
+        'sms.send', 'sms.status', 'sms.health',
+        'app.create_multi', 'app.put_files', 'app.list_multi', 'app.list_files', 'app.delete_multi',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
