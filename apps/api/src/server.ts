@@ -362,6 +362,8 @@ const isPublic = (url: string): boolean => {
   if (url === '/ops/kg/graph' || url.startsWith('/ops/kg/graph'))       return true  // R640 — KG graph viz
   if (url === '/ops/console' || url.startsWith('/ops/console'))         return true  // R641 — unified ops console
   if (url.startsWith('/ops/memory/'))                                   return true  // R641 — memory write-side POST (upsert/delete)
+  if (url.startsWith('/ws/voice/realtime'))                             return true  // R642c — OpenAI Realtime WS proxy; token in query
+  if (url.startsWith('/apps/'))                                         return true  // R642d — generated apps served under /apps/:slug
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
   if (url.startsWith('/ops/gdpr/'))                                     return true  // R515 — token in query
   if (url.startsWith('/ops/dmca/'))                                     return true  // R516 — token in query
@@ -880,6 +882,27 @@ self.addEventListener('install',  (e) => self.skipWaiting())
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()))
 self.addEventListener('fetch',    () => {})
 `)
+})
+
+// R642c — Pass-through proxy to wss://api.openai.com/v1/realtime
+app.get('/ws/voice/realtime', { websocket: true }, async (sock, req) => {
+  const qs = new URL(req.url, 'http://x').searchParams
+  if (!r637WsTokenOk(qs)) { try { sock.send(JSON.stringify({ type: 'error', message: '401 unauthorized' })); sock.close(1008, 'unauthorized') } catch { /* ignore */ }; return }
+  const opts: { model?: string; voice?: string } = {}
+  const model = qs.get('model'); if (model) opts.model = model
+  const voice = qs.get('voice'); if (voice) opts.voice = voice
+  const { attachRealtimeSession } = await import('./services/r642-realtime-voice.js')
+  attachRealtimeSession(sock as unknown as import('ws').WebSocket, opts)
+})
+
+// R642d — Serve generated single-file apps under /apps/:slug
+app.get<{ Params: { slug: string }; Querystring: { workspace?: string } }>('/apps/:slug', async (req, reply) => {
+  try {
+    const { serveAppHtml } = await import('./services/r642-app-builder.js')
+    const html = await serveAppHtml(req.query.workspace ?? 'default', req.params.slug)
+    if (!html) return void reply.status(404).type('text/html').send('<h1>404</h1><p>No app at that slug. Use <code>app.create</code> brain op to generate one.</p>')
+    reply.type('text/html').send(html)
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
 })
 
 app.get('/ws/voice', { websocket: true }, async (sock, req) => {

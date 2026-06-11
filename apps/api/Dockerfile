@@ -5,8 +5,11 @@ FROM node:20-alpine
 
 RUN apk add --no-cache python3 make g++ postgresql-client ffmpeg \
     chromium nss freetype harfbuzz ca-certificates ttf-freefont \
+    poppler-utils ttf-dejavu fontconfig \
  && corepack enable \
  && corepack prepare pnpm@9.12.0 --activate
+# R642 — poppler-utils ships pdftotext for native PDF text extraction (faster than pdfjs),
+#        ttf-dejavu + fontconfig give FFmpeg a real font for caption burn-in.
 
 # R602 — point Playwright at Alpine's system chromium instead of downloading
 # the Debian glibc-only headless shell (which won't run on musl).

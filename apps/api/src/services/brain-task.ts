@@ -3651,6 +3651,90 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return buildSnapshot(ws)
     },
   },
+  // ─── R642b Media tools (FFmpeg + pdftotext) ────────────────────────
+  'media.health': {
+    description: 'R642b: Probe ffmpeg + pdftotext binaries in the container.',
+    risk: 'low',
+    handler: async () => {
+      const { mediaToolsHealth } = await import('./r642-media-tools.js')
+      return mediaToolsHealth()
+    },
+  },
+  'video.burn_captions': {
+    description: 'R642b: Burn SRT/VTT/ASS subtitles into a video via FFmpeg. Params: videoBase64? OR videoUrl?, subtitlesText, format? (srt|vtt|ass), fontSize?, fontColor?, outlineColor?, maxSeconds?',
+    risk: 'medium',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r642-media-tools.js').burnCaptions>[0]
+      const { burnCaptions } = await import('./r642-media-tools.js')
+      return burnCaptions(p)
+    },
+  },
+  'audio.extract': {
+    description: 'R642b: Extract audio from a video via FFmpeg. Params: videoBase64? OR videoUrl?, format? (mp3|wav|ogg), bitrate?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r642-media-tools.js').extractAudio>[0]
+      const { extractAudio } = await import('./r642-media-tools.js')
+      return extractAudio(p)
+    },
+  },
+  'pdf.text_native': {
+    description: 'R642b: Native PDF text extraction via pdftotext (faster than pdfjs). Params: pdfBase64? OR pdfUrl?, layout?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r642-media-tools.js').pdfTextNative>[0]
+      const { pdfTextNative } = await import('./r642-media-tools.js')
+      return pdfTextNative(p)
+    },
+  },
+  // ─── R642c Realtime voice (OpenAI WS pass-through) ─────────────────
+  'voice.realtime.stats_proxy': {
+    description: 'R642c: Active /ws/voice/realtime proxy sessions (OpenAI Realtime API).',
+    risk: 'low',
+    handler: async () => {
+      const { realtimeStats } = await import('./r642-realtime-voice.js')
+      return realtimeStats()
+    },
+  },
+  // ─── R642d App builder ─────────────────────────────────────────────
+  'app.create': {
+    description: 'R642d: Generate a single-file HTML web app from a prompt. Params: prompt, name?, slug?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r642-app-builder.js').createApp>[1]
+      const { createApp } = await import('./r642-app-builder.js')
+      return createApp(ws, p)
+    },
+  },
+  'app.list': {
+    description: 'R642d: List generated apps in this workspace. Params: limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { listApps } = await import('./r642-app-builder.js')
+      return { items: await listApps(ws, p.limit) }
+    },
+  },
+  'app.get': {
+    description: 'R642d: Get one app metadata (no HTML body unless includeHtml=true). Params: slug, includeHtml?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { slug?: string; includeHtml?: boolean }
+      if (!p.slug) throw new Error('slug required')
+      const { getApp } = await import('./r642-app-builder.js')
+      return await getApp(ws, p.slug, !!p.includeHtml) ?? {}
+    },
+  },
+  'app.delete': {
+    description: 'R642d: Delete a generated app by slug. Params: slug.',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { slug?: string }
+      if (!p.slug) throw new Error('slug required')
+      const { deleteApp } = await import('./r642-app-builder.js')
+      return deleteApp(ws, p.slug)
+    },
+  },
   // ─── R611 SMTP email fallback ───────────────────────────────────────
   'email.smtp.health': {
     description: 'R611: Probe SMTP — connects, EHLO, QUIT (no send). Returns ok + reason if SMTP_HOST/USER/PASS configured.',
@@ -11663,6 +11747,10 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'kg.graph.export',
         // R641 — unified console + memory write-side + page PDF + Hedra lipsync
         'console.summary', 'avatar.lipsync', 'avatar.status', 'avatar.health',
+        // R642 — media tools + realtime voice proxy + app builder
+        'media.health', 'video.burn_captions', 'audio.extract', 'pdf.text_native',
+        'voice.realtime.stats_proxy',
+        'app.create', 'app.list', 'app.get', 'app.delete',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',

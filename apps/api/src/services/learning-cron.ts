@@ -1331,6 +1331,7 @@ const INTERVALS = {
   saturationAlerts:       60_000,             // R606 — 60s tick to check tasksInFlight against threshold + fire webhook
   inboxDispatch:          30_000,             // R612 — 30s tick to process autonomous task inbox
   dailyDigest:            10 * 60_000,        // R613 — 10min tick; fires send() once per day after 09:00 UTC
+  scrapeSchedule:         5 * 60_000,         // R642e — 5min tick; runs scrape jobs whose schedule_cron is due
 }
 
 /**
@@ -1650,6 +1651,15 @@ async function runInboxDispatchTick(): Promise<void> {
     const r = await tickAll()
     if (r.processed > 0) await emit('cron.inbox_dispatch', r)
   } catch (e) { await emit('cron.error', { task: 'inbox_dispatch', error: (e as Error).message }) }
+}
+
+// R642e — fire any due cron-scheduled scrape jobs across workspaces
+async function runScrapeScheduleTick(): Promise<void> {
+  try {
+    const { tickScrape } = await import('./r639-scrape-engine.js')
+    const r = await tickScrape()
+    if (r.fired > 0) await emit('cron.scrape_schedule', r)
+  } catch (e) { await emit('cron.error', { task: 'scrape_schedule', error: (e as Error).message }) }
 }
 
 // R606 — Saturation alerts. Polls neural.counters per workspace; webhooks +
@@ -2562,6 +2572,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runSaturationAlertsTick,        INTERVALS.saturationAlerts))     // R606
   handles.push(scheduleJittered(runInboxDispatchTick,           INTERVALS.inboxDispatch))        // R612
   handles.push(scheduleJittered(runDailyDigestTick,             INTERVALS.dailyDigest))          // R613
+  handles.push(scheduleJittered(runScrapeScheduleTick,          INTERVALS.scrapeSchedule))       // R642e
   handles.push(scheduleJittered(runTrustAutoDerive,             INTERVALS.trustAutoDerive))
   handles.push(scheduleJittered(runFabricSweep,                 INTERVALS.fabricSweep))
   handles.push(scheduleJittered(runDataRetention,               INTERVALS.dataRetention))
