@@ -363,6 +363,7 @@ const isPublic = (url: string): boolean => {
   if (url === '/ops/console' || url.startsWith('/ops/console'))         return true  // R641 — unified ops console
   if (url.startsWith('/ops/memory/'))                                   return true  // R641 — memory write-side POST (upsert/delete)
   if (url.startsWith('/ws/voice/realtime'))                             return true  // R642c — OpenAI Realtime WS proxy; token in query
+  if (url === '/ops/plans' || url.startsWith('/ops/plans'))             return true  // R646a — plans dashboard (own token gate)
   if (url.startsWith('/apps/'))                                         return true  // R642d — generated apps served under /apps/:slug
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
   if (url.startsWith('/ops/gdpr/'))                                     return true  // R515 — token in query
@@ -1017,6 +1018,23 @@ app.get<{ Params: { id: string } }>('/share/digest/:id', async (req, reply) => {
   try {
     const { renderSharedDigestHtml } = await import('./services/r630-timeline-mockups-ab-share.js')
     reply.type('text/html').send(await renderSharedDigestHtml(req.params.id))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R646d — Public research share (no auth, read-only)
+app.get<{ Params: { id: string } }>('/share/research/:id', async (req, reply) => {
+  try {
+    const { renderSharedResearchHtml } = await import('./services/r646-misc.js')
+    reply.type('text/html').send(await renderSharedResearchHtml(req.params.id))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R646a — /ops/plans dashboard
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/plans', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  try {
+    const { renderPlansHtml } = await import('./services/r646-plans.js')
+    reply.type('text/html').send(await renderPlansHtml(g.ws(req.query)))
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
 })
 

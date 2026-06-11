@@ -3977,6 +3977,121 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return chatMultimodal(ws, p)
     },
   },
+  // ─── R646a Plans with checkpoints ──────────────────────────────────
+  'plan.create': {
+    description: 'R646a: Decompose a goal into steps (LLM-planned or operator-supplied) and persist. Params: goal, steps?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r646-plans.js').createPlan>[1]
+      const { createPlan } = await import('./r646-plans.js')
+      return createPlan(ws, p)
+    },
+  },
+  'plan.run': {
+    description: 'R646a: Execute a plan from its current checkpoint. Survives container restart — dispatches each step via brain registry. Params: id.',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { runPlan } = await import('./r646-plans.js')
+      return runPlan(ws, p.id)
+    },
+  },
+  'plan.resume': {
+    description: 'R646a: Alias for plan.run — explicit-intent label for resuming a stopped plan.',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { runPlan } = await import('./r646-plans.js')
+      return runPlan(ws, p.id)
+    },
+  },
+  'plan.list': {
+    description: 'R646a: List plans in workspace. Params: limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { listPlans } = await import('./r646-plans.js')
+      return { items: await listPlans(ws, p.limit) }
+    },
+  },
+  'plan.get': {
+    description: 'R646a: Get plan with all step results. Params: id.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { getPlan } = await import('./r646-plans.js')
+      return await getPlan(ws, p.id) ?? {}
+    },
+  },
+  'plan.cancel': {
+    description: 'R646a: Cancel a pending/running plan. Params: id.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { cancelPlan } = await import('./r646-plans.js')
+      return cancelPlan(ws, p.id)
+    },
+  },
+  // ─── R646b Asset thumbnail ─────────────────────────────────────────
+  'asset.thumbnail': {
+    description: 'R646b: Generate a thumbnail via FFmpeg + persist to S3 + write thumb_url back to row. Params: assetId? OR imageBase64? OR imageUrl?, width?, height?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r646-misc.js').thumbnailize>[1]
+      const { thumbnailize } = await import('./r646-misc.js')
+      return thumbnailize(ws, p)
+    },
+  },
+  // ─── R646d Share research ─────────────────────────────────────────
+  'research.share': {
+    description: 'R646d: Create a public read-only share link for a previously-run research.deep result. Params: researchId, ttlDays?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { researchId?: string; ttlDays?: number }
+      if (!p.researchId) throw new Error('researchId required')
+      const { createShare } = await import('./r630-timeline-mockups-ab-share.js')
+      const input: { kind: 'research'; refId: string; ttlDays?: number } = { kind: 'research', refId: p.researchId }
+      if (typeof p.ttlDays === 'number') input.ttlDays = p.ttlDays
+      return createShare(ws, input)
+    },
+  },
+  // ─── R646e Failover-aware router ──────────────────────────────────
+  'router.failover': {
+    description: 'R646e: Try a chain of providers; first non-empty success wins. Params: msgs, providers[], maxRetries?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r646-misc.js').failoverChat>[1]
+      if (!Array.isArray(p.msgs) || p.msgs.length === 0) throw new Error('msgs[] required')
+      if (!Array.isArray(p.providers) || p.providers.length === 0) throw new Error('providers[] required')
+      const { failoverChat } = await import('./r646-misc.js')
+      return failoverChat(ws, p)
+    },
+  },
+  // ─── R646f Multi-attempt consensus ────────────────────────────────
+  'consensus.judge': {
+    description: 'R646f: Run msgs across N providers in parallel; judge picks winner. Params: msgs, providers[], judge?, judgeCriteria?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r646-misc.js').consensusJudge>[1]
+      if (!Array.isArray(p.msgs) || p.msgs.length === 0) throw new Error('msgs[] required')
+      if (!Array.isArray(p.providers) || p.providers.length === 0) throw new Error('providers[] required')
+      const { consensusJudge } = await import('./r646-misc.js')
+      return consensusJudge(ws, p)
+    },
+  },
+  // ─── R646h Capability auto-closer ─────────────────────────────────
+  'capability.closer.tick': {
+    description: 'R646h: Pick top 3 unclosed capability gaps from R334 parity registry + attempt the registered closure op for each. Also runs on a 5min cron.',
+    risk: 'medium',
+    handler: async () => {
+      const { tickCapabilityCloser } = await import('./r646-misc.js')
+      return tickCapabilityCloser()
+    },
+  },
   // ─── R611 SMTP email fallback ───────────────────────────────────────
   'email.smtp.health': {
     description: 'R611: Probe SMTP — connects, EHLO, QUIT (no send). Returns ok + reason if SMTP_HOST/USER/PASS configured.',
@@ -12005,6 +12120,11 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'narrative.list', 'narrative.get', 'narrative.delete',
         'code.exec', 'code.exec_health',
         'chat.multimodal',
+        // R646 — plans + thumbs + share + failover + consensus + capability closer
+        'plan.create', 'plan.run', 'plan.resume', 'plan.list', 'plan.get', 'plan.cancel',
+        'asset.thumbnail', 'research.share',
+        'router.failover', 'consensus.judge',
+        'capability.closer.tick',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',

@@ -208,6 +208,17 @@ export async function persistAsset(input: PersistInput): Promise<PersistResult> 
             ${JSON.stringify(input.metadata ?? {})}::jsonb, ${Date.now()})
   `).catch(() => {})
 
+  // R646c — auto-link asset to KG (fire-and-forget; skips when metadata.isThumbnail to avoid noise)
+  const isThumb = (input.metadata as Record<string, unknown> | undefined)?.['isThumbnail']
+  if (!isThumb) {
+    void (async () => {
+      try {
+        const { linkAssetToKg } = await import('./r646-misc.js')
+        await linkAssetToKg(input.workspaceId, { assetId: id, prompt: input.prompt ?? '', kind: input.kind })
+      } catch { /* tolerated */ }
+    })()
+  }
+
   return { id, publicUrl, s3Key: storedInS3 ? key : null, bytes: input.bytes.length, sha256: sha, storedInS3, ...(reason ? { reason } : {}) }
 }
 

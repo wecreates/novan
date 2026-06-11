@@ -186,5 +186,12 @@ export async function researchDeep(workspaceId: string, input: ResearchInput): P
     },
   }
   if (ingestedKgNodeId) result.ingestedKgNodeId = ingestedKgNodeId
+
+  // R646d — always persist research result so any future research.share can target it
+  try {
+    const { persistResearch } = await import('./r646-misc.js')
+    await persistResearch(workspaceId, question, result as unknown as Record<string, unknown>)
+  } catch { /* tolerated */ }
+
   return result
 }

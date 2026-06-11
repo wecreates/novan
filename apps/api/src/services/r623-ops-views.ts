@@ -169,6 +169,11 @@ export async function renderSpendHtml(workspaceId: string): Promise<string> {
     FROM ai_usage WHERE workspace_id = ${workspaceId} AND timestamp > ${week}
     GROUP BY task_type ORDER BY cost DESC LIMIT 15
   `).catch(() => [] as unknown[])
+  let sparkline = ''
+  try {
+    const { renderSpendSparkline } = await import('./r646-misc.js')
+    sparkline = await renderSpendSparkline(workspaceId)
+  } catch { /* sparkline optional */ }
   const body = `
     <div class="meta">workspace=${esc(workspaceId)} · auto-refresh 30s</div>
     <div class="row">
@@ -176,6 +181,8 @@ export async function renderSpendHtml(workspaceId: string): Promise<string> {
       <div class="card"><span class="big">${fmtUsd(Number(t['d7d']  ?? 0))}</span><span class="kpi-label">last 7d</span></div>
       <div class="card"><span class="big">${fmtUsd(Number(t['all_time'] ?? 0))}</span><span class="kpi-label">all time</span></div>
     </div>
+    <h2>30-day trend</h2>
+    ${sparkline}
     <h2>By provider / model (7d)</h2>
     <table><thead><tr><th>provider</th><th>model</th><th>cost</th><th>tokens</th><th>calls</th></tr></thead><tbody>
       ${(byProvider as Array<Record<string, unknown>>).map(r => `<tr>

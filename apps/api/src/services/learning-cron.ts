@@ -1333,6 +1333,7 @@ const INTERVALS = {
   dailyDigest:            10 * 60_000,        // R613 — 10min tick; fires send() once per day after 09:00 UTC
   scrapeSchedule:         5 * 60_000,         // R642e — 5min tick; runs scrape jobs whose schedule_cron is due
   approvalSmsBridge:      60_000,             // R644d — 60s tick; SMS-notifies new pending approvals when Twilio configured
+  capabilityCloser:       5 * 60_000,         // R646h — 5min tick; auto-attempt next-target capability closures from R334 parity registry
 }
 
 /**
@@ -1670,6 +1671,15 @@ async function runApprovalSmsBridgeTick(): Promise<void> {
     const r = await tickApprovalSms()
     if (r.sent > 0 || r.failed > 0) await emit('cron.approval_sms_bridge', r)
   } catch (e) { await emit('cron.error', { task: 'approval_sms_bridge', error: (e as Error).message }) }
+}
+
+// R646h — auto-attempt closures for top capability gaps from R334 parity registry
+async function runCapabilityCloserTick(): Promise<void> {
+  try {
+    const { tickCapabilityCloser } = await import('./r646-misc.js')
+    const r = await tickCapabilityCloser()
+    if (r.attempted > 0) await emit('cron.capability_closer', r)
+  } catch (e) { await emit('cron.error', { task: 'capability_closer', error: (e as Error).message }) }
 }
 
 // R606 — Saturation alerts. Polls neural.counters per workspace; webhooks +
@@ -2584,6 +2594,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runDailyDigestTick,             INTERVALS.dailyDigest))          // R613
   handles.push(scheduleJittered(runScrapeScheduleTick,          INTERVALS.scrapeSchedule))       // R642e
   handles.push(scheduleJittered(runApprovalSmsBridgeTick,       INTERVALS.approvalSmsBridge))    // R644d
+  handles.push(scheduleJittered(runCapabilityCloserTick,        INTERVALS.capabilityCloser))     // R646h
   handles.push(scheduleJittered(runTrustAutoDerive,             INTERVALS.trustAutoDerive))
   handles.push(scheduleJittered(runFabricSweep,                 INTERVALS.fabricSweep))
   handles.push(scheduleJittered(runDataRetention,               INTERVALS.dataRetention))
