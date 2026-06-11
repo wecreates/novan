@@ -3020,6 +3020,353 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { items: await recentAudit(ws, p) }
     },
   },
+  // ─── R630 Timeline + mockups + A/B + sharing ───────────────────────
+  'ab.create': {
+    description: 'R630: Create an A/B listing test. Params: listingKey, platform, variants[{id,label,...}]',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r630-timeline-mockups-ab-share.js').createAbTest>[1]
+      const { createAbTest } = await import('./r630-timeline-mockups-ab-share.js')
+      return createAbTest(ws, p)
+    },
+  },
+  'ab.metric': {
+    description: 'R630: Record A/B metrics. Params: testId, variantId, impressions?, clicks?, sales?, revenueUsd?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r630-timeline-mockups-ab-share.js').recordAbMetric>[1]
+      const { recordAbMetric } = await import('./r630-timeline-mockups-ab-share.js')
+      return recordAbMetric(ws, p)
+    },
+  },
+  'ab.winner': {
+    description: 'R630: Pick A/B winner. Params: testId, metric? (ctr|cvr|revenue, default revenue)',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { testId?: string; metric?: 'ctr' | 'cvr' | 'revenue' }
+      if (!p.testId) throw new Error('testId required')
+      const { pickAbWinner } = await import('./r630-timeline-mockups-ab-share.js')
+      return pickAbWinner(ws, p.testId, p.metric)
+    },
+  },
+  'ab.list': {
+    description: 'R630: List recent A/B tests.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { listAbTests } = await import('./r630-timeline-mockups-ab-share.js')
+      return { items: await listAbTests(ws, p.limit) }
+    },
+  },
+  'share.create': {
+    description: 'R630: Create a public read-only share link. Params: kind (asset|digest|research), refId, ttlDays?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r630-timeline-mockups-ab-share.js').createShare>[1]
+      const { createShare } = await import('./r630-timeline-mockups-ab-share.js')
+      return createShare(ws, p)
+    },
+  },
+  // ─── R631 Long voice + podcast ─────────────────────────────────────
+  'voice.transcribe_long': {
+    description: 'R631: Transcribe long audio (chunked). Params: audioBase64? OR audioUrl?, filename?, lang?, chapter?, summarize?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r631-long-voice-podcast.js').transcribeLong>[1]
+      const { transcribeLong } = await import('./r631-long-voice-podcast.js')
+      return transcribeLong(ws, p)
+    },
+  },
+  'podcast.generate': {
+    description: 'R631: NotebookLM-style 2-host podcast from source text. Params: source, topic?, targetMin?, voices?, language?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r631-long-voice-podcast.js').generatePodcast>[1]
+      if (!p?.source) throw new Error('source required')
+      const { generatePodcast } = await import('./r631-long-voice-podcast.js')
+      return generatePodcast(ws, p)
+    },
+  },
+  // ─── R632 Research polish ──────────────────────────────────────────
+  'research.score_source': {
+    description: 'R632: Heuristic source-quality score for a URL. Params: url, snippet?, publishedAt?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { url?: string; snippet?: string; publishedAt?: number }
+      if (!p.url) throw new Error('url required')
+      const { scoreSource } = await import('./r632-research-polish.js')
+      const input: { url: string; snippet?: string; publishedAt?: number } = { url: p.url }
+      if (p.snippet) input.snippet = p.snippet
+      if (typeof p.publishedAt === 'number') input.publishedAt = p.publishedAt
+      return scoreSource(input)
+    },
+  },
+  'research.cite': {
+    description: 'R632: Format a source list as BibTeX or MLA citations. Params: sources[], format (bibtex|mla)',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { sources?: Array<import('./r618-research-deep.js').ResearchSource>; format?: 'bibtex' | 'mla' }
+      if (!Array.isArray(p.sources)) throw new Error('sources[] required')
+      const { citeFromSources } = await import('./r632-research-polish.js')
+      return citeFromSources(p.sources, p.format ?? 'mla')
+    },
+  },
+  'research.deep_multilang': {
+    description: 'R632: Run R618 deep research across N languages and merge. Params: question, langs?, perLang?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r632-research-polish.js').deepMultiLang>[1]
+      if (!p?.question) throw new Error('question required')
+      const { deepMultiLang } = await import('./r632-research-polish.js')
+      return deepMultiLang(ws, p)
+    },
+  },
+  // ─── R633 Agent tools ──────────────────────────────────────────────
+  'db.explore': {
+    description: 'R633: Read-only SELECT against allowlisted tables. Params: query, limit?, workspaceId?',
+    risk: 'medium',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r633-agent-tools.js').dbExplore>[0]
+      const { dbExplore } = await import('./r633-agent-tools.js')
+      return dbExplore(p)
+    },
+  },
+  'github.open_pr': {
+    description: 'R633: Open a GitHub PR via REST. Needs GITHUB_TOKEN env. Params: repo, base, head, title, body?, draft?',
+    risk: 'high',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r633-agent-tools.js').openPr>[0]
+      const { openPr } = await import('./r633-agent-tools.js')
+      return openPr(p)
+    },
+  },
+  'code.review': {
+    description: 'R633: LLM code review with findings + severity. Params: filename, code, language?, focus?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r633-agent-tools.js').codeReview>[1]
+      const { codeReview } = await import('./r633-agent-tools.js')
+      return codeReview(ws, p)
+    },
+  },
+  'debug.trace': {
+    description: 'R633: Pull recent error events + LLM root cause + suggestion. Params: hoursBack?, filter?, limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r633-agent-tools.js').debugTrace>[1]
+      const { debugTrace } = await import('./r633-agent-tools.js')
+      return debugTrace(ws, p)
+    },
+  },
+  // ─── R634 Knowledge tools ──────────────────────────────────────────
+  'rag.ingest_site': {
+    description: 'R634: Crawl a same-origin docs site + ingest pages into R621 RAG. Params: startUrl, maxDepth? (≤4), maxPages? (≤50), namePrefix?, includePath?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r634-knowledge-tools.js').ingestSite>[1]
+      const { ingestSite } = await import('./r634-knowledge-tools.js')
+      return ingestSite(ws, p)
+    },
+  },
+  'memory.upsert': {
+    description: 'R634: Write/update workspace_memory by key. Params: key, value, scope?, importance?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r634-knowledge-tools.js').memoryUpsert>[1]
+      const { memoryUpsert } = await import('./r634-knowledge-tools.js')
+      return memoryUpsert(ws, p)
+    },
+  },
+  'memory.delete': {
+    description: 'R634: Remove workspace_memory by key. Params: key.',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { key?: string }
+      if (!p.key) throw new Error('key required')
+      const { memoryDelete } = await import('./r634-knowledge-tools.js')
+      return memoryDelete(ws, p.key)
+    },
+  },
+  'memory.list': {
+    description: 'R634: List workspace memories. Params: scope?, limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { scope?: string; limit?: number }
+      const { memoryList } = await import('./r634-knowledge-tools.js')
+      return { items: await memoryList(ws, p) }
+    },
+  },
+  'knowledge.auto_tag': {
+    description: 'R634: LLM proposes 3-15 topical tags + topic. Params: text, maxTags?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r634-knowledge-tools.js').autoTag>[1]
+      const { autoTag } = await import('./r634-knowledge-tools.js')
+      return autoTag(ws, p)
+    },
+  },
+  // ─── R635 Infra tools ──────────────────────────────────────────────
+  'ollama.health': {
+    description: 'R635: Probe OLLAMA_BASE_URL for available local models.',
+    risk: 'low',
+    handler: async () => {
+      const { ollamaHealth } = await import('./r635-infra-tools.js')
+      return ollamaHealth()
+    },
+  },
+  'mcp.catalog': {
+    description: 'R635: List MCP servers in the catalog and whether their env is configured.',
+    risk: 'low',
+    handler: async () => {
+      const { listMcp } = await import('./r635-infra-tools.js')
+      return listMcp()
+    },
+  },
+  'snapshot.create': {
+    description: 'R635: Snapshot key workspace tables to S3 as JSON. Returns counts + s3Url.',
+    risk: 'high',
+    handler: async (ws) => {
+      const { snapshot } = await import('./r635-infra-tools.js')
+      return snapshot(ws)
+    },
+  },
+  'migrations.list': {
+    description: 'R635: List applied migrations.',
+    risk: 'low',
+    handler: async () => {
+      const { listMigrations } = await import('./r635-infra-tools.js')
+      return { items: await listMigrations() }
+    },
+  },
+  'migrations.record': {
+    description: 'R635: Record that a migration has been applied. Params: name, sqlHash.',
+    risk: 'high',
+    handler: async (_ws, params) => {
+      const p = params as { name?: string; sqlHash?: string }
+      if (!p.name || !p.sqlHash) throw new Error('name + sqlHash required')
+      const { recordMigration } = await import('./r635-infra-tools.js')
+      return recordMigration({ name: p.name, sqlHash: p.sqlHash })
+    },
+  },
+  'flag.set': {
+    description: 'R635: Set a workspace feature flag. Params: flag, enabled, value?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r635-infra-tools.js').flagSet>[1]
+      const { flagSet } = await import('./r635-infra-tools.js')
+      return flagSet(ws, p)
+    },
+  },
+  'flag.get': {
+    description: 'R635: Get a workspace feature flag. Params: flag.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { flag?: string }
+      if (!p.flag) throw new Error('flag required')
+      const { flagGet } = await import('./r635-infra-tools.js')
+      return flagGet(ws, p.flag)
+    },
+  },
+  'flag.list': {
+    description: 'R635: List all workspace feature flags.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { flagList } = await import('./r635-infra-tools.js')
+      return { items: await flagList(ws) }
+    },
+  },
+  'workspaces.list': {
+    description: 'R635: List workspaces with asset + memory counts + last activity.',
+    risk: 'low',
+    handler: async () => {
+      const { listWorkspaces } = await import('./r635-infra-tools.js')
+      return { items: await listWorkspaces() }
+    },
+  },
+  // ─── R636 Misc closures: competitors, push topics, rate limit, kill switch ─
+  'competitors.track': {
+    description: 'R636: Add a competitor listing URL to watch. Params: label, url, platform?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r636-misc.js').trackCompetitor>[1]
+      const { trackCompetitor } = await import('./r636-misc.js')
+      return trackCompetitor(ws, p)
+    },
+  },
+  'competitors.tick': {
+    description: 'R636: Re-scrape oldest N competitor listings. Params: maxCount?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { maxCount?: number }
+      const { tickCompetitors } = await import('./r636-misc.js')
+      return tickCompetitors(ws, p)
+    },
+  },
+  'competitors.list': {
+    description: 'R636: List tracked competitor listings + last-known price/title.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { listCompetitors } = await import('./r636-misc.js')
+      return { items: await listCompetitors(ws) }
+    },
+  },
+  'push.subscribe': {
+    description: 'R636: Subscribe a subscriberId to a digest topic. Params: subscriberId, topic.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r636-misc.js').topicSubscribe>[1]
+      const { topicSubscribe } = await import('./r636-misc.js')
+      return topicSubscribe(ws, p)
+    },
+  },
+  'push.unsubscribe': {
+    description: 'R636: Unsubscribe a subscriberId from a digest topic. Params: subscriberId, topic.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r636-misc.js').topicUnsubscribe>[1]
+      const { topicUnsubscribe } = await import('./r636-misc.js')
+      return topicUnsubscribe(ws, p)
+    },
+  },
+  'push.subscribers': {
+    description: 'R636: List subscribers for a topic. Params: topic.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { topic?: string }
+      if (!p.topic) throw new Error('topic required')
+      const { topicSubscribers } = await import('./r636-misc.js')
+      return topicSubscribers(ws, p.topic)
+    },
+  },
+  'rate_limit.consume': {
+    description: 'R636: Consume 1 token from a per-workspace bucket. Params: bucketKey, capacity?, refillPerSec?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r636-misc.js').rateLimitConsume>[1]
+      const { rateLimitConsume } = await import('./r636-misc.js')
+      return rateLimitConsume(ws, p)
+    },
+  },
+  'killswitch.set': {
+    description: 'R636: Toggle workspace kill switch. Params: on, pausedUntil?',
+    risk: 'critical',
+    handler: async (ws, params) => {
+      const p = params as { on?: boolean; pausedUntil?: number }
+      if (typeof p.on !== 'boolean') throw new Error('on (boolean) required')
+      const { killSwitchSet } = await import('./r636-misc.js')
+      const input: { on: boolean; pausedUntil?: number } = { on: p.on }
+      if (typeof p.pausedUntil === 'number') input.pausedUntil = p.pausedUntil
+      return killSwitchSet(ws, input)
+    },
+  },
+  'killswitch.status': {
+    description: 'R636: Current kill-switch state.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { killSwitchStatus } = await import('./r636-misc.js')
+      return killSwitchStatus(ws)
+    },
+  },
   // ─── R611 SMTP email fallback ───────────────────────────────────────
   'email.smtp.health': {
     description: 'R611: Probe SMTP — connects, EHLO, QUIT (no send). Returns ok + reason if SMTP_HOST/USER/PASS configured.',
@@ -11007,6 +11354,17 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'channel.discord.send', 'channel.telegram.send', 'channel.slack.send', 'channel.fanout', 'channel.health',
         'approvals.request', 'approvals.list', 'approvals.approve', 'approvals.reject',
         'spend.cap.get', 'spend.cap.set', 'spend.check', 'audit.list',
+        // R630-R636 — operator cluster + the rest
+        'ab.create', 'ab.metric', 'ab.winner', 'ab.list', 'share.create',
+        'voice.transcribe_long', 'podcast.generate',
+        'research.score_source', 'research.cite', 'research.deep_multilang',
+        'db.explore', 'github.open_pr', 'code.review', 'debug.trace',
+        'rag.ingest_site', 'memory.upsert', 'memory.delete', 'memory.list', 'knowledge.auto_tag',
+        'ollama.health', 'mcp.catalog', 'snapshot.create', 'migrations.list', 'migrations.record',
+        'flag.set', 'flag.get', 'flag.list', 'workspaces.list',
+        'competitors.track', 'competitors.tick', 'competitors.list',
+        'push.subscribe', 'push.unsubscribe', 'push.subscribers',
+        'rate_limit.consume', 'killswitch.set', 'killswitch.status',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',

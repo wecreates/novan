@@ -345,6 +345,10 @@ const isPublic = (url: string): boolean => {
   if (url === '/ops/inbox'       || url.startsWith('/ops/inbox'))       return true  // R623 — inbox dashboard has its own query-param token check
   if (url === '/ops/desktop'     || url.startsWith('/ops/desktop'))     return true  // R623 — desktop queue dashboard has its own query-param token check
   if (url === '/ops/rag'         || url.startsWith('/ops/rag'))         return true  // R623 — RAG documents dashboard has its own query-param token check
+  if (url === '/ops/timeline'    || url.startsWith('/ops/timeline'))    return true  // R630 — agent timeline view (D4)
+  if (url === '/ops/mockups'     || url.startsWith('/ops/mockups'))     return true  // R630 — mockup gallery (F3)
+  if (url === '/ops/ab'          || url.startsWith('/ops/ab'))          return true  // R630 — A/B tests dashboard (F7)
+  if (url.startsWith('/share/'))                                        return true  // R630 — public asset/digest sharing (I2-I3)
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
   if (url.startsWith('/ops/gdpr/'))                                     return true  // R515 — token in query
   if (url.startsWith('/ops/dmca/'))                                     return true  // R516 — token in query
@@ -714,6 +718,46 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/rag', asy
   try {
     const { renderRagHtml } = await import('./services/r623-ops-views.js')
     reply.type('text/html').send(await renderRagHtml(g.ws(req.query)))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R630 — Agent timeline + mockup gallery + A/B + public sharing
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/timeline', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  try {
+    const { renderTimelineHtml } = await import('./services/r630-timeline-mockups-ab-share.js')
+    reply.type('text/html').send(await renderTimelineHtml(g.ws(req.query)))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/mockups', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  try {
+    const { renderMockupsHtml } = await import('./services/r630-timeline-mockups-ab-share.js')
+    reply.type('text/html').send(await renderMockupsHtml(g.ws(req.query)))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/ab', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  try {
+    const { renderAbHtml } = await import('./services/r630-timeline-mockups-ab-share.js')
+    reply.type('text/html').send(await renderAbHtml(g.ws(req.query)))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R630 public share — NO auth, read-only by design
+app.get<{ Params: { id: string } }>('/share/asset/:id', async (req, reply) => {
+  try {
+    const { renderSharedAssetHtml } = await import('./services/r630-timeline-mockups-ab-share.js')
+    reply.type('text/html').send(await renderSharedAssetHtml(req.params.id))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+app.get<{ Params: { id: string } }>('/share/digest/:id', async (req, reply) => {
+  try {
+    const { renderSharedDigestHtml } = await import('./services/r630-timeline-mockups-ab-share.js')
+    reply.type('text/html').send(await renderSharedDigestHtml(req.params.id))
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
 })
 
