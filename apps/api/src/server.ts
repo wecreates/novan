@@ -366,6 +366,7 @@ const isPublic = (url: string): boolean => {
   if (url === '/ops/plans' || url.startsWith('/ops/plans'))             return true  // R646a — plans dashboard (own token gate)
   if (url === '/ops/cache' || url.startsWith('/ops/cache'))             return true  // R647c — prompt-cache dashboard (own token gate)
   if (url === '/ops/agents' || url.startsWith('/ops/agents'))           return true  // R649 — agent runs dashboard (own token gate)
+  if (url.startsWith('/agent/stream'))                                  return true  // R661 — SSE agent stream (own token gate)
   // R647d /ops/desktop/act covered by the R623 whitelist above (startsWith '/ops/desktop')
   if (url.startsWith('/apps/'))                                         return true  // R642d — generated apps served under /apps/:slug
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
@@ -1075,6 +1076,49 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/agents/ro
     const { renderAgentRollupHtml } = await import('./services/r658-agent-rollup.js')
     reply.type('text/html').send(await renderAgentRollupHtml(g.ws(req.query)))
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R661 — SSE live agent stream. Drives a novan.agent run and pushes every
+// plan/act/reflect/done event over text/event-stream so operators can watch
+// the loop in real time instead of waiting for the final answer.
+app.get<{ Querystring: { token?: string; workspace?: string; goal?: string; tools?: string; maxLoops?: string } }>('/agent/stream', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).send({ error: 'unauthorized' })
+  const goal = req.query.goal
+  if (!goal) return void reply.status(400).send({ error: 'goal query param required' })
+  const tools = req.query.tools ? req.query.tools.split(',').map(s => s.trim()).filter(Boolean) : undefined
+  const maxLoops = req.query.maxLoops ? Math.min(8, Math.max(1, parseInt(req.query.maxLoops, 10) || 8)) : undefined
+
+  reply.raw.setHeader('Content-Type', 'text/event-stream')
+  reply.raw.setHeader('Cache-Control', 'no-cache, no-transform')
+  reply.raw.setHeader('Connection', 'keep-alive')
+  reply.raw.setHeader('X-Accel-Buffering', 'no')
+  reply.raw.flushHeaders()
+
+  const send = (event: string, data: unknown): void => {
+    try {
+      reply.raw.write(`event: ${event}\n`)
+      reply.raw.write(`data: ${JSON.stringify(data)}\n\n`)
+    } catch { /* client gone */ }
+  }
+  // Heartbeat so proxies don't drop the conn during long loops
+  const heartbeat = setInterval(() => { try { reply.raw.write(': hb\n\n') } catch { /* ignore */ } }, 15000)
+
+  try {
+    send('start', { goal, tools, maxLoops, ts: new Date().toISOString() })
+    const { runAgent } = await import('./services/r649-agent.js')
+    const result = await runAgent(g.ws(req.query), {
+      goal,
+      ...(tools ? { toolsAllowed: tools } : {}),
+      ...(maxLoops ? { maxLoops } : {}),
+      onEvent: (ev) => send(ev.kind, { round: ev.round, ...ev.data }),
+    })
+    send('result', result)
+  } catch (e) {
+    send('error', { message: (e as Error).message ?? String(e) })
+  } finally {
+    clearInterval(heartbeat)
+    try { reply.raw.end() } catch { /* ignore */ }
+  }
 })
 
 // R603 — Neural network live view. Auto-refreshes every 5s. Same ops-token gate.

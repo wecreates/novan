@@ -60,6 +60,8 @@ export interface AgentInput {
   toolsAllowed?: string[]
   maxLoops?:     number
   preferProvider?: 'anthropic' | 'openai' | 'auto'
+  /** R661 — optional SSE-style callback fired on every plan/act/reflect step. */
+  onEvent?:      (event: { kind: 'plan' | 'act' | 'reflect' | 'evidence' | 'done' | 'error'; round: number; data: Record<string, unknown> }) => void
 }
 
 export interface AgentResult {
@@ -146,6 +148,7 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
     const planData = plan.data as { subgoal?: string; reasoning?: string; tools_needed?: string[] }
     const planSubgoal = planData.subgoal ?? currentSubgoal
     trace.push({ phase: 'plan', round: loop, summary: `subgoal=${planSubgoal} · tools=${(planData.tools_needed ?? []).join(',')}` })
+    try { input.onEvent?.({ kind: 'plan', round: loop, data: { subgoal: planSubgoal, tools_needed: planData.tools_needed ?? [], reasoning: planData.reasoning } }) } catch { /* tolerated */ }
 
     // 2. ACT
     const toolsForRound = (planData.tools_needed ?? []).filter(t => allowed.includes(t))
@@ -166,6 +169,7 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
         if (c.ok && c.resultPreview) evidence.push({ round: loop, tool: c.tool, preview: c.resultPreview.slice(0, 1200) })
       }
       trace.push({ phase: 'act', round: loop, summary: `ran ${act.toolCalls.length} tool(s) over ${act.rounds} rounds: ${act.toolCalls.map(c => `${c.tool}${c.ok ? '✓' : '✗'}`).join(', ')}` })
+      try { input.onEvent?.({ kind: 'act', round: loop, data: { tool_calls: act.toolCalls.map(c => ({ tool: c.tool, ok: c.ok, ms: c.durationMs })), rounds: act.rounds } }) } catch { /* tolerated */ }
     }
 
     // 3. REFLECT — R650: include actual evidence so the answer contains real data
@@ -185,6 +189,7 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
     }
     const r = reflect.data as { done?: boolean; answer?: string; next_subgoal?: string; reasoning?: string }
     trace.push({ phase: 'reflect', round: loop, summary: `done=${r.done} · ${r.reasoning?.slice(0, 80) ?? ''}` })
+    try { input.onEvent?.({ kind: 'reflect', round: loop, data: { done: !!r.done, reasoning: r.reasoning, next_subgoal: r.next_subgoal } }) } catch { /* tolerated */ }
 
     if (r.done) {
       done = true
@@ -193,6 +198,7 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
     }
     currentSubgoal = r.next_subgoal ?? currentSubgoal
   }
+  try { input.onEvent?.({ kind: 'done', round: loop, data: { answer, done } }) } catch { /* tolerated */ }
 
   if (!done && !answer) {
     answer = `[reached loop cap (${maxLoops}) without a final answer]\n\nLast subgoal: ${currentSubgoal}`
