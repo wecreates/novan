@@ -865,8 +865,10 @@ app.get<{ Querystring: { token?: string; workspace?: string; voice?: string; mod
   }
   const { renderVoicePwaHtml, renderVoiceRealtimePwaHtml } = await import('./services/r638-voice-pwa.js')
   // R643e — ?mode=realtime swaps to OpenAI Realtime API client
+  // R644b — passes workspace + selected voice through so dropdown is pre-populated
   if (req.query.mode === 'realtime') {
-    reply.type('text/html').send(renderVoiceRealtimePwaHtml())
+    const html = await renderVoiceRealtimePwaHtml(req.query.workspace ?? 'default', req.query.voice ?? 'alloy')
+    reply.type('text/html').send(html)
     return
   }
   reply.type('text/html').send(renderVoicePwaHtml({

@@ -1332,6 +1332,7 @@ const INTERVALS = {
   inboxDispatch:          30_000,             // R612 — 30s tick to process autonomous task inbox
   dailyDigest:            10 * 60_000,        // R613 — 10min tick; fires send() once per day after 09:00 UTC
   scrapeSchedule:         5 * 60_000,         // R642e — 5min tick; runs scrape jobs whose schedule_cron is due
+  approvalSmsBridge:      60_000,             // R644d — 60s tick; SMS-notifies new pending approvals when Twilio configured
 }
 
 /**
@@ -1660,6 +1661,15 @@ async function runScrapeScheduleTick(): Promise<void> {
     const r = await tickScrape()
     if (r.fired > 0) await emit('cron.scrape_schedule', r)
   } catch (e) { await emit('cron.error', { task: 'scrape_schedule', error: (e as Error).message }) }
+}
+
+// R644d — SMS-notify pending approvals when Twilio + TWILIO_APPROVAL_TO configured
+async function runApprovalSmsBridgeTick(): Promise<void> {
+  try {
+    const { tickApprovalSms } = await import('./r644-approvals-sms.js')
+    const r = await tickApprovalSms()
+    if (r.sent > 0 || r.failed > 0) await emit('cron.approval_sms_bridge', r)
+  } catch (e) { await emit('cron.error', { task: 'approval_sms_bridge', error: (e as Error).message }) }
 }
 
 // R606 — Saturation alerts. Polls neural.counters per workspace; webhooks +
@@ -2573,6 +2583,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runInboxDispatchTick,           INTERVALS.inboxDispatch))        // R612
   handles.push(scheduleJittered(runDailyDigestTick,             INTERVALS.dailyDigest))          // R613
   handles.push(scheduleJittered(runScrapeScheduleTick,          INTERVALS.scrapeSchedule))       // R642e
+  handles.push(scheduleJittered(runApprovalSmsBridgeTick,       INTERVALS.approvalSmsBridge))    // R644d
   handles.push(scheduleJittered(runTrustAutoDerive,             INTERVALS.trustAutoDerive))
   handles.push(scheduleJittered(runFabricSweep,                 INTERVALS.fabricSweep))
   handles.push(scheduleJittered(runDataRetention,               INTERVALS.dataRetention))

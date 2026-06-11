@@ -3847,6 +3847,33 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return deleteApp(ws, p.slug)
     },
   },
+  // ─── R644c App iterate (diff-mode multi-file refinement) ───────────
+  'app.iterate': {
+    description: 'R644c: Refine an existing multi-file app via diff or full rewrite. LLM chooses mode. Params: slug, prompt.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r644-app-iterate.js').iterate>[1]
+      const { iterate } = await import('./r644-app-iterate.js')
+      return iterate(ws, p)
+    },
+  },
+  // ─── R644d SMS approval bridge ─────────────────────────────────────
+  'approvals.sms.tick': {
+    description: 'R644d: Scan pending approvals + send SMS preview via Twilio for any not yet notified. Requires Twilio configured + TWILIO_APPROVAL_TO env.',
+    risk: 'medium',
+    handler: async () => {
+      const { tickApprovalSms } = await import('./r644-approvals-sms.js')
+      return tickApprovalSms()
+    },
+  },
+  'approvals.sms.status': {
+    description: 'R644d: Show approval-SMS bridge status: configured, destination, pending-not-notified count, sent-24h count.',
+    risk: 'low',
+    handler: async () => {
+      const { approvalSmsStatus } = await import('./r644-approvals-sms.js')
+      return approvalSmsStatus()
+    },
+  },
   // ─── R611 SMTP email fallback ───────────────────────────────────────
   'email.smtp.health': {
     description: 'R611: Probe SMTP — connects, EHLO, QUIT (no send). Returns ok + reason if SMTP_HOST/USER/PASS configured.',
@@ -11867,6 +11894,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'vision.health', 'vision.ocr', 'vision.chart_extract', 'vision.describe',
         'sms.send', 'sms.status', 'sms.health',
         'app.create_multi', 'app.put_files', 'app.list_multi', 'app.list_files', 'app.delete_multi',
+        // R644 — app.iterate + SMS approval bridge
+        'app.iterate', 'approvals.sms.tick', 'approvals.sms.status',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',

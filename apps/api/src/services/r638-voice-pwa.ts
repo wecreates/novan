@@ -277,10 +277,43 @@ export function renderVoicePwaHtml(_opts: { workspace?: string; voice?: string }
 }
 
 /** R643e — Alternative voice page that drives /ws/voice/realtime (OpenAI Realtime API).
- *  Activated by ?mode=realtime on the /voice URL. Same Look/feel as the R638 turn-based
- *  page, but plumbing uses OpenAI's Realtime protocol (input_audio_buffer.append,
- *  response.audio.delta, etc.) for true full-duplex with server-side barge-in. */
-export function renderVoiceRealtimePwaHtml(): string {
+ *  R644b — Server-side renders a voice picker dropdown from R640 voice_library so the
+ *  operator can switch voices without retyping the query string. */
+export async function renderVoiceRealtimePwaHtml(workspaceId = 'default', selectedVoice = 'alloy'): Promise<string> {
+  // R644b — pull saved voices from R640 library, fall back to OpenAI Realtime built-ins
+  const BUILTINS = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse']
+  type VoiceOpt = { id: string; label: string; group: string }
+  const opts: VoiceOpt[] = BUILTINS.map(v => ({ id: v, label: v, group: 'OpenAI Realtime' }))
+  try {
+    const { listVoices } = await import('./r640-voice-library.js')
+    const lib = await listVoices(workspaceId)
+    for (const v of lib) {
+      // Realtime supports a fixed list of voices; user-cloned voice IDs from another provider
+      // (e.g. OmniVoice) won't pass through OpenAI's session.update. We still show them so the
+      // operator knows they exist, marked as "via TTS fallback (not realtime)".
+      const isRealtimeCompatible = v.provider === 'openai' && BUILTINS.includes(v.providerVoiceId)
+      opts.push({
+        id:    isRealtimeCompatible ? v.providerVoiceId : `lib:${v.id}`,
+        label: `${v.name}${v.isDefault ? ' ★' : ''}${isRealtimeCompatible ? '' : ' (turn-based only)'}`,
+        group: isRealtimeCompatible ? 'OpenAI Realtime · saved' : 'Saved (turn-based only)',
+      })
+    }
+  } catch { /* voice library optional */ }
+  // Dedupe + group
+  const seen = new Set<string>()
+  const groups: Record<string, VoiceOpt[]> = {}
+  for (const o of opts) {
+    if (seen.has(o.id)) continue
+    seen.add(o.id)
+    groups[o.group] = groups[o.group] || []
+    groups[o.group]!.push(o)
+  }
+  const escAttr = (s: string): string => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
+  const voiceOptionsHtml = Object.entries(groups).map(([g, list]) => `
+    <optgroup label="${escAttr(g)}">${list.map(v =>
+      `<option value="${escAttr(v.id)}"${v.id === selectedVoice ? ' selected' : ''}>${escAttr(v.label)}</option>`
+    ).join('')}</optgroup>`).join('')
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -294,11 +327,12 @@ export function renderVoiceRealtimePwaHtml(): string {
   *,*::before,*::after{box-sizing:border-box}
   html,body{margin:0;padding:0}
   body{font:16px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0b0d12;color:#e5e7eb;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
-  header{padding:12px 16px env(safe-area-inset-top,12px);border-bottom:1px solid #1f2937;display:flex;align-items:center;justify-content:space-between;background:#0b0d12;position:sticky;top:0;z-index:10}
-  header .brand{font-weight:600;font-size:15px}
+  header{padding:12px 16px env(safe-area-inset-top,12px);border-bottom:1px solid #1f2937;display:flex;align-items:center;gap:8px;justify-content:space-between;background:#0b0d12;position:sticky;top:0;z-index:10}
+  header .brand{font-weight:600;font-size:15px;flex:1;min-width:0}
   header .brand .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#a855f7;margin-right:6px;vertical-align:middle;transition:background .3s}
   header .brand .dot.off{background:#6b7280}
-  header .mode{font-size:11px;color:#a855f7;background:#581c8722;padding:2px 8px;border-radius:10px;letter-spacing:.04em;text-transform:uppercase}
+  header select{font:12px sans-serif;background:#1f2937;color:#e5e7eb;border:1px solid #374151;border-radius:4px;padding:4px 6px;max-width:140px}
+  header .mode{font-size:10px;color:#a855f7;background:#581c8722;padding:2px 6px;border-radius:10px;letter-spacing:.04em;text-transform:uppercase}
   main{flex:1;overflow-y:auto;padding:16px;max-width:760px;margin:0 auto;width:100%}
   .msg{margin:10px 0;padding:11px 14px;border-radius:16px;max-width:82%;line-height:1.45;word-wrap:break-word;font-size:15px}
   .msg.user{background:#1f2937;margin-left:auto;border-bottom-right-radius:5px;color:#f9fafb}
@@ -318,14 +352,15 @@ export function renderVoiceRealtimePwaHtml(): string {
 </head>
 <body>
 <header>
-  <span class="brand"><span class="dot off" id="dot"></span>Novan Voice</span>
+  <span class="brand"><span class="dot off" id="dot"></span>Novan</span>
+  <select id="voicePicker" aria-label="voice">${voiceOptionsHtml}</select>
   <span class="mode">REALTIME</span>
 </header>
 <main id="msgs">
   <div class="empty" id="empty">
     Tap the mic once to start a continuous session.<br><br>
     Speak naturally — Novan listens, thinks, and interrupts itself when you speak again.
-    <a class="link" href="/voice${'?'}token=__APPEND_TOKEN__">switch to turn-based →</a>
+    <a class="link" href="/voice?token=__APPEND_TOKEN__">switch to turn-based →</a>
   </div>
 </main>
 <footer>
@@ -338,16 +373,33 @@ export function renderVoiceRealtimePwaHtml(): string {
 (async () => {
   const params    = new URLSearchParams(location.search);
   const token     = params.get('token');
-  const voiceId   = params.get('voice') || 'alloy';
   const model     = params.get('model') || 'gpt-realtime';
 
   const $ = (id) => document.getElementById(id);
   const msgs = $('msgs'), mic = $('mic'), status = $('status'), dot = $('dot'), empty = $('empty');
+  const voicePicker = $('voicePicker');
+  let voiceId = voicePicker.value;
 
   if (!token) { status.innerHTML = '<span class="err">no ?token= in URL</span>'; return; }
 
   // Splice token into the "switch to turn-based" link
   empty.innerHTML = empty.innerHTML.replace('__APPEND_TOKEN__', encodeURIComponent(token));
+
+  // R644b — when the operator picks a different voice, reload the page with that voice in the URL
+  voicePicker.addEventListener('change', () => {
+    const newVoice = voicePicker.value;
+    if (newVoice === voiceId) return;
+    const u = new URL(location.href);
+    if (newVoice.startsWith('lib:')) {
+      alert('Saved-but-not-realtime voices need the turn-based /voice page. Switching there.');
+      u.searchParams.delete('mode');
+      u.searchParams.set('voice', newVoice.slice(4));
+    } else {
+      u.searchParams.set('mode', 'realtime');
+      u.searchParams.set('voice', newVoice);
+    }
+    location.assign(u.toString());
+  });
 
   let currentAssistantEl = null;
   let currentUserEl = null;
@@ -365,8 +417,6 @@ export function renderVoiceRealtimePwaHtml(): string {
     msgs.scrollTop = msgs.scrollHeight;
   }
 
-  // Audio playback via AudioWorklet-less ScriptProcessor for compat. Realtime
-  // API emits PCM16 mono @ 24 kHz; we resample on the fly to AudioContext rate.
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
   let playHead = 0;
   function schedulePcm16(b64) {
@@ -391,7 +441,6 @@ export function renderVoiceRealtimePwaHtml(): string {
   }
   function flushAudio() { playHead = audioCtx.currentTime; }
 
-  // Mic capture as PCM16 24 kHz mono via ScriptProcessor
   let captureCtx = null, captureSrc = null, captureProc = null, captureStream = null;
   async function startCapture() {
     if (captureCtx) return true;
@@ -411,7 +460,6 @@ export function renderVoiceRealtimePwaHtml(): string {
         const s = Math.max(-1, Math.min(1, f32[i]));
         i16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
       }
-      // base64 encode
       let bin = '';
       const bytes = new Uint8Array(i16.buffer);
       for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
@@ -437,7 +485,6 @@ export function renderVoiceRealtimePwaHtml(): string {
     switch (m.type) {
       case 'novan.upstream_ready':
         status.textContent = 'ready';
-        // Tell OpenAI we want a transcribed input + voice output session
         ws.send(JSON.stringify({ type: 'session.update', session: { modalities: ['audio', 'text'], voice: voiceId, instructions: 'You are Novan, the operator\\'s autonomous AI partner. Be concise — this is voice. 1-3 sentences per turn unless asked for more.', input_audio_transcription: { model: 'whisper-1' }, turn_detection: { type: 'server_vad' } } }));
         break;
       case 'response.audio.delta':
@@ -460,7 +507,6 @@ export function renderVoiceRealtimePwaHtml(): string {
         }
         break;
       case 'input_audio_buffer.speech_started':
-        // user is talking → barge in
         flushAudio();
         currentUserEl = newMsg('user', '…');
         break;
