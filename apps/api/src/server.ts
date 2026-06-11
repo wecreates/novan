@@ -354,6 +354,9 @@ const isPublic = (url: string): boolean => {
   if (url.startsWith('/share/'))                                        return true  // R630 — public asset/digest sharing (I2-I3)
   if (url.startsWith('/ws/voice')    || url === '/ws/voice')            return true  // R637 — A1 realtime voice; token in query, validated in handler
   if (url.startsWith('/ws/presence') || url === '/ws/presence')         return true  // R637 — J2 presence; token in query, validated in handler
+  if (url === '/voice' || url.startsWith('/voice?'))                    return true  // R638 — voice PWA page; token in query, validated in handler
+  if (url === '/voice.webmanifest')                                     return true  // R638 — PWA manifest
+  if (url === '/sw.js')                                                 return true  // R638 — service worker (existing or stub)
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
   if (url.startsWith('/ops/gdpr/'))                                     return true  // R515 — token in query
   if (url.startsWith('/ops/dmca/'))                                     return true  // R516 — token in query
@@ -757,6 +760,36 @@ function r637WsTokenOk(qs: URLSearchParams): boolean {
   const tok = qs.get('token') ?? ''
   return !!tok && (!ops || tok === ops)
 }
+
+// R638 — Voice PWA page. Token gate inside the page itself; the
+// underlying /ws/voice + /ws/presence both validate the token again
+// during their handshake.
+app.get<{ Querystring: { token?: string; workspace?: string; voice?: string } }>('/voice', async (req, reply) => {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  if (!req.query.token || (ops && req.query.token !== ops)) {
+    reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt; in the URL.')
+    return
+  }
+  const { renderVoicePwaHtml } = await import('./services/r638-voice-pwa.js')
+  reply.type('text/html').send(renderVoicePwaHtml({
+    workspace: req.query.workspace ?? 'default',
+    voice:     req.query.voice     ?? 'nova',
+  }))
+})
+
+app.get('/voice.webmanifest', async (_req, reply) => {
+  const { renderVoiceManifest } = await import('./services/r638-voice-pwa.js')
+  reply.type('application/manifest+json').send(renderVoiceManifest())
+})
+
+// Minimal service worker — keep page installable even if no offline caching yet
+app.get('/sw.js', async (_req, reply) => {
+  reply.type('application/javascript').send(`// R638 — minimal SW; cache-on-demand layer added later.
+self.addEventListener('install',  (e) => self.skipWaiting())
+self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()))
+self.addEventListener('fetch',    () => {})
+`)
+})
 
 app.get('/ws/voice', { websocket: true }, async (sock, req) => {
   const qs = new URL(req.url, 'http://x').searchParams
