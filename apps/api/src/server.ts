@@ -18,6 +18,7 @@ import cors                  from '@fastify/cors'
 import helmet                from '@fastify/helmet'
 import rateLimit             from '@fastify/rate-limit'
 import jwt                   from '@fastify/jwt'
+import fastifyWebsocket      from '@fastify/websocket'         // R637 — A1 voice + J2 presence
 // Swagger lazy-imported below to survive Node 24's strict JSON parsing of @fastify/swagger-ui's csp.json
 import { redisClient }       from './redis/client.js'
 import { registerQueues }    from './queues/index.js'
@@ -291,6 +292,8 @@ await app.register(helmet, {
   },
 })
 await app.register(rateLimit,   { max: 200, timeWindow: '1 minute' })
+// R637 — WebSocket plugin (unlocks /ws/voice for A1 realtime voice + /ws/presence for J2)
+await app.register(fastifyWebsocket, { options: { maxPayload: 8 * 1024 * 1024 } })
 
 // R146.301 — fail-fast on missing AUTH_SECRET. The previous `!` non-null
 // assertion was a TS-only silencer; at runtime an unset env would pass
@@ -349,6 +352,8 @@ const isPublic = (url: string): boolean => {
   if (url === '/ops/mockups'     || url.startsWith('/ops/mockups'))     return true  // R630 — mockup gallery (F3)
   if (url === '/ops/ab'          || url.startsWith('/ops/ab'))          return true  // R630 — A/B tests dashboard (F7)
   if (url.startsWith('/share/'))                                        return true  // R630 — public asset/digest sharing (I2-I3)
+  if (url.startsWith('/ws/voice')    || url === '/ws/voice')            return true  // R637 — A1 realtime voice; token in query, validated in handler
+  if (url.startsWith('/ws/presence') || url === '/ws/presence')         return true  // R637 — J2 presence; token in query, validated in handler
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
   if (url.startsWith('/ops/gdpr/'))                                     return true  // R515 — token in query
   if (url.startsWith('/ops/dmca/'))                                     return true  // R516 — token in query
@@ -744,6 +749,29 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/ab', asyn
     const { renderAbHtml } = await import('./services/r630-timeline-mockups-ab-share.js')
     reply.type('text/html').send(await renderAbHtml(g.ws(req.query)))
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R637 — WebSocket endpoints. Ops-token query-param gate. workspace defaults to 'default'.
+function r637WsTokenOk(qs: URLSearchParams): boolean {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  const tok = qs.get('token') ?? ''
+  return !!tok && (!ops || tok === ops)
+}
+
+app.get('/ws/voice', { websocket: true }, async (sock, req) => {
+  const qs = new URL(req.url, 'http://x').searchParams
+  if (!r637WsTokenOk(qs)) { try { sock.send(JSON.stringify({ type: 'error', message: '401 unauthorized' })); sock.close(1008, 'unauthorized') } catch { /* ignore */ }; return }
+  const ws = qs.get('workspace') ?? 'default'
+  const { attachVoiceSession } = await import('./services/r622-voice-realtime.js')
+  attachVoiceSession(sock as unknown as import('ws').WebSocket, ws)
+})
+
+app.get('/ws/presence', { websocket: true }, async (sock, req) => {
+  const qs = new URL(req.url, 'http://x').searchParams
+  if (!r637WsTokenOk(qs)) { try { sock.send(JSON.stringify({ type: 'error', message: '401 unauthorized' })); sock.close(1008, 'unauthorized') } catch { /* ignore */ }; return }
+  const ws = qs.get('workspace') ?? 'default'
+  const { attachPresenceSession } = await import('./services/r637-presence.js')
+  attachPresenceSession(sock as unknown as import('ws').WebSocket, ws)
 })
 
 // R630 public share — NO auth, read-only by design

@@ -23,6 +23,7 @@
     "@fastify/rate-limit": "^10.2.0",
     "@fastify/swagger": "^9.1.0",
     "@fastify/swagger-ui": "^5.1.0",
+    "@fastify/websocket": "^11.0.1",
     "@neondatabase/serverless": "^0.10.0",
     "@octokit/rest": "^22.0.1",
     "@opentelemetry/auto-instrumentations-node": "^0.52.0",
@@ -55,6 +56,7 @@
   },
   "devDependencies": {
     "@types/uuid": "*",
+    "@types/ws": "^8.5.13",
     "@vitest/ui": "^2.1.9",
     "drizzle-kit": "^0.28.0",
     "tsx": "^4.19.2",

@@ -3367,6 +3367,31 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return killSwitchStatus(ws)
     },
   },
+  // ─── R637 Realtime: WS voice + presence stats ──────────────────────
+  'voice.realtime.stats': {
+    description: 'R637: Active /ws/voice sessions (A1 realtime voice bridge).',
+    risk: 'low',
+    handler: async () => {
+      const { voiceStats } = await import('./r622-voice-realtime.js')
+      return voiceStats()
+    },
+  },
+  'presence.stats': {
+    description: 'R637: Rooms + total peers across /ws/presence (J2).',
+    risk: 'low',
+    handler: async () => {
+      const { presenceStats } = await import('./r637-presence.js')
+      return presenceStats()
+    },
+  },
+  'presence.roster': {
+    description: 'R637: Current peers in this workspace (J2). HTTP-friendly snapshot of the WS roster.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { presenceRoster } = await import('./r637-presence.js')
+      return { peers: presenceRoster(ws) }
+    },
+  },
   // ─── R611 SMTP email fallback ───────────────────────────────────────
   'email.smtp.health': {
     description: 'R611: Probe SMTP — connects, EHLO, QUIT (no send). Returns ok + reason if SMTP_HOST/USER/PASS configured.',
@@ -11365,6 +11390,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'competitors.track', 'competitors.tick', 'competitors.list',
         'push.subscribe', 'push.unsubscribe', 'push.subscribers',
         'rate_limit.consume', 'killswitch.set', 'killswitch.status',
+        // R637 — realtime WS bridge surfaces
+        'voice.realtime.stats', 'presence.stats', 'presence.roster',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
