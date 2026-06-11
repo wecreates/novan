@@ -364,6 +364,8 @@ const isPublic = (url: string): boolean => {
   if (url.startsWith('/ops/memory/'))                                   return true  // R641 — memory write-side POST (upsert/delete)
   if (url.startsWith('/ws/voice/realtime'))                             return true  // R642c — OpenAI Realtime WS proxy; token in query
   if (url === '/ops/plans' || url.startsWith('/ops/plans'))             return true  // R646a — plans dashboard (own token gate)
+  if (url === '/ops/cache' || url.startsWith('/ops/cache'))             return true  // R647c — prompt-cache dashboard (own token gate)
+  // R647d /ops/desktop/act covered by the R623 whitelist above (startsWith '/ops/desktop')
   if (url.startsWith('/apps/'))                                         return true  // R642d — generated apps served under /apps/:slug
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
   if (url.startsWith('/ops/gdpr/'))                                     return true  // R515 — token in query
@@ -1035,6 +1037,24 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/plans', a
   try {
     const { renderPlansHtml } = await import('./services/r646-plans.js')
     reply.type('text/html').send(await renderPlansHtml(g.ws(req.query)))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R647c — prompt-cache marker dashboard
+app.get<{ Querystring: { token?: string } }>('/ops/cache', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>')
+  try {
+    const { renderCacheHtml } = await import('./services/r647-prompt-cache.js')
+    reply.type('text/html').send(await renderCacheHtml())
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R647d — desktop-act jobs dashboard (R621 owns /ops/desktop; this is the R647 act-loop)
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/desktop/act', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>')
+  try {
+    const { renderDesktopHtml } = await import('./services/r647-computer-use.js')
+    reply.type('text/html').send(await renderDesktopHtml(g.ws(req.query)))
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
 })
 

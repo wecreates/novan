@@ -4092,6 +4092,95 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return tickCapabilityCloser()
     },
   },
+  // ─── R647 Parallel tools + universal schema + prompt cache + desktop ─────
+  'chat.tools.run': {
+    description: 'R647a: Run a chat turn with parallel tool-calling. Model can emit N tool_call envelopes per round; they execute via Promise.all. Params: prompt, systemPrompt?, toolsAllowed?, maxRounds?, preferProvider?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r647-tool-orchestrator.js').orchestrateTools>[1]
+      if (!p.userPrompt && typeof (p as Record<string, unknown>)['prompt'] === 'string') {
+        p.userPrompt = (p as Record<string, unknown>)['prompt'] as string
+      }
+      if (!p.userPrompt) throw new Error('userPrompt (or prompt) required')
+      const { orchestrateTools } = await import('./r647-tool-orchestrator.js')
+      return orchestrateTools(ws, p)
+    },
+  },
+  'chat.with_schema': {
+    description: 'R647b: Force JSON output matching a JSON Schema (draft-07 subset). Validates + retries once on mismatch. Params: prompt, schema, systemPrompt?, preferProvider?, maxRetries?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r647-structured-output.js').withSchema>[1]
+      if (!p.prompt) throw new Error('prompt required')
+      if (!p.schema || typeof p.schema !== 'object') throw new Error('schema (JSON Schema object) required')
+      const { withSchema } = await import('./r647-structured-output.js')
+      return withSchema(ws, p)
+    },
+  },
+  'cache.should_cache': {
+    description: 'R647c: Check if a system-prompt prefix should be cache-marked (and record observation). Params: systemPrompt, provider?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { systemPrompt?: string; provider?: string }
+      if (!p.systemPrompt) throw new Error('systemPrompt required')
+      const { shouldCache } = await import('./r647-prompt-cache.js')
+      const opts: { provider?: string } = {}
+      if (p.provider) opts.provider = p.provider
+      return shouldCache(p.systemPrompt, opts)
+    },
+  },
+  'cache.list': {
+    description: 'R647c: List tracked prompt-cache prefixes (hash, hits, length, saved). Params: limit?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { limit?: number }
+      const { listCacheStats } = await import('./r647-prompt-cache.js')
+      return { items: await listCacheStats(p.limit ?? 50) }
+    },
+  },
+  'desktop.act': {
+    description: 'R647d: Enqueue a high-level desktop goal for the R357 novan-local-agent on operator machine to execute. Params: goal, context?',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { goal?: string; context?: Record<string, unknown> }
+      if (!p.goal) throw new Error('goal required')
+      const { enqueueDesktop } = await import('./r647-computer-use.js')
+      return enqueueDesktop(ws, p.goal, p.context)
+    },
+  },
+  'desktop.act.list': {
+    description: 'R647d: List recent desktop-act jobs in workspace (R647 table). Params: limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { listDesktopJobs } = await import('./r647-computer-use.js')
+      return { items: await listDesktopJobs(ws, p.limit ?? 50) }
+    },
+  },
+  'desktop.act.next': {
+    description: 'R647d: Local agent pulls next pending desktop-act job (atomic claim). Params: agentId.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { agentId?: string }
+      if (!p.agentId) throw new Error('agentId required')
+      const { claimNextDesktopJob } = await import('./r647-computer-use.js')
+      return { job: await claimNextDesktopJob(ws, p.agentId) }
+    },
+  },
+  'desktop.act.complete': {
+    description: 'R647d: Local agent reports completion of a desktop-act job. Params: id, status (done|failed|partial), result?, error?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { id?: string; status?: 'done' | 'failed' | 'partial'; result?: unknown; error?: string }
+      if (!p.id) throw new Error('id required')
+      if (p.status !== 'done' && p.status !== 'failed' && p.status !== 'partial') throw new Error('status must be done|failed|partial')
+      const { completeDesktopJob } = await import('./r647-computer-use.js')
+      const outcome: { status: 'done' | 'failed' | 'partial'; result?: unknown; error?: string } = { status: p.status }
+      if (p.result !== undefined) outcome.result = p.result
+      if (p.error  !== undefined) outcome.error  = p.error
+      return completeDesktopJob(ws, p.id, outcome)
+    },
+  },
   // ─── R611 SMTP email fallback ───────────────────────────────────────
   'email.smtp.health': {
     description: 'R611: Probe SMTP — connects, EHLO, QUIT (no send). Returns ok + reason if SMTP_HOST/USER/PASS configured.',
@@ -12125,6 +12214,10 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'asset.thumbnail', 'research.share',
         'router.failover', 'consensus.judge',
         'capability.closer.tick',
+        // R647 — parallel tool calling + universal schema + prompt cache + desktop bridge
+        'chat.tools.run', 'chat.with_schema',
+        'cache.should_cache', 'cache.list',
+        'desktop.act', 'desktop.act.list', 'desktop.act.next', 'desktop.act.complete',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
