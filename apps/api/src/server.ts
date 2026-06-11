@@ -357,6 +357,7 @@ const isPublic = (url: string): boolean => {
   if (url === '/voice' || url.startsWith('/voice?'))                    return true  // R638 — voice PWA page; token in query, validated in handler
   if (url === '/voice.webmanifest')                                     return true  // R638 — PWA manifest
   if (url === '/sw.js')                                                 return true  // R638 — service worker (existing or stub)
+  if (url === '/ops/scrape' || url.startsWith('/ops/scrape'))           return true  // R639 — webscraping dashboard + run pages
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
   if (url.startsWith('/ops/gdpr/'))                                     return true  // R515 — token in query
   if (url.startsWith('/ops/dmca/'))                                     return true  // R516 — token in query
@@ -710,6 +711,24 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/inbox', a
   try {
     const { renderInboxHtml } = await import('./services/r623-ops-views.js')
     reply.type('text/html').send(await renderInboxHtml(g.ws(req.query)))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R639 — Webscraping dashboards
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/scrape', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  try {
+    const { renderScrapeHtml } = await import('./services/r639-scrape-views.js')
+    const html = (await renderScrapeHtml(g.ws(req.query))).replaceAll('__TOKEN__', encodeURIComponent(req.query.token ?? ''))
+    reply.type('text/html').send(html)
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+app.get<{ Querystring: { token?: string; workspace?: string }; Params: { id: string } }>('/ops/scrape/runs/:id', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  try {
+    const { renderScrapeRunHtml } = await import('./services/r639-scrape-views.js')
+    reply.type('text/html').send(await renderScrapeRunHtml(g.ws(req.query), req.params.id))
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
 })
 

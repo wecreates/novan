@@ -3392,6 +3392,142 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { peers: presenceRoster(ws) }
     },
   },
+  // ─── R639 Webscraping system ───────────────────────────────────────
+  'scrape.job.create': {
+    description: 'R639: Create a scrape job. Params: name, seedUrl, template?, scheduleCron?, maxPages? (≤500), maxDepth? (≤5), useHeadless?, respectRobots?, ingestToRag?, notifyChannels? (["discord","telegram","slack"])',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r639-scrape-engine.js').createJob>[1]
+      const { createJob } = await import('./r639-scrape-engine.js')
+      return createJob(ws, p)
+    },
+  },
+  'scrape.job.list': {
+    description: 'R639: List scrape jobs.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { listJobs } = await import('./r639-scrape-engine.js')
+      return { items: await listJobs(ws) }
+    },
+  },
+  'scrape.job.get': {
+    description: 'R639: Get one scrape job. Params: id.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { getJob } = await import('./r639-scrape-engine.js')
+      return await getJob(ws, p.id) ?? {}
+    },
+  },
+  'scrape.job.delete': {
+    description: 'R639: Delete a scrape job. Params: id.',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { deleteJob } = await import('./r639-scrape-engine.js')
+      return deleteJob(ws, p.id)
+    },
+  },
+  'scrape.run': {
+    description: 'R639: Run a scrape job now. Params: id, trigger? (manual|cron).',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { id?: string; trigger?: 'manual' | 'cron' }
+      if (!p.id) throw new Error('id required')
+      const { runJob } = await import('./r639-scrape-engine.js')
+      return runJob(ws, p.id, p.trigger ?? 'manual')
+    },
+  },
+  'scrape.run.list': {
+    description: 'R639: List scrape runs. Params: jobId?, limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { jobId?: string; limit?: number }
+      const { listRuns } = await import('./r639-scrape-engine.js')
+      return { items: await listRuns(ws, p.jobId, p.limit) }
+    },
+  },
+  'scrape.run.pages': {
+    description: 'R639: List pages within a run. Params: runId, limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { runId?: string; limit?: number }
+      if (!p.runId) throw new Error('runId required')
+      const { listPages } = await import('./r639-scrape-engine.js')
+      return { items: await listPages(ws, p.runId, p.limit) }
+    },
+  },
+  'scrape.page.get': {
+    description: 'R639: Get one scraped page with full extracted JSON. Params: pageId.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { pageId?: string }
+      if (!p.pageId) throw new Error('pageId required')
+      const { getPage } = await import('./r639-scrape-engine.js')
+      return await getPage(ws, p.pageId) ?? {}
+    },
+  },
+  'scrape.template.save': {
+    description: 'R639: Save/update a reusable scrape template. Params: name, domainGlob?, template ({type,selectors,follow})',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r639-scrape-engine.js').saveTemplate>[1]
+      const { saveTemplate } = await import('./r639-scrape-engine.js')
+      return saveTemplate(ws, p)
+    },
+  },
+  'scrape.template.list': {
+    description: 'R639: List saved scrape templates.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { listTemplates } = await import('./r639-scrape-engine.js')
+      return { items: await listTemplates(ws) }
+    },
+  },
+  'scrape.sitemap': {
+    description: 'R639: Fetch URLs from a sitemap.xml (or sitemap index). Params: url, max? (≤500).',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { url?: string; max?: number }
+      if (!p.url) throw new Error('url required')
+      const { fetchSitemapForJob } = await import('./r639-scrape-engine.js')
+      const input: { url: string; max?: number } = { url: p.url }
+      if (typeof p.max === 'number') input.max = p.max
+      return fetchSitemapForJob(input)
+    },
+  },
+  'scrape.robots': {
+    description: 'R639: Test if a URL would be allowed by robots.txt. Params: url.',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { url?: string }
+      if (!p.url) throw new Error('url required')
+      const { robotsCheck } = await import('./r639-scrape-engine.js')
+      return robotsCheck({ url: p.url })
+    },
+  },
+  'scrape.tick': {
+    description: 'R639: Cron tick — pick all due scrape jobs across workspaces and run them.',
+    risk: 'medium',
+    handler: async () => {
+      const { tickScrape } = await import('./r639-scrape-engine.js')
+      return tickScrape()
+    },
+  },
+  'scrape.extract': {
+    description: 'R639: One-shot extract from a URL without saving — useful for testing templates. Params: url, template, useHeadless?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { url?: string; template?: import('./r639-scrape-engine.js').ScrapeTemplate; useHeadless?: boolean }
+      if (!p.url) throw new Error('url required')
+      const r = await fetch(p.url, { headers: { 'User-Agent': 'NovanScraper/1.0' }, signal: AbortSignal.timeout(20_000) })
+      const html = await r.text()
+      const { extract } = await import('./r639-scrape-engine.js')
+      return { status: r.status, ...extract(html, p.url, p.template ?? {}) }
+    },
+  },
   // ─── R611 SMTP email fallback ───────────────────────────────────────
   'email.smtp.health': {
     description: 'R611: Probe SMTP — connects, EHLO, QUIT (no send). Returns ok + reason if SMTP_HOST/USER/PASS configured.',
@@ -11392,6 +11528,11 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'rate_limit.consume', 'killswitch.set', 'killswitch.status',
         // R637 — realtime WS bridge surfaces
         'voice.realtime.stats', 'presence.stats', 'presence.roster',
+        // R639 — webscraping end-to-end
+        'scrape.job.create', 'scrape.job.list', 'scrape.job.get', 'scrape.job.delete',
+        'scrape.run', 'scrape.run.list', 'scrape.run.pages', 'scrape.page.get',
+        'scrape.template.save', 'scrape.template.list',
+        'scrape.sitemap', 'scrape.robots', 'scrape.tick', 'scrape.extract',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
