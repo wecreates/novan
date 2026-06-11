@@ -2651,6 +2651,375 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return poolHealth()
     },
   },
+  // ─── R618 Deep research (Perplexity-class) ─────────────────────────
+  'research.deep': {
+    description: 'R618: Multi-step web research — decompose question, DDG search + fetch top sources, synthesize with [N] citations. Optionally persist into KG. Params: question, maxQueries?, recency?, ingestToKg?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r618-research-deep.js').researchDeep>[1]
+      if (!p?.question) throw new Error('question required')
+      const { researchDeep } = await import('./r618-research-deep.js')
+      return researchDeep(ws, p)
+    },
+  },
+  // ─── R619 Image editing (FLUX-Kontext / Qwen-Edit / Pollinations) ─
+  'image.free.edit': {
+    description: 'R619: Edit an existing image via free + open-source providers (FLUX-Kontext-dev → Qwen-Edit → Pollinations). Params: prompt, imageBase64? OR imageUrl?, model?, strength?, width?, height?, seed?.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r619-image-edit.js').editImage>[0]
+      if (!p?.prompt) throw new Error('prompt required')
+      if (!p.imageBase64 && !p.imageUrl) throw new Error('imageBase64 or imageUrl required')
+      const { editImage } = await import('./r619-image-edit.js')
+      return editImage(p, ws)
+    },
+  },
+  'image.free.edit_health': {
+    description: 'R619: Probe HF FLUX-Kontext / Qwen-Edit / Pollinations img2img.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { editImageHealth } = await import('./r619-image-edit.js')
+      return editImageHealth(ws)
+    },
+  },
+  // ─── R620 Desktop action queue (Manus/CU parity via R357 local agent) ─
+  'desktop.enqueue': {
+    description: 'R620: Queue a desktop action for the operator\'s local agent to execute. Params: kind, brief, params?, maxAttempts?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r620-desktop-act.js').enqueue>[1]
+      const { enqueue } = await import('./r620-desktop-act.js')
+      return enqueue(ws, p)
+    },
+  },
+  'desktop.list': {
+    description: 'R620: List desktop queue jobs. Params: status?, limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { status?: 'pending' | 'claimed' | 'done' | 'failed' | 'cancelled'; limit?: number }
+      const { listJobs } = await import('./r620-desktop-act.js')
+      return { items: await listJobs(ws, p) }
+    },
+  },
+  'desktop.claim': {
+    description: 'R620: Atomically claim the next pending desktop job. Called by R357 local agent. Params: claimedBy.',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { claimedBy?: string }
+      if (!p.claimedBy) throw new Error('claimedBy required')
+      const { claimNext } = await import('./r620-desktop-act.js')
+      return { job: await claimNext(ws, p.claimedBy) }
+    },
+  },
+  'desktop.complete': {
+    description: 'R620: Local agent reports result for a desktop job. Params: id, ok, result?, error?',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r620-desktop-act.js').complete>[1]
+      if (!p?.id) throw new Error('id required')
+      const { complete } = await import('./r620-desktop-act.js')
+      return complete(ws, p)
+    },
+  },
+  'desktop.cancel': {
+    description: 'R620: Cancel a pending or claimed desktop job. Params: id.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { cancel } = await import('./r620-desktop-act.js')
+      return cancel(ws, p.id)
+    },
+  },
+  'desktop.stats': {
+    description: 'R620: Desktop queue stats per status.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { stats } = await import('./r620-desktop-act.js')
+      return stats(ws)
+    },
+  },
+  // ─── R621 Document RAG (NotebookLM-class) ──────────────────────────
+  'rag.ingest': {
+    description: 'R621: Ingest a text/markdown document — chunk + embed + store. Params: name, text, mime?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r621-document-rag.js').ingest>[1]
+      if (!p?.name || !p?.text) throw new Error('name + text required')
+      const { ingest } = await import('./r621-document-rag.js')
+      return ingest(ws, p)
+    },
+  },
+  'rag.query': {
+    description: 'R621: Cosine-search ingested chunks + synthesize answer with [N] citations. Params: question, topK?, docId?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r621-document-rag.js').query>[1]
+      if (!p?.question) throw new Error('question required')
+      const { query } = await import('./r621-document-rag.js')
+      return query(ws, p)
+    },
+  },
+  'rag.list': {
+    description: 'R621: List ingested documents. Params: limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { listDocuments } = await import('./r621-document-rag.js')
+      return { items: await listDocuments(ws, p.limit) }
+    },
+  },
+  'rag.delete': {
+    description: 'R621: Delete a document + all its chunks. Params: docId.',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { docId?: string }
+      if (!p.docId) throw new Error('docId required')
+      const { deleteDocument } = await import('./r621-document-rag.js')
+      return deleteDocument(ws, p.docId)
+    },
+  },
+  'rag.stats': {
+    description: 'R621: Document RAG stats — total docs, chunks, embedded count.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { stats } = await import('./r621-document-rag.js')
+      return stats(ws)
+    },
+  },
+  // ─── R624 Image transforms ─────────────────────────────────────────
+  'image.bg_remove': {
+    description: 'R624: Remove background via HF briaai/RMBG-1.4. Params: imageBase64? OR imageUrl?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r624-image-transforms.js').bgRemove>[0]
+      const { bgRemove } = await import('./r624-image-transforms.js')
+      return bgRemove(p)
+    },
+  },
+  'image.upscale': {
+    description: 'R624: Upscale 2x via HF swin2SR. Params: imageBase64? OR imageUrl?, scale?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r624-image-transforms.js').upscale>[0]
+      const { upscale } = await import('./r624-image-transforms.js')
+      return upscale(p)
+    },
+  },
+  'image.inpaint': {
+    description: 'R624: Inpaint masked region via SD-inpainting. Params: imageBase64? OR imageUrl?, maskBase64, prompt, negativePrompt?',
+    risk: 'medium',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r624-image-transforms.js').inpaint>[0]
+      if (!p?.prompt || !p?.maskBase64) throw new Error('prompt + maskBase64 required')
+      const { inpaint } = await import('./r624-image-transforms.js')
+      return inpaint(p)
+    },
+  },
+  'image.variants': {
+    description: 'R624: Generate N variants of a prompt (different seeds) so caller picks best. Params: prompt, count? (2-8), width?, height?, model?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r624-image-transforms.js').variants>[0]
+      if (!p?.prompt) throw new Error('prompt required')
+      const { variants } = await import('./r624-image-transforms.js')
+      return variants(p, ws)
+    },
+  },
+  // ─── R625 Research extensions ──────────────────────────────────────
+  'research.youtube_transcript': {
+    description: 'R625: Fetch transcript from a YouTube video (no API key). Params: url, lang?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r625-research-extensions.js').youtubeTranscript>[0]
+      if (!p?.url) throw new Error('url required')
+      const { youtubeTranscript } = await import('./r625-research-extensions.js')
+      return youtubeTranscript(p)
+    },
+  },
+  'research.arxiv': {
+    description: 'R625: Search arxiv.org for academic papers (no API key). Params: query, maxResults?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r625-research-extensions.js').arxivSearch>[0]
+      if (!p?.query) throw new Error('query required')
+      const { arxivSearch } = await import('./r625-research-extensions.js')
+      return arxivSearch(p)
+    },
+  },
+  'research.reddit': {
+    description: 'R625: Search reddit via DDG site-operators (no API key). Params: query, subreddit?, max?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r625-research-extensions.js').redditSearch>[0]
+      if (!p?.query) throw new Error('query required')
+      const { redditSearch } = await import('./r625-research-extensions.js')
+      return redditSearch(p)
+    },
+  },
+  'research.image_search': {
+    description: 'R625: Find images via Bing HTML SERP (no API key). Params: query, max?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r625-research-extensions.js').imageSearch>[0]
+      if (!p?.query) throw new Error('query required')
+      const { imageSearch } = await import('./r625-research-extensions.js')
+      return imageSearch(p)
+    },
+  },
+  // ─── R627 Listing score + pricing ──────────────────────────────────
+  'listing.score': {
+    description: 'R627: Heuristic SEO score (0-100) for a proposed listing. Params: title, description?, tags?, price?, platform?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r627-listing-score.js').score>[0]
+      if (!p?.title) throw new Error('title required')
+      const { score } = await import('./r627-listing-score.js')
+      return score(p)
+    },
+  },
+  'listing.improve': {
+    description: 'R627: LLM-rewrite a listing toward higher score, returns before/after + changes. Params: title, description?, tags?, price?, platform?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r627-listing-score.js').improve>[1]
+      if (!p?.title) throw new Error('title required')
+      const { improve } = await import('./r627-listing-score.js')
+      return improve(ws, p)
+    },
+  },
+  'pricing.optimize': {
+    description: 'R627: Suggest raise/lower with reasoning + charm-priced target. Params: currentPrice, cogs, platform, marketLow?, marketHigh?, marketMedian?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r627-listing-score.js').optimizePrice>[0]
+      const { optimizePrice } = await import('./r627-listing-score.js')
+      return optimizePrice(p)
+    },
+  },
+  // ─── R628 Discord / Telegram / Slack channels ───────────────────────
+  'channel.discord.send': {
+    description: 'R628: Post a message to DISCORD_WEBHOOK_URL. Params: text, title?, silent?',
+    risk: 'medium',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r628-channels.js').sendDiscord>[0]
+      if (!p?.text) throw new Error('text required')
+      const { sendDiscord } = await import('./r628-channels.js')
+      return sendDiscord(p)
+    },
+  },
+  'channel.telegram.send': {
+    description: 'R628: Send a message via TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID. Params: text, title?, threadId?, silent?',
+    risk: 'medium',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r628-channels.js').sendTelegram>[0]
+      if (!p?.text) throw new Error('text required')
+      const { sendTelegram } = await import('./r628-channels.js')
+      return sendTelegram(p)
+    },
+  },
+  'channel.slack.send': {
+    description: 'R628: Post to SLACK_WEBHOOK_URL. Params: text, title?',
+    risk: 'medium',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r628-channels.js').sendSlack>[0]
+      if (!p?.text) throw new Error('text required')
+      const { sendSlack } = await import('./r628-channels.js')
+      return sendSlack(p)
+    },
+  },
+  'channel.fanout': {
+    description: 'R628: Send same message to all configured channels (Discord + Telegram + Slack).',
+    risk: 'high',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r628-channels.js').fanout>[0]
+      if (!p?.text) throw new Error('text required')
+      const { fanout } = await import('./r628-channels.js')
+      return fanout(p)
+    },
+  },
+  'channel.health': {
+    description: 'R628: Show which channels are configured (Discord/Telegram/Slack).',
+    risk: 'low',
+    handler: async () => {
+      const { channelsHealth } = await import('./r628-channels.js')
+      return channelsHealth()
+    },
+  },
+  // ─── R629 Governance: approvals + spend caps + audit ────────────────
+  'approvals.request': {
+    description: 'R629: File an approval request for a risky op. Returns id + expiresAt. Params: op, brief, riskLevel?, payload?, ttlMin?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r629-governance.js').requestApproval>[1]
+      if (!p?.op || !p?.brief) throw new Error('op + brief required')
+      const { requestApproval } = await import('./r629-governance.js')
+      return requestApproval(ws, p)
+    },
+  },
+  'approvals.list': {
+    description: 'R629: List pending/recent approvals. Params: status?, limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { status?: 'pending' | 'approved' | 'rejected' | 'expired'; limit?: number }
+      const { listApprovals } = await import('./r629-governance.js')
+      return { items: await listApprovals(ws, p) }
+    },
+  },
+  'approvals.approve': {
+    description: 'R629: Approve a pending request. Params: id, decidedBy.',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { id?: string; decidedBy?: string }
+      if (!p.id || !p.decidedBy) throw new Error('id + decidedBy required')
+      const { decide } = await import('./r629-governance.js')
+      return decide(ws, p.id, 'approved', p.decidedBy)
+    },
+  },
+  'approvals.reject': {
+    description: 'R629: Reject a pending request. Params: id, decidedBy.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { id?: string; decidedBy?: string }
+      if (!p.id || !p.decidedBy) throw new Error('id + decidedBy required')
+      const { decide } = await import('./r629-governance.js')
+      return decide(ws, p.id, 'rejected', p.decidedBy)
+    },
+  },
+  'spend.cap.get': {
+    description: 'R629: Get workspace spend cap (daily + monthly + hardStop).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { getCap } = await import('./r629-governance.js')
+      return getCap(ws)
+    },
+  },
+  'spend.cap.set': {
+    description: 'R629: Update workspace spend cap. Params: dailyUsd?, monthlyUsd?, hardStop?',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { dailyUsd?: number; monthlyUsd?: number; hardStop?: boolean }
+      const { setCap } = await import('./r629-governance.js')
+      return setCap(ws, p)
+    },
+  },
+  'spend.check': {
+    description: 'R629: Check current spend vs cap; ok=false when hardStop true and a cap is hit. Callers gate expensive ops on this.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { checkCap } = await import('./r629-governance.js')
+      return checkCap(ws)
+    },
+  },
+  'audit.list': {
+    description: 'R629: Recent events (audit log view). Params: type?, limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { type?: string; limit?: number }
+      const { recentAudit } = await import('./r629-governance.js')
+      return { items: await recentAudit(ws, p) }
+    },
+  },
   // ─── R611 SMTP email fallback ───────────────────────────────────────
   'email.smtp.health': {
     description: 'R611: Probe SMTP — connects, EHLO, QUIT (no send). Returns ok + reason if SMTP_HOST/USER/PASS configured.',
@@ -10626,6 +10995,18 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'brain.list', 'connectors.audit', 'connectors.wire_check',
         'pipelines.list', 'pipelines.run', 'pipelines.overdue',
         'digest.tick', 'autobrowser.pool',
+        // R618-R621 — competitive-spectrum gap closures
+        'research.deep',
+        'image.free.edit', 'image.free.edit_health',
+        'desktop.enqueue', 'desktop.list', 'desktop.claim', 'desktop.complete', 'desktop.cancel', 'desktop.stats',
+        'rag.ingest', 'rag.query', 'rag.list', 'rag.delete', 'rag.stats',
+        // R624-R629 — wider gap closure batch
+        'image.bg_remove', 'image.upscale', 'image.inpaint', 'image.variants',
+        'research.youtube_transcript', 'research.arxiv', 'research.reddit', 'research.image_search',
+        'listing.score', 'listing.improve', 'pricing.optimize',
+        'channel.discord.send', 'channel.telegram.send', 'channel.slack.send', 'channel.fanout', 'channel.health',
+        'approvals.request', 'approvals.list', 'approvals.approve', 'approvals.reject',
+        'spend.cap.get', 'spend.cap.set', 'spend.check', 'audit.list',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',

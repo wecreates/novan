@@ -339,6 +339,12 @@ const isPublic = (url: string): boolean => {
   if (url === '/ops/neural'      || url.startsWith('/ops/neural'))      return true  // R603 — neural-net view has its own query-param token check
   if (url === '/ops/gallery'     || url.startsWith('/ops/gallery'))     return true  // R616 — asset gallery has its own query-param token check
   if (url === '/ops/digest'      || url.startsWith('/ops/digest'))      return true  // R617 — daily digest view has its own query-param token check
+  if (url === '/ops/memory'      || url.startsWith('/ops/memory'))      return true  // R623 — memory editor view has its own query-param token check
+  if (url === '/ops/kg'          || url.startsWith('/ops/kg'))          return true  // R623 — KG browser view has its own query-param token check
+  if (url === '/ops/spend'       || url.startsWith('/ops/spend'))       return true  // R623 — AI cost dashboard has its own query-param token check
+  if (url === '/ops/inbox'       || url.startsWith('/ops/inbox'))       return true  // R623 — inbox dashboard has its own query-param token check
+  if (url === '/ops/desktop'     || url.startsWith('/ops/desktop'))     return true  // R623 — desktop queue dashboard has its own query-param token check
+  if (url === '/ops/rag'         || url.startsWith('/ops/rag'))         return true  // R623 — RAG documents dashboard has its own query-param token check
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
   if (url.startsWith('/ops/gdpr/'))                                     return true  // R515 — token in query
   if (url.startsWith('/ops/dmca/'))                                     return true  // R516 — token in query
@@ -654,6 +660,61 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/digest', 
   } catch (e) {
     reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`)
   }
+})
+
+// R623 — Operator-facing dashboards (memory, KG, spend, inbox, desktop, RAG). Same ops-token gate.
+function r623Token(req: { query: { token?: string } }): { ok: true; ws: (q: { workspace?: string }) => string } | { ok: false } {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  if (!req.query.token || (ops && req.query.token !== ops)) return { ok: false }
+  return { ok: true, ws: q => q.workspace ?? 'default' }
+}
+
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/memory', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  try {
+    const { renderMemoryHtml } = await import('./services/r623-ops-views.js')
+    reply.type('text/html').send(await renderMemoryHtml(g.ws(req.query)))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/kg', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  try {
+    const { renderKgHtml } = await import('./services/r623-ops-views.js')
+    reply.type('text/html').send(await renderKgHtml(g.ws(req.query)))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/spend', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  try {
+    const { renderSpendHtml } = await import('./services/r623-ops-views.js')
+    reply.type('text/html').send(await renderSpendHtml(g.ws(req.query)))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/inbox', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  try {
+    const { renderInboxHtml } = await import('./services/r623-ops-views.js')
+    reply.type('text/html').send(await renderInboxHtml(g.ws(req.query)))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/desktop', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  try {
+    const { renderDesktopHtml } = await import('./services/r623-ops-views.js')
+    reply.type('text/html').send(await renderDesktopHtml(g.ws(req.query)))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/rag', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  try {
+    const { renderRagHtml } = await import('./services/r623-ops-views.js')
+    reply.type('text/html').send(await renderRagHtml(g.ws(req.query)))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
 })
 
 // R603 — Neural network live view. Auto-refreshes every 5s. Same ops-token gate.
