@@ -2471,6 +2471,42 @@ export const OPERATIONS: Record<string, OpSpec> = {
     },
   },
   // ─── R612 Task inbox ───────────────────────────────────────────────
+  'inbox.bulk_add': {
+    description: 'R615: Drop N briefs in one call. Params: kind, briefs[], commonParams?, commonPriority?, businessId?, createdBy?, quotaOverride?. Returns queued count, rejected reason if cap hit, pendingAfter, cap.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r615-inbox-bulk.js').bulkAdd>[1]
+      const { bulkAdd } = await import('./r615-inbox-bulk.js')
+      return bulkAdd(ws, p)
+    },
+  },
+  'inbox.bulk_image': {
+    description: 'R615: Generate N image briefs from one niche prompt with curated style/color/composition variants. Params: niche, count (1..100), variantPrompts?, width?, height?, model?, priority?, seedBase?, businessId?, createdBy?, quotaOverride?.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r615-inbox-bulk.js').bulkImage>[1]
+      const { bulkImage } = await import('./r615-inbox-bulk.js')
+      return bulkImage(ws, p)
+    },
+  },
+  'inbox.recent_done': {
+    description: 'R615: Last N completed briefs with result preview (300 chars). Params: kind?, limit?.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { kind?: string; limit?: number }
+      const { recentDone } = await import('./r615-inbox-bulk.js')
+      return { items: await recentDone(ws, p) }
+    },
+  },
+  'inbox.clear_old': {
+    description: 'R615: Delete done/failed/cancelled briefs older than olderThanDays (default 14).',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { olderThanDays?: number }
+      const { clearOld } = await import('./r615-inbox-bulk.js')
+      return clearOld(ws, p.olderThanDays ?? 14)
+    },
+  },
   'inbox.add': {
     description: 'R612: Drop a brief into Novan\'s autonomous task queue. Params: kind (image|music|video|chat_summary|kg_ingest|custom), brief, params?, priority?, businessId?, maxAttempts?, dueAt?, createdBy?',
     risk: 'medium',
@@ -10484,6 +10520,7 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'image.free.generate', 'image.free.health',
         'email.smtp.health', 'email.smtp.test_send',
         'inbox.add', 'inbox.list', 'inbox.stats', 'inbox.cancel', 'inbox.tick',
+        'inbox.bulk_add', 'inbox.bulk_image', 'inbox.recent_done', 'inbox.clear_old',
         'digest.compose', 'digest.send',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
