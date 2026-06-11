@@ -338,6 +338,7 @@ const isPublic = (url: string): boolean => {
   if (url === '/ops/dashboard'   || url.startsWith('/ops/dashboard'))   return true  // R370 — dashboard + R418 actions have their own query-param token check
   if (url === '/ops/neural'      || url.startsWith('/ops/neural'))      return true  // R603 — neural-net view has its own query-param token check
   if (url === '/ops/gallery'     || url.startsWith('/ops/gallery'))     return true  // R616 — asset gallery has its own query-param token check
+  if (url === '/ops/digest'      || url.startsWith('/ops/digest'))      return true  // R617 — daily digest view has its own query-param token check
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
   if (url.startsWith('/ops/gdpr/'))                                     return true  // R515 — token in query
   if (url.startsWith('/ops/dmca/'))                                     return true  // R516 — token in query
@@ -630,6 +631,29 @@ app.get<{ Querystring: { token?: string; workspace?: string; kind?: string; limi
   if (req.query.limit) opts.limit = Number(req.query.limit)
   const html = await renderGallery(req.query.workspace ?? 'default', opts)
   reply.type('text/html').send(html)
+})
+
+// R617 — Daily digest live view. Same ops-token gate. Renders today's digest as HTML.
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/digest', async (req, reply) => {
+  const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
+  if (!req.query.token || (ops && req.query.token !== ops)) {
+    reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+    return
+  }
+  const ws = req.query.workspace ?? 'default'
+  try {
+    const { compose } = await import('./services/r613-daily-digest.js')
+    const d = await compose(ws)
+    const esc = (s: string) => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!))
+    const md = esc(d.markdown ?? '')
+    const html = `<!doctype html><meta charset="utf-8"><title>Novan digest · ${esc(d.forDateUtc)}</title>
+<style>body{font:14px/1.5 -apple-system,BlinkMacSystemFont,sans-serif;max-width:760px;margin:24px auto;padding:0 16px;color:#222}pre{white-space:pre-wrap;background:#f6f7f9;border:1px solid #e5e7eb;border-radius:6px;padding:12px;font:13px/1.5 ui-monospace,monospace}.meta{color:#6b7280;font-size:12px;margin-bottom:8px}a{color:#2563eb}</style>
+<div class="meta">workspace=${esc(ws)} · for ${esc(d.forDateUtc)} · ${d.suggestions.length} suggestions · refresh manually for new data</div>
+<pre>${md}</pre>`
+    reply.type('text/html').send(html)
+  } catch (e) {
+    reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`)
+  }
 })
 
 // R603 — Neural network live view. Auto-refreshes every 5s. Same ops-token gate.

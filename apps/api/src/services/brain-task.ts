@@ -2579,6 +2579,78 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return tickWorkspace(ws, p.maxItems ?? 5)
     },
   },
+  // ─── R617 Op-registry holes filled (formerly "unknown op") ─────────
+  'brain.list': {
+    description: 'R617: List every registered brain op with description + risk. Meta introspection.',
+    risk: 'low',
+    handler: async () => {
+      const entries = Object.entries(OPERATIONS)
+        .map(([op, def]) => ({ op, description: def.description ?? '', risk: def.risk ?? 'low' }))
+        .sort((a, b) => a.op.localeCompare(b.op))
+      return { count: entries.length, ops: entries }
+    },
+  },
+  'connectors.audit': {
+    description: 'R617: Audit every connector (api / agent_managed / deprecated) with status + setup hints. Backed by R608.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { auditConnectors } = await import('./r608-connector-audit.js')
+      const connectors = await auditConnectors(ws)
+      return { count: connectors.length, connectors }
+    },
+  },
+  'connectors.wire_check': {
+    description: 'R617: Live wire-check across configured connectors — does each one actually authenticate.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { wireCheck } = await import('./r608-connector-audit.js')
+      return wireCheck(ws)
+    },
+  },
+  'pipelines.list': {
+    description: 'R617: List all defined pipelines in workspace (R598).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { listPipelines } = await import('./r598-pipelines.js')
+      const pipelines = await listPipelines(ws)
+      return { count: pipelines.length, pipelines }
+    },
+  },
+  'pipelines.run': {
+    description: 'R617: Run a pipeline by name now (R598). Params: name, trigger? (default "manual").',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { name?: string; trigger?: string }
+      if (!p.name) throw new Error('name required')
+      const { runPipeline } = await import('./r598-pipelines.js')
+      return runPipeline(ws, p.name, { trigger: p.trigger ?? 'manual' })
+    },
+  },
+  'pipelines.overdue': {
+    description: 'R617: List enabled+scheduled pipelines past their expected fire (R598 catch-up surface).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { pipelinesOverdue } = await import('./r598-pipelines.js')
+      const overdue = await pipelinesOverdue(ws)
+      return { count: overdue.length, overdue }
+    },
+  },
+  'digest.tick': {
+    description: 'R617: Once-per-UTC-day digest tick across all workspaces (R613 tickAll). Cron also runs this every 10min.',
+    risk: 'medium',
+    handler: async () => {
+      const { tickAll } = await import('./r613-daily-digest.js')
+      return tickAll()
+    },
+  },
+  'autobrowser.pool': {
+    description: 'R617: Autobrowser pool health snapshot — pool size, idle/busy, supported scripts (R602).',
+    risk: 'low',
+    handler: async () => {
+      const { poolHealth } = await import('./r602-autobrowser-pool.js')
+      return poolHealth()
+    },
+  },
   // ─── R611 SMTP email fallback ───────────────────────────────────────
   'email.smtp.health': {
     description: 'R611: Probe SMTP — connects, EHLO, QUIT (no send). Returns ok + reason if SMTP_HOST/USER/PASS configured.',
@@ -10550,6 +10622,10 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'inbox.bulk_add', 'inbox.bulk_image', 'inbox.recent_done', 'inbox.clear_old',
         'assets.list', 'assets.get', 'assets.stats',
         'digest.compose', 'digest.send',
+        // R617 — op-registry holes filled
+        'brain.list', 'connectors.audit', 'connectors.wire_check',
+        'pipelines.list', 'pipelines.run', 'pipelines.overdue',
+        'digest.tick', 'autobrowser.pool',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
