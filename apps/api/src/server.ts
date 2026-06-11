@@ -1068,6 +1068,15 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/agents', 
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
 })
 
+// R658 — agent rollup dashboard (14d totals + by-day + top goals)
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/agents/rollup', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>')
+  try {
+    const { renderAgentRollupHtml } = await import('./services/r658-agent-rollup.js')
+    reply.type('text/html').send(await renderAgentRollupHtml(g.ws(req.query)))
+  } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
 // R603 — Neural network live view. Auto-refreshes every 5s. Same ops-token gate.
 app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/neural', async (req, reply) => {
   const ops = process.env['NOVAN_OPS_TOKEN'] ?? process.env['OPERATOR_TOKEN'] ?? ''
