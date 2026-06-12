@@ -4351,6 +4351,22 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { turns: await getChatSession(ws, p.sessionId) }
     },
   },
+  'tool_cache.stats': {
+    description: 'R665: In-memory tool-call cache stats (hits, misses, size, hitRate). 60s TTL on cacheable reads.',
+    risk: 'low',
+    handler: async () => {
+      const { getCacheStats } = await import('./r665-tool-cache.js')
+      return getCacheStats()
+    },
+  },
+  'tool_cache.clear': {
+    description: 'R665: Drop all in-memory tool-result cache entries (returns count cleared).',
+    risk: 'medium',
+    handler: async () => {
+      const { clearToolCache } = await import('./r665-tool-cache.js')
+      return clearToolCache()
+    },
+  },
   'cache.should_cache': {
     description: 'R647c: Check if a system-prompt prefix should be cache-marked (and record observation). Params: systemPrompt, provider?',
     risk: 'low',
@@ -12485,6 +12501,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'github.repo', 'github.release', 'github.readme',
         // R663 — one-shot conversational chat
         'novan.chat', 'novan.chat.sessions', 'novan.chat.history',
+        // R665 — tool-result cache stats
+        'tool_cache.stats', 'tool_cache.clear',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',

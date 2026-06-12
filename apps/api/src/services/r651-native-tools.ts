@@ -197,10 +197,13 @@ export async function orchestrateToolsNative(workspaceId: string, input: NativeT
         return { id: c.id, name: c.function.name, content: `ERROR: unknown op ${op}` }
       }
       try {
-        const result = await handler(workspaceId, params)
+        // R665 — cache safe-to-cache reads within a short TTL
+        const { withToolCache } = await import('./r665-tool-cache.js')
+        const { value: result, cacheHit } = await withToolCache(op, workspaceId, params, () => handler(workspaceId, params))
         const dur = Date.now() - tStart
         const preview = truncatePreview(result, 4000)
         const entry: typeof toolCalls[number] = { round, tool: op, params, ok: true, durationMs: dur, resultPreview: truncatePreview(result) }
+        if (cacheHit) entry.resultPreview = `[CACHED] ${entry.resultPreview ?? ''}`
         toolCalls.push(entry)
         return { id: c.id, name: c.function.name, content: preview }
       } catch (e) {
