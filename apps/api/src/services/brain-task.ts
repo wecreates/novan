@@ -4524,6 +4524,44 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return transcribe(ws, p)
     },
   },
+  'webhook.create': {
+    description: 'R678: Register an incoming webhook that fires novan.agent when POSTed. {{payload.x.y}} placeholders resolve from the request JSON. Returns URL+secret. Params: slug, goalTemplate, toolsAllowed?',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r678-incoming-webhooks.js').createWebhook>[1]
+      const { createWebhook } = await import('./r678-incoming-webhooks.js')
+      return createWebhook(ws, p)
+    },
+  },
+  'webhook.list': {
+    description: 'R678: List registered incoming webhooks in this workspace.',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { listWebhooks } = await import('./r678-incoming-webhooks.js')
+      return { items: await listWebhooks(ws, p.limit ?? 50) }
+    },
+  },
+  'webhook.delete': {
+    description: 'R678: Delete a webhook by slug.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { slug?: string }
+      if (!p.slug) throw new Error('slug required')
+      const { deleteWebhook } = await import('./r678-incoming-webhooks.js')
+      return deleteWebhook(ws, p.slug)
+    },
+  },
+  'webhook.events': {
+    description: 'R678: List recent fires of a webhook (payload + resulting agent run id + status). Params: slug, limit?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { slug?: string; limit?: number }
+      if (!p.slug) throw new Error('slug required')
+      const { listWebhookEvents } = await import('./r678-incoming-webhooks.js')
+      return { items: await listWebhookEvents(p.slug, p.limit ?? 50) }
+    },
+  },
   'image.free.health': {
     description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
     risk: 'low',
@@ -12537,6 +12575,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'audio.openai.tts',
         // R677 — OpenAI Whisper STT
         'audio.openai.transcribe',
+        // R678 — incoming webhook receivers
+        'webhook.create', 'webhook.list', 'webhook.delete', 'webhook.events',
         // R655 — multi-turn agent sessions
         'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
         // R656 — scheduled agent goals

@@ -368,6 +368,7 @@ const isPublic = (url: string): boolean => {
   if (url === '/ops/agents' || url.startsWith('/ops/agents'))           return true  // R649 — agent runs dashboard (own token gate)
   if (url.startsWith('/agent/stream'))                                  return true  // R661 — SSE agent stream (own token gate)
   if (url.startsWith('/chat/stream'))                                   return true  // R664 — SSE chat stream (own token gate)
+  if (url.startsWith('/webhooks/incoming/'))                            return true  // R678 — public webhook receiver (token in query)
   if (url === '/chat' || url.startsWith('/chat?'))                      return true  // R667 — chat HTML UI (own token gate)
   // R647d /ops/desktop/act covered by the R623 whitelist above (startsWith '/ops/desktop')
   if (url.startsWith('/apps/'))                                         return true  // R642d — generated apps served under /apps/:slug
@@ -1060,6 +1061,22 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/desktop/a
     const { renderDesktopHtml } = await import('./services/r647-computer-use.js')
     reply.type('text/html').send(await renderDesktopHtml(g.ws(req.query)))
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R678 — public incoming-webhook receiver. Token in query string;
+// payload in JSON body. Fires novan.agent in the background and returns
+// the event id immediately so the caller doesn't block.
+app.post<{ Params: { slug: string }; Querystring: { token?: string }; Body: unknown }>('/webhooks/incoming/:slug', async (req, reply) => {
+  const token = req.query.token ?? ''
+  if (!token) return void reply.status(401).send({ error: 'token required' })
+  try {
+    const { fireWebhook } = await import('./services/r678-incoming-webhooks.js')
+    const r = await fireWebhook(req.params.slug, token, req.body ?? {})
+    if (!r.ok) return void reply.status(r.error === 'invalid token' ? 401 : 400).send({ error: r.error })
+    reply.send({ ok: true, eventId: r.runId })
+  } catch (e) {
+    reply.status(500).send({ error: (e as Error).message ?? String(e) })
+  }
 })
 
 // R649 — autonomous agent runs dashboard
