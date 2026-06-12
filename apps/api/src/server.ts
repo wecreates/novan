@@ -1069,6 +1069,13 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/desktop/a
 app.post<{ Params: { slug: string }; Querystring: { token?: string }; Body: unknown }>('/webhooks/incoming/:slug', async (req, reply) => {
   const token = req.query.token ?? ''
   if (!token) return void reply.status(401).send({ error: 'token required' })
+  // R683 — rate limit per slug (external services hit from many IPs)
+  const { take } = await import('./services/r683-rate-limit.js')
+  const rl = take('webhookFire', req.params.slug)
+  if (!rl.allowed) {
+    reply.header('Retry-After', Math.ceil(rl.retryAfterMs / 1000))
+    return void reply.status(429).send({ error: 'rate limited', retryAfterMs: rl.retryAfterMs })
+  }
   try {
     const { fireWebhook } = await import('./services/r678-incoming-webhooks.js')
     const r = await fireWebhook(req.params.slug, token, req.body ?? {})
@@ -1119,6 +1126,13 @@ app.get<{ Querystring: { token?: string; workspace?: string; message?: string; s
   const g = r623Token(req); if (!g.ok) return void reply.status(401).send({ error: 'unauthorized' })
   const message = req.query.message
   if (!message) return void reply.status(400).send({ error: 'message query param required' })
+  // R683 — rate limit per IP
+  const { take } = await import('./services/r683-rate-limit.js')
+  const rl = take('chatStream', req.ip ?? 'unknown')
+  if (!rl.allowed) {
+    reply.header('Retry-After', Math.ceil(rl.retryAfterMs / 1000))
+    return void reply.status(429).send({ error: 'rate limited', retryAfterMs: rl.retryAfterMs })
+  }
   const sessionId = req.query.sessionId
   const tools = req.query.tools !== undefined ? req.query.tools.split(',').map(s => s.trim()).filter(Boolean) : undefined
 
@@ -1169,6 +1183,13 @@ app.get<{ Querystring: { token?: string; workspace?: string; goal?: string; tool
   const g = r623Token(req); if (!g.ok) return void reply.status(401).send({ error: 'unauthorized' })
   const goal = req.query.goal
   if (!goal) return void reply.status(400).send({ error: 'goal query param required' })
+  // R683 — rate limit per IP
+  const { take } = await import('./services/r683-rate-limit.js')
+  const rl = take('agentStream', req.ip ?? 'unknown')
+  if (!rl.allowed) {
+    reply.header('Retry-After', Math.ceil(rl.retryAfterMs / 1000))
+    return void reply.status(429).send({ error: 'rate limited', retryAfterMs: rl.retryAfterMs })
+  }
   const tools = req.query.tools ? req.query.tools.split(',').map(s => s.trim()).filter(Boolean) : undefined
   const maxLoops = req.query.maxLoops ? Math.min(8, Math.max(1, parseInt(req.query.maxLoops, 10) || 8)) : undefined
 

@@ -4591,6 +4591,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return voiceChat(ws, p)
     },
   },
+  'ratelimit.stats': {
+    description: 'R683: Token-bucket rate-limiter stats (allowed/rejected per bucket: chatStream, agentStream, webhookFire).',
+    risk: 'low',
+    handler: async () => {
+      const { getRateStats } = await import('./r683-rate-limit.js')
+      return getRateStats()
+    },
+  },
   'image.free.health': {
     description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
     risk: 'low',
@@ -12612,6 +12620,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'chat.export.pdf',
         // R682 — voice-in → text-out (+optional TTS) round trip
         'voice.chat',
+        // R683 — rate limiter stats
+        'ratelimit.stats',
         // R655 — multi-turn agent sessions
         'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
         // R656 — scheduled agent goals
