@@ -1336,6 +1336,7 @@ const INTERVALS = {
   capabilityCloser:       5 * 60_000,         // R646h — 5min tick; auto-attempt next-target capability closures from R334 parity registry
   scheduledAgents:        60_000,             // R656 — 60s tick; fire novan.agent for any schedule whose next_run_at is past
   spendForecast:          6 * 60 * 60_000,    // R690 — 6h tick; project spend + alert if R660 cap would trip
+  dbBackupOffsite:        24 * 60 * 60_000,   // R692 — 24h tick; pg_dump → S3 (fires at jittered offset, ideally near 03:00 UTC)
 }
 
 /**
@@ -1700,6 +1701,29 @@ async function runSpendForecastTick(): Promise<void> {
     const r = await alertSpikes()
     if (r.alerted > 0) await emit('cron.spend_forecast', r)
   } catch (e) { await emit('cron.error', { task: 'spend_forecast', error: (e as Error).message }) }
+}
+
+// R692 — daily off-site pg_dump → S3, then prune > 14d
+async function runOffsiteBackupTick(): Promise<void> {
+  try {
+    const { runBackup, pruneOldBackups } = await import('./r692-db-backup.js')
+    const r = await runBackup()
+    await emit('cron.db_backup_offsite', r)
+    if (r.ok) {
+      const p = await pruneOldBackups(14)
+      await emit('cron.db_backup_prune', p)
+    } else {
+      // Loud failure — backup silently failing is the worst kind of bug
+      try {
+        const { notifyAgentCompletion } = await import('./r686-agent-notify.js')
+        await notifyAgentCompletion({
+          workspaceId: 'default', runId: `r692_${Date.now()}`,
+          goal: '[R692 backup FAILED]', answer: r.error ?? 'unknown error',
+          status: 'error', costUsd: 0, tokens: 0,
+        })
+      } catch { /* tolerated */ }
+    }
+  } catch (e) { await emit('cron.error', { task: 'db_backup_offsite', error: (e as Error).message }) }
 }
 
 // R606 — Saturation alerts. Polls neural.counters per workspace; webhooks +
@@ -2617,6 +2641,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runCapabilityCloserTick,        INTERVALS.capabilityCloser))     // R646h
   handles.push(scheduleJittered(runScheduledAgentsTick,         INTERVALS.scheduledAgents))      // R656
   handles.push(scheduleJittered(runSpendForecastTick,           INTERVALS.spendForecast))        // R690
+  handles.push(scheduleJittered(runOffsiteBackupTick,           INTERVALS.dbBackupOffsite))      // R692
   handles.push(scheduleJittered(runTrustAutoDerive,             INTERVALS.trustAutoDerive))
   handles.push(scheduleJittered(runFabricSweep,                 INTERVALS.fabricSweep))
   handles.push(scheduleJittered(runDataRetention,               INTERVALS.dataRetention))

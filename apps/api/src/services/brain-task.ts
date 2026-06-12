@@ -4739,6 +4739,31 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return alertSpikes()
     },
   },
+  'backup.s3.run': {
+    description: 'R692: Run pg_dump → gzip → S3 immediately. Also runs on 24h cron. Returns s3Key + bytes + duration.',
+    risk: 'high',
+    handler: async () => {
+      const { runBackup } = await import('./r692-db-backup.js')
+      return runBackup()
+    },
+  },
+  'backup.s3.list': {
+    description: 'R692: List recent S3 backups with size + lastModified.',
+    risk: 'low',
+    handler: async () => {
+      const { listBackups } = await import('./r692-db-backup.js')
+      return { items: await listBackups() }
+    },
+  },
+  'backup.s3.prune': {
+    description: 'R692: Delete S3 backups older than retentionDays (default 14), keeping 1st-of-month snapshots for 12 months. Params: retentionDays?',
+    risk: 'high',
+    handler: async (_ws, params) => {
+      const p = params as { retentionDays?: number }
+      const { pruneOldBackups } = await import('./r692-db-backup.js')
+      return pruneOldBackups(p.retentionDays ?? 14)
+    },
+  },
   'image.free.health': {
     description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
     risk: 'low',
@@ -12773,6 +12798,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'knowledge.list', 'knowledge.delete',
         // R690 — cost forecast + spike alerts
         'forecast.spend', 'forecast.alert_spikes',
+        // R692 — automated DB backups to S3
+        'backup.s3.run', 'backup.s3.list', 'backup.s3.prune',
         // R655 — multi-turn agent sessions
         'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
         // R656 — scheduled agent goals
