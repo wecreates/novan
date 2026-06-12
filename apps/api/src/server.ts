@@ -371,6 +371,7 @@ const isPublic = (url: string): boolean => {
   if (url.startsWith('/webhooks/incoming/'))                            return true  // R678 — public webhook receiver (token in query)
   if (url === '/chat' || url.startsWith('/chat?'))                      return true  // R667 — chat HTML UI (own token gate)
   if (url === '/voice/realtime' || url.startsWith('/voice/realtime'))    return true  // R688 — Realtime voice UI + session mint (own token gate)
+  if (url.startsWith('/auth/'))                                         return true  // R689 — end-user auth (own bearer flow)
   // R647d /ops/desktop/act covered by the R623 whitelist above (startsWith '/ops/desktop')
   if (url.startsWith('/apps/'))                                         return true  // R642d — generated apps served under /apps/:slug
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
@@ -1094,6 +1095,53 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/agents', 
     const { renderAgentsHtml } = await import('./services/r649-agent.js')
     reply.type('text/html').send(await renderAgentsHtml(g.ws(req.query)))
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R689 — End-user auth (signup/login/me/logout). NOT for operator paths.
+app.post<{ Body: { email?: string; password?: string; displayName?: string } }>('/auth/signup', async (req, reply) => {
+  try {
+    const { take } = await import('./services/r683-rate-limit.js')
+    const rl = take('agentStream', req.ip ?? 'unknown')
+    if (!rl.allowed) { reply.header('Retry-After', Math.ceil(rl.retryAfterMs / 1000)); return void reply.status(429).send({ ok: false, error: 'rate limited' }) }
+  } catch { /* tolerated */ }
+  const b = req.body ?? {}
+  if (!b.email || !b.password) return void reply.status(400).send({ ok: false, error: 'email + password required' })
+  const { signup } = await import('./services/r689-user-auth.js')
+  const r = await signup({ email: b.email, password: b.password, ...(b.displayName ? { displayName: b.displayName } : {}) })
+  reply.status(r.ok ? 200 : 400).send(r)
+})
+
+app.post<{ Body: { email?: string; password?: string } }>('/auth/login', async (req, reply) => {
+  try {
+    const { take } = await import('./services/r683-rate-limit.js')
+    const rl = take('agentStream', req.ip ?? 'unknown')
+    if (!rl.allowed) { reply.header('Retry-After', Math.ceil(rl.retryAfterMs / 1000)); return void reply.status(429).send({ ok: false, error: 'rate limited' }) }
+  } catch { /* tolerated */ }
+  const b = req.body ?? {}
+  if (!b.email || !b.password) return void reply.status(400).send({ ok: false, error: 'email + password required' })
+  const { login } = await import('./services/r689-user-auth.js')
+  const r = await login({ email: b.email, password: b.password })
+  reply.status(r.ok ? 200 : 401).send(r)
+})
+
+app.get('/auth/me', async (req, reply) => {
+  const auth = req.headers['authorization']
+  const token = typeof auth === 'string' && auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  if (!token) return void reply.status(401).send({ ok: false, error: 'no bearer token' })
+  const { resolveSession, userInfo } = await import('./services/r689-user-auth.js')
+  const r = await resolveSession(token)
+  if (!r.ok) return void reply.status(401).send(r)
+  const u = r.userId ? await userInfo(r.userId) : null
+  reply.send({ ok: true, user: u, workspaceId: r.workspaceId })
+})
+
+app.post('/auth/logout', async (req, reply) => {
+  const auth = req.headers['authorization']
+  const token = typeof auth === 'string' && auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  if (!token) return void reply.status(401).send({ ok: false, error: 'no bearer token' })
+  const { logout } = await import('./services/r689-user-auth.js')
+  const r = await logout(token)
+  reply.send(r)
 })
 
 // R688 — OpenAI Realtime: ephemeral session mint + operator UI
