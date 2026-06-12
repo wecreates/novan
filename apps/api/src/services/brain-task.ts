@@ -4514,6 +4514,16 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return speak(ws, p)
     },
   },
+  'audio.openai.transcribe': {
+    description: 'R677: Speech-to-text via Whisper / gpt-4o-mini-transcribe. Source from audioUrl, audioB64, or assetId. Default model = mini-transcribe ($0.003/min, half of whisper-1). Params: audioUrl|audioB64|assetId, model?, language? (en|es|…), prompt? (decoding bias), format? (json|text|srt|verbose_json|vtt).',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r677-openai-whisper.js').transcribe>[1]
+      if (!p.audioUrl && !p.audioB64 && !p.assetId) throw new Error('one of audioUrl, audioB64, or assetId required')
+      const { transcribe } = await import('./r677-openai-whisper.js')
+      return transcribe(ws, p)
+    },
+  },
   'image.free.health': {
     description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
     risk: 'low',
@@ -12525,6 +12535,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'image.openai.generate', 'image.openai.edit',
         // R668 — OpenAI TTS
         'audio.openai.tts',
+        // R677 — OpenAI Whisper STT
+        'audio.openai.transcribe',
         // R655 — multi-turn agent sessions
         'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
         // R656 — scheduled agent goals
