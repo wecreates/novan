@@ -170,18 +170,22 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
 
     // 2. ACT
     const toolsForRound = planTools
+    let actAnswer = ''
+    let actDidWork = false
     if (toolsForRound.length === 0) {
       trace.push({ phase: 'act', round: loop, summary: 'no tools requested — skipping act' })
     } else {
       const act = await orchestrateToolsNative(workspaceId, {
         userPrompt:   planSubgoal,
-        systemPrompt: 'Use the provided tools to gather what you need. Be terse.',
+        systemPrompt: 'Use the provided tools to gather what you need. Be terse. Cite real values.',
         toolsAllowed: toolsForRound,
         maxRounds:    2,
       })
       totalTokens    += act.tokens
       totalCost      += act.costUsd
       totalToolCalls += act.toolCalls.length
+      actAnswer = act.answer ?? ''
+      actDidWork = act.toolCalls.length > 0
       // R669 — was 1200, model rarely needs more than 400 chars per tool to ground its answer
       for (const c of act.toolCalls) {
         if (c.ok && c.resultPreview) evidence.push({ round: loop, tool: c.tool, preview: c.resultPreview.slice(0, 400) })
@@ -190,8 +194,21 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
       try { input.onEvent?.({ kind: 'act', round: loop, data: { tool_calls: act.toolCalls.map(c => ({ tool: c.tool, ok: c.ok, ms: c.durationMs })), rounds: act.rounds } }) } catch { /* tolerated */ }
     }
 
-    // 3. REFLECT — R669 tightened. Drop the trace dump (model has same data
-    // in evidence); keep evidence + done/answer/next_subgoal request only.
+    // R673 — skip REFLECT entirely when ACT already produced a substantive
+    // answer grounded in tool evidence. The orchestrator's final assistant
+    // message IS the reflection — running another LLM call would only
+    // re-confirm what we already have. Saves ~300-500 tokens per loop.
+    const actAnswerLooksDone = actDidWork && actAnswer.length >= 12 && !actAnswer.toLowerCase().includes('error')
+    if (actAnswerLooksDone) {
+      done = true
+      answer = actAnswer
+      trace.push({ phase: 'reflect', round: loop, summary: 'fast-finish: ACT answer accepted (REFLECT skipped)' })
+      try { input.onEvent?.({ kind: 'reflect', round: loop, data: { done: true, fastFinish: true } }) } catch { /* tolerated */ }
+      break
+    }
+
+    // 3. REFLECT — only when ACT didn't produce a usable answer (no tools
+    // were run, or the model just confirmed without grounding).
     const evidenceBlock = evidence.length === 0 ? '' :
       'Evidence:\n' + evidence.map(e => `[${e.tool}#${e.round}] ${e.preview}`).join('\n') + '\n'
     const reflect = await withSchemaNative(workspaceId, {
