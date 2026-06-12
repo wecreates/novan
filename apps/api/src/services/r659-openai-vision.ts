@@ -40,7 +40,7 @@ const PROMPTS = {
 async function resolveAssetUrl(workspaceId: string, assetId: string): Promise<string | null> {
   try {
     const rows = await db.execute(sql`
-      SELECT public_url FROM assets WHERE id = ${assetId} AND workspace_id = ${workspaceId} LIMIT 1
+      SELECT public_url FROM generated_assets WHERE id = ${assetId} AND workspace_id = ${workspaceId} LIMIT 1
     `)
     const r = ((rows.rows ?? rows) as Array<Record<string, unknown>>)[0]
     return r?.['public_url'] ? String(r['public_url']) : null

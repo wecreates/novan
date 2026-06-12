@@ -4477,6 +4477,17 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return generateOpenAIImage(ws, p)
     },
   },
+  'image.openai.edit': {
+    description: 'R666: Image-to-image edit via gpt-image-1. Source from imageUrl, imageB64, or assetId; optional maskB64 (PNG transparent where edits go). Persists result to S3. Params: prompt, imageUrl|imageB64|assetId, maskB64?, size?, quality?, n?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r654-openai-image.js').editOpenAIImage>[1]
+      if (!p.prompt) throw new Error('prompt required')
+      if (!p.imageUrl && !p.imageB64 && !p.assetId) throw new Error('one of imageUrl, imageB64, or assetId required')
+      const { editOpenAIImage } = await import('./r654-openai-image.js')
+      return editOpenAIImage(ws, p)
+    },
+  },
   'image.free.health': {
     description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
     risk: 'low',
@@ -12484,8 +12495,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'novan.agent', 'novan.agent.list', 'novan.agent.get',
         // R651 — native OpenAI tool calling
         'chat.tools.run_native',
-        // R654 — OpenAI gpt-image-1
-        'image.openai.generate',
+        // R654/R666 — OpenAI gpt-image-1 generate + edit
+        'image.openai.generate', 'image.openai.edit',
         // R655 — multi-turn agent sessions
         'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
         // R656 — scheduled agent goals
