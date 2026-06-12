@@ -35,6 +35,9 @@ export interface NativeToolsInput {
   toolsAllowed?: string[]
   maxRounds?:    number
   model?:        string
+  /** R672 — cap assistant response length (default 512). Tool-result rounds
+   *  override to a higher value automatically. */
+  maxTokens?:    number
 }
 
 export interface NativeToolsResult {
@@ -151,7 +154,7 @@ export async function orchestrateToolsNative(workspaceId: string, input: NativeT
     rounds = round
     // R669 — when caller passed no tools, omit the tools/tool_choice fields
     // entirely. OpenAI applies hidden overhead just for declaring the array.
-    const body: Record<string, unknown> = { model, messages }
+    const body: Record<string, unknown> = { model, messages, max_tokens: input.maxTokens ?? 512 }
     if (tools.length > 0) {
       body['tools'] = tools
       body['tool_choice'] = 'auto'

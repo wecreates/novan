@@ -65,7 +65,10 @@ async function runAnthropic(_workspaceId: string, input: NativeSchemaInput, t0: 
   const model = input.model ?? 'claude-sonnet-4-6'
   const body: Record<string, unknown> = {
     model,
-    max_tokens: 4096,
+    // R672 — was 4096; structured-output responses are bounded by the schema shape
+    // and 1024 is plenty for typical {subgoal,reasoning,tools_needed} or
+    // {done,answer,next_subgoal} returns.
+    max_tokens: 1024,
     system: input.systemPrompt ?? 'You are a precise JSON generator. Always use the structured_output tool.',
     messages: [{ role: 'user', content: input.prompt }],
     tools: [{
@@ -137,6 +140,8 @@ async function runOpenAI(_workspaceId: string, input: NativeSchemaInput, t0: num
   const model = input.model ?? 'gpt-4o-mini'
   const body: Record<string, unknown> = {
     model,
+    // R672 — same 1024 cap as the Anthropic path
+    max_tokens: 1024,
     messages: [
       ...(input.systemPrompt ? [{ role: 'system', content: input.systemPrompt }] : []),
       { role: 'user', content: input.prompt },
