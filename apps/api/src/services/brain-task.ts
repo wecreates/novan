@@ -4902,6 +4902,79 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return runSmoke()
     },
   },
+  'google.status': {
+    description: 'R705: Is Gmail/Calendar connected for this workspace? Returns email + scopes + connectedAt.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { getConnectionStatus } = await import('./r705-google-oauth.js')
+      return getConnectionStatus(ws)
+    },
+  },
+  'google.auth_url': {
+    description: 'R705: Get the Google consent URL to connect Gmail+Calendar. Visit it once to authorize.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { buildAuthUrl } = await import('./r705-google-oauth.js')
+      return buildAuthUrl(ws)
+    },
+  },
+  'google.disconnect': {
+    description: 'R705: Revoke the stored Gmail/Calendar tokens for this workspace.',
+    risk: 'medium',
+    handler: async (ws) => {
+      const { disconnect } = await import('./r705-google-oauth.js')
+      return disconnect(ws)
+    },
+  },
+  'gmail.search': {
+    description: 'R705: Search Gmail. Params: query (Gmail search syntax, e.g. "is:unread from:boss"), limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { query?: string; limit?: number }
+      if (!p.query) throw new Error('query required')
+      const { gmailSearch } = await import('./r705-gmail-calendar.js')
+      return gmailSearch(ws, p.query, p.limit ?? 10)
+    },
+  },
+  'gmail.read': {
+    description: 'R705: Read a Gmail message body by id. Params: messageId',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { messageId?: string }
+      if (!p.messageId) throw new Error('messageId required')
+      const { gmailRead } = await import('./r705-gmail-calendar.js')
+      return gmailRead(ws, p.messageId)
+    },
+  },
+  'gmail.send': {
+    description: 'R705: Send an email from the connected Gmail. EXPLICIT-PERMISSION action. Params: to, subject, body',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { to?: string; subject?: string; body?: string }
+      if (!p.to || !p.subject || !p.body) throw new Error('to + subject + body required')
+      const { gmailSend } = await import('./r705-gmail-calendar.js')
+      return gmailSend(ws, p.to, p.subject, p.body)
+    },
+  },
+  'calendar.upcoming': {
+    description: 'R705: List upcoming calendar events from the primary calendar. Params: limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { calendarUpcoming } = await import('./r705-gmail-calendar.js')
+      return calendarUpcoming(ws, p.limit ?? 10)
+    },
+  },
+  'calendar.create_event': {
+    description: 'R705: Create a calendar event. Params: summary, startISO, endISO, description?, location?',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r705-gmail-calendar.js').calendarCreateEvent>[1]
+      if (!p.summary || !p.startISO || !p.endISO) throw new Error('summary + startISO + endISO required')
+      const { calendarCreateEvent } = await import('./r705-gmail-calendar.js')
+      return calendarCreateEvent(ws, p)
+    },
+  },
   'image.free.health': {
     description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
     risk: 'low',
@@ -12954,6 +13027,10 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'migrations.list',
         // R703 — smoke tests
         'test.run_smoke',
+        // R705 — Gmail + Calendar
+        'google.status', 'google.auth_url', 'google.disconnect',
+        'gmail.search', 'gmail.read', 'gmail.send',
+        'calendar.upcoming', 'calendar.create_event',
         // R655 — multi-turn agent sessions
         'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
         // R656 — scheduled agent goals

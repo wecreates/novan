@@ -1068,6 +1068,28 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/desktop/a
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
 })
 
+// R705 — Google OAuth: consent redirect + callback. Token gate on the
+// consent kickoff; the callback is public (Google posts back) but verifies
+// the state nonce it minted.
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/auth/google', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  const { buildAuthUrl } = await import('./services/r705-google-oauth.js')
+  const r = await buildAuthUrl(g.ws(req.query))
+  if (!r.ok || !r.url) return void reply.status(400).type('text/html').send(`<h1>Not configured</h1><pre>${r.error}</pre>`)
+  reply.redirect(r.url)
+})
+
+app.get<{ Querystring: { code?: string; state?: string; error?: string } }>('/auth/google/callback', async (req, reply) => {
+  if (req.query.error) return void reply.type('text/html').send(`<h1>Consent declined</h1><pre>${req.query.error}</pre>`)
+  if (!req.query.code || !req.query.state) return void reply.status(400).type('text/html').send('<h1>Missing code/state</h1>')
+  const { handleCallback } = await import('./services/r705-google-oauth.js')
+  const r = await handleCallback(req.query.code, req.query.state)
+  if (!r.ok) return void reply.status(400).type('text/html').send(`<h1>Connection failed</h1><pre>${r.error}</pre>`)
+  reply.type('text/html').send(`<!doctype html><html><body style="font:16px system-ui;text-align:center;padding:3rem">
+    <h1>✅ Connected</h1><p>Gmail + Calendar linked for <b>${r.email}</b>.</p>
+    <p>You can close this tab. Novan can now read/send your mail and manage your calendar.</p></body></html>`)
+})
+
 // R693 — Stripe billing endpoints
 app.post<{ Body: { tier?: string; returnUrl?: string } }>('/billing/checkout', async (req, reply) => {
   const auth = req.headers['authorization']
