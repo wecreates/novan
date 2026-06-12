@@ -368,6 +368,7 @@ const isPublic = (url: string): boolean => {
   if (url === '/ops/agents' || url.startsWith('/ops/agents'))           return true  // R649 — agent runs dashboard (own token gate)
   if (url.startsWith('/agent/stream'))                                  return true  // R661 — SSE agent stream (own token gate)
   if (url.startsWith('/chat/stream'))                                   return true  // R664 — SSE chat stream (own token gate)
+  if (url === '/chat' || url.startsWith('/chat?'))                      return true  // R667 — chat HTML UI (own token gate)
   // R647d /ops/desktop/act covered by the R623 whitelist above (startsWith '/ops/desktop')
   if (url.startsWith('/apps/'))                                         return true  // R642d — generated apps served under /apps/:slug
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
@@ -1077,6 +1078,13 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/agents/ro
     const { renderAgentRollupHtml } = await import('./services/r658-agent-rollup.js')
     reply.type('text/html').send(await renderAgentRollupHtml(g.ws(req.query)))
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R667 — Minimalist HTML chat UI at /chat. Drives /chat/stream via SSE.
+app.get<{ Querystring: { token?: string } }>('/chat', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  const { renderChatHtml } = await import('./services/r667-chat-ui.js')
+  reply.type('text/html').send(renderChatHtml())
 })
 
 // R664 — SSE token stream for novan.chat. Streams the assistant reply
