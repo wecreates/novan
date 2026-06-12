@@ -132,26 +132,44 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
   const evidence: Array<{ round: number; tool: string; preview: string }> = []
 
   for (loop = 1; loop <= maxLoops; loop++) {
-    // 1. PLAN — R669 tightened prompt
-    const plan = await withSchemaNative(workspaceId, {
-      prompt: `Goal: ${input.goal}\nStep: ${currentSubgoal}\nTools: ${allowed.join(',')}${priorBlock}`,
-      schema: PLAN_SCHEMA,
-      systemPrompt: 'Plan one concrete step. JSON.',
-      ...(input.preferProvider ? { preferProvider: input.preferProvider } : {}),
-    })
-    totalTokens += plan.tokens
-    totalCost   += plan.costUsd
-    if (!plan.ok) {
-      trace.push({ phase: 'plan', round: loop, summary: `PLAN failed: ${plan.error}` })
-      break
+    // R671 — fast-path: skip PLAN on simple goals.
+    // Trigger: goal ≤ 200 chars, exactly 1–2 allowed tools, no prior turns
+    // referenced. The orchestrator (ACT) is already a planner-of-sorts via
+    // tool_choice:auto, so the PLAN call is redundant for trivial asks.
+    const fastPath = loop === 1
+      && input.goal.length <= 200
+      && allowed.length >= 1 && allowed.length <= 2
+
+    let planSubgoal: string
+    let planTools: string[]
+    if (fastPath) {
+      planSubgoal = input.goal
+      planTools = allowed
+      trace.push({ phase: 'plan', round: loop, summary: `fast-path · tools=${allowed.join(',')}` })
+      try { input.onEvent?.({ kind: 'plan', round: loop, data: { subgoal: planSubgoal, tools_needed: planTools, fastPath: true } }) } catch { /* tolerated */ }
+    } else {
+      // 1. PLAN — R669 tightened prompt
+      const plan = await withSchemaNative(workspaceId, {
+        prompt: `Goal: ${input.goal}\nStep: ${currentSubgoal}\nTools: ${allowed.join(',')}${priorBlock}`,
+        schema: PLAN_SCHEMA,
+        systemPrompt: 'Plan one concrete step. JSON.',
+        ...(input.preferProvider ? { preferProvider: input.preferProvider } : {}),
+      })
+      totalTokens += plan.tokens
+      totalCost   += plan.costUsd
+      if (!plan.ok) {
+        trace.push({ phase: 'plan', round: loop, summary: `PLAN failed: ${plan.error}` })
+        break
+      }
+      const planData = plan.data as { subgoal?: string; reasoning?: string; tools_needed?: string[] }
+      planSubgoal = planData.subgoal ?? currentSubgoal
+      planTools = (planData.tools_needed ?? []).filter(t => allowed.includes(t))
+      trace.push({ phase: 'plan', round: loop, summary: `subgoal=${planSubgoal} · tools=${planTools.join(',')}` })
+      try { input.onEvent?.({ kind: 'plan', round: loop, data: { subgoal: planSubgoal, tools_needed: planTools, reasoning: planData.reasoning } }) } catch { /* tolerated */ }
     }
-    const planData = plan.data as { subgoal?: string; reasoning?: string; tools_needed?: string[] }
-    const planSubgoal = planData.subgoal ?? currentSubgoal
-    trace.push({ phase: 'plan', round: loop, summary: `subgoal=${planSubgoal} · tools=${(planData.tools_needed ?? []).join(',')}` })
-    try { input.onEvent?.({ kind: 'plan', round: loop, data: { subgoal: planSubgoal, tools_needed: planData.tools_needed ?? [], reasoning: planData.reasoning } }) } catch { /* tolerated */ }
 
     // 2. ACT
-    const toolsForRound = (planData.tools_needed ?? []).filter(t => allowed.includes(t))
+    const toolsForRound = planTools
     if (toolsForRound.length === 0) {
       trace.push({ phase: 'act', round: loop, summary: 'no tools requested — skipping act' })
     } else {
