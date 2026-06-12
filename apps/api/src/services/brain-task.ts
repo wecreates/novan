@@ -4582,6 +4582,15 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return exportChatPdf(ws, p)
     },
   },
+  'voice.chat': {
+    description: 'R682: Voice-in → text-out round trip. Whisper transcribes audio → novan.chat answers → optional TTS reply (returns audio assetId). Params: audioUrl|audioB64|audioAssetId, sessionId?, language?, transcribePrompt?, ttsReply? (default true), ttsVoice?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r682-voice-chat.js').voiceChat>[1]
+      const { voiceChat } = await import('./r682-voice-chat.js')
+      return voiceChat(ws, p)
+    },
+  },
   'image.free.health': {
     description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
     risk: 'low',
@@ -12601,6 +12610,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'document.pdf',
         // R681 — chat session → PDF transcript
         'chat.export.pdf',
+        // R682 — voice-in → text-out (+optional TTS) round trip
+        'voice.chat',
         // R655 — multi-turn agent sessions
         'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
         // R656 — scheduled agent goals
