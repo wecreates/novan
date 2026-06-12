@@ -4572,6 +4572,16 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return markdownToPdf(ws, p)
     },
   },
+  'chat.export.pdf': {
+    description: 'R681: Render a novan.chat session as a PDF transcript. Persists to S3. Params: sessionId, title?, includeMeta? (default true).',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r681-chat-export.js').exportChatPdf>[1]
+      if (!p.sessionId) throw new Error('sessionId required')
+      const { exportChatPdf } = await import('./r681-chat-export.js')
+      return exportChatPdf(ws, p)
+    },
+  },
   'image.free.health': {
     description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
     risk: 'low',
@@ -12589,6 +12599,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'webhook.create', 'webhook.list', 'webhook.delete', 'webhook.events',
         // R679 — markdown → PDF
         'document.pdf',
+        // R681 — chat session → PDF transcript
+        'chat.export.pdf',
         // R655 — multi-turn agent sessions
         'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
         // R656 — scheduled agent goals
