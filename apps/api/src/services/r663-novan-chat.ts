@@ -97,14 +97,47 @@ export async function chat(workspaceId: string, input: ChatInput): Promise<ChatO
     priorTurns.map(t => `U:${String(t['user_message']).slice(0, 180)}\nA:${String(t['assistant_msg'] ?? '').slice(0, 180)}`).join('\n') + '\n---\n'
 
   // R669 — Array.isArray respects explicit [] = no tools.
-  const tools = Array.isArray(input.toolsAllowed) ? input.toolsAllowed : DEFAULT_TOOLS
+  // R674 — smart-tools gating: if caller didn't specify tools AND the
+  // message looks like chitchat (short, no question, no fetch verbs),
+  // skip tools entirely. Saves ~700 tokens per chitchat turn.
+  const TOOLY_HINTS = /\?|search|find|look\s*up|fetch|what\s+is|who\s+is|when\s+(was|did)|how\s+many|latest|news|price|count|list|version|release/i
+  const looksLikeChitchat = input.message.length < 60 && !TOOLY_HINTS.test(input.message)
+  const tools = Array.isArray(input.toolsAllowed)
+    ? input.toolsAllowed
+    : (looksLikeChitchat ? [] : DEFAULT_TOOLS)
+  const sysPrompt = input.systemPrompt ?? (tools.length === 0 ? 'Be terse.' : 'You are Novan. Use tools when they give fresher/better answers. Be terse.')
+
+  // R675 — cache lookup on (sys+message+tools). Only check when there's no
+  // history (history changes turn-by-turn so cache would mask context) and
+  // no tools (tool results are time-sensitive).
+  const cacheEligible = tools.length === 0 && priorTurns.length === 0
+  if (cacheEligible) {
+    const { getCached } = await import('./r675-chat-cache.js')
+    const hit = getCached(workspaceId, sysPrompt, input.message, tools)
+    if (hit) {
+      const turnId = `cht_${crypto.randomBytes(8).toString('hex')}`
+      const latencyMs = Date.now() - t0
+      try {
+        await db.execute(sql`
+          INSERT INTO r663_chat_turns (id, workspace_id, session_id, user_message, assistant_msg, tool_calls, tokens, cost_usd, latency_ms)
+          VALUES (${turnId}, ${workspaceId}, ${sessionId}, ${input.message}, ${hit.answer}, 0, 0, 0, ${latencyMs})
+        `)
+      } catch { /* tolerated */ }
+      return { turnId, sessionId, answer: hit.answer, toolCalls: 0, tokens: 0, costUsd: 0, latencyMs }
+    }
+  }
+
   const { orchestrateToolsNative } = await import('./r651-native-tools.js')
   const r = await orchestrateToolsNative(workspaceId, {
     userPrompt: historyBlock + input.message,
-    systemPrompt: input.systemPrompt ?? (tools.length === 0 ? 'Be terse.' : 'You are Novan. Use tools when they give fresher/better answers. Be terse.'),
+    systemPrompt: sysPrompt,
     toolsAllowed: tools,
     maxRounds:    input.maxRounds ?? 4,
   })
+  if (cacheEligible && r.answer) {
+    const { setCached } = await import('./r675-chat-cache.js')
+    setCached(workspaceId, sysPrompt, input.message, tools, r.answer, r.tokens, r.costUsd)
+  }
 
   const turnId = `cht_${crypto.randomBytes(8).toString('hex')}`
   const latencyMs = Date.now() - t0

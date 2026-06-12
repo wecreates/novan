@@ -4367,6 +4367,22 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return clearToolCache()
     },
   },
+  'chat_cache.stats': {
+    description: 'R675: novan.chat response cache stats (hits, misses, hitRate, size). 10min TTL on (sys+msg+tools) hash.',
+    risk: 'low',
+    handler: async () => {
+      const { getChatCacheStats } = await import('./r675-chat-cache.js')
+      return getChatCacheStats()
+    },
+  },
+  'chat_cache.clear': {
+    description: 'R675: Drop all in-memory chat response cache entries.',
+    risk: 'medium',
+    handler: async () => {
+      const { clearChatCache } = await import('./r675-chat-cache.js')
+      return clearChatCache()
+    },
+  },
   'cache.should_cache': {
     description: 'R647c: Check if a system-prompt prefix should be cache-marked (and record observation). Params: systemPrompt, provider?',
     risk: 'low',
@@ -12526,6 +12542,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'novan.chat', 'novan.chat.sessions', 'novan.chat.history',
         // R665 — tool-result cache stats
         'tool_cache.stats', 'tool_cache.clear',
+        // R675 — chat response cache stats
+        'chat_cache.stats', 'chat_cache.clear',
         'kg.ingest', 'kg.upsert_node', 'kg.upsert_edge', 'kg.get_node', 'kg.list_nodes',
         'kg.backlinks', 'kg.neighborhood', 'kg.shortest_path', 'kg.centrality', 'kg.mermaid', 'kg.daily_note', 'kg.stats',
         'autobrowser.run', 'autobrowser.submit', 'autobrowser.job', 'autobrowser.recent', 'autobrowser.health', 'autobrowser.tick',
