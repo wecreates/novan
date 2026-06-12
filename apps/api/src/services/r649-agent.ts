@@ -117,8 +117,19 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
   // R651 — prefer native OpenAI tool calling; falls back internally to R647a if no key
   const { orchestrateToolsNative } = await import('./r651-native-tools.js')
 
-  // R653 — recall past similar runs so the agent compounds on prior knowledge
-  const priorRuns = await findSimilarRuns(workspaceId, input.goal, 3)
+  // R653+R685 — recall past similar runs so the agent compounds on prior knowledge.
+  // Prefer semantic vector match when embeddings are available; fall back to
+  // keyword overlap otherwise. R685 also fires fire-and-forget to embed the
+  // current goal so future runs benefit.
+  let priorRuns: Array<Record<string, unknown>> = []
+  try {
+    const { findSimilarRunsByVector } = await import('./r685-embeddings.js')
+    const hits = await findSimilarRunsByVector(workspaceId, input.goal, 3)
+    if (hits.length > 0) {
+      priorRuns = hits.map(h => ({ goal: h.goal, status: 'done', answer: h.assistant_msg, similarity: h.similarity }))
+    }
+  } catch { /* fall through to keyword */ }
+  if (priorRuns.length === 0) priorRuns = await findSimilarRuns(workspaceId, input.goal, 3)
   const priorBlock = priorRuns.length === 0 ? '' :
     `\n\nPrior similar runs in this workspace (most recent first):\n` +
     priorRuns.map(r => `  - goal="${String(r['goal']).slice(0, 100)}" status=${r['status']} answer="${String(r['answer'] ?? '').slice(0, 240)}"`).join('\n') +
@@ -255,6 +266,18 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
       WHERE id = ${runId}
     `)
   } catch { /* tolerated */ }
+
+  // R685 — fire-and-forget embed of the goal so future agents can semantic-recall this run
+  void (async () => {
+    try {
+      const { embedText } = await import('./r685-embeddings.js')
+      const emb = await embedText(input.goal)
+      if (emb.ok && emb.vector) {
+        const lit = '[' + emb.vector.join(',') + ']'
+        await db.execute(sql.raw(`UPDATE r649_agent_runs SET goal_vec = '${lit}'::vector WHERE id = '${runId}'`))
+      }
+    } catch { /* tolerated */ }
+  })()
 
   return {
     runId, goal: input.goal, answer, done,

@@ -4607,6 +4607,46 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return snapshot(ws)
     },
   },
+  'embed.text': {
+    description: 'R685: Get a 1536-dim embedding via OpenAI text-embedding-3-small ($0.02/1M tokens). Params: text.',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { text?: string }
+      if (!p.text) throw new Error('text required')
+      const { embedText } = await import('./r685-embeddings.js')
+      return embedText(p.text)
+    },
+  },
+  'embed.semantic.runs': {
+    description: 'R685: Semantic search past novan.agent runs by goal similarity. Params: queryText, limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { queryText?: string; limit?: number }
+      if (!p.queryText) throw new Error('queryText required')
+      const { findSimilarRunsByVector } = await import('./r685-embeddings.js')
+      return { items: await findSimilarRunsByVector(ws, p.queryText, p.limit ?? 5) }
+    },
+  },
+  'embed.semantic.chat': {
+    description: 'R685: Semantic search past novan.chat turns by user_message similarity. Params: queryText, limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { queryText?: string; limit?: number }
+      if (!p.queryText) throw new Error('queryText required')
+      const { findSimilarChatTurns } = await import('./r685-embeddings.js')
+      return { items: await findSimilarChatTurns(ws, p.queryText, p.limit ?? 5) }
+    },
+  },
+  'embed.backfill': {
+    description: 'R685: Backfill missing goal_vec / message_vec for past rows. Params: table (agent|chat), limit?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { table?: 'agent' | 'chat'; limit?: number }
+      if (p.table !== 'agent' && p.table !== 'chat') throw new Error('table must be agent or chat')
+      const { backfillEmbeddings } = await import('./r685-embeddings.js')
+      return backfillEmbeddings(ws, p.table, p.limit ?? 50)
+    },
+  },
   'image.free.health': {
     description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
     risk: 'low',
@@ -12632,6 +12672,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'ratelimit.stats',
         // R684 — aggregate health snapshot
         'ops.health',
+        // R685 — embeddings + semantic recall
+        'embed.text', 'embed.semantic.runs', 'embed.semantic.chat', 'embed.backfill',
         // R655 — multi-turn agent sessions
         'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
         // R656 — scheduled agent goals
