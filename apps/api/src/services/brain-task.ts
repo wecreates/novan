@@ -4488,6 +4488,16 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return editOpenAIImage(ws, p)
     },
   },
+  'audio.openai.tts': {
+    description: 'R668: Text-to-speech via OpenAI tts-1 / tts-1-hd / gpt-4o-mini-tts. Persists MP3 to S3 + returns assetId+publicUrl. Params: text, voice? (alloy|echo|fable|onyx|nova|shimmer|ash|ballad|coral|sage), model? (tts-1|tts-1-hd|gpt-4o-mini-tts), format? (mp3|opus|aac|flac|wav), speed? (0.25-4.0).',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r668-openai-tts.js').speak>[1]
+      if (!p.text) throw new Error('text required')
+      const { speak } = await import('./r668-openai-tts.js')
+      return speak(ws, p)
+    },
+  },
   'image.free.health': {
     description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
     risk: 'low',
@@ -12497,6 +12507,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'chat.tools.run_native',
         // R654/R666 — OpenAI gpt-image-1 generate + edit
         'image.openai.generate', 'image.openai.edit',
+        // R668 — OpenAI TTS
+        'audio.openai.tts',
         // R655 — multi-turn agent sessions
         'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
         // R656 — scheduled agent goals
