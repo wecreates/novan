@@ -4647,6 +4647,33 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return backfillEmbeddings(ws, p.table, p.limit ?? 50)
     },
   },
+  'notify.add': {
+    description: 'R686: Register an outbound notify target fired when novan.agent completes. Params: kind (webhook|slack|discord|push), target (URL), onlyOn? (done|capped|error).',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r686-agent-notify.js').addNotifyTarget>[1]
+      const { addNotifyTarget } = await import('./r686-agent-notify.js')
+      return addNotifyTarget(ws, p)
+    },
+  },
+  'notify.list': {
+    description: 'R686: List registered notify targets for this workspace.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { listNotifyTargets } = await import('./r686-agent-notify.js')
+      return { items: await listNotifyTargets(ws) }
+    },
+  },
+  'notify.remove': {
+    description: 'R686: Remove a notify target by id.',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { id?: string }
+      if (!p.id) throw new Error('id required')
+      const { removeNotifyTarget } = await import('./r686-agent-notify.js')
+      return removeNotifyTarget(ws, p.id)
+    },
+  },
   'image.free.health': {
     description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
     risk: 'low',
@@ -12674,6 +12701,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'ops.health',
         // R685 — embeddings + semantic recall
         'embed.text', 'embed.semantic.runs', 'embed.semantic.chat', 'embed.backfill',
+        // R686 — outbound notifications on agent completion
+        'notify.add', 'notify.list', 'notify.remove',
         // R655 — multi-turn agent sessions
         'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
         // R656 — scheduled agent goals

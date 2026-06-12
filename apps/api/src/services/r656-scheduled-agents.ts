@@ -148,6 +148,18 @@ export async function tickScheduledAgents(): Promise<{ fired: number; errors: nu
       try {
         await db.execute(sql`UPDATE r649_agent_runs SET schedule_id = ${id} WHERE id = ${result.runId}`)
       } catch { /* tolerated */ }
+      // R686 — fire any outbound notifications
+      void (async () => {
+        try {
+          const { notifyAgentCompletion } = await import('./r686-agent-notify.js')
+          await notifyAgentCompletion({
+            workspaceId, runId: result.runId, goal, answer: result.answer,
+            status: result.done ? 'done' : 'capped',
+            costUsd: result.costUsd, tokens: result.tokens,
+            scheduleId: id,
+          })
+        } catch { /* tolerated */ }
+      })()
       await db.execute(sql`
         UPDATE r656_agent_schedules
         SET last_run_at = now(),
