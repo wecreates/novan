@@ -20,14 +20,9 @@
 const MAX_ROUNDS = 6
 const MAX_PARALLEL = 8
 
-const DEFAULT_TOOLS = [
-  'brain.list',
-  'web.fetch', 'scrape.extract',
-  'research.deep', 'research.youtube_transcript', 'research.arxiv', 'research.reddit',
-  'vision.ocr', 'vision.describe',
-  'rag.query', 'kg.search',
-  'memory.recall', 'memory.list',
-]
+// R704 — full arsenal shared catalog.
+import { FULL_ARSENAL } from './r704-tool-catalog.js'
+const DEFAULT_TOOLS = FULL_ARSENAL
 
 export interface NativeToolsInput {
   userPrompt:    string

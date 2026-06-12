@@ -16,13 +16,9 @@ import crypto from 'crypto'
 import { db } from '../db/client.js'
 import { sql } from 'drizzle-orm'
 
-const DEFAULT_TOOLS = [
-  'web.search', 'web.fetch', 'scrape.extract',
-  'github.repo', 'github.release', 'github.readme',
-  'brain.list', 'memory.recall', 'memory.list',
-  'rag.query', 'kg.search',
-  'vision.openai.describe',
-]
+// R704 — chat arsenal shared catalog (broad, includes media gen + code exec).
+import { CHAT_ARSENAL } from './r704-tool-catalog.js'
+const DEFAULT_TOOLS = CHAT_ARSENAL
 
 let ddlOk = false
 async function ensureDdl(): Promise<void> {

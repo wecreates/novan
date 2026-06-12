@@ -21,15 +21,9 @@ import { db } from '../db/client.js'
 import { sql } from 'drizzle-orm'
 
 const MAX_LOOPS    = 8
-const DEFAULT_TOOLS = [
-  'brain.list',
-  'web.fetch', 'scrape.extract',
-  'research.deep', 'research.youtube_transcript', 'research.arxiv', 'research.reddit',
-  'vision.ocr', 'vision.describe',
-  'rag.query', 'kg.search', 'kg.mermaid',
-  'memory.recall', 'memory.list',
-  'desktop.act',
-]
+// R704 — full arsenal: agent reaches the whole platform by default.
+import { FULL_ARSENAL } from './r704-tool-catalog.js'
+const DEFAULT_TOOLS = FULL_ARSENAL
 
 let ddlOk = false
 async function ensureDdl(): Promise<void> {
