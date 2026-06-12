@@ -18,6 +18,8 @@ export interface VisionInput {
   assetId?:  string
   mode?:     'describe' | 'ocr' | 'extract_data'
   model?:    string
+  /** R670 — 'low' caps image at 85 tokens (~10x cheaper); 'high' is default. */
+  detail?:   'low' | 'high' | 'auto'
 }
 
 export interface VisionResult {
@@ -53,19 +55,25 @@ export async function describeImage(workspaceId: string, input: VisionInput): Pr
   if (!apiKey) {
     return { ok: false, error: 'OPENAI_API_KEY not set', model: 'gpt-4o', tokens: 0, costUsd: 0, latencyMs: Date.now() - t0 }
   }
-  const model = input.model ?? 'gpt-4o'
+  // R670 — gpt-4o-mini is ~17x cheaper than gpt-4o and matches gpt-4o on most
+  // vision benchmarks. Caller can still override with model param for hard cases.
+  const model = input.model ?? 'gpt-4o-mini'
   const mode = input.mode ?? 'describe'
 
-  // Resolve image source to a data URL or external URL
-  let imageRef: { type: 'image_url'; image_url: { url: string } } | null = null
+  // R670 — default detail=low (85 tokens for image regardless of size, vs 765+
+  // for high-detail tiling). Sufficient for description/scene questions; OCR
+  // benefits from high so we bump it there only.
+  const detail = input.detail ?? (mode === 'ocr' ? 'high' : 'low')
+
+  let imageRef: { type: 'image_url'; image_url: { url: string; detail?: string } } | null = null
   if (input.imageB64) {
-    imageRef = { type: 'image_url', image_url: { url: `data:image/png;base64,${input.imageB64}` } }
+    imageRef = { type: 'image_url', image_url: { url: `data:image/png;base64,${input.imageB64}`, detail } }
   } else if (input.imageUrl) {
-    imageRef = { type: 'image_url', image_url: { url: input.imageUrl } }
+    imageRef = { type: 'image_url', image_url: { url: input.imageUrl, detail } }
   } else if (input.assetId) {
     const url = await resolveAssetUrl(workspaceId, input.assetId)
     if (!url) return { ok: false, error: `asset ${input.assetId} not found`, model, tokens: 0, costUsd: 0, latencyMs: Date.now() - t0 }
-    imageRef = { type: 'image_url', image_url: { url } }
+    imageRef = { type: 'image_url', image_url: { url, detail } }
   }
   if (!imageRef) {
     return { ok: false, error: 'one of imageUrl, imageB64, assetId required', model, tokens: 0, costUsd: 0, latencyMs: Date.now() - t0 }
@@ -100,8 +108,11 @@ export async function describeImage(workspaceId: string, input: VisionInput): Pr
     }
     const text = j.choices?.[0]?.message?.content ?? ''
     const inp = (j.usage?.prompt_tokens ?? 0), out = (j.usage?.completion_tokens ?? 0)
-    // gpt-4o pricing: $2.50 in / $10.00 out per 1M
-    const costUsd = (inp / 1_000_000) * 2.5 + (out / 1_000_000) * 10
+    // Pricing per 1M tokens: gpt-4o-mini $0.15/$0.60, gpt-4o $2.50/$10.00.
+    const isMini = model.includes('mini')
+    const inRate  = isMini ? 0.15 : 2.5
+    const outRate = isMini ? 0.60 : 10
+    const costUsd = (inp / 1_000_000) * inRate + (out / 1_000_000) * outRate
     const result: VisionResult = {
       ok: true, text, model,
       tokens: inp + out, costUsd: Number(costUsd.toFixed(6)),

@@ -43,8 +43,10 @@ export async function generateOpenAIImage(workspaceId: string, input: OpenAIImag
   if (!apiKey) {
     return { ok: false, error: 'OPENAI_API_KEY not set', model: 'gpt-image-1', costUsd: 0, latencyMs: Date.now() - t0 }
   }
+  // R670 — defaults to cheapest tier ($0.011 vs $0.042 for medium, $0.167 for high).
+  // Caller can still explicitly request medium/high when they care about quality.
   const size = input.size ?? '1024x1024'
-  const quality = input.quality ?? 'medium'
+  const quality = input.quality ?? 'low'
   const n = Math.max(1, Math.min(4, input.n ?? 1))
 
   const body: Record<string, unknown> = {
@@ -172,8 +174,9 @@ export async function editOpenAIImage(workspaceId: string, input: OpenAIImageEdi
   if (!bytes) {
     return { ok: false, error: 'failed to resolve source image (imageUrl/imageB64/assetId)', model: 'gpt-image-1', costUsd: 0, latencyMs: Date.now() - t0 }
   }
+  // R670 — default to cheapest tier here too
   const size = input.size ?? '1024x1024'
-  const quality = input.quality ?? 'medium'
+  const quality = input.quality ?? 'low'
   const n = Math.max(1, Math.min(4, input.n ?? 1))
 
   const fd = new FormData()

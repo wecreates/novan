@@ -40,9 +40,12 @@ export async function speak(workspaceId: string, input: TtsInput): Promise<TtsRe
   if (!apiKey) return { ok: false, error: 'OPENAI_API_KEY not set', model: 'tts-1', voice: 'alloy', costUsd: 0, latencyMs: Date.now() - t0 }
   if (!input.text?.trim()) return { ok: false, error: 'text required', model: 'tts-1', voice: 'alloy', costUsd: 0, latencyMs: Date.now() - t0 }
   const text = input.text.slice(0, 4096)  // OpenAI cap
-  const model = input.model ?? 'tts-1'
+  // R670 — default to gpt-4o-mini-tts ($12/1M chars) instead of tts-1 ($15/1M).
+  // 20% cheaper and broadly equivalent for non-broadcast use. opus encoding
+  // is smaller (~half the bytes) for the same audio quality.
+  const model = input.model ?? 'gpt-4o-mini-tts'
   const voice = input.voice ?? 'alloy'
-  const format = input.format ?? 'mp3'
+  const format = input.format ?? 'opus'
 
   const body: Record<string, unknown> = { model, input: text, voice, response_format: format }
   if (input.speed) body['speed'] = Math.max(0.25, Math.min(4.0, input.speed))
