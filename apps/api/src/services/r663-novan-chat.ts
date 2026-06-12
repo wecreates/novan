@@ -77,28 +77,31 @@ export async function chat(workspaceId: string, input: ChatInput): Promise<ChatO
   let sessionId = input.sessionId ?? ''
   if (!sessionId) sessionId = `chs_${crypto.randomBytes(8).toString('hex')}`
 
-  // Pull last 6 turns of history for context
+  // R669 — only fetch history when caller provided a sessionId; for a fresh
+  // chat there's nothing to pull and the round-trip wastes ~10ms + 0 tokens.
   let priorTurns: Array<Record<string, unknown>> = []
-  try {
-    const rows = await db.execute(sql`
-      SELECT user_message, assistant_msg
-      FROM r663_chat_turns
-      WHERE workspace_id = ${workspaceId} AND session_id = ${sessionId}
-      ORDER BY created_at DESC LIMIT 6
-    `)
-    priorTurns = ((rows.rows ?? rows) as Array<Record<string, unknown>>).reverse()
-  } catch { /* fresh session */ }
+  if (input.sessionId) {
+    try {
+      const rows = await db.execute(sql`
+        SELECT user_message, assistant_msg
+        FROM r663_chat_turns
+        WHERE workspace_id = ${workspaceId} AND session_id = ${sessionId}
+        ORDER BY created_at DESC LIMIT 3
+      `)
+      priorTurns = ((rows.rows ?? rows) as Array<Record<string, unknown>>).reverse()
+    } catch { /* fresh session */ }
+  }
 
+  // R669 — compress: 3 turns max, 180-char window per side, terser delimiter.
   const historyBlock = priorTurns.length === 0 ? '' :
-    `Prior turns in this session:\n` +
-    priorTurns.map(t => `User: ${String(t['user_message']).slice(0, 400)}\nAssistant: ${String(t['assistant_msg'] ?? '').slice(0, 400)}`).join('\n\n') +
-    `\n\n---\nNew user message:\n`
+    priorTurns.map(t => `U:${String(t['user_message']).slice(0, 180)}\nA:${String(t['assistant_msg'] ?? '').slice(0, 180)}`).join('\n') + '\n---\n'
 
-  const tools = input.toolsAllowed ?? DEFAULT_TOOLS
+  // R669 — Array.isArray respects explicit [] = no tools.
+  const tools = Array.isArray(input.toolsAllowed) ? input.toolsAllowed : DEFAULT_TOOLS
   const { orchestrateToolsNative } = await import('./r651-native-tools.js')
   const r = await orchestrateToolsNative(workspaceId, {
     userPrompt: historyBlock + input.message,
-    systemPrompt: input.systemPrompt ?? 'You are Novan, a helpful autonomous assistant. Use tools when they would give better/fresher answers than your training data. Be terse.',
+    systemPrompt: input.systemPrompt ?? (tools.length === 0 ? 'Be terse.' : 'You are Novan. Use tools when they give fresher/better answers. Be terse.'),
     toolsAllowed: tools,
     maxRounds:    input.maxRounds ?? 4,
   })

@@ -132,11 +132,11 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
   const evidence: Array<{ round: number; tool: string; preview: string }> = []
 
   for (loop = 1; loop <= maxLoops; loop++) {
-    // 1. PLAN
+    // 1. PLAN — R669 tightened prompt
     const plan = await withSchemaNative(workspaceId, {
-      prompt: `Goal: ${input.goal}\n\nCurrent step: ${currentSubgoal}\n\nAvailable tools: ${allowed.join(', ')}${priorBlock}\n\nReturn a JSON plan with the immediate subgoal, reasoning, and which tools you'll need.`,
+      prompt: `Goal: ${input.goal}\nStep: ${currentSubgoal}\nTools: ${allowed.join(',')}${priorBlock}`,
       schema: PLAN_SCHEMA,
-      systemPrompt: 'You are Novan, an autonomous agent. Plan one concrete actionable step.',
+      systemPrompt: 'Plan one concrete step. JSON.',
       ...(input.preferProvider ? { preferProvider: input.preferProvider } : {}),
     })
     totalTokens += plan.tokens
@@ -164,21 +164,22 @@ export async function runAgent(workspaceId: string, input: AgentInput): Promise<
       totalTokens    += act.tokens
       totalCost      += act.costUsd
       totalToolCalls += act.toolCalls.length
-      // R650 — keep actual tool result previews so reflect + final answer aren't blind
+      // R669 — was 1200, model rarely needs more than 400 chars per tool to ground its answer
       for (const c of act.toolCalls) {
-        if (c.ok && c.resultPreview) evidence.push({ round: loop, tool: c.tool, preview: c.resultPreview.slice(0, 1200) })
+        if (c.ok && c.resultPreview) evidence.push({ round: loop, tool: c.tool, preview: c.resultPreview.slice(0, 400) })
       }
       trace.push({ phase: 'act', round: loop, summary: `ran ${act.toolCalls.length} tool(s) over ${act.rounds} rounds: ${act.toolCalls.map(c => `${c.tool}${c.ok ? '✓' : '✗'}`).join(', ')}` })
       try { input.onEvent?.({ kind: 'act', round: loop, data: { tool_calls: act.toolCalls.map(c => ({ tool: c.tool, ok: c.ok, ms: c.durationMs })), rounds: act.rounds } }) } catch { /* tolerated */ }
     }
 
-    // 3. REFLECT — R650: include actual evidence so the answer contains real data
-    const evidenceBlock = evidence.length === 0 ? '(no tool evidence yet)' :
-      evidence.map(e => `  [${e.tool}#${e.round}] ${e.preview}`).join('\n')
+    // 3. REFLECT — R669 tightened. Drop the trace dump (model has same data
+    // in evidence); keep evidence + done/answer/next_subgoal request only.
+    const evidenceBlock = evidence.length === 0 ? '' :
+      'Evidence:\n' + evidence.map(e => `[${e.tool}#${e.round}] ${e.preview}`).join('\n') + '\n'
     const reflect = await withSchemaNative(workspaceId, {
-      prompt: `Original goal: ${input.goal}\nJust completed subgoal: ${planSubgoal}\n\nTool evidence (real data from the calls):\n${evidenceBlock}\n\nTrace:\n${trace.map(t => `  [${t.phase}#${t.round}] ${t.summary}`).join('\n')}\n\nIs the goal complete? If yes, set done=true and provide the final answer GROUNDED IN THE EVIDENCE ABOVE (no placeholders, no "X"). If no, set done=false and provide the next_subgoal.`,
+      prompt: `Goal: ${input.goal}\nJust did: ${planSubgoal}\n${evidenceBlock}Done? If yes, set done=true + answer (cite concrete values from evidence, no placeholders). Else done=false + next_subgoal.`,
       schema: REFLECT_SCHEMA,
-      systemPrompt: 'You are Novan reflecting on progress. Cite concrete numbers/values from the evidence — never invent placeholders.',
+      systemPrompt: 'Reflect. Cite real values, never placeholders. JSON.',
       ...(input.preferProvider ? { preferProvider: input.preferProvider } : {}),
     })
     totalTokens += reflect.tokens

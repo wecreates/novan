@@ -81,6 +81,13 @@ async function loadOpRegistry(): Promise<Record<string, { description: string; h
   return mod.OPERATIONS ?? {}
 }
 
+function compressDesc(s: string): string {
+  // R669 — kill round/version prefixes ("R662: ", "R646h: ") and ellipsize
+  // to a short usable hint. Saves ~60% per tool description.
+  const stripped = s.replace(/^R\d+[a-z]?:\s*/, '').replace(/\s+/g, ' ').trim()
+  return stripped.length > 120 ? stripped.slice(0, 117) + '…' : stripped
+}
+
 function buildToolDefs(allowed: string[], registry: Awaited<ReturnType<typeof loadOpRegistry>>): OAIToolDef[] {
   // OpenAI requires function names to match ^[a-zA-Z0-9_-]+$. Brain ops use
   // dots ('brain.list'); we substitute to underscores in the function name
@@ -91,15 +98,11 @@ function buildToolDefs(allowed: string[], registry: Awaited<ReturnType<typeof lo
       type: 'function' as const,
       function: {
         name: op.replace(/\./g, '__'),
-        description: (registry[op]?.description ?? `Run the ${op} brain op.`).slice(0, 400),
+        description: compressDesc(registry[op]?.description ?? op),
         parameters: {
           type: 'object',
           properties: {
-            params: {
-              type: 'object',
-              description: 'Parameters for this op. See the op description for the exact shape.',
-              additionalProperties: true,
-            },
+            params: { type: 'object', additionalProperties: true },
           },
           required: ['params'],
           additionalProperties: false,
@@ -124,14 +127,19 @@ export async function orchestrateToolsNative(workspaceId: string, input: NativeT
   }
 
   const model = input.model ?? 'gpt-4o-mini'
-  const allowed = input.toolsAllowed?.length ? input.toolsAllowed : DEFAULT_TOOLS
+  // R669 — empty array = NO tools (was incorrectly falling through to DEFAULT_TOOLS).
+  // Only substitute defaults when caller passed undefined/null.
+  const allowed = Array.isArray(input.toolsAllowed) ? input.toolsAllowed : DEFAULT_TOOLS
   const allowedSet = new Set(allowed)
   const registry = await loadOpRegistry()
   const tools = buildToolDefs(allowed, registry)
   const maxRounds = Math.max(1, Math.min(MAX_ROUNDS, input.maxRounds ?? MAX_ROUNDS))
 
+  // R669 — drop system prompt when there are no tools (saves ~15 tokens) and
+  // tighten the tools-present prompt.
+  const sysPrompt = input.systemPrompt ?? (tools.length === 0 ? 'Be terse.' : 'Use tools when helpful. Be terse.')
   const messages: OAIMessage[] = [
-    { role: 'system', content: input.systemPrompt ?? 'You are Novan. Use the provided tools when they help. Be terse.' },
+    { role: 'system', content: sysPrompt },
     { role: 'user',   content: input.userPrompt },
   ]
   const toolCalls: NativeToolsResult['toolCalls'] = []
@@ -141,12 +149,13 @@ export async function orchestrateToolsNative(workspaceId: string, input: NativeT
 
   for (let round = 1; round <= maxRounds; round++) {
     rounds = round
-    const body: Record<string, unknown> = {
-      model,
-      messages,
-      tools,
-      tool_choice: 'auto',
-      parallel_tool_calls: true,
+    // R669 — when caller passed no tools, omit the tools/tool_choice fields
+    // entirely. OpenAI applies hidden overhead just for declaring the array.
+    const body: Record<string, unknown> = { model, messages }
+    if (tools.length > 0) {
+      body['tools'] = tools
+      body['tool_choice'] = 'auto'
+      body['parallel_tool_calls'] = true
     }
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -201,7 +210,8 @@ export async function orchestrateToolsNative(workspaceId: string, input: NativeT
         const { withToolCache } = await import('./r665-tool-cache.js')
         const { value: result, cacheHit } = await withToolCache(op, workspaceId, params, () => handler(workspaceId, params))
         const dur = Date.now() - tStart
-        const preview = truncatePreview(result, 4000)
+        // R669 — was 4000, model rarely needs more than ~1000 chars of tool result
+        const preview = truncatePreview(result, 1000)
         const entry: typeof toolCalls[number] = { round, tool: op, params, ok: true, durationMs: dur, resultPreview: truncatePreview(result) }
         if (cacheHit) entry.resultPreview = `[CACHED] ${entry.resultPreview ?? ''}`
         toolCalls.push(entry)
