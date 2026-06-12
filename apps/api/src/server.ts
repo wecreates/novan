@@ -370,6 +370,7 @@ const isPublic = (url: string): boolean => {
   if (url.startsWith('/chat/stream'))                                   return true  // R664 — SSE chat stream (own token gate)
   if (url.startsWith('/webhooks/incoming/'))                            return true  // R678 — public webhook receiver (token in query)
   if (url === '/chat' || url.startsWith('/chat?'))                      return true  // R667 — chat HTML UI (own token gate)
+  if (url === '/voice/realtime' || url.startsWith('/voice/realtime'))    return true  // R688 — Realtime voice UI + session mint (own token gate)
   // R647d /ops/desktop/act covered by the R623 whitelist above (startsWith '/ops/desktop')
   if (url.startsWith('/apps/'))                                         return true  // R642d — generated apps served under /apps/:slug
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
@@ -1093,6 +1094,30 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/agents', 
     const { renderAgentsHtml } = await import('./services/r649-agent.js')
     reply.type('text/html').send(await renderAgentsHtml(g.ws(req.query)))
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R688 — OpenAI Realtime: ephemeral session mint + operator UI
+app.post<{ Querystring: { token?: string }; Body: { voice?: string; instructions?: string } }>('/voice/realtime/session', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).send({ ok: false, error: 'unauthorized' })
+  // R683 — rate limit (reuse agentStream bucket; Realtime is expensive)
+  try {
+    const { take } = await import('./services/r683-rate-limit.js')
+    const rl = take('agentStream', req.ip ?? 'unknown')
+    if (!rl.allowed) {
+      reply.header('Retry-After', Math.ceil(rl.retryAfterMs / 1000))
+      return void reply.status(429).send({ ok: false, error: 'rate limited' })
+    }
+  } catch { /* tolerated */ }
+  const { mintRealtimeSession } = await import('./services/r688-realtime-ui.js')
+  const body = req.body ?? {}
+  const r = await mintRealtimeSession({ ...(body.voice ? { voice: body.voice } : {}), ...(body.instructions ? { instructions: body.instructions } : {}) })
+  reply.send(r)
+})
+
+app.get<{ Querystring: { token?: string } }>('/voice/realtime', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  const { renderRealtimeHtml } = await import('./services/r688-realtime-ui.js')
+  reply.type('text/html').send(renderRealtimeHtml())
 })
 
 // R680 — live agent SSE viewer at /ops/agents/live
