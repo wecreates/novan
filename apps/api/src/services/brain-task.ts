@@ -4599,6 +4599,14 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return getRateStats()
     },
   },
+  'ops.health': {
+    description: 'R684: Aggregate platform health snapshot — brain op count, 24h agent runs+tokens+spend vs budget cap, tool/chat/prompt cache stats, rate-limit rejections, scheduled-agent state, webhook fire count, session activity. Single round-trip, no LLM calls.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { snapshot } = await import('./r684-ops-health.js')
+      return snapshot(ws)
+    },
+  },
   'image.free.health': {
     description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
     risk: 'low',
@@ -12622,6 +12630,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'voice.chat',
         // R683 — rate limiter stats
         'ratelimit.stats',
+        // R684 — aggregate health snapshot
+        'ops.health',
         // R655 — multi-turn agent sessions
         'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
         // R656 — scheduled agent goals
