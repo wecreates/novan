@@ -4764,6 +4764,144 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return pruneOldBackups(p.retentionDays ?? 14)
     },
   },
+  'billing.plan': {
+    description: 'R693: Get workspace plan tier + daily cap + next renewal.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { getPlan } = await import('./r693-billing.js')
+      return getPlan(ws)
+    },
+  },
+  'billing.set_tier': {
+    description: 'R693: Admin override of workspace tier (free|pro|scale). Syncs R660 daily cap. Params: tier.',
+    risk: 'high',
+    handler: async (ws, params) => {
+      const p = params as { tier?: string }
+      if (!p.tier) throw new Error('tier required')
+      const { setTier } = await import('./r693-billing.js')
+      return setTier(ws, p.tier)
+    },
+  },
+  'billing.tiers': {
+    description: 'R693: List available billing tiers with daily caps + Stripe priceIds.',
+    risk: 'low',
+    handler: async () => {
+      const { listTiers } = await import('./r693-billing.js')
+      return { items: listTiers() }
+    },
+  },
+  'user_budget.get': {
+    description: 'R694: Get a user\'s daily cap + today\'s spend within a workspace. Params: userId',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { userId?: string }
+      if (!p.userId) throw new Error('userId required')
+      const { getUserCap, getUserSpendToday } = await import('./r694-user-budget.js')
+      const [cap, spent] = await Promise.all([getUserCap(ws, p.userId), getUserSpendToday(ws, p.userId)])
+      return { userId: p.userId, cap, spent, remaining: Math.max(0, cap - spent) }
+    },
+  },
+  'user_budget.set': {
+    description: 'R694: Set a per-user daily cap. Params: userId, dailyUsdCap',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { userId?: string; dailyUsdCap?: number }
+      if (!p.userId || typeof p.dailyUsdCap !== 'number') throw new Error('userId + dailyUsdCap required')
+      const { setUserCap } = await import('./r694-user-budget.js')
+      return setUserCap(ws, p.userId, p.dailyUsdCap)
+    },
+  },
+  'user_budget.list': {
+    description: 'R694: List per-user budgets in this workspace.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { listUserBudgets } = await import('./r694-user-budget.js')
+      return { items: await listUserBudgets(ws) }
+    },
+  },
+  'audit.query': {
+    description: 'R697: Query the audit log. Params: event?, actorType?, actorId?, workspaceId?, since? (ISO date), limit?',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as Parameters<typeof import('./r697-audit-log.js').queryAuditLog>[0] & { since?: string }
+      const q: Parameters<typeof import('./r697-audit-log.js').queryAuditLog>[0] = { ...p }
+      if (typeof p.since === 'string') q.since = new Date(p.since)
+      const { queryAuditLog } = await import('./r697-audit-log.js')
+      return { items: await queryAuditLog(q) }
+    },
+  },
+  'schedule.dlq.list': {
+    description: 'R698: List schedules in the dead-letter queue (auto-disabled after 3 consecutive failures).',
+    risk: 'low',
+    handler: async (ws) => {
+      const { listDlqSchedules } = await import('./r698-schedule-dlq.js')
+      return { items: await listDlqSchedules(ws) }
+    },
+  },
+  'schedule.dlq.revive': {
+    description: 'R698: Re-enable a DLQ\'d schedule. Params: scheduleId',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { scheduleId?: string }
+      if (!p.scheduleId) throw new Error('scheduleId required')
+      const { reviveSchedule } = await import('./r698-schedule-dlq.js')
+      return reviveSchedule(ws, p.scheduleId)
+    },
+  },
+  'provider.health': {
+    description: 'R699: Configured-status of OpenAI, Gemini, Anthropic for failover routing.',
+    risk: 'low',
+    handler: async () => {
+      const { providerHealth } = await import('./r699-provider-failover.js')
+      return providerHealth()
+    },
+  },
+  'apikey.mint': {
+    description: 'R700: Mint a long-lived API key for a user. Returns raw key ONCE. Params: userId, workspaceId, scope (read|write|admin), name?',
+    risk: 'high',
+    handler: async (_ws, params) => {
+      const p = params as { userId?: string; workspaceId?: string; scope?: string; name?: string }
+      if (!p.userId || !p.workspaceId || !p.scope) throw new Error('userId + workspaceId + scope required')
+      const { mintKey } = await import('./r700-api-keys.js')
+      return mintKey(p.userId, p.workspaceId, p.scope, p.name)
+    },
+  },
+  'apikey.list': {
+    description: 'R700: List a user\'s API keys (no raw value). Params: userId',
+    risk: 'low',
+    handler: async (_ws, params) => {
+      const p = params as { userId?: string }
+      if (!p.userId) throw new Error('userId required')
+      const { listUserKeys } = await import('./r700-api-keys.js')
+      return { items: await listUserKeys(p.userId) }
+    },
+  },
+  'apikey.revoke': {
+    description: 'R700: Revoke an API key by id. Params: userId, keyId',
+    risk: 'medium',
+    handler: async (_ws, params) => {
+      const p = params as { userId?: string; keyId?: string }
+      if (!p.userId || !p.keyId) throw new Error('userId + keyId required')
+      const { revokeKey } = await import('./r700-api-keys.js')
+      return revokeKey(p.userId, p.keyId)
+    },
+  },
+  'migrations.list': {
+    description: 'R701: List recorded schema migrations + known platform tables with row counts.',
+    risk: 'low',
+    handler: async () => {
+      const { listMigrations, listKnownTables } = await import('./r701-migrations.js')
+      return { migrations: await listMigrations(), tables: await listKnownTables() }
+    },
+  },
+  'test.run_smoke': {
+    description: 'R703: Run the R647-R702 smoke suite. ~10 tests, each ≤1s. Returns pass/fail per test.',
+    risk: 'low',
+    handler: async () => {
+      const { runSmoke } = await import('./r703-test-runner.js')
+      return runSmoke()
+    },
+  },
   'image.free.health': {
     description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
     risk: 'low',
@@ -12800,6 +12938,22 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'forecast.spend', 'forecast.alert_spikes',
         // R692 — automated DB backups to S3
         'backup.s3.run', 'backup.s3.list', 'backup.s3.prune',
+        // R693 — Stripe billing
+        'billing.plan', 'billing.set_tier', 'billing.tiers',
+        // R694 — per-user budgets
+        'user_budget.get', 'user_budget.set', 'user_budget.list',
+        // R697 — audit log
+        'audit.query',
+        // R698 — schedule DLQ
+        'schedule.dlq.list', 'schedule.dlq.revive',
+        // R699 — provider failover health
+        'provider.health',
+        // R700 — API keys
+        'apikey.mint', 'apikey.list', 'apikey.revoke',
+        // R701 — schema migrations
+        'migrations.list',
+        // R703 — smoke tests
+        'test.run_smoke',
         // R655 — multi-turn agent sessions
         'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
         // R656 — scheduled agent goals

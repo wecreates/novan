@@ -36,6 +36,45 @@ export async function mintRealtimeSession(input: { voice?: string; instructions?
     const result: { ok: boolean; client_secret?: string; expires_at?: number; model?: string } = { ok: true, client_secret: j.value, model: j.session?.model ?? REALTIME_MODEL }
     if (j.expires_at) result.expires_at = j.expires_at
     return result
+}
+
+// R695 — drop-in script the PWA chat injects to route its voice button
+// through R688 Realtime instead of R131 Web Speech. Returned as a tiny
+// JS module so the PWA can <script src> it without rebuilding.
+export function renderPwaVoiceShim(): string {
+  return `// R695 PWA voice shim — replaces Web Speech with Realtime
+window.NovanVoiceShim = {
+  async start(opts) {
+    const token = opts?.token || new URLSearchParams(location.search).get('token') || '';
+    const sess = await fetch('/voice/realtime/session?token=' + encodeURIComponent(token), { method: 'POST' }).then(r => r.json());
+    if (!sess.ok) throw new Error(sess.error || 'session mint failed');
+    const pc = new RTCPeerConnection();
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(t => pc.addTrack(t, stream));
+    pc.ontrack = (ev) => {
+      const audio = new Audio(); audio.srcObject = ev.streams[0]; audio.autoplay = true;
+      document.body.appendChild(audio);
+    };
+    const dc = pc.createDataChannel('oai-events');
+    dc.addEventListener('message', (ev) => {
+      try {
+        const e = JSON.parse(ev.data);
+        if (e.type === 'response.audio_transcript.delta') opts?.onAssistantText?.(e.delta);
+        if (e.type === 'conversation.item.input_audio_transcription.completed') opts?.onUserText?.(e.transcript);
+      } catch {}
+    });
+    const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+    const sdpResp = await fetch('https://api.openai.com/v1/realtime?model=' + encodeURIComponent(sess.model), {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + sess.client_secret, 'Content-Type': 'application/sdp' },
+      body: offer.sdp,
+    });
+    await pc.setRemoteDescription({ type: 'answer', sdp: await sdpResp.text() });
+    return { stop: () => { dc.close(); pc.close(); stream.getTracks().forEach(t => t.stop()); } };
+  }
+};
+`
+}
   } catch (e) { return { ok: false, error: (e as Error).message } }
 }
 

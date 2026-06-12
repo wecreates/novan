@@ -373,6 +373,8 @@ const isPublic = (url: string): boolean => {
   if (url === '/voice/realtime' || url.startsWith('/voice/realtime'))    return true  // R688 — Realtime voice UI + session mint (own token gate)
   if (url.startsWith('/auth/'))                                         return true  // R689 — end-user auth (own bearer flow)
   if (url === '/openapi.json' || url === '/novan-docs')                 return true  // R691 — public API docs
+  if (url.startsWith('/billing/'))                                      return true  // R693 — billing endpoints (bearer/sig gated)
+  if (url === '/ops/knowledge' || url.startsWith('/ops/knowledge'))     return true  // R702 — KB UI (own token gate)
   // R647d /ops/desktop/act covered by the R623 whitelist above (startsWith '/ops/desktop')
   if (url.startsWith('/apps/'))                                         return true  // R642d — generated apps served under /apps/:slug
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
@@ -1064,6 +1066,87 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/desktop/a
     const { renderDesktopHtml } = await import('./services/r647-computer-use.js')
     reply.type('text/html').send(await renderDesktopHtml(g.ws(req.query)))
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R693 — Stripe billing endpoints
+app.post<{ Body: { tier?: string; returnUrl?: string } }>('/billing/checkout', async (req, reply) => {
+  const auth = req.headers['authorization']
+  const token = typeof auth === 'string' && auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  if (!token) return void reply.status(401).send({ ok: false, error: 'auth required' })
+  const { resolveSession } = await import('./services/r689-user-auth.js')
+  const s = await resolveSession(token); if (!s.ok || !s.userId) return void reply.status(401).send(s)
+  const b = req.body ?? {}
+  if (!b.tier || !b.returnUrl) return void reply.status(400).send({ ok: false, error: 'tier + returnUrl required' })
+  const { createCheckoutSession } = await import('./services/r693-billing.js')
+  reply.send(await createCheckoutSession(s.userId, b.tier, b.returnUrl))
+})
+
+app.post<{ Body: { returnUrl?: string } }>('/billing/portal', async (req, reply) => {
+  const auth = req.headers['authorization']
+  const token = typeof auth === 'string' && auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  if (!token) return void reply.status(401).send({ ok: false, error: 'auth required' })
+  const { resolveSession } = await import('./services/r689-user-auth.js')
+  const s = await resolveSession(token); if (!s.ok || !s.workspaceId) return void reply.status(401).send(s)
+  const b = req.body ?? {}
+  if (!b.returnUrl) return void reply.status(400).send({ ok: false, error: 'returnUrl required' })
+  // Look up customer id from workspace plan
+  try {
+    const { db } = await import('./db/client.js')
+    const { sql } = await import('drizzle-orm')
+    const rows = await db.execute(sql`SELECT stripe_customer_id FROM r693_workspace_plans WHERE workspace_id = ${s.workspaceId} LIMIT 1`)
+    const r = ((rows.rows ?? rows) as Array<Record<string, unknown>>)[0]
+    const cid = r?.['stripe_customer_id'] ? String(r['stripe_customer_id']) : null
+    if (!cid) return void reply.status(404).send({ ok: false, error: 'no Stripe customer linked yet' })
+    const { createPortalSession } = await import('./services/r693-billing.js')
+    reply.send(await createPortalSession(cid, b.returnUrl))
+  } catch (e) { reply.status(500).send({ ok: false, error: (e as Error).message }) }
+})
+
+app.post('/billing/webhook', { config: { rawBody: true } }, async (req, reply) => {
+  const sig = req.headers['stripe-signature']
+  const secret = process.env['STRIPE_WEBHOOK_SECRET']
+  if (!sig || !secret) return void reply.status(400).send({ ok: false, error: 'missing signature or secret' })
+  const raw = (req as unknown as { rawBody?: string }).rawBody ?? JSON.stringify(req.body ?? {})
+  try {
+    const { verifyWebhookSignature, handleWebhookEvent } = await import('./services/r693-billing.js')
+    if (!verifyWebhookSignature(raw, typeof sig === 'string' ? sig : sig[0]!, secret)) {
+      return void reply.status(400).send({ ok: false, error: 'bad signature' })
+    }
+    const event = JSON.parse(raw) as Record<string, unknown>
+    await handleWebhookEvent(event)
+    reply.send({ ok: true })
+  } catch (e) { reply.status(500).send({ ok: false, error: (e as Error).message }) }
+})
+
+// R695 — PWA voice shim served as a tiny JS file
+app.get('/voice/realtime/pwa-shim.js', async (_req, reply) => {
+  const { renderPwaVoiceShim } = await import('./services/r688-realtime-ui.js')
+  reply.type('application/javascript').send(renderPwaVoiceShim())
+})
+
+// R702 — KB browser UI
+app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/knowledge', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>')
+  const { renderKnowledgeHtml } = await import('./services/r702-kb-ui.js')
+  reply.type('text/html').send(await renderKnowledgeHtml(g.ws(req.query)))
+})
+
+// R700 — apply CORS to public surfaces (chat, voice, billing, auth, openapi)
+app.addHook('onRequest', async (req, reply) => {
+  const url = req.url ?? ''
+  const corsable = url.startsWith('/chat/') || url.startsWith('/voice/') || url.startsWith('/billing/') || url.startsWith('/auth/') || url === '/openapi.json' || url === '/novan-docs' || url.startsWith('/agent/')
+  if (!corsable) return
+  const { getCorsOrigins } = await import('./services/r700-api-keys.js')
+  const allowed = getCorsOrigins()
+  const origin = typeof req.headers['origin'] === 'string' ? req.headers['origin'] : ''
+  const allow = allowed.length === 0 ? origin : (allowed.includes(origin) ? origin : allowed[0]!)
+  if (allow) {
+    reply.header('Access-Control-Allow-Origin', allow)
+    reply.header('Access-Control-Allow-Credentials', 'true')
+    reply.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    reply.header('Access-Control-Allow-Headers', 'Authorization,Content-Type,X-Admin-Token')
+  }
+  if (req.method === 'OPTIONS') reply.status(204).send()
 })
 
 // R691 — auto-generated OpenAPI spec + Stoplight Elements viewer.
