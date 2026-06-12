@@ -1088,6 +1088,13 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/agents', 
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
 })
 
+// R680 — live agent SSE viewer at /ops/agents/live
+app.get<{ Querystring: { token?: string } }>('/ops/agents/live', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>Pass ?token=&lt;ops-token&gt;')
+  const { renderAgentLiveHtml } = await import('./services/r680-agent-live-ui.js')
+  reply.type('text/html').send(renderAgentLiveHtml())
+})
+
 // R658 — agent rollup dashboard (14d totals + by-day + top goals)
 app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/agents/rollup', async (req, reply) => {
   const g = r623Token(req); if (!g.ok) return void reply.status(401).type('text/html').send('<h1>401</h1>')
