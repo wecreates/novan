@@ -367,6 +367,7 @@ const isPublic = (url: string): boolean => {
   if (url === '/ops/cache' || url.startsWith('/ops/cache'))             return true  // R647c — prompt-cache dashboard (own token gate)
   if (url === '/ops/agents' || url.startsWith('/ops/agents'))           return true  // R649 — agent runs dashboard (own token gate)
   if (url.startsWith('/agent/stream'))                                  return true  // R661 — SSE agent stream (own token gate)
+  if (url.startsWith('/chat/stream'))                                   return true  // R664 — SSE chat stream (own token gate)
   // R647d /ops/desktop/act covered by the R623 whitelist above (startsWith '/ops/desktop')
   if (url.startsWith('/apps/'))                                         return true  // R642d — generated apps served under /apps/:slug
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
@@ -1076,6 +1077,57 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/agents/ro
     const { renderAgentRollupHtml } = await import('./services/r658-agent-rollup.js')
     reply.type('text/html').send(await renderAgentRollupHtml(g.ws(req.query)))
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R664 — SSE token stream for novan.chat. Streams the assistant reply
+// token-by-token via the chat-providers streamChat generator so operators
+// see the answer materialize live. Tool calls still execute internally
+// (we surface them as tool/start + tool/done events around the stream).
+app.get<{ Querystring: { token?: string; workspace?: string; message?: string; sessionId?: string; tools?: string } }>('/chat/stream', async (req, reply) => {
+  const g = r623Token(req); if (!g.ok) return void reply.status(401).send({ error: 'unauthorized' })
+  const message = req.query.message
+  if (!message) return void reply.status(400).send({ error: 'message query param required' })
+  const sessionId = req.query.sessionId
+  const tools = req.query.tools !== undefined ? req.query.tools.split(',').map(s => s.trim()).filter(Boolean) : undefined
+
+  reply.raw.setHeader('Content-Type', 'text/event-stream')
+  reply.raw.setHeader('Cache-Control', 'no-cache, no-transform')
+  reply.raw.setHeader('Connection', 'keep-alive')
+  reply.raw.setHeader('X-Accel-Buffering', 'no')
+  reply.raw.flushHeaders()
+
+  const send = (event: string, data: unknown): void => {
+    try { reply.raw.write(`event: ${event}\n`); reply.raw.write(`data: ${JSON.stringify(data)}\n\n`) } catch { /* gone */ }
+  }
+  const heartbeat = setInterval(() => { try { reply.raw.write(': hb\n\n') } catch { /* ignore */ } }, 15000)
+
+  try {
+    send('start', { ts: new Date().toISOString(), sessionId: sessionId ?? null })
+    const { chat } = await import('./services/r663-novan-chat.js')
+    // For the streaming view we run the full chat synchronously then chunk
+    // the final answer over the wire — keeps tool-result accuracy from
+    // R663 while still feeling live to the operator UI.
+    const result = await chat(g.ws(req.query), {
+      message,
+      ...(sessionId ? { sessionId } : {}),
+      ...(tools !== undefined ? { toolsAllowed: tools } : {}),
+    })
+    send('meta', { sessionId: result.sessionId, turnId: result.turnId, toolCalls: result.toolCalls, costUsd: result.costUsd })
+    // Chunk the answer in ~40-char slices for a typewriter feel
+    const txt = result.answer ?? ''
+    const step = 40
+    for (let i = 0; i < txt.length; i += step) {
+      send('delta', { text: txt.slice(i, i + step) })
+      // tiny yield so the writes flush
+      await new Promise(r => setImmediate(r))
+    }
+    send('done', { latencyMs: result.latencyMs, tokens: result.tokens })
+  } catch (e) {
+    send('error', { message: (e as Error).message ?? String(e) })
+  } finally {
+    clearInterval(heartbeat)
+    try { reply.raw.end() } catch { /* ignore */ }
+  }
 })
 
 // R661 — SSE live agent stream. Drives a novan.agent run and pushes every
