@@ -4562,6 +4562,16 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return { items: await listWebhookEvents(p.slug, p.limit ?? 50) }
     },
   },
+  'document.pdf': {
+    description: 'R679: Render markdown to PDF via headless chromium. Subset markdown (headings, lists, code, bold/italic, links). Persists to S3. Params: markdown, title?, format? (A4|Letter|Legal), margin?, persist? (default true).',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r679-markdown-pdf.js').markdownToPdf>[1]
+      if (!p.markdown) throw new Error('markdown required')
+      const { markdownToPdf } = await import('./r679-markdown-pdf.js')
+      return markdownToPdf(ws, p)
+    },
+  },
   'image.free.health': {
     description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
     risk: 'low',
@@ -12577,6 +12587,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'audio.openai.transcribe',
         // R678 — incoming webhook receivers
         'webhook.create', 'webhook.list', 'webhook.delete', 'webhook.events',
+        // R679 — markdown → PDF
+        'document.pdf',
         // R655 — multi-turn agent sessions
         'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
         // R656 — scheduled agent goals
