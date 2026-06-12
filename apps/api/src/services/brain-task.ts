@@ -4674,6 +4674,55 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return removeNotifyTarget(ws, p.id)
     },
   },
+  'knowledge.ingest_url': {
+    description: 'R687: Fetch a URL → strip text → chunk → embed → store in workspace KB. Params: url, title?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r687-knowledge.js').ingestUrl>[1]
+      if (!p.url) throw new Error('url required')
+      const { ingestUrl } = await import('./r687-knowledge.js')
+      return ingestUrl(ws, p)
+    },
+  },
+  'knowledge.ingest_text': {
+    description: 'R687: Ingest raw text into workspace KB (chunk + embed). Params: text, title?, sourceUrl?',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r687-knowledge.js').ingestText>[1]
+      if (!p.text) throw new Error('text required')
+      const { ingestText } = await import('./r687-knowledge.js')
+      return ingestText(ws, p)
+    },
+  },
+  'knowledge.query': {
+    description: 'R687: Semantic search across the workspace KB. Returns top-k chunks with text + source URL. Params: queryText, limit? (1-20), minSimilarity?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as Parameters<typeof import('./r687-knowledge.js').queryKb>[1]
+      if (!p.queryText) throw new Error('queryText required')
+      const { queryKb } = await import('./r687-knowledge.js')
+      return queryKb(ws, p)
+    },
+  },
+  'knowledge.list': {
+    description: 'R687: List ingested KB documents in this workspace. Params: limit?',
+    risk: 'low',
+    handler: async (ws, params) => {
+      const p = params as { limit?: number }
+      const { listKbDocs } = await import('./r687-knowledge.js')
+      return { items: await listKbDocs(ws, p.limit ?? 50) }
+    },
+  },
+  'knowledge.delete': {
+    description: 'R687: Delete a KB document + its chunks. Params: docId',
+    risk: 'medium',
+    handler: async (ws, params) => {
+      const p = params as { docId?: string }
+      if (!p.docId) throw new Error('docId required')
+      const { deleteKbDoc } = await import('./r687-knowledge.js')
+      return deleteKbDoc(ws, p.docId)
+    },
+  },
   'image.free.health': {
     description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
     risk: 'low',
@@ -12703,6 +12752,9 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         'embed.text', 'embed.semantic.runs', 'embed.semantic.chat', 'embed.backfill',
         // R686 — outbound notifications on agent completion
         'notify.add', 'notify.list', 'notify.remove',
+        // R687 — RAG knowledge base
+        'knowledge.ingest_url', 'knowledge.ingest_text', 'knowledge.query',
+        'knowledge.list', 'knowledge.delete',
         // R655 — multi-turn agent sessions
         'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
         // R656 — scheduled agent goals
