@@ -33,10 +33,13 @@ export interface VisionResult {
   error?:    string
 }
 
+// R676 — tighter prompts. Default describe is 2 sentences (was unbounded
+// "in detail" which encouraged 200-word essays). Callers wanting depth can
+// override via input.prompt.
 const PROMPTS = {
-  describe:     'Describe this image in detail: objects, scene, colors, mood, notable elements.',
-  ocr:          'Extract every word of text visible in this image. Preserve line breaks and reading order. Output only the text, no commentary.',
-  extract_data: 'Extract any structured data visible (numbers, tables, charts, labels). Output as JSON.',
+  describe:     'Describe this image in 1-2 sentences. Key objects/colors only.',
+  ocr:          'Extract every word of text visible. Preserve line breaks. Text only.',
+  extract_data: 'Extract numbers/tables/labels as JSON. No prose.',
 }
 
 async function resolveAssetUrl(workspaceId: string, assetId: string): Promise<string | null> {
@@ -80,6 +83,9 @@ export async function describeImage(workspaceId: string, input: VisionInput): Pr
   }
 
   const promptText = input.prompt ?? PROMPTS[mode]
+  // R676 — was 2048; describe/extract responses are short by design.
+  // OCR needs more (multi-page text) so it gets a higher cap.
+  const maxTok = mode === 'ocr' ? 1024 : 256
   const body: Record<string, unknown> = {
     model,
     messages: [{
@@ -89,7 +95,7 @@ export async function describeImage(workspaceId: string, input: VisionInput): Pr
         imageRef,
       ],
     }],
-    max_tokens: 2048,
+    max_tokens: maxTok,
   }
 
   try {
