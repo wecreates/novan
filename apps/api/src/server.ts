@@ -372,6 +372,7 @@ const isPublic = (url: string): boolean => {
   if (url === '/chat' || url.startsWith('/chat?'))                      return true  // R667 — chat HTML UI (own token gate)
   if (url === '/voice/realtime' || url.startsWith('/voice/realtime'))    return true  // R688 — Realtime voice UI + session mint (own token gate)
   if (url.startsWith('/auth/'))                                         return true  // R689 — end-user auth (own bearer flow)
+  if (url === '/openapi.json' || url === '/novan-docs')                 return true  // R691 — public API docs
   // R647d /ops/desktop/act covered by the R623 whitelist above (startsWith '/ops/desktop')
   if (url.startsWith('/apps/'))                                         return true  // R642d — generated apps served under /apps/:slug
   if (url.startsWith('/ops/export/'))                                   return true  // R503 — CSV export, token in query
@@ -385,7 +386,7 @@ const isPublic = (url: string): boolean => {
   if (url === '/brain.html'   || url === '/brain')                      return true
   if (url === '/api/v1/health'  || url.startsWith('/api/v1/health/'))  return true
   if (url === '/metrics'        || url.startsWith('/metrics/'))        return true
-  if (url === '/docs'           || url.startsWith('/docs/'))           return true
+  if (url === '/api-docs'           || url.startsWith('/docs/'))           return true
   if (url.startsWith('/api/v1/auth/quick-link'))                       return true
   if (url === '/api/v1/auth/bootstrap')                                return true
   if (/^\/api\/v1\/webhooks\/[a-z0-9-]+\/trigger$/i.test(url))         return true
@@ -625,7 +626,7 @@ try {
     security: [{ bearerAuth: [] }],
   },
 })
-  await app.register(swaggerUi, { routePrefix: '/docs' })
+  await app.register(swaggerUi, { routePrefix: '/api-docs' })
 } catch (err) {
   // eslint-disable-next-line no-console
   console.warn('[swagger] disabled (non-fatal):', (err as Error).message)
@@ -1063,6 +1064,18 @@ app.get<{ Querystring: { token?: string; workspace?: string } }>('/ops/desktop/a
     const { renderDesktopHtml } = await import('./services/r647-computer-use.js')
     reply.type('text/html').send(await renderDesktopHtml(g.ws(req.query)))
   } catch (e) { reply.status(500).type('text/html').send(`<h1>500</h1><pre>${String((e as Error).message ?? e)}</pre>`) }
+})
+
+// R691 — auto-generated OpenAPI spec + Stoplight Elements viewer.
+app.get('/openapi.json', async (_req, reply) => {
+  const { buildOpenApiSpec } = await import('./services/r691-openapi.js')
+  const spec = await buildOpenApiSpec()
+  reply.type('application/json').send(spec)
+})
+
+app.get('/novan-docs', async (_req, reply) => {
+  const { renderSwaggerHtml } = await import('./services/r691-openapi.js')
+  reply.type('text/html').send(renderSwaggerHtml())
 })
 
 // R678 — public incoming-webhook receiver. Token in query string;
