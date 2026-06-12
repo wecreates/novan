@@ -1335,6 +1335,7 @@ const INTERVALS = {
   approvalSmsBridge:      60_000,             // R644d — 60s tick; SMS-notifies new pending approvals when Twilio configured
   capabilityCloser:       5 * 60_000,         // R646h — 5min tick; auto-attempt next-target capability closures from R334 parity registry
   scheduledAgents:        60_000,             // R656 — 60s tick; fire novan.agent for any schedule whose next_run_at is past
+  spendForecast:          6 * 60 * 60_000,    // R690 — 6h tick; project spend + alert if R660 cap would trip
 }
 
 /**
@@ -1690,6 +1691,15 @@ async function runScheduledAgentsTick(): Promise<void> {
     const r = await tickScheduledAgents()
     if (r.fired > 0 || r.errors > 0) await emit('cron.scheduled_agents', r)
   } catch (e) { await emit('cron.error', { task: 'scheduled_agents', error: (e as Error).message }) }
+}
+
+// R690 — project next-7d spend per workspace, alert if R660 cap would trip
+async function runSpendForecastTick(): Promise<void> {
+  try {
+    const { alertSpikes } = await import('./r690-cost-forecast.js')
+    const r = await alertSpikes()
+    if (r.alerted > 0) await emit('cron.spend_forecast', r)
+  } catch (e) { await emit('cron.error', { task: 'spend_forecast', error: (e as Error).message }) }
 }
 
 // R606 — Saturation alerts. Polls neural.counters per workspace; webhooks +
@@ -2606,6 +2616,7 @@ export function startLearningCron(): void {
   handles.push(scheduleJittered(runApprovalSmsBridgeTick,       INTERVALS.approvalSmsBridge))    // R644d
   handles.push(scheduleJittered(runCapabilityCloserTick,        INTERVALS.capabilityCloser))     // R646h
   handles.push(scheduleJittered(runScheduledAgentsTick,         INTERVALS.scheduledAgents))      // R656
+  handles.push(scheduleJittered(runSpendForecastTick,           INTERVALS.spendForecast))        // R690
   handles.push(scheduleJittered(runTrustAutoDerive,             INTERVALS.trustAutoDerive))
   handles.push(scheduleJittered(runFabricSweep,                 INTERVALS.fabricSweep))
   handles.push(scheduleJittered(runDataRetention,               INTERVALS.dataRetention))

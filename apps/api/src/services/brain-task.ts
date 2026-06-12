@@ -4723,6 +4723,22 @@ export const OPERATIONS: Record<string, OpSpec> = {
       return deleteKbDoc(ws, p.docId)
     },
   },
+  'forecast.spend': {
+    description: 'R690: Project next 7 days of agent spend from last 14d trend, flag if R660 daily cap would trip. Returns history + projection + slope + peak.',
+    risk: 'low',
+    handler: async (ws) => {
+      const { forecast } = await import('./r690-cost-forecast.js')
+      return forecast(ws)
+    },
+  },
+  'forecast.alert_spikes': {
+    description: 'R690: Run the all-workspace spend-spike scan (also runs on 6h cron). Fires R686 notify when a projection would trip the cap.',
+    risk: 'medium',
+    handler: async () => {
+      const { alertSpikes } = await import('./r690-cost-forecast.js')
+      return alertSpikes()
+    },
+  },
   'image.free.health': {
     description: 'R609: Probe HuggingFace + Pollinations free image-gen providers.',
     risk: 'low',
@@ -12755,6 +12771,8 @@ export async function executePlan(workspaceId: string, task: string, plan: TaskO
         // R687 — RAG knowledge base
         'knowledge.ingest_url', 'knowledge.ingest_text', 'knowledge.query',
         'knowledge.list', 'knowledge.delete',
+        // R690 — cost forecast + spike alerts
+        'forecast.spend', 'forecast.alert_spikes',
         // R655 — multi-turn agent sessions
         'novan.session.create', 'novan.session.turn', 'novan.session.list', 'novan.session.get',
         // R656 — scheduled agent goals
