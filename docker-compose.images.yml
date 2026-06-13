@@ -1,0 +1,11 @@
+# Production rollout override — point api/web at the GHCR images built by CI
+# (.github/workflows/build-and-push.yml) instead of building on the droplet.
+# Usage on the droplet:
+#   docker compose -f docker-compose.yml -f docker-compose.images.yml pull api web
+#   docker compose -f docker-compose.yml -f docker-compose.images.yml up -d --no-deps api web
+# (wrapped by scripts/deploy-droplet.sh). Postgres/Redis stay as-is.
+services:
+  api:
+    image: ghcr.io/wecreates/novan-api:latest
+  web:
+    image: ghcr.io/wecreates/novan-web:latest
