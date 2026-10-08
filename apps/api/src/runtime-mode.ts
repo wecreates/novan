@@ -35,3 +35,17 @@ export function redisRuntimeConfig(env: Record<string, string | undefined> = pro
   }
   throw new Error('REDIS_URL is required')
 }
+
+
+export function readinessDependencies(env: Record<string, string | undefined> = process.env): {
+  databaseRequired: boolean
+  redisRequired: boolean
+  queueMetricsRequired: boolean
+} {
+  const mode = runtimeModeConfig(env)
+  return {
+    databaseRequired: true,
+    redisRequired: mode.redisRequired,
+    queueMetricsRequired: mode.queuesEnabled,
+  }
+}
