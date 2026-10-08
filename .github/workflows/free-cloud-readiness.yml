@@ -1,0 +1,59 @@
+name: Novan Free Cloud Readiness
+
+on:
+  push:
+    paths:
+      - '.github/workflows/free-cloud-readiness.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      HAS_DATABASE_URL: ${{ secrets.DATABASE_URL != '' }}
+      HAS_REDIS_URL: ${{ secrets.REDIS_URL != '' }}
+      HAS_RENDER_API_KEY: ${{ secrets.RENDER_API_KEY != '' }}
+      HAS_AUTH_SECRET: ${{ secrets.AUTH_SECRET != '' }}
+      HAS_VAULT_MASTER_KEY: ${{ secrets.VAULT_MASTER_KEY != '' }}
+      HAS_CHANNEL_ENCRYPTION_KEY: ${{ secrets.CHANNEL_ENCRYPTION_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Record readiness without exposing secrets
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const yes=v=>String(v).toLowerCase()==='true';
+          const out={
+            checked_at:new Date().toISOString(),
+            database_url_configured:yes(process.env.HAS_DATABASE_URL),
+            redis_url_configured:yes(process.env.HAS_REDIS_URL),
+            render_api_key_configured:yes(process.env.HAS_RENDER_API_KEY),
+            auth_secret_configured:yes(process.env.HAS_AUTH_SECRET),
+            vault_master_key_configured:yes(process.env.HAS_VAULT_MASTER_KEY),
+            channel_encryption_key_configured:yes(process.env.HAS_CHANNEL_ENCRYPTION_KEY)
+          };
+          out.ready_for_secretless_operator_deploy =
+            out.database_url_configured &&
+            out.redis_url_configured &&
+            out.render_api_key_configured &&
+            out.auth_secret_configured &&
+            out.vault_master_key_configured &&
+            out.channel_encryption_key_configured;
+          fs.writeFileSync('FREE_CLOUD_READINESS.json',JSON.stringify(out,null,2)+'\n');
+          NODE
+      - name: Persist readiness
+        shell: bash
+        run: |
+          git config user.name "novan-cloud-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add FREE_CLOUD_READINESS.json
+          git diff --cached --quiet || git commit -m "record Novan free cloud readiness"
+          git pull --rebase origin main
+          git push origin HEAD:main
