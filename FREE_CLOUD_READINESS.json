@@ -1,0 +1,10 @@
+{
+  "checked_at": "2026-10-08T03:21:14.882Z",
+  "database_url_configured": false,
+  "redis_url_configured": false,
+  "render_api_key_configured": false,
+  "auth_secret_configured": false,
+  "vault_master_key_configured": false,
+  "channel_encryption_key_configured": false,
+  "ready_for_secretless_operator_deploy": false
+}
