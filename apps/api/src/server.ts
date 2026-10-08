@@ -128,6 +128,7 @@ import { startLearningCron, bootKick } from './services/learning-cron.js'
 import { registerAutonomousWorker } from './services/autonomous-orchestrator.js'
 import { startAgentHeartbeatTicker, stopAgentHeartbeatTicker } from './services/agent-state-sync.js'
 import { startHeartbeat }          from './services/runtime-heartbeat.js'
+import { runtimeModeConfig }          from './runtime-mode.js'
 
 // Render/Heroku/Fly inject PORT; fall back to API_PORT for local dev.
 // R143 — guard against non-numeric env values that would otherwise
@@ -2267,10 +2268,21 @@ await app.register(docsRedirectRoute)
 // ─── Init infrastructure ───────────────────────────────────────────────────────
 
 // db connection is lazy (postgres-js connects on first query)
-await redisClient.ping()
-await registerQueues()
-registerAutonomousWorker()
-startAgentHeartbeatTicker('default', 60_000)   // bridge all agent registries
+const runtimeMode = runtimeModeConfig(process.env)
+if (runtimeMode.redisRequired) {
+  await redisClient.ping()
+}
+if (runtimeMode.queuesEnabled) {
+  await registerQueues()
+}
+if (runtimeMode.autonomousWorkerEnabled) {
+  registerAutonomousWorker()
+}
+if (runtimeMode.mode === 'full') {
+  startAgentHeartbeatTicker('default', 60_000)
+} else {
+  app.log.info({ runtimeMode: runtimeMode.mode }, 'cloud API mode: Redis queues and autonomous worker disabled')
+}   // bridge all agent registries
 
 // Boot-time workspace seed — fills the operator-baseline tables that
 // otherwise sit empty (provider_configs, kill_switches, runtime_nodes,
