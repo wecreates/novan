@@ -2242,8 +2242,11 @@ validateEnvOrThrow()
   })
 }
 
-// Start the closed learning loop: periodic incident/improvement/suspicious scans + sweeps
-startLearningCron()
+// Start the closed learning loop only in the full runtime. Free cloud API
+// mode delegates scheduled automation to GitHub Actions.
+if (runtimeMode.backgroundAutomationEnabled) {
+  startLearningCron()
+}
 // R146.123 — Ensure the War Room agent roster is seeded for the system
 // workspace on first boot. Idempotent: r115 agentSeedDefaults checks
 // existing rows by shortName before inserting.
@@ -2253,16 +2256,17 @@ void (async () => {
     await agentSeedDefaults('system')
   } catch (e) { app.log.warn({ err: (e as Error).message }, '[boot] agent seed failed (non-fatal)') }
 })()
-// 24/7 self-monitoring + cron re-arm on drift
-startHeartbeat(60_000)
-// Kick the autonomous mind on boot so cold start isn't silent. Errors
-// here are recoverable — if the cold-start research scan fails, the
-// next learning-cron tick will retry it.
-void (async () => {
-  try { await bootKick() } catch (e) {
-    app.log.error({ err: (e as Error).message }, 'bootKick failed')
-  }
-})()
+// 24/7 self-monitoring and autonomous cold-start kick are full-runtime
+// features. Cloud API mode stays request-driven and uses external GitHub
+// schedules instead.
+if (runtimeMode.backgroundAutomationEnabled) {
+  startHeartbeat(60_000)
+  void (async () => {
+    try { await bootKick() } catch (e) {
+      app.log.error({ err: (e as Error).message }, 'bootKick failed')
+    }
+  })()
+}
 await app.register(docsRedirectRoute)
 
 // ─── Init infrastructure ───────────────────────────────────────────────────────
@@ -2321,18 +2325,16 @@ const shutdown = async (signal: string) => {
   // Stop the learning-cron interval cluster — 50+ self-rescheduling
   // setTimeouts that would otherwise hold the event loop open past
   // app.close() and force a SIGKILL after the grace period.
-  try {
-    const { stopLearningCron, drainLearningCron } = await import('./services/learning-cron.js')
-    stopLearningCron()
-    // R146.15 — wait for any tick already mid-flight to finish before
-    // we close the DB pool / redis client. Bounded 5s so a stuck tick
-    // can't hang shutdown forever; any tag still running past the
-    // deadline gets logged for forensics.
-    const drain = await drainLearningCron(5_000)
-    if (!drain.drained) {
-      app.log.warn({ remaining: drain.remaining }, '[shutdown] learning-cron drain timeout — tick(s) still running')
-    }
-  } catch { /* */ }
+  if (runtimeMode.backgroundAutomationEnabled) {
+    try {
+      const { stopLearningCron, drainLearningCron } = await import('./services/learning-cron.js')
+      stopLearningCron()
+      const drain = await drainLearningCron(5_000)
+      if (!drain.drained) {
+        app.log.warn({ remaining: drain.remaining }, '[shutdown] learning-cron drain timeout — tick(s) still running')
+      }
+    } catch { /* */ }
+  }
   try {
     const { stopConnectorOauthReaper } = await import('./services/connector-oauth.js')
     stopConnectorOauthReaper()
@@ -2350,10 +2352,12 @@ const shutdown = async (signal: string) => {
   // was .unref()'d so it doesn't block exit, but during the SIGTERM
   // drain it keeps firing inserts against a closing pool. Stop it
   // explicitly before app.close() runs.
-  try {
-    const { stopHeartbeat } = await import('./services/runtime-heartbeat.js')
-    stopHeartbeat()
-  } catch { /* */ }
+  if (runtimeMode.backgroundAutomationEnabled) {
+    try {
+      const { stopHeartbeat } = await import('./services/runtime-heartbeat.js')
+      stopHeartbeat()
+    } catch { /* */ }
+  }
   // Close any open playwright sessions + the shared browser. Without
   // this, restarts leak chrome processes on Windows.
   try {
