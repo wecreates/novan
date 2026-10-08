@@ -1,0 +1,7 @@
+{
+  "checked_at": "2026-10-08T03:25:24.995Z",
+  "command": "pnpm --filter @ops/api exec vitest run src/test/runtime-mode.test.ts",
+  "exit_code": 0,
+  "pass": true,
+  "output": "\n\u001b[1m\u001b[7m\u001b[36m RUN \u001b[39m\u001b[27m\u001b[22m \u001b[36mv2.1.9 \u001b[39m\u001b[90m/home/runner/work/novan/novan/apps/api\u001b[39m\n\n \u001b[32m✓\u001b[39m src/test/runtime-mode.test.ts \u001b[2m(\u001b[22m\u001b[2m4 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[90m 2\u001b[2mms\u001b[22m\u001b[39m\n\n\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m1 passed\u001b[39m\u001b[22m\u001b[90m (1)\u001b[39m\n\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m4 passed\u001b[39m\u001b[22m\u001b[90m (4)\u001b[39m\n\u001b[2m   Start at \u001b[22m 03:25:24\n\u001b[2m   Duration \u001b[22m 166ms\u001b[2m (transform 22ms, setup 0ms, collect 18ms, tests 2ms, environment 0ms, prepare 45ms)\u001b[22m\n\n"
+}
