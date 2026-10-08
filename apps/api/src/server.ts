@@ -2340,10 +2340,12 @@ const shutdown = async (signal: string) => {
   // R146.54 — drain Workers + close Queues. Without this the BullMQ
   // worker process stays connected to Redis after SIGTERM and the
   // graceful shutdown hangs until forced.
-  try {
-    const { stopQueues } = await import('./queues/index.js')
-    await stopQueues()
-  } catch { /* */ }
+  if (runtimeMode.queuesEnabled) {
+    try {
+      const { stopQueues } = await import('./queues/index.js')
+      await stopQueues()
+    } catch { /* */ }
+  }
   // R146.13 — runtime-heartbeat fires a DB write every 60s. The timer
   // was .unref()'d so it doesn't block exit, but during the SIGTERM
   // drain it keeps firing inserts against a closing pool. Stop it
@@ -2363,7 +2365,9 @@ const shutdown = async (signal: string) => {
     await shutdownFetcher()
   } catch { /* */ }
   await app.close()
-  await redisClient.quit()
+  if (runtimeMode.redisRequired) {
+    await redisClient.quit()
+  }
   // R146.281 — close the pg pool last (after every other component has
   // stopped issuing queries). 5s grace lets any LISTEN connection or
   // in-flight cron query exit cleanly instead of cutting mid-stream.
