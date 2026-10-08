@@ -1,0 +1,29 @@
+name: Novan Free Render Runtime Test
+
+on:
+  push:
+    paths:
+      - 'apps/api/src/runtime-mode.ts'
+      - 'apps/api/src/runtime-mode.free.test.ts'
+      - 'apps/api/src/routes/health.ts'
+      - '.github/workflows/free-render-runtime-test.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused free runtime test
+        run: pnpm --filter @ops/api exec vitest run src/runtime-mode.free.test.ts
+      - name: API typecheck
+        run: pnpm --filter @ops/api typecheck
