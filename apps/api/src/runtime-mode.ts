@@ -3,6 +3,7 @@ export interface RuntimeModeConfig {
   redisRequired: boolean
   queuesEnabled: boolean
   autonomousWorkerEnabled: boolean
+  backgroundAutomationEnabled: boolean
 }
 
 export function runtimeModeConfig(env: Record<string, string | undefined> = process.env): RuntimeModeConfig {
@@ -13,6 +14,7 @@ export function runtimeModeConfig(env: Record<string, string | undefined> = proc
       redisRequired: false,
       queuesEnabled: false,
       autonomousWorkerEnabled: false,
+      backgroundAutomationEnabled: false,
     }
   }
   return {
@@ -20,6 +22,7 @@ export function runtimeModeConfig(env: Record<string, string | undefined> = proc
     redisRequired: true,
     queuesEnabled: true,
     autonomousWorkerEnabled: true,
+    backgroundAutomationEnabled: true,
   }
 }
 
