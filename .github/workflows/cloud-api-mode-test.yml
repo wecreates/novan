@@ -1,0 +1,61 @@
+name: Novan Cloud API Mode Test
+
+on:
+  push:
+    paths:
+      - 'apps/api/src/runtime-mode.ts'
+      - 'apps/api/src/redis/client.ts'
+      - 'apps/api/src/server.ts'
+      - 'apps/api/src/test/runtime-mode.test.ts'
+      - '.github/workflows/cloud-api-mode-test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Run focused runtime-mode tests
+        shell: bash
+        run: |
+          set +e
+          pnpm --filter @ops/api exec vitest run src/test/runtime-mode.test.ts > /tmp/test.log 2>&1
+          CODE=$?
+          node - "$CODE" <<'NODE'
+          const fs=require('fs');
+          const code=Number(process.argv[2]);
+          const out={
+            checked_at:new Date().toISOString(),
+            command:'pnpm --filter @ops/api exec vitest run src/test/runtime-mode.test.ts',
+            exit_code:code,
+            pass:code===0,
+            output:fs.readFileSync('/tmp/test.log','utf8').slice(0,16000)
+          };
+          fs.writeFileSync('CLOUD_API_MODE_TEST.json',JSON.stringify(out,null,2)+'\n');
+          process.exitCode=code;
+          NODE
+      - name: Persist result
+        if: always()
+        shell: bash
+        run: |
+          git config user.name "novan-cloud-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add CLOUD_API_MODE_TEST.json
+          git diff --cached --quiet || git commit -m "record Novan cloud API mode test"
+          git pull --rebase origin main
+          git push origin HEAD:main
