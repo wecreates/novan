@@ -1,0 +1,63 @@
+name: Novan Free Render Runtime Verification
+
+on:
+  push:
+    paths:
+      - 'apps/api/src/runtime-mode.ts'
+      - 'apps/api/src/runtime-mode.free.test.ts'
+      - 'apps/api/src/test/runtime-mode.test.ts'
+      - 'apps/api/src/routes/health.ts'
+      - '.github/workflows/free-render-runtime-verify.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run verification
+        shell: bash
+        run: |
+          set +e
+          (pnpm --filter @ops/api exec vitest run src/test/runtime-mode.test.ts src/runtime-mode.free.test.ts) >/tmp/tests.log 2>&1
+          TEST_CODE=$?
+          (pnpm --filter @ops/api typecheck) >/tmp/typecheck.log 2>&1
+          TYPE_CODE=$?
+          node - "$TEST_CODE" "$TYPE_CODE" <<'NODE'
+          const fs=require('fs');
+          const [testCode,typeCode]=process.argv.slice(2).map(Number);
+          const out={
+            checked_at:new Date().toISOString(),
+            tests:{pass:testCode===0,code:testCode,output:fs.readFileSync('/tmp/tests.log','utf8').slice(0,12000)},
+            typecheck:{pass:typeCode===0,code:typeCode,output:fs.readFileSync('/tmp/typecheck.log','utf8').slice(0,12000)},
+            redis_required_in_cloud_mode:false,
+            queues_enabled_in_cloud_mode:false,
+            pass:testCode===0&&typeCode===0
+          };
+          fs.writeFileSync('FREE_RENDER_RUNTIME_RESULT.json',JSON.stringify(out,null,2)+'\n');
+          if(!out.pass) process.exitCode=1;
+          NODE
+      - name: Persist verification
+        if: always()
+        shell: bash
+        run: |
+          git config user.name "novan-free-runtime-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add FREE_RENDER_RUNTIME_RESULT.json
+          git diff --cached --quiet || git commit -m "record free Render runtime verification"
+          git pull --rebase origin main
+          git push origin HEAD:main
