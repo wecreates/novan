@@ -1,0 +1,16 @@
+{
+  "checked_at": "2026-10-08T13:49:13.551Z",
+  "tests": {
+    "pass": true,
+    "code": 0,
+    "output": "\n\u001b[1m\u001b[7m\u001b[36m RUN \u001b[39m\u001b[27m\u001b[22m \u001b[36mv2.1.9 \u001b[39m\u001b[90m/home/runner/work/novan/novan/apps/api\u001b[39m\n\n \u001b[32m✓\u001b[39m src/test/runtime-mode.test.ts \u001b[2m(\u001b[22m\u001b[2m4 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[90m 4\u001b[2mms\u001b[22m\u001b[39m\n\n\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m1 passed\u001b[39m\u001b[22m\u001b[90m (1)\u001b[39m\n\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m4 passed\u001b[39m\u001b[22m\u001b[90m (4)\u001b[39m\n\u001b[2m   Start at \u001b[22m 13:49:09\n\u001b[2m   Duration \u001b[22m 251ms\u001b[2m (transform 37ms, setup 0ms, collect 28ms, tests 4ms, environment 0ms, prepare 61ms)\u001b[22m\n\n"
+  },
+  "typecheck": {
+    "pass": false,
+    "code": 2,
+    "output": "\n> @ops/api@0.1.0 typecheck /home/runner/work/novan/novan/apps/api\n> tsc --noEmit\n\nsrc/services/r688-realtime-ui.ts(44,1): error TS1472: 'catch' or 'finally' expected.\nsrc/services/r688-realtime-ui.ts(78,5): error TS1005: 'try' expected.\nsrc/services/r688-realtime-ui.ts(79,1): error TS1128: Declaration or statement expected.\n/home/runner/work/novan/novan/apps/api:\n ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @ops/api@0.1.0 typecheck: `tsc --noEmit`\nExit status 2\n"
+  },
+  "redis_required_in_cloud_mode": false,
+  "queues_enabled_in_cloud_mode": false,
+  "pass": false
+}
