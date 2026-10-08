@@ -8,6 +8,7 @@ describe('runtimeModeConfig', () => {
       redisRequired: false,
       queuesEnabled: false,
       autonomousWorkerEnabled: false,
+      backgroundAutomationEnabled: false,
     })
   })
 
@@ -17,6 +18,7 @@ describe('runtimeModeConfig', () => {
       redisRequired: true,
       queuesEnabled: true,
       autonomousWorkerEnabled: true,
+      backgroundAutomationEnabled: true,
     })
   })
 })
